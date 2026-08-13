@@ -2779,13 +2779,13 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
 /// pairs, which is why this does not switch lowering the way the register-layer
 /// ladder does -- there the fallback walks a slice in place and is genuinely cheaper.
 /// Gate on the const at the call site if a specific composite says otherwise.
+#[rustfmt::skip]
 #[doc(hidden)]
 #[macro_export]
 macro_rules! scan_ladder {
     (reverse, $v:expr, $fill:expr, $op:path) => {{
         let mut v = $v;
         let f = $fill;
-        #[rustfmt::skip]
         let () = {
             if const { Self::LANES >  1 } { v = $op(v, v.align::<1>(f)); }
             if const { Self::LANES >  2 } { v = $op(v, v.align::<2>(f)); }
@@ -2793,7 +2793,7 @@ macro_rules! scan_ladder {
             if const { Self::LANES >  8 } { v = $op(v, v.align::<8>(f)); }
             if const { Self::LANES > 16 } { v = $op(v, v.align::<16>(f)); }
             if const { Self::LANES > 32 } { v = $op(v, v.align::<32>(f)); }
-            };
+        };
         v
     }};
 
@@ -2804,7 +2804,6 @@ macro_rules! scan_ladder {
         if const { Self::LANES.is_power_of_two() && Self::LANES <= 64 } {
             // `a.align::<OFFSET>(b)[i] == concat(a, b)[OFFSET + i]`, so with `a = fill`
             // and `b = v` the stage that wants `v[i - s]` is `OFFSET == LANES - s`.
-            #[rustfmt::skip]
             let () = match const { Self::LANES } {
                 0 | 1 => {}
                 2  => { v = $op(v, f.align::<1>(v)); }
@@ -2827,11 +2826,11 @@ macro_rules! scan_ladder {
                         v = $op(v, f.align::<60>(v));
                         v = $op(v, f.align::<56>(v));
                         v = $op(v, f.align::<48>(v));
-                            v = $op(v, f.align::<32>(v)); }
-                    // unreachable: guarded by the `if const` above. Panicking is the right
-                    // failure mode if a width ever slips past that guard.
-                    _ => unreachable!(),
-                };
+                        v = $op(v, f.align::<32>(v)); }
+                // unreachable: guarded by the `if const` above. Panicking is the right
+                // failure mode if a width ever slips past that guard.
+                _ => unreachable!(),
+            };
             v
         } else {
             // `fill` is the lane-0 broadcast either way: reversing makes it the last

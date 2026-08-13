@@ -168,6 +168,209 @@ macro_rules! for_float {
     }};
 }
 
+// ===========================================================================
+// Generic `_limited` f64 <-> 64-bit-int magic-number conversions.
+// ===========================================================================
+
+/// Integer-valued probes spanning the signed domain `[-2^51, 2^51]`, weighted
+/// toward the negatives and the endpoints.
+///
+/// Negatives are the whole point: the bias trick is `x + 1.5 * 2^52`, and the
+/// non-negative half of the domain agrees with the oracle under *either* a
+/// correct unbias or a wrong one, so a corpus of naturals proves nothing here.
+const LIMITED_SIGNED: &[i64] = &[
+    0,
+    1,
+    -1,
+    2,
+    -2,
+    3,
+    -3,
+    -42,
+    42,
+    -1000,
+    1000,
+    1 << 31,
+    -(1 << 31),
+    1 << 32,
+    -(1 << 32),
+    1 << 50,
+    -(1 << 50),
+    (1 << 51) - 1,
+    -((1 << 51) - 1),
+    1 << 51,
+    -(1 << 51),
+];
+
+/// Integer-valued probes spanning the unsigned domain `[0, 2^52)`.
+const LIMITED_UNSIGNED: &[u64] = &[
+    0,
+    1,
+    2,
+    3,
+    42,
+    1000,
+    1 << 31,
+    1 << 32,
+    1 << 50,
+    1 << 51,
+    (1 << 52) - 2,
+    (1 << 52) - 1,
+];
+
+/// The four `backend/generic/polyfills/casts.rs` magic-number conversions,
+/// checked against a pure-Rust oracle on **every** backend's f64 registers -
+/// not only the one backend that routes to them in production.
+///
+/// That last part is the point of this test existing. These four are generic
+/// over `R`, but the wasm backend is the only caller, so until now they were
+/// reachable exclusively from a suite that does not run by default. A wrong
+/// unbias therefore shipped: the signed `pd -> epi64` direction used `bitxor`
+/// to remove the bias instead of subtracting it.
+///
+/// The magic constant is `1.5 * 2^52`, whose own mantissa has bit 51 set, so xor
+/// and subtract agree only where no bit-51 interaction occurs. That is every
+/// negative input - `-2` came back as `2^52 - 2`, which is what made wasm `powf`
+/// read a bogus exponent and overflow - **and** the positive endpoint `+2^51`,
+/// which is in the documented domain. Everything strictly between `0` and `2^51`
+/// was correct, which is exactly why a corpus of small naturals never noticed.
+/// Nothing on x86 could see any of it, and the x86 suite is what runs.
+///
+/// Instantiating the polyfills here on x86 registers puts them in the default
+/// suite regardless of which backend calls them. That is the general rule for
+/// anything under `backend/generic/polyfills/`: test it **generically**, on a
+/// backend the default suite runs, rather than relying on the backend that
+/// happens to use it.
+///
+/// Inputs are integer-valued on purpose. The trick rounds to nearest rather
+/// than truncating, which is a documented `fast_cast` relaxation; on integers
+/// round and truncate agree, so the oracle stays exact and the test is not
+/// asserting a rounding mode the function never promised.
+macro_rules! limited_casts_for {
+    ($($name:ident: $b:ty, $f:ident, $i:ident, $u:ident);* $(;)?) => {$(
+        #[test]
+        fn $name() {
+            use generic_array::typenum::Unsigned;
+            use thermite::backend::generic::polyfills::casts as gc;
+            use thermite::register::CoreRegister;
+
+            type F = <$b as Simd>::$f;
+            type I = <$b as Simd>::$i;
+            type U = <$b as Simd>::$u;
+
+            let lanes = <<F as CoreRegister>::Lanes as Unsigned>::USIZE;
+            let label = concat!(stringify!($name), " ", stringify!($f));
+
+            // Slide the probe list across the lanes so adjacent lanes differ,
+            // which catches lane-routing mistakes a broadcast would miss.
+            for start in 0..LIMITED_SIGNED.len() {
+                let ints: Vec<i64> = (0..lanes)
+                    .map(|k| LIMITED_SIGNED[(start + k) % LIMITED_SIGNED.len()])
+                    .collect();
+                let floats: Vec<f64> = ints.iter().map(|&x| x as f64).collect();
+
+                let got = harness::read::<I>(&gc::convert_pd_epi64_limited::<F>(
+                    harness::make_array::<F>(&floats),
+                ));
+                harness::assert_lanes_eq(
+                    concat!("convert_pd_epi64_limited ", stringify!($name)),
+                    &[ints.as_slice()], &got, &ints, Tol::Exact,
+                );
+
+                let got = harness::read::<F>(&gc::convert_epi64_pd_limited::<F>(
+                    harness::make_array::<I>(&ints),
+                ));
+                harness::assert_lanes_eq(
+                    concat!("convert_epi64_pd_limited ", stringify!($name)),
+                    &[floats.as_slice()], &got, &floats, Tol::Exact,
+                );
+
+                // Round trip, which pins the two against each other even where
+                // they might share a sign-handling mistake with the oracle.
+                let rt = harness::read::<I>(&gc::convert_pd_epi64_limited::<F>(
+                    gc::convert_epi64_pd_limited::<F>(harness::make_array::<I>(&ints)),
+                ));
+                harness::assert_lanes_eq(
+                    concat!("limited i64 round trip ", stringify!($name)),
+                    &[ints.as_slice()], &rt, &ints, Tol::Exact,
+                );
+            }
+
+            for start in 0..LIMITED_UNSIGNED.len() {
+                let ints: Vec<u64> = (0..lanes)
+                    .map(|k| LIMITED_UNSIGNED[(start + k) % LIMITED_UNSIGNED.len()])
+                    .collect();
+                let floats: Vec<f64> = ints.iter().map(|&x| x as f64).collect();
+
+                let got = harness::read::<U>(&gc::convert_pd_epu64_limited::<F>(
+                    harness::make_array::<F>(&floats),
+                ));
+                harness::assert_lanes_eq(
+                    concat!("convert_pd_epu64_limited ", stringify!($name)),
+                    &[], &got, &ints, Tol::Exact,
+                );
+
+                let got = harness::read::<F>(&gc::convert_epu64_pd_limited::<F>(
+                    harness::make_array::<U>(&ints),
+                ));
+                harness::assert_lanes_eq(
+                    concat!("convert_epu64_pd_limited ", stringify!($name)),
+                    &[floats.as_slice()], &got, &floats, Tol::Exact,
+                );
+
+                let rt = harness::read::<U>(&gc::convert_pd_epu64_limited::<F>(
+                    gc::convert_epu64_pd_limited::<F>(harness::make_array::<U>(&ints)),
+                ));
+                harness::assert_lanes_eq(
+                    concat!("limited u64 round trip ", stringify!($name)),
+                    &[ints.as_slice()], &rt, &ints, Tol::Exact,
+                );
+            }
+
+            let _ = label;
+        }
+    )*};
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod limited_casts_x86 {
+    use super::*;
+    use thermite::backend::x86_v1::X86V1;
+    use thermite::backend::x86_v2::X86V2;
+    use thermite::backend::x86_v3::X86V3;
+
+    limited_casts_for! {
+        v1_x2: X86V1, f64x2, i64x2, u64x2;
+        v1_x4: X86V1, f64x4, i64x4, u64x4;
+        v2_x2: X86V2, f64x2, i64x2, u64x2;
+        v2_x4: X86V2, f64x4, i64x4, u64x4;
+        v3_x2: X86V3, f64x2, i64x2, u64x2;
+        v3_x4: X86V3, f64x4, i64x4, u64x4;
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+mod limited_casts_wasm {
+    use super::*;
+    use thermite::backend::wasm::Wasm;
+
+    limited_casts_for! {
+        wasm_x2: Wasm, f64x2, i64x2, u64x2;
+        wasm_x4: Wasm, f64x4, i64x4, u64x4;
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+mod limited_casts_neon {
+    use super::*;
+    use thermite::backend::neon::Neon;
+
+    limited_casts_for! {
+        neon_x2: Neon, f64x2, i64x2, u64x2;
+        neon_x4: Neon, f64x4, i64x4, u64x4;
+    }
+}
+
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86 {
     use super::*;

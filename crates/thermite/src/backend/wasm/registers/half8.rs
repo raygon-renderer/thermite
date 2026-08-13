@@ -449,7 +449,6 @@ impl CastRegister<super::U8x16Wasm> for ArrayRegister<super::U32x4Wasm, 4> {
     }
 }
 
-
 // --- x2 (ArrayRegister<i8,2> <-> I32x2Wasm reduced) ---
 #[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<i8, 2>> for super::half::I32x2Wasm {
@@ -674,7 +673,6 @@ impl CastRegister<super::U8x16Wasm> for ArrayRegister<super::U64x2Wasm, 8> {
         ])
     }
 }
-
 
 // ===========================================================================================
 // 8 <-> f32/f64 direct casts (widen int -> i32 then native i32<->float converts; narrow via

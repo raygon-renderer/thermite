@@ -373,7 +373,6 @@ impl CastRegister<super::U16x8Wasm> for ArrayRegister<super::U64x2Wasm, 4> {
     }
 }
 
-
 // --- x16 widen i16 -> i64 (ArrayRegister<I16x8Wasm, 2> -> ArrayRegister<I64x2Wasm, 8>) ---
 #[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<super::I16x8Wasm, 2>> for ArrayRegister<super::I64x2Wasm, 8> {

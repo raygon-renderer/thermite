@@ -570,6 +570,44 @@ macro_rules! sat_cast_diff {
     }};
 }
 
+/// Differential test for `fast_cast` (`<Dst as CastRegister<Src>>::fast_cast_from`).
+///
+/// `fast_cast` is the deliberately-narrow-domain conversion: out of range it
+/// returns unspecified values by contract, so `$prep` must map the corpus into
+/// the domain where it *is* defined - and, for float sources, onto integral
+/// values, because the magic-number lowerings round to nearest where `as`
+/// truncates.
+///
+/// The scalar backend is the oracle and is a genuinely independent one here: it
+/// has no `fast_cast` override at all, so it falls through to `cast_from`, which
+/// is plain `as`. It cannot share a bug with the magic-number path under test.
+#[macro_export]
+macro_rules! fast_cast_diff {
+    ($label:expr, $src_ut:ty, $dst_ut:ty, $src_rf:ty, $dst_rf:ty, $se:ty, $prep:expr) => {{
+        use ::thermite::register::CastRegister;
+        let mut rng = $crate::harness::rng();
+        let lanes =
+            <<$src_ut as ::thermite::register::CoreRegister>::Lanes as ::generic_array::typenum::Unsigned>::USIZE;
+        let prep: fn($se) -> $se = $prep;
+        for raw in $crate::harness::corpus::<$se>(lanes, &mut rng) {
+            let input: Vec<$se> = raw.iter().map(|&x| prep(x)).collect();
+            let got = $crate::harness::read::<$dst_ut>(&<$dst_ut as CastRegister<$src_ut>>::fast_cast_from(
+                $crate::harness::make_array::<$src_ut>(&input),
+            ));
+            let want = $crate::harness::read::<$dst_rf>(&<$dst_rf as CastRegister<$src_rf>>::cast_from(
+                $crate::harness::make_array::<$src_rf>(&input),
+            ));
+            $crate::harness::assert_lanes_eq(
+                concat!($label, " [fast_cast vs scalar `as`]"),
+                &[],
+                &got,
+                &want,
+                Tol::Exact,
+            );
+        }
+    }};
+}
+
 /// Differential test for a numeric `cast` (`<Dst as CastRegister<Src>>`).
 ///
 /// The scalar backend's `cast_from` is literally `value as _`, so this is a

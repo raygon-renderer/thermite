@@ -81,11 +81,11 @@ macro_rules! use_ladder {
 /// expressible on stable. Hence the match on the (compile-time) lane count with a
 /// precomputed offset list per width; exactly one arm survives monomorphization, and
 /// `use_ladder!` has already excluded every width without an arm.
+#[rustfmt::skip]
 macro_rules! forward_ladder {
     ($r:ty, $v:expr, $fill:expr, $op:path) => {{
         let mut v = $v;
         let f = $fill;
-        #[rustfmt::skip]
         let () = match const { lanes!($r) } {
             0 | 1 => {}
             2  => { v = $op(v, <$r as Register>::align::<1>(f, v)); }
@@ -123,11 +123,11 @@ macro_rules! forward_ladder {
 /// is `align::<s>(v, fill)`. Unlike the forward direction the offset *is* the shift, so
 /// it is already a literal and needs no per-width table - the `if const` chain just
 /// stops once the shift covers the register.
+#[rustfmt::skip]
 macro_rules! reverse_ladder {
     ($r:ty, $v:expr, $fill:expr, $op:path) => {{
         let mut v = $v;
         let f = $fill;
-        #[rustfmt::skip]
         let () = {
             if const { lanes!($r) >  1 } { v = $op(v, <$r as Register>::align::<1>(v, f)); }
             if const { lanes!($r) >  2 } { v = $op(v, <$r as Register>::align::<2>(v, f)); }

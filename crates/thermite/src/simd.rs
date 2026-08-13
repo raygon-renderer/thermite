@@ -564,105 +564,129 @@ pub trait Simd: NativeSimd {type usizex2: WellFormedUnsignedIntegerRegister<Elem
     type f32x2: WellFormedFloatRegister<Bits = Self::u32x2, SignedBits = Self::i32x2>
         + FullyInteroperable<Self::i32x2, Self::u32x2, Lanes = U2, Element = f32, Unsigned = Self::u32x2, Signed = Self::i32x2>
         + CastRegister<Self::f64x2> + CastRegister<Self::i16x2> + CastRegister<Self::u16x2> + CastRegister<Self::i8x2> + CastRegister<Self::u8x2>
-        + FullConcatRegister<f32> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
+        + FullConcatRegister<f32> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>
+        + CastRegister<Self::i64x2> + CastRegister<Self::u64x2>;
     type i32x2: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f32x2, Self::u32x2, Lanes = U2, Element = i32, Unsigned = Self::u32x2, Signed = Self::i32x2>
-        + CastRegister<Self::i64x2> + CastRegister<Self::i16x2> + CastRegister<Self::i8x2> + CastRegister<Self::f32x2> + CastRegister<Self::f64x2> + FullConcatRegister<i32> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
+        + CastRegister<Self::i64x2> + CastRegister<Self::i16x2> + CastRegister<Self::i8x2> + CastRegister<Self::f32x2> + CastRegister<Self::f64x2> + FullConcatRegister<i32> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>
+        + CastRegister<Self::u8x2> + CastRegister<Self::u16x2> + CastRegister<Self::u64x2>;
     // SAD: two u32 lanes = exactly one pair.
     type u32x2: WellFormedUnsignedIntegerRegister + Sad64Register<u64>
         + FullyInteroperable<Self::f32x2, Self::i32x2, Lanes = U2, Element = u32, Unsigned = Self::u32x2, Signed = Self::i32x2>
-        + CastRegister<Self::u64x2> + CastRegister<Self::u16x2> + CastRegister<Self::u8x2> + CastRegister<Self::f32x2> + CastRegister<Self::f64x2> + FullConcatRegister<u32> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
+        + CastRegister<Self::u64x2> + CastRegister<Self::u16x2> + CastRegister<Self::u8x2> + CastRegister<Self::f32x2> + CastRegister<Self::f64x2> + FullConcatRegister<u32> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>
+        + CastRegister<Self::i8x2> + CastRegister<Self::i16x2> + CastRegister<Self::i64x2>;
 
     // 128/32-bit SIMD types
     type f32x4: WellFormedFloatRegister<Bits = Self::u32x4, SignedBits = Self::i32x4> + LinAlg4Register
         + FullyInteroperable<Self::i32x4, Self::u32x4, Lanes = U4, Element = f32, Unsigned = Self::u32x4, Signed = Self::i32x4>
         + CastRegister<Self::f64x4> + CastRegister<Self::i16x4> + CastRegister<Self::u16x4> + CastRegister<Self::i8x4> + CastRegister<Self::u8x4>
-        + FullConcatRegister<Self::f32x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4> + CastRegister<Self::u64x4>;
+        + FullConcatRegister<Self::f32x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4> + CastRegister<Self::u64x4>
+        + CastRegister<Self::i64x4>;
     type i32x4: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f32x4, Self::u32x4, Lanes = U4, Element = i32, Unsigned = Self::u32x4, Signed = Self::i32x4>
-        + CastRegister<Self::i64x4> + CastRegister<Self::i16x4> + CastRegister<Self::i8x4> + CastRegister<Self::f32x4> + CastRegister<Self::f64x4> + FullConcatRegister<Self::i32x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
+        + CastRegister<Self::i64x4> + CastRegister<Self::i16x4> + CastRegister<Self::i8x4> + CastRegister<Self::f32x4> + CastRegister<Self::f64x4> + FullConcatRegister<Self::i32x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>
+        + CastRegister<Self::u8x4> + CastRegister<Self::u16x4> + CastRegister<Self::u64x4>;
     type u32x4: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f32x4, Self::i32x4, Lanes = U4, Element = u32, Unsigned = Self::u32x4, Signed = Self::i32x4>
         + CastRegister<Self::u64x4> + CastRegister<Self::u16x4> + CastRegister<Self::u8x4> + CastRegister<Self::f32x4> + CastRegister<Self::f64x4> + FullConcatRegister<Self::u32x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>
         // Same-width reinterprets (see `u8x16`'s SAD bounds).
         + BitCastRegister<Self::u8x16> + BitCastRegister<Self::u16x8>
-        + Sad64Register<Self::u64x2>;
+        + Sad64Register<Self::u64x2>
+        + CastRegister<Self::i8x4> + CastRegister<Self::i16x4> + CastRegister<Self::i64x4>;
 
     // 256/32-bit SIMD types
     type f32x8: WellFormedFloatRegister<Bits = Self::u32x8, SignedBits = Self::i32x8>
         + FullyInteroperable<Self::i32x8, Self::u32x8, Lanes = U8, Element = f32, Unsigned = Self::u32x8, Signed = Self::i32x8>
         + CastRegister<Self::f64x8> + CastRegister<Self::i16x8> + CastRegister<Self::u16x8> + CastRegister<Self::i8x8> + CastRegister<Self::u8x8>
-        + FullConcatRegister<Self::f32x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
+        + FullConcatRegister<Self::f32x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>
+        + CastRegister<Self::i64x8> + CastRegister<Self::u64x8>;
     type i32x8: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f32x8, Self::u32x8, Lanes = U8, Element = i32, Unsigned = Self::u32x8, Signed = Self::i32x8>
-        + CastRegister<Self::i64x8> + CastRegister<Self::i16x8> + CastRegister<Self::i8x8> + CastRegister<Self::f32x8> + CastRegister<Self::f64x8> + FullConcatRegister<Self::i32x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
+        + CastRegister<Self::i64x8> + CastRegister<Self::i16x8> + CastRegister<Self::i8x8> + CastRegister<Self::f32x8> + CastRegister<Self::f64x8> + FullConcatRegister<Self::i32x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>
+        + CastRegister<Self::u8x8> + CastRegister<Self::u16x8> + CastRegister<Self::u64x8>;
     // SAD: pairs -> u64x4.
     type u32x8: WellFormedUnsignedIntegerRegister + Sad64Register<Self::u64x4>
         + FullyInteroperable<Self::f32x8, Self::i32x8, Lanes = U8, Element = u32, Unsigned = Self::u32x8, Signed = Self::i32x8>
-        + CastRegister<Self::u64x8> + CastRegister<Self::u16x8> + CastRegister<Self::u8x8> + CastRegister<Self::f32x8> + CastRegister<Self::f64x8> + FullConcatRegister<Self::u32x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
+        + CastRegister<Self::u64x8> + CastRegister<Self::u16x8> + CastRegister<Self::u8x8> + CastRegister<Self::f32x8> + CastRegister<Self::f64x8> + FullConcatRegister<Self::u32x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>
+        + CastRegister<Self::i8x8> + CastRegister<Self::i16x8> + CastRegister<Self::i64x8>;
 
     // 128/64-bit SIMD types
     type f64x2: WellFormedFloatRegister<Bits = Self::u64x2, SignedBits = Self::i64x2>
         + FullyInteroperable<Self::i64x2, Self::u64x2, Lanes = U2, Element = f64, Unsigned = Self::u64x2, Signed = Self::i64x2>
         + CastRegister<Self::f32x2> + CastRegister<Self::i16x2> + CastRegister<Self::u16x2> + CastRegister<Self::i8x2> + CastRegister<Self::u8x2>
-        + FullConcatRegister<f64> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
+        + FullConcatRegister<f64> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>
+        + CastRegister<Self::i32x2> + CastRegister<Self::u32x2>;
     type i64x2: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f64x2, Self::u64x2, Lanes = U2, Element = i64, Unsigned = Self::u64x2, Signed = Self::i64x2>
-        + CastRegister<Self::i32x2> + CastRegister<Self::i16x2> + CastRegister<Self::i8x2> + CastRegister<Self::f64x2> + CastRegister<Self::f32x2> + FullConcatRegister<i64> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
+        + CastRegister<Self::i32x2> + CastRegister<Self::i16x2> + CastRegister<Self::i8x2> + CastRegister<Self::f64x2> + CastRegister<Self::f32x2> + FullConcatRegister<i64> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>
+        + CastRegister<Self::u8x2> + CastRegister<Self::u16x2> + CastRegister<Self::u32x2>;
     type u64x2: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f64x2, Self::i64x2, Lanes = U2, Element = u64, Unsigned = Self::u64x2, Signed = Self::i64x2>
         + CastRegister<Self::u32x2> + CastRegister<Self::u16x2> + CastRegister<Self::u8x2> + CastRegister<Self::f64x2> + CastRegister<Self::f32x2> + FullConcatRegister<u64> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>
         // Same-width reinterprets (see `u8x16`'s SAD bounds).
-        + BitCastRegister<Self::u8x16> + BitCastRegister<Self::u16x8> + BitCastRegister<Self::u32x4>;
+        + BitCastRegister<Self::u8x16> + BitCastRegister<Self::u16x8> + BitCastRegister<Self::u32x4>
+        + CastRegister<Self::i8x2> + CastRegister<Self::i16x2> + CastRegister<Self::i32x2>;
 
     // 256/64-bit SIMD types
     type f64x4: WellFormedFloatRegister<Bits = Self::u64x4, SignedBits = Self::i64x4> + LinAlg4Register
         + FullyInteroperable<Self::i64x4, Self::u64x4, Lanes = U4, Element = f64, Unsigned = Self::u64x4, Signed = Self::i64x4>
         + CastRegister<Self::f32x4> + CastRegister<Self::i16x4> + CastRegister<Self::u16x4> + CastRegister<Self::i8x4> + CastRegister<Self::u8x4>
-        + FullConcatRegister<Self::f64x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
+        + FullConcatRegister<Self::f64x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>
+        + CastRegister<Self::i32x4> + CastRegister<Self::u32x4>;
     type i64x4: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f64x4, Self::u64x4, Lanes = U4, Element = i64, Unsigned = Self::u64x4, Signed = Self::i64x4>
-        + CastRegister<Self::i32x4> + CastRegister<Self::i16x4> + CastRegister<Self::i8x4> + CastRegister<Self::f64x4> + CastRegister<Self::f32x4> + FullConcatRegister<Self::i64x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
+        + CastRegister<Self::i32x4> + CastRegister<Self::i16x4> + CastRegister<Self::i8x4> + CastRegister<Self::f64x4> + CastRegister<Self::f32x4> + FullConcatRegister<Self::i64x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>
+        + CastRegister<Self::u8x4> + CastRegister<Self::u16x4> + CastRegister<Self::u32x4>;
     type u64x4: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f64x4, Self::i64x4, Lanes = U4, Element = u64, Unsigned = Self::u64x4, Signed = Self::i64x4>
-        + CastRegister<Self::u32x4> + CastRegister<Self::u16x4> + CastRegister<Self::u8x4> + CastRegister<Self::f64x4> + CastRegister<Self::f32x4> + FullConcatRegister<Self::u64x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
+        + CastRegister<Self::u32x4> + CastRegister<Self::u16x4> + CastRegister<Self::u8x4> + CastRegister<Self::f64x4> + CastRegister<Self::f32x4> + FullConcatRegister<Self::u64x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>
+        + CastRegister<Self::i8x4> + CastRegister<Self::i16x4> + CastRegister<Self::i32x4>;
 
     // 512/64-bit SIMD types
     type f64x8: WellFormedFloatRegister<Bits = Self::u64x8, SignedBits = Self::i64x8>
         + FullyInteroperable<Self::i64x8, Self::u64x8, Lanes = U8, Element = f64, Unsigned = Self::u64x8, Signed = Self::i64x8>
         + CastRegister<Self::f32x8> + CastRegister<Self::i16x8> + CastRegister<Self::u16x8> + CastRegister<Self::i8x8> + CastRegister<Self::u8x8>
-        + FullConcatRegister<Self::f64x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
+        + FullConcatRegister<Self::f64x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>
+        + CastRegister<Self::i32x8> + CastRegister<Self::u32x8>;
     type i64x8: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f64x8, Self::u64x8, Lanes = U8, Element = i64, Unsigned = Self::u64x8, Signed = Self::i64x8>
-        + CastRegister<Self::i32x8> + CastRegister<Self::i16x8> + CastRegister<Self::i8x8> + CastRegister<Self::f64x8> + CastRegister<Self::f32x8> + FullConcatRegister<Self::i64x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
+        + CastRegister<Self::i32x8> + CastRegister<Self::i16x8> + CastRegister<Self::i8x8> + CastRegister<Self::f64x8> + CastRegister<Self::f32x8> + FullConcatRegister<Self::i64x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>
+        + CastRegister<Self::u8x8> + CastRegister<Self::u16x8> + CastRegister<Self::u32x8>;
     type u64x8: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f64x8, Self::i64x8, Lanes = U8, Element = u64, Unsigned = Self::u64x8, Signed = Self::i64x8>
-        + CastRegister<Self::u32x8> + CastRegister<Self::u16x8> + CastRegister<Self::u8x8> + CastRegister<Self::f64x8> + CastRegister<Self::f32x8> + FullConcatRegister<Self::u64x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
+        + CastRegister<Self::u32x8> + CastRegister<Self::u16x8> + CastRegister<Self::u8x8> + CastRegister<Self::f64x8> + CastRegister<Self::f32x8> + FullConcatRegister<Self::u64x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>
+        + CastRegister<Self::i8x8> + CastRegister<Self::i16x8> + CastRegister<Self::i32x8>;
 
     // 512/32-bit SIMD types
     type f32x16: WellFormedFloatRegister<Bits = Self::u32x16, SignedBits = Self::i32x16>
         + FullyInteroperable<Self::i32x16, Self::u32x16, Lanes = U16, Element = f32, Unsigned = Self::u32x16, Signed = Self::i32x16>
         + CastRegister<Self::f64x16> + CastRegister<Self::i16x16> + CastRegister<Self::u16x16> + CastRegister<Self::i8x16> + CastRegister<Self::u8x16>
-        + FullConcatRegister<Self::f32x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
+        + FullConcatRegister<Self::f32x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>
+        + CastRegister<Self::i64x16> + CastRegister<Self::u64x16>;
     type i32x16: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f32x16, Self::u32x16, Lanes = U16, Element = i32, Unsigned = Self::u32x16, Signed = Self::i32x16>
-        + CastRegister<Self::i64x16> + CastRegister<Self::i16x16> + CastRegister<Self::i8x16> + CastRegister<Self::f32x16> + CastRegister<Self::f64x16> + FullConcatRegister<Self::i32x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
+        + CastRegister<Self::i64x16> + CastRegister<Self::i16x16> + CastRegister<Self::i8x16> + CastRegister<Self::f32x16> + CastRegister<Self::f64x16> + FullConcatRegister<Self::i32x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>
+        + CastRegister<Self::u8x16> + CastRegister<Self::u16x16> + CastRegister<Self::u64x16>;
     // SAD: pairs -> u64x8.
     type u32x16: WellFormedUnsignedIntegerRegister + Sad64Register<Self::u64x8>
         + FullyInteroperable<Self::f32x16, Self::i32x16, Lanes = U16, Element = u32, Unsigned = Self::u32x16, Signed = Self::i32x16>
-        + CastRegister<Self::u64x16> + CastRegister<Self::u16x16> + CastRegister<Self::u8x16> + CastRegister<Self::f32x16> + CastRegister<Self::f64x16> + FullConcatRegister<Self::u32x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
+        + CastRegister<Self::u64x16> + CastRegister<Self::u16x16> + CastRegister<Self::u8x16> + CastRegister<Self::f32x16> + CastRegister<Self::f64x16> + FullConcatRegister<Self::u32x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>
+        + CastRegister<Self::i8x16> + CastRegister<Self::i16x16> + CastRegister<Self::i64x16>;
 
     // 1024/64-bit SIMD types
     type f64x16: WellFormedFloatRegister<Bits = Self::u64x16, SignedBits = Self::i64x16>
         + FullyInteroperable<Self::i64x16, Self::u64x16, Lanes = U16, Element = f64, Unsigned = Self::u64x16, Signed = Self::i64x16>
         + CastRegister<Self::f32x16> + CastRegister<Self::i16x16> + CastRegister<Self::u16x16> + CastRegister<Self::i8x16> + CastRegister<Self::u8x16>
-        + FullConcatRegister<Self::f64x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
+        + FullConcatRegister<Self::f64x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>
+        + CastRegister<Self::i32x16> + CastRegister<Self::u32x16>;
     type i64x16: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f64x16, Self::u64x16, Lanes = U16, Element = i64, Unsigned = Self::u64x16, Signed = Self::i64x16>
-        + CastRegister<Self::i32x16> + CastRegister<Self::i16x16> + CastRegister<Self::i8x16> + CastRegister<Self::f64x16> + CastRegister<Self::f32x16> + FullConcatRegister<Self::i64x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
+        + CastRegister<Self::i32x16> + CastRegister<Self::i16x16> + CastRegister<Self::i8x16> + CastRegister<Self::f64x16> + CastRegister<Self::f32x16> + FullConcatRegister<Self::i64x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>
+        + CastRegister<Self::u8x16> + CastRegister<Self::u16x16> + CastRegister<Self::u32x16>;
     type u64x16: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f64x16, Self::i64x16, Lanes = U16, Element = u64, Unsigned = Self::u64x16, Signed = Self::i64x16>
-        + CastRegister<Self::u32x16> + CastRegister<Self::u16x16> + CastRegister<Self::u8x16> + CastRegister<Self::f64x16> + CastRegister<Self::f32x16> + FullConcatRegister<Self::u64x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
+        + CastRegister<Self::u32x16> + CastRegister<Self::u16x16> + CastRegister<Self::u8x16> + CastRegister<Self::f64x16> + CastRegister<Self::f32x16> + FullConcatRegister<Self::u64x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>
+        + CastRegister<Self::i8x16> + CastRegister<Self::i16x16> + CastRegister<Self::i32x16>;
 
     // ===== 8-bit and 16-bit integer families =====
     // No floating-point partner (there is no `f16`), so these are modeled on the float-free
@@ -679,7 +703,8 @@ pub trait Simd: NativeSimd {type usizex2: WellFormedUnsignedIntegerRegister<Elem
         + IndexableRegister<Self::u8x16> + CastRegister<Self::i32x16> + CastRegister<Self::i16x16> + CastRegister<Self::i64x16>
            + CastRegister<Self::f32x16> + CastRegister<Self::f64x16>
           + BitCastRegister<Self::u8x16>
-        + FullConcatRegister<Self::i8x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
+        + FullConcatRegister<Self::i8x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>
+        + CastRegister<Self::u16x16> + CastRegister<Self::u32x16> + CastRegister<Self::u64x16>;
     /// Fixed 16-lane (128-bit) unsigned 8-bit register. See [`i8x16`](Self::i8x16).
     type u8x16: WellFormedUnsignedIntegerRegister<Element = u8, Lanes = U16, Unsigned = Self::u8x16, Signed = Self::i8x16>
         + IndexableRegister<Self::u8x16> + CastRegister<Self::u32x16> + CastRegister<Self::u16x16> + CastRegister<Self::u64x16>
@@ -689,7 +714,8 @@ pub trait Simd: NativeSimd {type usizex2: WellFormedUnsignedIntegerRegister<Elem
         // Sum of absolute differences, summed in groups of 2/4/8 byte lanes into the
         // same-width `u16`/`u32`/`u64` register. x86 does the `u64` grouping in one
         // `psadbw`; NEON/wasm do the narrower ones in one `vpaddl`/`extadd_pairwise`.
-        + Sad16Register<Self::u16x8> + Sad32Register<Self::u32x4> + Sad64Register<Self::u64x2>;
+        + Sad16Register<Self::u16x8> + Sad32Register<Self::u32x4> + Sad64Register<Self::u64x2>
+        + CastRegister<Self::i16x16> + CastRegister<Self::i32x16> + CastRegister<Self::i64x16>;
 
     // Sub-native 8-bit ladder (x2 = ArrayRegister, x4/x8 = ReducedRegister over the native 128-bit
     // register). `CastRegister<Self::i16xK>` is the 16 -> 8 narrow; `CastRegister<Self::i32xK>` the
@@ -697,7 +723,8 @@ pub trait Simd: NativeSimd {type usizex2: WellFormedUnsignedIntegerRegister<Elem
     type i8x2: WellFormedSignedIntegerRegister<Element = i8, Lanes = U2, Unsigned = Self::u8x2, Signed = Self::i8x2>
         + CastRegister<Self::i32x2> + CastRegister<Self::i16x2> + CastRegister<Self::i64x2>
            + CastRegister<Self::f32x2> + CastRegister<Self::f64x2>
-          + BitCastRegister<Self::u8x2> + FullConcatRegister<i8> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
+          + BitCastRegister<Self::u8x2> + FullConcatRegister<i8> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>
+        + CastRegister<Self::u16x2> + CastRegister<Self::u32x2> + CastRegister<Self::u64x2>;
     type u8x2: WellFormedUnsignedIntegerRegister<Element = u8, Lanes = U2, Unsigned = Self::u8x2, Signed = Self::i8x2>
         + CastRegister<Self::u32x2> + CastRegister<Self::u16x2> + CastRegister<Self::u64x2>
            + CastRegister<Self::f32x2> + CastRegister<Self::f64x2>
@@ -705,61 +732,71 @@ pub trait Simd: NativeSimd {type usizex2: WellFormedUnsignedIntegerRegister<Elem
         + PackedF8Register<Self::f32x2>
         // SAD: two bytes is below every grouping, so all three sum the whole
         // register into a single lane (the 1-lane scalar registers).
-        + Sad16Register<u16> + Sad32Register<u32> + Sad64Register<u64>;
+        + Sad16Register<u16> + Sad32Register<u32> + Sad64Register<u64>
+        + CastRegister<Self::i16x2> + CastRegister<Self::i32x2> + CastRegister<Self::i64x2>;
 
     type i8x4: WellFormedSignedIntegerRegister<Element = i8, Lanes = U4, Unsigned = Self::u8x4, Signed = Self::i8x4>
         + CastRegister<Self::i32x4> + CastRegister<Self::i16x4> + CastRegister<Self::i64x4>
            + CastRegister<Self::f32x4> + CastRegister<Self::f64x4>
-          + BitCastRegister<Self::u8x4> + FullConcatRegister<Self::i8x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
+          + BitCastRegister<Self::u8x4> + FullConcatRegister<Self::i8x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>
+        + CastRegister<Self::u16x4> + CastRegister<Self::u32x4> + CastRegister<Self::u64x4>;
     type u8x4: WellFormedUnsignedIntegerRegister<Element = u8, Lanes = U4, Unsigned = Self::u8x4, Signed = Self::i8x4>
         + CastRegister<Self::u32x4> + CastRegister<Self::u16x4> + CastRegister<Self::u64x4>
            + CastRegister<Self::f32x4> + CastRegister<Self::f64x4>
           + BitCastRegister<Self::i8x4> + FullConcatRegister<Self::u8x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>
         + PackedF8Register<Self::f32x4>
         // SAD: 4 bytes = two 2-byte groups, one 4-byte group, and a partial 8-byte group.
-        + Sad16Register<Self::u16x2> + Sad32Register<u32> + Sad64Register<u64>;
+        + Sad16Register<Self::u16x2> + Sad32Register<u32> + Sad64Register<u64>
+        + CastRegister<Self::i16x4> + CastRegister<Self::i32x4> + CastRegister<Self::i64x4>;
 
     type i8x8: WellFormedSignedIntegerRegister<Element = i8, Lanes = U8, Unsigned = Self::u8x8, Signed = Self::i8x8>
         + CastRegister<Self::i32x8> + CastRegister<Self::i16x8> + CastRegister<Self::i64x8>
            + CastRegister<Self::f32x8> + CastRegister<Self::f64x8>
-          + BitCastRegister<Self::u8x8> + FullConcatRegister<Self::i8x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
+          + BitCastRegister<Self::u8x8> + FullConcatRegister<Self::i8x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>
+        + CastRegister<Self::u16x8> + CastRegister<Self::u32x8> + CastRegister<Self::u64x8>;
     type u8x8: WellFormedUnsignedIntegerRegister<Element = u8, Lanes = U8, Unsigned = Self::u8x8, Signed = Self::i8x8>
         + CastRegister<Self::u32x8> + CastRegister<Self::u16x8> + CastRegister<Self::u64x8>
            + CastRegister<Self::f32x8> + CastRegister<Self::f64x8>
           + BitCastRegister<Self::i8x8> + FullConcatRegister<Self::u8x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>
         + PackedF8Register<Self::f32x8>
         // SAD: 8 bytes = four/two groups, and exactly one full 8-byte group.
-        + Sad16Register<Self::u16x4> + Sad32Register<Self::u32x2> + Sad64Register<u64>;
+        + Sad16Register<Self::u16x4> + Sad32Register<Self::u32x2> + Sad64Register<u64>
+        + CastRegister<Self::i16x8> + CastRegister<Self::i32x8> + CastRegister<Self::i64x8>;
 
     // 16-bit ladder. `CastRegister<Self::i8xK>` is the 8 -> 16 widen; `CastRegister<Self::i32xK>`
     // the 16 -> 32 narrow.
     type i16x2: WellFormedSignedIntegerRegister<Element = i16, Lanes = U2, Unsigned = Self::u16x2, Signed = Self::i16x2>
         + CastRegister<Self::i32x2> + CastRegister<Self::i8x2> + CastRegister<Self::i64x2>
           + CastRegister<Self::f32x2> + CastRegister<Self::f64x2>
-          + BitCastRegister<Self::u16x2> + FullConcatRegister<i16> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
+          + BitCastRegister<Self::u16x2> + FullConcatRegister<i16> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>
+        + CastRegister<Self::u8x2> + CastRegister<Self::u32x2> + CastRegister<Self::u64x2>;
     // SAD: one full pair; the group of four is partial, so it sums both lanes.
     type u16x2: WellFormedUnsignedIntegerRegister<Element = u16, Lanes = U2, Unsigned = Self::u16x2, Signed = Self::i16x2>
         + Sad32Register<u32> + Sad64Register<u64>
         + CastRegister<Self::u32x2> + CastRegister<Self::u8x2> + CastRegister<Self::u64x2>
           + CastRegister<Self::f32x2> + CastRegister<Self::f64x2>
-          + BitCastRegister<Self::i16x2> + FullConcatRegister<u16> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>;
+          + BitCastRegister<Self::i16x2> + FullConcatRegister<u16> + IndexedBy<Self::usizex2, Self::u32x2, Self::u64x2>
+        + CastRegister<Self::i8x2> + CastRegister<Self::i32x2> + CastRegister<Self::i64x2>;
 
     type i16x4: WellFormedSignedIntegerRegister<Element = i16, Lanes = U4, Unsigned = Self::u16x4, Signed = Self::i16x4>
         + CastRegister<Self::i32x4> + CastRegister<Self::i8x4> + CastRegister<Self::i64x4>
           + CastRegister<Self::f32x4> + CastRegister<Self::f64x4>
-          + BitCastRegister<Self::u16x4> + FullConcatRegister<Self::i16x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>;
+          + BitCastRegister<Self::u16x4> + FullConcatRegister<Self::i16x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>
+        + CastRegister<Self::u8x4> + CastRegister<Self::u32x4> + CastRegister<Self::u64x4>;
     // SAD: 4 u16 lanes = two pairs, and exactly one group of four.
     type u16x4: WellFormedUnsignedIntegerRegister<Element = u16, Lanes = U4, Unsigned = Self::u16x4, Signed = Self::i16x4>
         + Sad32Register<Self::u32x2> + Sad64Register<u64>
         + CastRegister<Self::u32x4> + CastRegister<Self::u8x4> + CastRegister<Self::u64x4>
           + CastRegister<Self::f32x4> + CastRegister<Self::f64x4>
           + BitCastRegister<Self::i16x4> + FullConcatRegister<Self::u16x2> + IndexedBy<Self::usizex4, Self::u32x4, Self::u64x4>
-        + PackedF16Register<Self::f32x4>;
+        + PackedF16Register<Self::f32x4>
+        + CastRegister<Self::i8x4> + CastRegister<Self::i32x4> + CastRegister<Self::i64x4>;
 
     type i16x8: WellFormedSignedIntegerRegister<Element = i16, Lanes = U8, Unsigned = Self::u16x8, Signed = Self::i16x8>
         + CastRegister<Self::i32x8> + CastRegister<Self::i8x8> + CastRegister<Self::i64x8>
           + CastRegister<Self::f32x8> + CastRegister<Self::f64x8>
-          + BitCastRegister<Self::u16x8> + FullConcatRegister<Self::i16x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>;
+          + BitCastRegister<Self::u16x8> + FullConcatRegister<Self::i16x4> + IndexedBy<Self::usizex8, Self::u32x8, Self::u64x8>
+        + CastRegister<Self::u8x8> + CastRegister<Self::u32x8> + CastRegister<Self::u64x8>;
     type u16x8: WellFormedUnsignedIntegerRegister<Element = u16, Lanes = U8, Unsigned = Self::u16x8, Signed = Self::i16x8>
         + CastRegister<Self::u32x8> + CastRegister<Self::u8x8> + CastRegister<Self::u64x8>
           + CastRegister<Self::f32x8> + CastRegister<Self::f64x8>
@@ -768,19 +805,22 @@ pub trait Simd: NativeSimd {type usizex2: WellFormedUnsignedIntegerRegister<Elem
         // Same-width reinterpret of the byte register (see `u8x16`'s SAD bounds).
         + BitCastRegister<Self::u8x16>
         // SAD one element size up: pairs -> u32, quads -> u64.
-        + Sad32Register<Self::u32x4> + Sad64Register<Self::u64x2>;
+        + Sad32Register<Self::u32x4> + Sad64Register<Self::u64x2>
+        + CastRegister<Self::i8x8> + CastRegister<Self::i32x8> + CastRegister<Self::i64x8>;
 
     type i16x16: WellFormedSignedIntegerRegister<Element = i16, Lanes = U16, Unsigned = Self::u16x16, Signed = Self::i16x16>
         + CastRegister<Self::i32x16> + CastRegister<Self::i8x16> + CastRegister<Self::i64x16>
           + CastRegister<Self::f32x16> + CastRegister<Self::f64x16>
-          + BitCastRegister<Self::u16x16> + FullConcatRegister<Self::i16x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>;
+          + BitCastRegister<Self::u16x16> + FullConcatRegister<Self::i16x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>
+        + CastRegister<Self::u8x16> + CastRegister<Self::u32x16> + CastRegister<Self::u64x16>;
     // SAD: pairs -> u32x8, groups of four -> u64x4.
     type u16x16: WellFormedUnsignedIntegerRegister<Element = u16, Lanes = U16, Unsigned = Self::u16x16, Signed = Self::i16x16>
         + Sad32Register<Self::u32x8> + Sad64Register<Self::u64x4>
         + CastRegister<Self::u32x16> + CastRegister<Self::u8x16> + CastRegister<Self::u64x16>
           + CastRegister<Self::f32x16> + CastRegister<Self::f64x16>
           + BitCastRegister<Self::i16x16> + FullConcatRegister<Self::u16x8> + IndexedBy<Self::usizex16, Self::u32x16, Self::u64x16>
-        + PackedF16Register<Self::f32x16>;}
+        + PackedF16Register<Self::f32x16>
+        + CastRegister<Self::i8x16> + CastRegister<Self::i32x16> + CastRegister<Self::i64x16>;}
 
 /// Reduced registers to 3 lanes, for 3D math operations. They are backed by 4-lane registers internally
 /// using [`ReducedRegister`], so they have the same alignment and nearly identical performance
@@ -1547,113 +1587,213 @@ pub trait SimdVectors: NativeSimdVectors {type usizex2: UnsignedIntegerVector<La
     type f32x2: FloatVector<Lanes = U2, Element = f32>
         + CastVector<<Self as SimdVectors>::f64x2>
         + ConcatVector<Vector<f32>> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>
+        + CastVector<<Self as SimdVectors>::i16x2> + CastVector<<Self as SimdVectors>::i32x2>
+        + CastVector<<Self as SimdVectors>::i64x2> + CastVector<<Self as SimdVectors>::i8x2>
+        + CastVector<<Self as SimdVectors>::u16x2> + CastVector<<Self as SimdVectors>::u32x2>
+        + CastVector<<Self as SimdVectors>::u64x2> + CastVector<<Self as SimdVectors>::u8x2>;
     type i32x2: SignedIntegerVector<Lanes = U2, Element = i32>
         + CastVector<<Self as SimdVectors>::i64x2> + CastVector<<Self as SimdVectors>::i64x2>
         + ConcatVector<Vector<i32>> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>
+        + CastVector<<Self as SimdVectors>::f32x2> + CastVector<<Self as SimdVectors>::f64x2>
+        + CastVector<<Self as SimdVectors>::i16x2> + CastVector<<Self as SimdVectors>::i8x2>
+        + CastVector<<Self as SimdVectors>::u16x2> + CastVector<<Self as SimdVectors>::u32x2>
+        + CastVector<<Self as SimdVectors>::u64x2> + CastVector<<Self as SimdVectors>::u8x2>;
     type u32x2: UnsignedIntegerVector<Lanes = U2, Element = u32> + Sad64Vector<Vector<u64>>
         + CastVector<<Self as SimdVectors>::u64x2> + CastVector<<Self as SimdVectors>::u64x2>
         + ConcatVector<Vector<u32>> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>
+        + CastVector<<Self as SimdVectors>::f32x2> + CastVector<<Self as SimdVectors>::f64x2>
+        + CastVector<<Self as SimdVectors>::i16x2> + CastVector<<Self as SimdVectors>::i32x2>
+        + CastVector<<Self as SimdVectors>::i64x2> + CastVector<<Self as SimdVectors>::i8x2>
+        + CastVector<<Self as SimdVectors>::u16x2> + CastVector<<Self as SimdVectors>::u8x2>;
 
     type f32x4: FloatVector<Lanes = U4, Element = f32>
         + CastVector<<Self as SimdVectors>::f64x4>
         + ConcatVector<<Self as SimdVectors>::f32x2> + SwizzleVector
         + LinAlg4Vector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>
+        + CastVector<<Self as SimdVectors>::i16x4> + CastVector<<Self as SimdVectors>::i32x4>
+        + CastVector<<Self as SimdVectors>::i64x4> + CastVector<<Self as SimdVectors>::i8x4>
+        + CastVector<<Self as SimdVectors>::u16x4> + CastVector<<Self as SimdVectors>::u32x4>
+        + CastVector<<Self as SimdVectors>::u64x4> + CastVector<<Self as SimdVectors>::u8x4>;
     type i32x4: SignedIntegerVector<Lanes = U4, Element = i32>
         + CastVector<<Self as SimdVectors>::i64x4> + CastVector<<Self as SimdVectors>::i64x4>
         + ConcatVector<<Self as SimdVectors>::i32x2> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>
+        + CastVector<<Self as SimdVectors>::f32x4> + CastVector<<Self as SimdVectors>::f64x4>
+        + CastVector<<Self as SimdVectors>::i16x4> + CastVector<<Self as SimdVectors>::i8x4>
+        + CastVector<<Self as SimdVectors>::u16x4> + CastVector<<Self as SimdVectors>::u32x4>
+        + CastVector<<Self as SimdVectors>::u64x4> + CastVector<<Self as SimdVectors>::u8x4>;
     type u32x4: UnsignedIntegerVector<Lanes = U4, Element = u32> + Sad64Vector<<Self as SimdVectors>::u64x2>
         + CastVector<<Self as SimdVectors>::u64x4> + CastVector<<Self as SimdVectors>::u64x4>
         + ConcatVector<<Self as SimdVectors>::u32x2> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>
+        + CastVector<<Self as SimdVectors>::f32x4> + CastVector<<Self as SimdVectors>::f64x4>
+        + CastVector<<Self as SimdVectors>::i16x4> + CastVector<<Self as SimdVectors>::i32x4>
+        + CastVector<<Self as SimdVectors>::i64x4> + CastVector<<Self as SimdVectors>::i8x4>
+        + CastVector<<Self as SimdVectors>::u16x4> + CastVector<<Self as SimdVectors>::u8x4>;
 
     type f32x8: FloatVector<Lanes = U8, Element = f32>
         + CastVector<<Self as SimdVectors>::f64x8>
         + ConcatVector<<Self as SimdVectors>::f32x4> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>
+        + CastVector<<Self as SimdVectors>::i16x8> + CastVector<<Self as SimdVectors>::i32x8>
+        + CastVector<<Self as SimdVectors>::i64x8> + CastVector<<Self as SimdVectors>::i8x8>
+        + CastVector<<Self as SimdVectors>::u16x8> + CastVector<<Self as SimdVectors>::u32x8>
+        + CastVector<<Self as SimdVectors>::u64x8> + CastVector<<Self as SimdVectors>::u8x8>;
     type i32x8: SignedIntegerVector<Lanes = U8, Element = i32>
         + CastVector<<Self as SimdVectors>::i64x8> + CastVector<<Self as SimdVectors>::i64x8>
         + ConcatVector<<Self as SimdVectors>::i32x4> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>
+        + CastVector<<Self as SimdVectors>::f32x8> + CastVector<<Self as SimdVectors>::f64x8>
+        + CastVector<<Self as SimdVectors>::i16x8> + CastVector<<Self as SimdVectors>::i8x8>
+        + CastVector<<Self as SimdVectors>::u16x8> + CastVector<<Self as SimdVectors>::u32x8>
+        + CastVector<<Self as SimdVectors>::u64x8> + CastVector<<Self as SimdVectors>::u8x8>;
     type u32x8: UnsignedIntegerVector<Lanes = U8, Element = u32> + Sad64Vector<<Self as SimdVectors>::u64x4>
         + CastVector<<Self as SimdVectors>::u64x8> + CastVector<<Self as SimdVectors>::u64x8>
         + ConcatVector<<Self as SimdVectors>::u32x4> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>
+        + CastVector<<Self as SimdVectors>::f32x8> + CastVector<<Self as SimdVectors>::f64x8>
+        + CastVector<<Self as SimdVectors>::i16x8> + CastVector<<Self as SimdVectors>::i32x8>
+        + CastVector<<Self as SimdVectors>::i64x8> + CastVector<<Self as SimdVectors>::i8x8>
+        + CastVector<<Self as SimdVectors>::u16x8> + CastVector<<Self as SimdVectors>::u8x8>;
 
     type f64x2: FloatVector<Lanes = U2, Element = f64>
         + CastVector<<Self as SimdVectors>::f32x2>
         + ConcatVector<Vector<f64>> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>
+        + CastVector<<Self as SimdVectors>::i16x2> + CastVector<<Self as SimdVectors>::i32x2>
+        + CastVector<<Self as SimdVectors>::i64x2> + CastVector<<Self as SimdVectors>::i8x2>
+        + CastVector<<Self as SimdVectors>::u16x2> + CastVector<<Self as SimdVectors>::u32x2>
+        + CastVector<<Self as SimdVectors>::u64x2> + CastVector<<Self as SimdVectors>::u8x2>;
     type i64x2: SignedIntegerVector<Lanes = U2, Element = i64>
         + CastVector<<Self as SimdVectors>::i32x2>
         + ConcatVector<Vector<i64>> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>
+        + CastVector<<Self as SimdVectors>::f32x2> + CastVector<<Self as SimdVectors>::f64x2>
+        + CastVector<<Self as SimdVectors>::i16x2> + CastVector<<Self as SimdVectors>::i8x2>
+        + CastVector<<Self as SimdVectors>::u16x2> + CastVector<<Self as SimdVectors>::u32x2>
+        + CastVector<<Self as SimdVectors>::u64x2> + CastVector<<Self as SimdVectors>::u8x2>;
     type u64x2: UnsignedIntegerVector<Lanes = U2, Element = u64>
         + CastVector<<Self as SimdVectors>::u32x2>
         + ConcatVector<Vector<u64>> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>
+        + CastVector<<Self as SimdVectors>::f32x2> + CastVector<<Self as SimdVectors>::f64x2>
+        + CastVector<<Self as SimdVectors>::i16x2> + CastVector<<Self as SimdVectors>::i32x2>
+        + CastVector<<Self as SimdVectors>::i64x2> + CastVector<<Self as SimdVectors>::i8x2>
+        + CastVector<<Self as SimdVectors>::u16x2> + CastVector<<Self as SimdVectors>::u8x2>;
 
     type f64x4: FloatVector<Lanes = U4, Element = f64>
         + CastVector<<Self as SimdVectors>::f32x4>
         + ConcatVector<<Self as SimdVectors>::f64x2> + SwizzleVector
         + LinAlg4Vector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>
+        + CastVector<<Self as SimdVectors>::i16x4> + CastVector<<Self as SimdVectors>::i32x4>
+        + CastVector<<Self as SimdVectors>::i64x4> + CastVector<<Self as SimdVectors>::i8x4>
+        + CastVector<<Self as SimdVectors>::u16x4> + CastVector<<Self as SimdVectors>::u32x4>
+        + CastVector<<Self as SimdVectors>::u64x4> + CastVector<<Self as SimdVectors>::u8x4>;
     type i64x4: SignedIntegerVector<Lanes = U4, Element = i64>
         + CastVector<<Self as SimdVectors>::i32x4>
         + ConcatVector<<Self as SimdVectors>::i64x2> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>
+        + CastVector<<Self as SimdVectors>::f32x4> + CastVector<<Self as SimdVectors>::f64x4>
+        + CastVector<<Self as SimdVectors>::i16x4> + CastVector<<Self as SimdVectors>::i8x4>
+        + CastVector<<Self as SimdVectors>::u16x4> + CastVector<<Self as SimdVectors>::u32x4>
+        + CastVector<<Self as SimdVectors>::u64x4> + CastVector<<Self as SimdVectors>::u8x4>;
     type u64x4: UnsignedIntegerVector<Lanes = U4, Element = u64>
         + CastVector<<Self as SimdVectors>::u32x4>
         + ConcatVector<<Self as SimdVectors>::u64x2> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>
+        + CastVector<<Self as SimdVectors>::f32x4> + CastVector<<Self as SimdVectors>::f64x4>
+        + CastVector<<Self as SimdVectors>::i16x4> + CastVector<<Self as SimdVectors>::i32x4>
+        + CastVector<<Self as SimdVectors>::i64x4> + CastVector<<Self as SimdVectors>::i8x4>
+        + CastVector<<Self as SimdVectors>::u16x4> + CastVector<<Self as SimdVectors>::u8x4>;
 
     type f64x8: FloatVector<Lanes = U8, Element = f64>
         + CastVector<<Self as SimdVectors>::f32x8>
         + ConcatVector<<Self as SimdVectors>::f64x4> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>
+        + CastVector<<Self as SimdVectors>::i16x8> + CastVector<<Self as SimdVectors>::i32x8>
+        + CastVector<<Self as SimdVectors>::i64x8> + CastVector<<Self as SimdVectors>::i8x8>
+        + CastVector<<Self as SimdVectors>::u16x8> + CastVector<<Self as SimdVectors>::u32x8>
+        + CastVector<<Self as SimdVectors>::u64x8> + CastVector<<Self as SimdVectors>::u8x8>;
     type i64x8: SignedIntegerVector<Lanes = U8, Element = i64>
         + CastVector<<Self as SimdVectors>::i32x8>
         + ConcatVector<<Self as SimdVectors>::i64x4> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>
+        + CastVector<<Self as SimdVectors>::f32x8> + CastVector<<Self as SimdVectors>::f64x8>
+        + CastVector<<Self as SimdVectors>::i16x8> + CastVector<<Self as SimdVectors>::i8x8>
+        + CastVector<<Self as SimdVectors>::u16x8> + CastVector<<Self as SimdVectors>::u32x8>
+        + CastVector<<Self as SimdVectors>::u64x8> + CastVector<<Self as SimdVectors>::u8x8>;
     type u64x8: UnsignedIntegerVector<Lanes = U8, Element = u64>
         + CastVector<<Self as SimdVectors>::u32x8>
         + ConcatVector<<Self as SimdVectors>::u64x4> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>
+        + CastVector<<Self as SimdVectors>::f32x8> + CastVector<<Self as SimdVectors>::f64x8>
+        + CastVector<<Self as SimdVectors>::i16x8> + CastVector<<Self as SimdVectors>::i32x8>
+        + CastVector<<Self as SimdVectors>::i64x8> + CastVector<<Self as SimdVectors>::i8x8>
+        + CastVector<<Self as SimdVectors>::u16x8> + CastVector<<Self as SimdVectors>::u8x8>;
 
     type f32x16: FloatVector<Lanes = U16, Element = f32>
         + CastVector<<Self as SimdVectors>::f64x16>
         + ConcatVector<<Self as SimdVectors>::f32x8> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>
+        + CastVector<<Self as SimdVectors>::i16x16> + CastVector<<Self as SimdVectors>::i32x16>
+        + CastVector<<Self as SimdVectors>::i64x16> + CastVector<<Self as SimdVectors>::i8x16>
+        + CastVector<<Self as SimdVectors>::u16x16> + CastVector<<Self as SimdVectors>::u32x16>
+        + CastVector<<Self as SimdVectors>::u64x16> + CastVector<<Self as SimdVectors>::u8x16>;
     type i32x16: SignedIntegerVector<Lanes = U16, Element = i32>
         + CastVector<<Self as SimdVectors>::i64x16> + CastVector<<Self as SimdVectors>::i64x16>
         + ConcatVector<<Self as SimdVectors>::i32x8> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>
+        + CastVector<<Self as SimdVectors>::f32x16> + CastVector<<Self as SimdVectors>::f64x16>
+        + CastVector<<Self as SimdVectors>::i16x16> + CastVector<<Self as SimdVectors>::i8x16>
+        + CastVector<<Self as SimdVectors>::u16x16> + CastVector<<Self as SimdVectors>::u32x16>
+        + CastVector<<Self as SimdVectors>::u64x16> + CastVector<<Self as SimdVectors>::u8x16>;
     type u32x16: UnsignedIntegerVector<Lanes = U16, Element = u32> + Sad64Vector<<Self as SimdVectors>::u64x8>
         + CastVector<<Self as SimdVectors>::u64x16> + CastVector<<Self as SimdVectors>::u64x16>
         + ConcatVector<<Self as SimdVectors>::u32x8> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>
+        + CastVector<<Self as SimdVectors>::f32x16> + CastVector<<Self as SimdVectors>::f64x16>
+        + CastVector<<Self as SimdVectors>::i16x16> + CastVector<<Self as SimdVectors>::i32x16>
+        + CastVector<<Self as SimdVectors>::i64x16> + CastVector<<Self as SimdVectors>::i8x16>
+        + CastVector<<Self as SimdVectors>::u16x16> + CastVector<<Self as SimdVectors>::u8x16>;
 
     type f64x16: FloatVector<Lanes = U16, Element = f64>
         + CastVector<<Self as SimdVectors>::f32x16>
         + ConcatVector<<Self as SimdVectors>::f64x8> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>
+        + CastVector<<Self as SimdVectors>::i16x16> + CastVector<<Self as SimdVectors>::i32x16>
+        + CastVector<<Self as SimdVectors>::i64x16> + CastVector<<Self as SimdVectors>::i8x16>
+        + CastVector<<Self as SimdVectors>::u16x16> + CastVector<<Self as SimdVectors>::u32x16>
+        + CastVector<<Self as SimdVectors>::u64x16> + CastVector<<Self as SimdVectors>::u8x16>;
     type i64x16: SignedIntegerVector<Lanes = U16, Element = i64>
         + CastVector<<Self as SimdVectors>::i32x16>
         + ConcatVector<<Self as SimdVectors>::i64x8> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>
+        + CastVector<<Self as SimdVectors>::f32x16> + CastVector<<Self as SimdVectors>::f64x16>
+        + CastVector<<Self as SimdVectors>::i16x16> + CastVector<<Self as SimdVectors>::i8x16>
+        + CastVector<<Self as SimdVectors>::u16x16> + CastVector<<Self as SimdVectors>::u32x16>
+        + CastVector<<Self as SimdVectors>::u64x16> + CastVector<<Self as SimdVectors>::u8x16>;
     type u64x16: UnsignedIntegerVector<Lanes = U16, Element = u64>
         + CastVector<<Self as SimdVectors>::u32x16>
         + ConcatVector<<Self as SimdVectors>::u64x8> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>
+        + CastVector<<Self as SimdVectors>::f32x16> + CastVector<<Self as SimdVectors>::f64x16>
+        + CastVector<<Self as SimdVectors>::i16x16> + CastVector<<Self as SimdVectors>::i32x16>
+        + CastVector<<Self as SimdVectors>::i64x16> + CastVector<<Self as SimdVectors>::i8x16>
+        + CastVector<<Self as SimdVectors>::u16x16> + CastVector<<Self as SimdVectors>::u8x16>;
 
     // ===== 8-bit and 16-bit integer vector families (mirror of the same on `Simd`) =====
     type i8x16: SignedIntegerVector<Lanes = U16, Element = i8, Unsigned = <Self as SimdVectors>::u8x16, Signed = <Self as SimdVectors>::i8x16>
         + CastVector<<Self as SimdVectors>::i32x16> + CastVector<<Self as SimdVectors>::i32x16> + ConcatVector<<Self as SimdVectors>::i8x8> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>
+        + CastVector<<Self as SimdVectors>::f32x16> + CastVector<<Self as SimdVectors>::f64x16>
+        + CastVector<<Self as SimdVectors>::i16x16> + CastVector<<Self as SimdVectors>::i64x16>
+        + CastVector<<Self as SimdVectors>::u16x16> + CastVector<<Self as SimdVectors>::u32x16>
+        + CastVector<<Self as SimdVectors>::u64x16> + CastVector<<Self as SimdVectors>::u8x16>;
     type u8x16: UnsignedIntegerVector<Lanes = U16, Element = u8, Unsigned = <Self as SimdVectors>::u8x16, Signed = <Self as SimdVectors>::i8x16>
         + CastVector<<Self as SimdVectors>::u32x16> + CastVector<<Self as SimdVectors>::u32x16> + ConcatVector<<Self as SimdVectors>::u8x8> + SwizzleVector
         + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>
@@ -1661,69 +1801,129 @@ pub trait SimdVectors: NativeSimdVectors {type usizex2: UnsignedIntegerVector<La
         // Vector-level mirror of the `Simd::u8x16` SAD bounds.
         + Sad16Vector<<Self as SimdVectors>::u16x8>
         + Sad32Vector<<Self as SimdVectors>::u32x4>
-        + Sad64Vector<<Self as SimdVectors>::u64x2>;
+        + Sad64Vector<<Self as SimdVectors>::u64x2>
+        + CastVector<<Self as SimdVectors>::f32x16> + CastVector<<Self as SimdVectors>::f64x16>
+        + CastVector<<Self as SimdVectors>::i16x16> + CastVector<<Self as SimdVectors>::i32x16>
+        + CastVector<<Self as SimdVectors>::i64x16> + CastVector<<Self as SimdVectors>::i8x16>
+        + CastVector<<Self as SimdVectors>::u16x16> + CastVector<<Self as SimdVectors>::u64x16>;
 
     type i8x2: SignedIntegerVector<Lanes = U2, Element = i8, Unsigned = <Self as SimdVectors>::u8x2, Signed = <Self as SimdVectors>::i8x2>
         + CastVector<<Self as SimdVectors>::i32x2> + CastVector<<Self as SimdVectors>::i32x2> + ConcatVector<Vector<i8>> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>
+        + CastVector<<Self as SimdVectors>::f32x2> + CastVector<<Self as SimdVectors>::f64x2>
+        + CastVector<<Self as SimdVectors>::i16x2> + CastVector<<Self as SimdVectors>::i64x2>
+        + CastVector<<Self as SimdVectors>::u16x2> + CastVector<<Self as SimdVectors>::u32x2>
+        + CastVector<<Self as SimdVectors>::u64x2> + CastVector<<Self as SimdVectors>::u8x2>;
     type u8x2: UnsignedIntegerVector<Lanes = U2, Element = u8, Unsigned = <Self as SimdVectors>::u8x2, Signed = <Self as SimdVectors>::i8x2>
         + CastVector<<Self as SimdVectors>::u32x2> + CastVector<<Self as SimdVectors>::u32x2> + ConcatVector<Vector<u8>> + SwizzleVector
         + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>
         + PackedF8Vector<<Self as SimdVectors>::f32x2>
-        + Sad16Vector<Vector<u16>> + Sad32Vector<Vector<u32>> + Sad64Vector<Vector<u64>>;
+        + Sad16Vector<Vector<u16>> + Sad32Vector<Vector<u32>> + Sad64Vector<Vector<u64>>
+        + CastVector<<Self as SimdVectors>::f32x2> + CastVector<<Self as SimdVectors>::f64x2>
+        + CastVector<<Self as SimdVectors>::i16x2> + CastVector<<Self as SimdVectors>::i32x2>
+        + CastVector<<Self as SimdVectors>::i64x2> + CastVector<<Self as SimdVectors>::i8x2>
+        + CastVector<<Self as SimdVectors>::u16x2> + CastVector<<Self as SimdVectors>::u64x2>;
 
     type i8x4: SignedIntegerVector<Lanes = U4, Element = i8, Unsigned = <Self as SimdVectors>::u8x4, Signed = <Self as SimdVectors>::i8x4>
         + CastVector<<Self as SimdVectors>::i32x4> + CastVector<<Self as SimdVectors>::i32x4> + ConcatVector<<Self as SimdVectors>::i8x2> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>
+        + CastVector<<Self as SimdVectors>::f32x4> + CastVector<<Self as SimdVectors>::f64x4>
+        + CastVector<<Self as SimdVectors>::i16x4> + CastVector<<Self as SimdVectors>::i64x4>
+        + CastVector<<Self as SimdVectors>::u16x4> + CastVector<<Self as SimdVectors>::u32x4>
+        + CastVector<<Self as SimdVectors>::u64x4> + CastVector<<Self as SimdVectors>::u8x4>;
     type u8x4: UnsignedIntegerVector<Lanes = U4, Element = u8, Unsigned = <Self as SimdVectors>::u8x4, Signed = <Self as SimdVectors>::i8x4>
         + CastVector<<Self as SimdVectors>::u32x4> + CastVector<<Self as SimdVectors>::u32x4> + ConcatVector<<Self as SimdVectors>::u8x2> + SwizzleVector
         + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>
         + PackedF8Vector<<Self as SimdVectors>::f32x4>
-        + Sad16Vector<<Self as SimdVectors>::u16x2> + Sad32Vector<Vector<u32>> + Sad64Vector<Vector<u64>>;
+        + Sad16Vector<<Self as SimdVectors>::u16x2> + Sad32Vector<Vector<u32>> + Sad64Vector<Vector<u64>>
+        + CastVector<<Self as SimdVectors>::f32x4> + CastVector<<Self as SimdVectors>::f64x4>
+        + CastVector<<Self as SimdVectors>::i16x4> + CastVector<<Self as SimdVectors>::i32x4>
+        + CastVector<<Self as SimdVectors>::i64x4> + CastVector<<Self as SimdVectors>::i8x4>
+        + CastVector<<Self as SimdVectors>::u16x4> + CastVector<<Self as SimdVectors>::u64x4>;
 
     type i8x8: SignedIntegerVector<Lanes = U8, Element = i8, Unsigned = <Self as SimdVectors>::u8x8, Signed = <Self as SimdVectors>::i8x8>
         + CastVector<<Self as SimdVectors>::i32x8> + CastVector<<Self as SimdVectors>::i32x8> + ConcatVector<<Self as SimdVectors>::i8x4> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>
+        + CastVector<<Self as SimdVectors>::f32x8> + CastVector<<Self as SimdVectors>::f64x8>
+        + CastVector<<Self as SimdVectors>::i16x8> + CastVector<<Self as SimdVectors>::i64x8>
+        + CastVector<<Self as SimdVectors>::u16x8> + CastVector<<Self as SimdVectors>::u32x8>
+        + CastVector<<Self as SimdVectors>::u64x8> + CastVector<<Self as SimdVectors>::u8x8>;
     type u8x8: UnsignedIntegerVector<Lanes = U8, Element = u8, Unsigned = <Self as SimdVectors>::u8x8, Signed = <Self as SimdVectors>::i8x8>
         + CastVector<<Self as SimdVectors>::u32x8> + CastVector<<Self as SimdVectors>::u32x8> + ConcatVector<<Self as SimdVectors>::u8x4> + SwizzleVector
         + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>
         + PackedF8Vector<<Self as SimdVectors>::f32x8>
-        + Sad16Vector<<Self as SimdVectors>::u16x4> + Sad32Vector<<Self as SimdVectors>::u32x2> + Sad64Vector<Vector<u64>>;
+        + Sad16Vector<<Self as SimdVectors>::u16x4> + Sad32Vector<<Self as SimdVectors>::u32x2> + Sad64Vector<Vector<u64>>
+        + CastVector<<Self as SimdVectors>::f32x8> + CastVector<<Self as SimdVectors>::f64x8>
+        + CastVector<<Self as SimdVectors>::i16x8> + CastVector<<Self as SimdVectors>::i32x8>
+        + CastVector<<Self as SimdVectors>::i64x8> + CastVector<<Self as SimdVectors>::i8x8>
+        + CastVector<<Self as SimdVectors>::u16x8> + CastVector<<Self as SimdVectors>::u64x8>;
 
     type i16x2: SignedIntegerVector<Lanes = U2, Element = i16, Unsigned = <Self as SimdVectors>::u16x2, Signed = <Self as SimdVectors>::i16x2>
         + CastVector<<Self as SimdVectors>::i32x2> + CastVector<<Self as SimdVectors>::i32x2> + ConcatVector<Vector<i16>> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>
+        + CastVector<<Self as SimdVectors>::f32x2> + CastVector<<Self as SimdVectors>::f64x2>
+        + CastVector<<Self as SimdVectors>::i64x2> + CastVector<<Self as SimdVectors>::i8x2>
+        + CastVector<<Self as SimdVectors>::u16x2> + CastVector<<Self as SimdVectors>::u32x2>
+        + CastVector<<Self as SimdVectors>::u64x2> + CastVector<<Self as SimdVectors>::u8x2>;
     type u16x2: UnsignedIntegerVector<Lanes = U2, Element = u16, Unsigned = <Self as SimdVectors>::u16x2, Signed = <Self as SimdVectors>::i16x2>
         + Sad32Vector<Vector<u32>> + Sad64Vector<Vector<u64>>
         + CastVector<<Self as SimdVectors>::u32x2> + CastVector<<Self as SimdVectors>::u32x2> + ConcatVector<Vector<u16>> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex2, <Self as SimdVectors>::u32x2, <Self as SimdVectors>::u64x2>
+        + CastVector<<Self as SimdVectors>::f32x2> + CastVector<<Self as SimdVectors>::f64x2>
+        + CastVector<<Self as SimdVectors>::i16x2> + CastVector<<Self as SimdVectors>::i32x2>
+        + CastVector<<Self as SimdVectors>::i64x2> + CastVector<<Self as SimdVectors>::i8x2>
+        + CastVector<<Self as SimdVectors>::u64x2> + CastVector<<Self as SimdVectors>::u8x2>;
 
     type i16x4: SignedIntegerVector<Lanes = U4, Element = i16, Unsigned = <Self as SimdVectors>::u16x4, Signed = <Self as SimdVectors>::i16x4>
         + CastVector<<Self as SimdVectors>::i32x4> + CastVector<<Self as SimdVectors>::i32x4> + ConcatVector<<Self as SimdVectors>::i16x2> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>
+        + CastVector<<Self as SimdVectors>::f32x4> + CastVector<<Self as SimdVectors>::f64x4>
+        + CastVector<<Self as SimdVectors>::i64x4> + CastVector<<Self as SimdVectors>::i8x4>
+        + CastVector<<Self as SimdVectors>::u16x4> + CastVector<<Self as SimdVectors>::u32x4>
+        + CastVector<<Self as SimdVectors>::u64x4> + CastVector<<Self as SimdVectors>::u8x4>;
     type u16x4: UnsignedIntegerVector<Lanes = U4, Element = u16, Unsigned = <Self as SimdVectors>::u16x4, Signed = <Self as SimdVectors>::i16x4>
         + Sad32Vector<<Self as SimdVectors>::u32x2> + Sad64Vector<Vector<u64>>
         + CastVector<<Self as SimdVectors>::u32x4> + CastVector<<Self as SimdVectors>::u32x4> + ConcatVector<<Self as SimdVectors>::u16x2> + SwizzleVector
         + VectorIndexedBy<<Self as SimdVectors>::usizex4, <Self as SimdVectors>::u32x4, <Self as SimdVectors>::u64x4>
-        + PackedF16Vector<<Self as SimdVectors>::f32x4>;
+        + PackedF16Vector<<Self as SimdVectors>::f32x4>
+        + CastVector<<Self as SimdVectors>::f32x4> + CastVector<<Self as SimdVectors>::f64x4>
+        + CastVector<<Self as SimdVectors>::i16x4> + CastVector<<Self as SimdVectors>::i32x4>
+        + CastVector<<Self as SimdVectors>::i64x4> + CastVector<<Self as SimdVectors>::i8x4>
+        + CastVector<<Self as SimdVectors>::u64x4> + CastVector<<Self as SimdVectors>::u8x4>;
 
     type i16x8: SignedIntegerVector<Lanes = U8, Element = i16, Unsigned = <Self as SimdVectors>::u16x8, Signed = <Self as SimdVectors>::i16x8>
         + CastVector<<Self as SimdVectors>::i32x8> + CastVector<<Self as SimdVectors>::i32x8> + ConcatVector<<Self as SimdVectors>::i16x4> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>
+        + CastVector<<Self as SimdVectors>::f32x8> + CastVector<<Self as SimdVectors>::f64x8>
+        + CastVector<<Self as SimdVectors>::i64x8> + CastVector<<Self as SimdVectors>::i8x8>
+        + CastVector<<Self as SimdVectors>::u16x8> + CastVector<<Self as SimdVectors>::u32x8>
+        + CastVector<<Self as SimdVectors>::u64x8> + CastVector<<Self as SimdVectors>::u8x8>;
     type u16x8: UnsignedIntegerVector<Lanes = U8, Element = u16, Unsigned = <Self as SimdVectors>::u16x8, Signed = <Self as SimdVectors>::i16x8>
         + CastVector<<Self as SimdVectors>::u32x8> + CastVector<<Self as SimdVectors>::u32x8> + ConcatVector<<Self as SimdVectors>::u16x4> + SwizzleVector
         + VectorIndexedBy<<Self as SimdVectors>::usizex8, <Self as SimdVectors>::u32x8, <Self as SimdVectors>::u64x8>
         + PackedF16Vector<<Self as SimdVectors>::f32x8>
-        + Sad32Vector<<Self as SimdVectors>::u32x4> + Sad64Vector<<Self as SimdVectors>::u64x2>;
+        + Sad32Vector<<Self as SimdVectors>::u32x4> + Sad64Vector<<Self as SimdVectors>::u64x2>
+        + CastVector<<Self as SimdVectors>::f32x8> + CastVector<<Self as SimdVectors>::f64x8>
+        + CastVector<<Self as SimdVectors>::i16x8> + CastVector<<Self as SimdVectors>::i32x8>
+        + CastVector<<Self as SimdVectors>::i64x8> + CastVector<<Self as SimdVectors>::i8x8>
+        + CastVector<<Self as SimdVectors>::u64x8> + CastVector<<Self as SimdVectors>::u8x8>;
 
     type i16x16: SignedIntegerVector<Lanes = U16, Element = i16, Unsigned = <Self as SimdVectors>::u16x16, Signed = <Self as SimdVectors>::i16x16>
         + CastVector<<Self as SimdVectors>::i32x16> + CastVector<<Self as SimdVectors>::i32x16> + ConcatVector<<Self as SimdVectors>::i16x8> + SwizzleVector
-        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>;
+        + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>
+        + CastVector<<Self as SimdVectors>::f32x16> + CastVector<<Self as SimdVectors>::f64x16>
+        + CastVector<<Self as SimdVectors>::i64x16> + CastVector<<Self as SimdVectors>::i8x16>
+        + CastVector<<Self as SimdVectors>::u16x16> + CastVector<<Self as SimdVectors>::u32x16>
+        + CastVector<<Self as SimdVectors>::u64x16> + CastVector<<Self as SimdVectors>::u8x16>;
     type u16x16: UnsignedIntegerVector<Lanes = U16, Element = u16, Unsigned = <Self as SimdVectors>::u16x16, Signed = <Self as SimdVectors>::i16x16>
         + Sad32Vector<<Self as SimdVectors>::u32x8> + Sad64Vector<<Self as SimdVectors>::u64x4>
         + CastVector<<Self as SimdVectors>::u32x16> + CastVector<<Self as SimdVectors>::u32x16> + ConcatVector<<Self as SimdVectors>::u16x8> + SwizzleVector
         + VectorIndexedBy<<Self as SimdVectors>::usizex16, <Self as SimdVectors>::u32x16, <Self as SimdVectors>::u64x16>
-        + PackedF16Vector<<Self as SimdVectors>::f32x16>;}
+        + PackedF16Vector<<Self as SimdVectors>::f32x16>
+        + CastVector<<Self as SimdVectors>::f32x16> + CastVector<<Self as SimdVectors>::f64x16>
+        + CastVector<<Self as SimdVectors>::i16x16> + CastVector<<Self as SimdVectors>::i32x16>
+        + CastVector<<Self as SimdVectors>::i64x16> + CastVector<<Self as SimdVectors>::i8x16>
+        + CastVector<<Self as SimdVectors>::u64x16> + CastVector<<Self as SimdVectors>::u8x16>;}
 
 /// Marker companion to [`SimdVectors`] that also exposes each vector's
 /// underlying [`crate::register::Register`] type.

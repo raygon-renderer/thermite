@@ -152,10 +152,12 @@ macro_rules! cast_suite {
             fn f64_to_i64_inrange() {
                 cpair!($tag, $b, f64x4, i64x4, f64, to_i64_dom, Tol::Exact);
             }
-            // f64→u64 is NOT in the gate: it routes to the `_limited` epu64
-            // polyfill, which both (a) only works on [0, 2^52) and (b) *rounds*
-            // (adds 2^52 to force integer rounding) rather than truncating like
-            // `as`. Fully captured in `mod divergence`.
+            // f64→u64 is not repeated here; it is covered exhaustively, along
+            // with every other float→int pair at every lane count, by
+            // `diff_cast_matrix.rs`. (The note that used to sit here - that the
+            // pair diverged because it routed to the rounding `_limited` epu64
+            // polyfill - is obsolete: that polyfill backs only `fast_cast` now,
+            // and the in-range differential passes.)
 
             // --- rung 3: 8/16-bit int <-> f32/f64 direct casts ---
             // widen int -> float is value-preserving and exact (every i8/u8/i16/u16 is
