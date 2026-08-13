@@ -100,6 +100,7 @@ impl<E: RealValue + Element> Element for Complex<E> {
     const ORDER_MAX: Self = Self { re: E::ORDER_MAX, im: E::ORDER_MAX };
     const ORDER_MIN: Self = Self { re: E::ORDER_MIN, im: E::ORDER_MIN };
     const HAS_UNORDERED: bool = E::HAS_UNORDERED;
+    const IS_FLOAT: bool = E::IS_FLOAT;
 
     #[inline(always)] fn from_i8(value: i8) -> Self { Self::real(E::from_i8(value)) }
     #[inline(always)] fn from_u8(value: u8) -> Self { Self::real(E::from_u8(value)) }

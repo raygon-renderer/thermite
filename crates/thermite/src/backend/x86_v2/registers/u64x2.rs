@@ -463,10 +463,18 @@ impl IntegerRegister for U64x2V2 {
 #[thermite_macros::inline_always]
 impl UnsignedIntegerRegister for U64x2V2 {}
 
+#[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<U64x2V2, 2>> for super::U32x4V2 {
     fn cast_from(value: Storage<ArrayRegister<U64x2V2, 2>>) -> Storage<Self> {
         let (lo, hi) = <ArrayRegister<U64x2V2, 2> as ConcatRegister<U64x2V2>>::split(value);
         unsafe { arch::_mm_cvtepi64_epi32x_v2(lo, hi) }
+    }
+
+    fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x2V2, 2>>) -> Storage<Self> {
+        type Src = ArrayRegister<super::U64x2V2, 2>;
+        let hi = <Src as Register>::splat(u32::MAX as u64);
+        let clamped = <Src as NumericRegister>::min(value, hi);
+        <Self as CastRegister<Src>>::cast_from(clamped)
     }
 }
 

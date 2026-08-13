@@ -38,10 +38,10 @@ fn f32_cases() -> Vec<f32> {
         -100.0,
         f32::MAX,
         f32::MIN,
-        f32::MIN_POSITIVE,               // smallest normal
-        f32::from_bits(0x007F_FFFF),     // largest subnormal
-        f32::from_bits(0x0000_0001),     // smallest subnormal
-        f32::from_bits(0x8000_0001),     // negative smallest subnormal
+        f32::MIN_POSITIVE,           // smallest normal
+        f32::from_bits(0x007F_FFFF), // largest subnormal
+        f32::from_bits(0x0000_0001), // smallest subnormal
+        f32::from_bits(0x8000_0001), // negative smallest subnormal
         f32::from_bits(0x0040_0000),
         f32::from_bits(0x0000_FFFF),
         1.0e-40,

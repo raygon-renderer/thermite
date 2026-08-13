@@ -541,6 +541,7 @@ impl UnsignedIntegerRegister for U64x4V3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<U64x4V3, 2>> for super::U32x8V3 {
     fn cast_from(value: Storage<ArrayRegister<U64x4V3, 2>>) -> Storage<Self> {
         let (lo, hi) = <ArrayRegister<U64x4V3, 2> as ConcatRegister<U64x4V3>>::split(value);
@@ -551,5 +552,15 @@ impl CastRegister<ArrayRegister<U64x4V3, 2>> for super::U32x8V3 {
 
             arch::_mm256_setr_m128i(lo, hi)
         }
+    }
+
+    // AVX2 has no 64-bit pack, so clamp into range and reuse the truncating narrow above.
+    // Unsigned, so only the high end needs clamping.
+    fn saturating_cast_from(value: Storage<ArrayRegister<U64x4V3, 2>>) -> Storage<Self> {
+        type Src = ArrayRegister<U64x4V3, 2>;
+        let lo = <Src as Register>::splat(u32::MIN as u64);
+        let hi = <Src as Register>::splat(u32::MAX as u64);
+        let clamped = <Src as NumericRegister>::min(<Src as NumericRegister>::max(value, lo), hi);
+        <Self as CastRegister<Src>>::cast_from(clamped)
     }
 }

@@ -112,7 +112,7 @@ macro_rules! forward_ladder {
             // unreachable: `use_ladder!` gates on a power-of-two width <= 64. Panicking
             // is the right failure mode if a new width ever slips past that guard.
             _ => unreachable!(),
-            };
+        };
         v
     }};
 }
@@ -135,7 +135,7 @@ macro_rules! reverse_ladder {
             if const { lanes!($r) >  8 } { v = $op(v, <$r as Register>::align::<8>(v, f)); }
             if const { lanes!($r) > 16 } { v = $op(v, <$r as Register>::align::<16>(v, f)); }
             if const { lanes!($r) > 32 } { v = $op(v, <$r as Register>::align::<32>(v, f)); }
-                            };
+        };
         v
     }};
 }

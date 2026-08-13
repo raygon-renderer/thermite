@@ -1,4 +1,4 @@
-//! `SaturatingCastRegister` / `SaturatingCastVector` reference-oracle checks.
+//! `CastRegister` / `CastVector` reference-oracle checks.
 //!
 //! Narrowing, same-signedness casts clamp out-of-range source values into the
 //! destination element range (instead of `as`-style wrapping). Verified against

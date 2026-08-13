@@ -13,8 +13,7 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister,
-        empty_reg, reg, reg_splat,
+        SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
     },
 };
 
@@ -436,9 +435,9 @@ impl CastRegister<I16x8V3> for super::I32x8V3 {
     }
 }
 
-// Narrow i32x8 -> i16x8: truncate the low 16 bits of each lane (wrapping, like `as`).
 #[thermite_macros::inline_always]
 impl CastRegister<super::I32x8V3> for I16x8V3 {
+    // Narrow i32x8 -> i16x8: truncate the low 16 bits of each lane (wrapping, like `as`).
     fn cast_from(value: Storage<super::I32x8V3>) -> Storage<Self> {
         unsafe {
             // pack the two 128-bit halves' low-16 bits; vpackssdw saturates, so mask first
@@ -452,28 +451,34 @@ impl CastRegister<super::I32x8V3> for I16x8V3 {
             arch::_mm_unpacklo_epi64(lo, hi)
         }
     }
-}
 
-// Saturating narrow i32x8 -> i16x8 via `vpackssdw`. AVX2 packs interleave the two
-// 128-bit lanes, so pack `(v, v)` and pull the populated 64-bit groups (positions 0
-// and 2) back into sequence with `vpermq` before truncating to 128 bits.
-#[thermite_macros::inline_always]
-impl SaturatingCastRegister<super::I32x8V3> for I16x8V3 {
+    // Saturating narrow i32x8 -> i16x8 via `vpackssdw`, splitting to 128 bits FIRST.
+    //
+    // The 256-bit `_mm256_packs_epi32(v, v)` + `vpermq` form is also two instructions,
+    // but LLVM canonicalizes the 256-bit pack intrinsic into `smin`/`smax` + truncate
+    // and then re-selects `vpackssdw` without folding the clamps back out, costing a
+    // `vpmaxsd` and a `vpminsd` (plus their broadcasts) on every call. Extracting the
+    // high lane and packing at 128 bits gives the same result and lands on exactly the
+    // instructions LLVM was going to pick anyway, minus the redundant clamp.
     fn saturating_cast_from(value: Storage<super::I32x8V3>) -> Storage<Self> {
         unsafe {
-            let packed = arch::_mm256_packs_epi32(value, value);
-            arch::_mm256_castsi256_si128(arch::_mm256_permute4x64_epi64(packed, 0b00_00_10_00))
+            let lo = arch::_mm256_castsi256_si128(value);
+            let hi = arch::_mm256_extracti128_si256(value, 1);
+            arch::_mm_packs_epi32(lo, hi)
         }
     }
 }
 
 // i64x8 -> i16x8: clamp down to i32x8 (no 64-bit pack), then `vpackssdw`.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::I64x4V3, 2>> for I16x8V3 {
+impl CastRegister<ArrayRegister<super::I64x4V3, 2>> for I16x8V3 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I64x4V3, 2>>) -> Storage<Self> {
-        let words =
-            <super::I32x8V3 as SaturatingCastRegister<ArrayRegister<super::I64x4V3, 2>>>::saturating_cast_from(value);
-        <Self as SaturatingCastRegister<super::I32x8V3>>::saturating_cast_from(words)
+        let words = <super::I32x8V3 as CastRegister<ArrayRegister<super::I64x4V3, 2>>>::saturating_cast_from(value);
+        <Self as CastRegister<super::I32x8V3>>::saturating_cast_from(words)
+    }
+
+    fn cast_from(value: Storage<ArrayRegister<super::I64x4V3, 2>>) -> Storage<Self> {
+        unsafe { arch::_mm_cvt2epi64x4_epi16x_v3(value.0) }
     }
 }
 

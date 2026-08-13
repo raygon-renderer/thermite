@@ -7,10 +7,10 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
+        BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, ExtendRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        SaturatingCastRegister, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper,
-        array::ArrayRegister, empty_reg, reg, reg_splat,
+        ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister, empty_reg,
+        reg, reg_splat,
     },
 };
 
@@ -511,12 +511,17 @@ impl CastRegister<I32x4V1> for ArrayRegister<super::I64x2V1, 2> {
 
 // Saturating narrow i64x4 -> i32x4: no SSE 64-bit pack, so clamp (polyfilled 64-bit min/max) + narrow.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::I64x2V1, 2>> for I32x4V1 {
+impl CastRegister<ArrayRegister<super::I64x2V1, 2>> for I32x4V1 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I64x2V1, 2>>) -> Storage<Self> {
         type Src = ArrayRegister<super::I64x2V1, 2>;
         let lo = <Src as Register>::splat(i32::MIN as i64);
         let hi = <Src as Register>::splat(i32::MAX as i64);
         let clamped = <Src as NumericRegister>::min(<Src as NumericRegister>::max(value, lo), hi);
         <Self as CastRegister<Src>>::cast_from(clamped)
+    }
+
+    fn cast_from(value: Storage<ArrayRegister<super::I64x2V1, 2>>) -> Storage<Self> {
+        let (lo, hi) = <ArrayRegister<super::I64x2V1, 2> as ConcatRegister<super::I64x2V1>>::split(value);
+        unsafe { arch::_mm_cvtepi64_epi32x_v1(lo, hi) }
     }
 }

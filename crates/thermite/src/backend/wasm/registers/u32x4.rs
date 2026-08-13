@@ -7,8 +7,8 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, IntegerRegister, InterleaveRegister,
-        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        SaturatingCastRegister, ShuffleRegister, Storage, UnsignedIntegerRegister, ZeroUpper, array::ArrayRegister,
+        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
+        Storage, UnsignedIntegerRegister, ZeroUpper, array::ArrayRegister,
     },
 };
 
@@ -433,6 +433,7 @@ impl UnsignedIntegerRegister for U32x4Wasm {
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<U32x4Wasm> for ArrayRegister<super::U64x2Wasm, 2> {
     fn cast_from(value: Storage<U32x4Wasm>) -> Storage<Self> {
         // zero-extend each pair of u32 to u64
@@ -455,11 +456,8 @@ impl CastRegister<ArrayRegister<super::U64x2Wasm, 2>> for U32x4Wasm {
             24, 25, 26, 27  // Hi Vec, Lane 1 (Low bits)
         >(value.0[0], value.0[1])
     }
-}
 
-// Saturating narrow u64x4 -> u32x4: clamp the high end (no 64-bit narrow on WASM) + truncating narrow.
-#[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::U64x2Wasm, 2>> for U32x4Wasm {
+    // Saturating narrow u64x4 -> u32x4: clamp the high end (no 64-bit narrow on WASM) + truncating narrow.
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x2Wasm, 2>>) -> Storage<Self> {
         type Src = ArrayRegister<super::U64x2Wasm, 2>;
         let hi = <Src as Register>::splat(u32::MAX as u64);

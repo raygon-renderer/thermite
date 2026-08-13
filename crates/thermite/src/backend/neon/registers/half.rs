@@ -5,7 +5,7 @@
 //! q-register impls.
 
 use crate::register::{
-    CastRegister, ConcatRegister, CoreRegister, IndexableRegister, SaturatingCastRegister, Storage,
+    CastRegister, ConcatRegister, CoreRegister, IndexableRegister, Storage,
     reduced::{HalfRegister2, ReducedRegister},
 };
 
@@ -89,11 +89,15 @@ impl CastRegister<F32x2Neon> for super::F64x2Neon {
     }
 }
 
-// i32x2 <-> i64x2 (truncate / sign-extend)
 #[thermite_macros::inline_always]
 impl CastRegister<super::I64x2Neon> for I32x2Neon {
+    // i32x2 <-> i64x2 (truncate / sign-extend)
     fn cast_from(value: Storage<super::I64x2Neon>) -> Storage<Self> {
         unsafe { ReducedRegister::new(arch::vcombine_s32(arch::vmovn_s64(value), arch::vdup_n_s32(0))) }
+    }
+
+    fn saturating_cast_from(value: Storage<super::I64x2Neon>) -> Storage<Self> {
+        unsafe { ReducedRegister::new(arch::vcombine_s32(arch::vqmovn_s64(value), arch::vdup_n_s32(0))) }
     }
 }
 
@@ -104,11 +108,15 @@ impl CastRegister<I32x2Neon> for super::I64x2Neon {
     }
 }
 
-// u32x2 <-> u64x2 (truncate / zero-extend)
 #[thermite_macros::inline_always]
 impl CastRegister<super::U64x2Neon> for U32x2Neon {
+    // u32x2 <-> u64x2 (truncate / zero-extend)
     fn cast_from(value: Storage<super::U64x2Neon>) -> Storage<Self> {
         unsafe { ReducedRegister::new(arch::vcombine_u32(arch::vmovn_u64(value), arch::vdup_n_u32(0))) }
+    }
+
+    fn saturating_cast_from(value: Storage<super::U64x2Neon>) -> Storage<Self> {
+        unsafe { ReducedRegister::new(arch::vcombine_u32(arch::vqmovn_u64(value), arch::vdup_n_u32(0))) }
     }
 }
 
@@ -116,23 +124,6 @@ impl CastRegister<super::U64x2Neon> for U32x2Neon {
 impl CastRegister<U32x2Neon> for super::U64x2Neon {
     fn cast_from(value: Storage<U32x2Neon>) -> Storage<Self> {
         unsafe { arch::vmovl_u32(arch::vget_low_u32(value.0)) }
-    }
-}
-
-// --- Saturating narrows into the x2 registers: native `vqmovn` (wasm needs a
-// clamp + truncate dance here; NEON does it in one instruction) ---
-
-#[thermite_macros::inline_always]
-impl SaturatingCastRegister<super::I64x2Neon> for I32x2Neon {
-    fn saturating_cast_from(value: Storage<super::I64x2Neon>) -> Storage<Self> {
-        unsafe { ReducedRegister::new(arch::vcombine_s32(arch::vqmovn_s64(value), arch::vdup_n_s32(0))) }
-    }
-}
-
-#[thermite_macros::inline_always]
-impl SaturatingCastRegister<super::U64x2Neon> for U32x2Neon {
-    fn saturating_cast_from(value: Storage<super::U64x2Neon>) -> Storage<Self> {
-        unsafe { ReducedRegister::new(arch::vcombine_u32(arch::vqmovn_u64(value), arch::vdup_n_u32(0))) }
     }
 }
 

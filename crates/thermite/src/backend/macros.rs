@@ -931,25 +931,29 @@ macro_rules! impl_type_casts {
     };
 }
 
-/// Float -> int register casts. The plain `cast` uses the fast hardware/polyfill
-/// conversion, whose documented precondition is in-range finite inputs
-/// (out-of-range/NaN lanes are backend-defined); `sat` names the `as`-exact
-/// saturating variant exposed as [`SaturatingCastRegister`].
+/// Same-width float -> int register casts, the only pairs where the two
+/// strengths are separate instructions.
 ///
-/// Under `strict_ieee754`, `cast` itself routes to the saturating implementation
-/// so `cast` matches `as` exactly. `fast_cast` keeps its narrow-domain shortcut
-/// in every configuration - it is explicitly the "unspecified out of range" op.
+/// `$conv` is the fast hardware/polyfill conversion, whose documented
+/// precondition is in-range finite inputs (out-of-range/NaN lanes are
+/// backend-defined). `$sat` is the `as`-exact counterpart: NaN -> 0,
+/// out-of-range clamps. `$fast_conv`, where a backend has one, is narrower
+/// still.
+///
+/// The `strict_ieee754` redirect is NOT here. It lives at the vector layer, in
+/// the `Vector<R>` impl of `CastVector`, so it covers every pair rather than
+/// only the ones this macro stamps.
 macro_rules! impl_float_to_int_casts {
     ($($from:ty as $to:ty => $conv:ident sat $sat:ident $(| $fast_conv:ident)?),* $(,)?) => {
         const _: () = {$(
             #[thermite_macros::inline_always]
             impl $crate::register::CastRegister<$from> for $to {
                 fn cast_from(value: Storage<$from>) -> Storage<Self> {
-                    #[cfg(feature = "strict_ieee754")]
-                    return <Self as $crate::register::SaturatingCastRegister<$from>>::saturating_cast_from(value);
-
-                    #[cfg(not(feature = "strict_ieee754"))]
                     unsafe { arch::$conv(value) }
+                }
+
+                fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
+                    unsafe { arch::$sat(value) }
                 }
 
                 $(
@@ -958,29 +962,33 @@ macro_rules! impl_float_to_int_casts {
                     }
                 )?
             }
-
-            #[thermite_macros::inline_always]
-            impl $crate::register::SaturatingCastRegister<$from> for $to {
-                fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
-                    unsafe { arch::$sat(value) }
-                }
-            }
         )*};
     };
 }
 
-/// Cross-width float -> int saturating casts, composed from two existing
-/// saturating legs: float -> same-width int (`$mid`), then the saturating
-/// integer narrow. Saturation is idempotent across nested ranges, so the
-/// composition is bit-identical to a direct `as`.
-macro_rules! impl_saturating_cast_via {
+/// Cross-width casts composed from two existing legs: `$from -> $mid`, then
+/// `$mid -> $to`. Both strengths compose independently, each through its own
+/// pair of legs, which is what keeps `saturating_cast_from` bit-identical to a
+/// direct `as`: saturation is idempotent across nested ranges, so clamping at
+/// `$mid` and again at `$to` lands where clamping once at `$to` would.
+///
+/// `cast_from` composes the fast legs and inherits their contract, matching what
+/// the hand-written float -> narrow-int impls used to spell out (a same-width
+/// `cvtt` followed by an integer narrow).
+macro_rules! impl_cast_via {
     ($($from:ty as $to:ty => via $mid:ty),* $(,)?) => {
         const _: () = {$(
             #[thermite_macros::inline_always]
-            impl $crate::register::SaturatingCastRegister<$from> for $to {
+            impl $crate::register::CastRegister<$from> for $to {
+                fn cast_from(value: Storage<$from>) -> Storage<Self> {
+                    <Self as $crate::register::CastRegister<$mid>>::cast_from(
+                        <$mid as $crate::register::CastRegister<$from>>::cast_from(value),
+                    )
+                }
+
                 fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
-                    <Self as $crate::register::SaturatingCastRegister<$mid>>::saturating_cast_from(
-                        <$mid as $crate::register::SaturatingCastRegister<$from>>::saturating_cast_from(value),
+                    <Self as $crate::register::CastRegister<$mid>>::saturating_cast_from(
+                        <$mid as $crate::register::CastRegister<$from>>::saturating_cast_from(value),
                     )
                 }
             }
@@ -988,17 +996,23 @@ macro_rules! impl_saturating_cast_via {
     };
 }
 
-/// f32 -> 64-bit int saturating casts: widen exactly to f64 (`$mid`, a plain
-/// lossless `cast`), then the same-width f64 -> int saturating cast. Exact
-/// widening first means the clamp happens at the DESTINATION's range, matching
-/// a direct `as`.
-macro_rules! impl_saturating_cast_via_widen {
+/// f32 -> 64-bit int casts: widen exactly to f64 (`$mid`), then the same-width
+/// f64 -> int cast. The widen is lossless, so it is a plain `cast_from` on both
+/// paths; doing it first means the clamp happens at the DESTINATION's range,
+/// matching a direct `as` rather than clamping at `i32` on the way through.
+macro_rules! impl_cast_via_widen {
     ($($from:ty as $to:ty => via $mid:ty),* $(,)?) => {
         const _: () = {$(
             #[thermite_macros::inline_always]
-            impl $crate::register::SaturatingCastRegister<$from> for $to {
+            impl $crate::register::CastRegister<$from> for $to {
+                fn cast_from(value: Storage<$from>) -> Storage<Self> {
+                    <Self as $crate::register::CastRegister<$mid>>::cast_from(
+                        <$mid as $crate::register::CastRegister<$from>>::cast_from(value),
+                    )
+                }
+
                 fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
-                    <Self as $crate::register::SaturatingCastRegister<$mid>>::saturating_cast_from(
+                    <Self as $crate::register::CastRegister<$mid>>::saturating_cast_from(
                         <$mid as $crate::register::CastRegister<$from>>::cast_from(value),
                     )
                 }
@@ -1007,17 +1021,17 @@ macro_rules! impl_saturating_cast_via_widen {
     };
 }
 
-/// Stamp the full cross-width float -> int saturating-cast matrix for one or
-/// more lane-count rows of a backend's `Simd` slot types. The same-width
-/// float -> int saturating casts and the integer-narrowing saturating matrix
-/// must already exist for the row; everything here is composed from them
-/// (or from the exact f32 -> f64 widen for the 64-bit destinations).
+/// Stamp the full cross-width float -> int cast matrix for one or more
+/// lane-count rows of a backend's `Simd` slot types. The same-width float -> int
+/// casts and the integer-narrowing matrix must already exist for the row;
+/// everything here is composed from them (or from the exact f32 -> f64 widen for
+/// the 64-bit destinations).
 ///
 /// Row layout: `[f32, f64, i32, u32, i64, u64, i16, u16, i8, u8]` - the
 /// backend's concrete types for one lane count.
-macro_rules! impl_saturating_float_matrix {
+macro_rules! impl_float_cast_matrix {
     ($([$f32:ty, $f64:ty, $i32:ty, $u32:ty, $i64:ty, $u64:ty, $i16:ty, $u16:ty, $i8:ty, $u8:ty]),* $(,)?) => {$(
-        impl_saturating_cast_via! {
+        impl_cast_via! {
             $f32 as $i16 => via $i32,
             $f32 as $i8 => via $i32,
             $f32 as $u16 => via $u32,
@@ -1029,7 +1043,7 @@ macro_rules! impl_saturating_float_matrix {
             $f64 as $u16 => via $u64,
             $f64 as $u8 => via $u64,
         }
-        impl_saturating_cast_via_widen! {
+        impl_cast_via_widen! {
             $f32 as $i64 => via $f64,
             $f32 as $u64 => via $f64,
         }

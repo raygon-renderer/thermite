@@ -8,35 +8,22 @@ use generic_array::typenum::{U8, U12};
 use super::arch;
 
 use crate::register::{
-    CastRegister, ConcatRegister, ExtendRegister, IndexableRegister, NumericRegister, Register, SaturatingCastRegister,
-    Storage, array::ArrayRegister, reduced::ReducedRegister,
+    CastRegister, ConcatRegister, ExtendRegister, IndexableRegister, NumericRegister, Register, Storage,
+    array::ArrayRegister, reduced::ReducedRegister,
 };
 
 // Clamp + truncating narrow for the pack-less `* -> i8` pairs: `i64 -> i8` and the 2-lane
 // `i32 -> i8` combos with a scalar `ArrayRegister` destination.
 macro_rules! sat_clamp_narrow8 {
-    ($(($from:ty, $fe:ty, $into:ty, $ie:ty)),* $(,)?) => {$(
-        #[thermite_macros::inline_always]
-        impl SaturatingCastRegister<$from> for $into {
-            fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
-                let lo = <$from as Register>::splat(<$ie>::MIN as $fe);
-                let hi = <$from as Register>::splat(<$ie>::MAX as $fe);
-                let clamped = <$from as NumericRegister>::min(<$from as NumericRegister>::max(value, lo), hi);
-                <Self as CastRegister<$from>>::cast_from(clamped)
-            }
+    ($from:ty, $fe:ty, $ie:ty) => {
+        #[inline(always)]
+        fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
+            let lo = <$from as Register>::splat(<$ie>::MIN as $fe);
+            let hi = <$from as Register>::splat(<$ie>::MAX as $fe);
+            let clamped = <$from as NumericRegister>::min(<$from as NumericRegister>::max(value, lo), hi);
+            <Self as CastRegister<$from>>::cast_from(clamped)
         }
-    )*};
-}
-
-sat_clamp_narrow8! {
-    (ArrayRegister<super::I64x2V2, 2>, i64, I8x4V2, i8),
-    (ArrayRegister<super::U64x2V2, 2>, u64, U8x4V2, u8),
-    (ArrayRegister<super::I64x2V2, 4>, i64, I8x8V2, i8),
-    (ArrayRegister<super::U64x2V2, 4>, u64, U8x8V2, u8),
-    (super::half::I32x2V2, i32, ArrayRegister<i8, 2>, i8),
-    (super::half::U32x2V2, u32, ArrayRegister<u8, 2>, u8),
-    (super::I64x2V2, i64, ArrayRegister<i8, 2>, i8),
-    (super::U64x2V2, u64, ArrayRegister<u8, 2>, u8),
+    };
 }
 
 // `ReducedRegister<R, N>` removes `N` lanes (lane count = R::Lanes - N), so over the native
@@ -231,11 +218,22 @@ impl CastRegister<super::half16::I16x4V2> for I8x4V2 {
     fn cast_from(value: Storage<super::half16::I16x4V2>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_shuffle_epi8(value.0, arch::_mm_narrow_word_to_byte_maskx_v2()) })
     }
+
+    // i16x4 -> i8x4 via `packsswb` (4 valid words in the reduced source's low half).
+    fn saturating_cast_from(value: Storage<super::half16::I16x4V2>) -> Storage<Self> {
+        ReducedRegister::new(unsafe { arch::_mm_packs_epi16(value.0, value.0) })
+    }
 }
 #[thermite_macros::inline_always]
 impl CastRegister<super::half16::U16x4V2> for U8x4V2 {
     fn cast_from(value: Storage<super::half16::U16x4V2>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_shuffle_epi8(value.0, arch::_mm_narrow_word_to_byte_maskx_v2()) })
+    }
+
+    // u16x4 -> u8x4: clamp the high end (`pminuw`) then `packuswb`.
+    fn saturating_cast_from(value: Storage<super::half16::U16x4V2>) -> Storage<Self> {
+        let clamped = unsafe { arch::_mm_min_epu16(value.0, arch::_mm_set1_epi16(0xFF)) };
+        ReducedRegister::new(unsafe { arch::_mm_packus_epi16(clamped, clamped) })
     }
 }
 
@@ -257,76 +255,83 @@ impl CastRegister<super::I16x8V2> for I8x8V2 {
     fn cast_from(value: Storage<super::I16x8V2>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_shuffle_epi8(value, arch::_mm_narrow_word_to_byte_maskx_v2()) })
     }
+
+    // i16x8 -> i8x8 via `packsswb`.
+    fn saturating_cast_from(value: Storage<super::I16x8V2>) -> Storage<Self> {
+        ReducedRegister::new(unsafe { arch::_mm_packs_epi16(value, value) })
+    }
 }
 #[thermite_macros::inline_always]
 impl CastRegister<super::U16x8V2> for U8x8V2 {
     fn cast_from(value: Storage<super::U16x8V2>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_shuffle_epi8(value, arch::_mm_narrow_word_to_byte_maskx_v2()) })
     }
-}
 
-// --- saturating narrows into 8-bit (low half holds the result) ---
-
-// i16x8 -> i8x8 via `packsswb`.
-#[thermite_macros::inline_always]
-impl SaturatingCastRegister<super::I16x8V2> for I8x8V2 {
-    fn saturating_cast_from(value: Storage<super::I16x8V2>) -> Storage<Self> {
-        ReducedRegister::new(unsafe { arch::_mm_packs_epi16(value, value) })
-    }
-}
-// u16x8 -> u8x8: clamp the high end (`pminuw`) then `packuswb`.
-#[thermite_macros::inline_always]
-impl SaturatingCastRegister<super::U16x8V2> for U8x8V2 {
+    // u16x8 -> u8x8: clamp the high end (`pminuw`) then `packuswb`.
     fn saturating_cast_from(value: Storage<super::U16x8V2>) -> Storage<Self> {
         let clamped = unsafe { arch::_mm_min_epu16(value, arch::_mm_set1_epi16(0xFF)) };
         ReducedRegister::new(unsafe { arch::_mm_packus_epi16(clamped, clamped) })
     }
 }
-// i16x4 -> i8x4 via `packsswb` (4 valid words in the reduced source's low half).
-#[thermite_macros::inline_always]
-impl SaturatingCastRegister<super::half16::I16x4V2> for I8x4V2 {
-    fn saturating_cast_from(value: Storage<super::half16::I16x4V2>) -> Storage<Self> {
-        ReducedRegister::new(unsafe { arch::_mm_packs_epi16(value.0, value.0) })
-    }
-}
-// u16x4 -> u8x4: clamp the high end (`pminuw`) then `packuswb`.
-#[thermite_macros::inline_always]
-impl SaturatingCastRegister<super::half16::U16x4V2> for U8x4V2 {
-    fn saturating_cast_from(value: Storage<super::half16::U16x4V2>) -> Storage<Self> {
-        let clamped = unsafe { arch::_mm_min_epu16(value.0, arch::_mm_set1_epi16(0xFF)) };
-        ReducedRegister::new(unsafe { arch::_mm_packus_epi16(clamped, clamped) })
-    }
-}
 
-// --- skip-level 32 -> 8: compose the 32 -> 16 and 16 -> 8 saturating packs (idempotent). ---
+// --- saturating narrows into 8-bit (low half holds the result) ---
+
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<super::I32x4V2> for I8x4V2 {
+impl CastRegister<super::I32x4V2> for I8x4V2 {
+    // --- skip-level 32 -> 8: compose the 32 -> 16 and 16 -> 8 saturating packs (idempotent). ---
     fn saturating_cast_from(value: Storage<super::I32x4V2>) -> Storage<Self> {
-        let w = <super::half16::I16x4V2 as SaturatingCastRegister<super::I32x4V2>>::saturating_cast_from(value);
-        <Self as SaturatingCastRegister<super::half16::I16x4V2>>::saturating_cast_from(w)
+        let w = <super::half16::I16x4V2 as CastRegister<super::I32x4V2>>::saturating_cast_from(value);
+        <Self as CastRegister<super::half16::I16x4V2>>::saturating_cast_from(w)
+    }
+
+    // --- x4 narrow i32 -> i8 (low byte of each 32-bit lane, gathered into the low 4 bytes) ---
+    // pshufb mask gathering byte 0 of each of 4 i32 lanes (positions 0,4,8,12) into the low 4 bytes.
+    fn cast_from(value: Storage<super::I32x4V2>) -> Storage<Self> {
+        ReducedRegister::new(unsafe { arch::_mm_shuffle_epi8(value, arch::_mm_narrow_dword_to_byte_maskx_v2()) })
     }
 }
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<super::U32x4V2> for U8x4V2 {
+impl CastRegister<super::U32x4V2> for U8x4V2 {
     fn saturating_cast_from(value: Storage<super::U32x4V2>) -> Storage<Self> {
-        let w = <super::half16::U16x4V2 as SaturatingCastRegister<super::U32x4V2>>::saturating_cast_from(value);
-        <Self as SaturatingCastRegister<super::half16::U16x4V2>>::saturating_cast_from(w)
+        let w = <super::half16::U16x4V2 as CastRegister<super::U32x4V2>>::saturating_cast_from(value);
+        <Self as CastRegister<super::half16::U16x4V2>>::saturating_cast_from(w)
+    }
+
+    fn cast_from(value: Storage<super::U32x4V2>) -> Storage<Self> {
+        ReducedRegister::new(unsafe { arch::_mm_shuffle_epi8(value, arch::_mm_narrow_dword_to_byte_maskx_v2()) })
     }
 }
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::I32x4V2, 2>> for I8x8V2 {
+impl CastRegister<ArrayRegister<super::I32x4V2, 2>> for I8x8V2 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I32x4V2, 2>>) -> Storage<Self> {
-        let w =
-            <super::I16x8V2 as SaturatingCastRegister<ArrayRegister<super::I32x4V2, 2>>>::saturating_cast_from(value);
-        <Self as SaturatingCastRegister<super::I16x8V2>>::saturating_cast_from(w)
+        let w = <super::I16x8V2 as CastRegister<ArrayRegister<super::I32x4V2, 2>>>::saturating_cast_from(value);
+        <Self as CastRegister<super::I16x8V2>>::saturating_cast_from(w)
+    }
+
+    // --- x8 narrow i32 -> i8 (low byte of each lane in both halves -> low 8 bytes) ---
+    fn cast_from(value: Storage<ArrayRegister<super::I32x4V2, 2>>) -> Storage<Self> {
+        unsafe {
+            let mask = arch::_mm_narrow_dword_to_byte_maskx_v2();
+            let lo = arch::_mm_shuffle_epi8(value.0[0], mask); // 4 bytes in low 32 bits
+            let hi = arch::_mm_shuffle_epi8(value.0[1], mask);
+            ReducedRegister::new(arch::_mm_unpacklo_epi32(lo, hi))
+        }
     }
 }
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::U32x4V2, 2>> for U8x8V2 {
+impl CastRegister<ArrayRegister<super::U32x4V2, 2>> for U8x8V2 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U32x4V2, 2>>) -> Storage<Self> {
-        let w =
-            <super::U16x8V2 as SaturatingCastRegister<ArrayRegister<super::U32x4V2, 2>>>::saturating_cast_from(value);
-        <Self as SaturatingCastRegister<super::U16x8V2>>::saturating_cast_from(w)
+        let w = <super::U16x8V2 as CastRegister<ArrayRegister<super::U32x4V2, 2>>>::saturating_cast_from(value);
+        <Self as CastRegister<super::U16x8V2>>::saturating_cast_from(w)
+    }
+
+    fn cast_from(value: Storage<ArrayRegister<super::U32x4V2, 2>>) -> Storage<Self> {
+        unsafe {
+            let mask = arch::_mm_narrow_dword_to_byte_maskx_v2();
+            let lo = arch::_mm_shuffle_epi8(value.0[0], mask);
+            let hi = arch::_mm_shuffle_epi8(value.0[1], mask);
+            ReducedRegister::new(arch::_mm_unpacklo_epi32(lo, hi))
+        }
     }
 }
 
@@ -353,18 +358,6 @@ impl CastRegister<super::U8x16V2> for ArrayRegister<super::U16x8V2, 2> {
         }
     }
 }
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::I16x8V2, 2>> for super::I8x16V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::I16x8V2, 2>>) -> Storage<Self> {
-        unsafe { arch::_mm_cvt2epi16_epi8x_v2(value.0) }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::U16x8V2, 2>> for super::U8x16V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::U16x8V2, 2>>) -> Storage<Self> {
-        unsafe { arch::_mm_cvt2epi16_epi8x_v2(value.0) }
-    }
-}
 
 // ===========================================================================================
 // Widen casts to 32-bit (CastRegister = numeric widen/narrow).
@@ -388,21 +381,6 @@ impl CastRegister<U8x4V2> for super::U32x4V2 {
     }
 }
 
-// --- x4 narrow i32 -> i8 (low byte of each 32-bit lane, gathered into the low 4 bytes) ---
-// pshufb mask gathering byte 0 of each of 4 i32 lanes (positions 0,4,8,12) into the low 4 bytes.
-#[thermite_macros::inline_always]
-impl CastRegister<super::I32x4V2> for I8x4V2 {
-    fn cast_from(value: Storage<super::I32x4V2>) -> Storage<Self> {
-        ReducedRegister::new(unsafe { arch::_mm_shuffle_epi8(value, arch::_mm_narrow_dword_to_byte_maskx_v2()) })
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<super::U32x4V2> for U8x4V2 {
-    fn cast_from(value: Storage<super::U32x4V2>) -> Storage<Self> {
-        ReducedRegister::new(unsafe { arch::_mm_shuffle_epi8(value, arch::_mm_narrow_dword_to_byte_maskx_v2()) })
-    }
-}
-
 // --- x8 widen i8 -> i32 (low 8 bytes -> two 4x i32 lanes) ---
 #[thermite_macros::inline_always]
 impl CastRegister<I8x8V2> for ArrayRegister<super::I32x4V2, 2> {
@@ -421,30 +399,6 @@ impl CastRegister<U8x8V2> for ArrayRegister<super::U32x4V2, 2> {
             let lo = arch::_mm_cvtepu8_epi32(value.0);
             let hi = arch::_mm_cvtepu8_epi32(arch::_mm_srli_si128(value.0, 4));
             ArrayRegister([lo, hi])
-        }
-    }
-}
-
-// --- x8 narrow i32 -> i8 (low byte of each lane in both halves -> low 8 bytes) ---
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::I32x4V2, 2>> for I8x8V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::I32x4V2, 2>>) -> Storage<Self> {
-        unsafe {
-            let mask = arch::_mm_narrow_dword_to_byte_maskx_v2();
-            let lo = arch::_mm_shuffle_epi8(value.0[0], mask); // 4 bytes in low 32 bits
-            let hi = arch::_mm_shuffle_epi8(value.0[1], mask);
-            ReducedRegister::new(arch::_mm_unpacklo_epi32(lo, hi))
-        }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::U32x4V2, 2>> for U8x8V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::U32x4V2, 2>>) -> Storage<Self> {
-        unsafe {
-            let mask = arch::_mm_narrow_dword_to_byte_maskx_v2();
-            let lo = arch::_mm_shuffle_epi8(value.0[0], mask);
-            let hi = arch::_mm_shuffle_epi8(value.0[1], mask);
-            ReducedRegister::new(arch::_mm_unpacklo_epi32(lo, hi))
         }
     }
 }
@@ -477,20 +431,6 @@ impl CastRegister<super::U8x16V2> for ArrayRegister<super::U32x4V2, 4> {
     }
 }
 
-// --- x16 narrow i32 -> i8 (ArrayRegister<I32x4V2, 4> -> native 16 bytes) ---
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::I32x4V2, 4>> for super::I8x16V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::I32x4V2, 4>>) -> Storage<Self> {
-        unsafe { arch::_mm_cvt4epi32_epi8x_v2(value.0) }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::U32x4V2, 4>> for super::U8x16V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::U32x4V2, 4>>) -> Storage<Self> {
-        unsafe { arch::_mm_cvt4epi32_epi8x_v2(value.0) }
-    }
-}
-
 // --- x2 widen i8 -> i32 (ArrayRegister<i8,2> -> I32x2V2 reduced) ---
 #[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<i8, 2>> for super::half::I32x2V2 {
@@ -513,6 +453,8 @@ impl CastRegister<super::half::I32x2V2> for ArrayRegister<i8, 2> {
         unsafe { arch::_mm_storeu_si128(arr.as_mut_ptr() as *mut _, value.0) };
         ArrayRegister([arr[0] as i8, arr[1] as i8])
     }
+
+    sat_clamp_narrow8!(super::half::I32x2V2, i32, i8);
 }
 #[thermite_macros::inline_always]
 impl CastRegister<super::half::U32x2V2> for ArrayRegister<u8, 2> {
@@ -521,6 +463,8 @@ impl CastRegister<super::half::U32x2V2> for ArrayRegister<u8, 2> {
         unsafe { arch::_mm_storeu_si128(arr.as_mut_ptr() as *mut _, value.0) };
         ArrayRegister([arr[0] as u8, arr[1] as u8])
     }
+
+    sat_clamp_narrow8!(super::half::U32x2V2, u32, u8);
 }
 
 // ===========================================================================================
@@ -557,6 +501,8 @@ impl CastRegister<super::I64x2V2> for ArrayRegister<i8, 2> {
         unsafe { arch::_mm_storeu_si128(arr.as_mut_ptr() as *mut _, value) };
         ArrayRegister([arr[0] as i8, arr[1] as i8])
     }
+
+    sat_clamp_narrow8!(super::I64x2V2, i64, i8);
 }
 #[thermite_macros::inline_always]
 impl CastRegister<super::U64x2V2> for ArrayRegister<u8, 2> {
@@ -565,6 +511,8 @@ impl CastRegister<super::U64x2V2> for ArrayRegister<u8, 2> {
         unsafe { arch::_mm_storeu_si128(arr.as_mut_ptr() as *mut _, value) };
         ArrayRegister([arr[0] as u8, arr[1] as u8])
     }
+
+    sat_clamp_narrow8!(super::U64x2V2, u64, u8);
 }
 
 // --- x4 widen i8 -> i64 (low 4 bytes -> two 2x i64 lanes) ---
@@ -602,6 +550,8 @@ impl CastRegister<ArrayRegister<super::I64x2V2, 2>> for I8x4V2 {
             ReducedRegister::new(arch::_mm_unpacklo_epi16(lo, hi))
         }
     }
+
+    sat_clamp_narrow8!(ArrayRegister<super::I64x2V2, 2>, i64, i8);
 }
 #[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<super::U64x2V2, 2>> for U8x4V2 {
@@ -613,6 +563,8 @@ impl CastRegister<ArrayRegister<super::U64x2V2, 2>> for U8x4V2 {
             ReducedRegister::new(arch::_mm_unpacklo_epi16(lo, hi))
         }
     }
+
+    sat_clamp_narrow8!(ArrayRegister<super::U64x2V2, 2>, u64, u8);
 }
 
 // --- x8 widen i8 -> i64 (low 8 bytes -> four 2x i64 lanes) ---
@@ -649,12 +601,16 @@ impl CastRegister<ArrayRegister<super::I64x2V2, 4>> for I8x8V2 {
     fn cast_from(value: Storage<ArrayRegister<super::I64x2V2, 4>>) -> Storage<Self> {
         unsafe { ReducedRegister::new(arch::_mm_cvt4epi64_epi8x_v2(value.0)) }
     }
+
+    sat_clamp_narrow8!(ArrayRegister<super::I64x2V2, 4>, i64, i8);
 }
 #[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<super::U64x2V2, 4>> for U8x8V2 {
     fn cast_from(value: Storage<ArrayRegister<super::U64x2V2, 4>>) -> Storage<Self> {
         unsafe { ReducedRegister::new(arch::_mm_cvt4epi64_epi8x_v2(value.0)) }
     }
+
+    sat_clamp_narrow8!(ArrayRegister<super::U64x2V2, 4>, u64, u8);
 }
 
 // --- x16 widen i8 -> i64 (native 16 bytes -> ArrayRegister<I64x2V2, 8>) ---
@@ -690,20 +646,6 @@ impl CastRegister<super::U8x16V2> for ArrayRegister<super::U64x2V2, 8> {
                 arch::_mm_cvtepu8_epi64(arch::_mm_srli_si128(value, 14)),
             ])
         }
-    }
-}
-
-// --- x16 narrow i64 -> i8 (ArrayRegister<I64x2V2, 8> -> native 16 bytes) ---
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::I64x2V2, 8>> for super::I8x16V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::I64x2V2, 8>>) -> Storage<Self> {
-        unsafe { arch::_mm_cvt8epi64_epi8x_v2(value.0) }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::U64x2V2, 8>> for super::U8x16V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::U64x2V2, 8>>) -> Storage<Self> {
-        unsafe { arch::_mm_cvt8epi64_epi8x_v2(value.0) }
     }
 }
 
@@ -745,22 +687,6 @@ impl CastRegister<ArrayRegister<u8, 2>> for super::half::F32x2V2 {
         })
     }
 }
-#[thermite_macros::inline_always]
-impl CastRegister<super::half::F32x2V2> for ArrayRegister<i8, 2> {
-    fn cast_from(value: Storage<super::half::F32x2V2>) -> Storage<Self> {
-        let mut arr = [0i32; 4];
-        unsafe { arch::_mm_storeu_si128(arr.as_mut_ptr() as *mut _, arch::_mm_cvttps_epi32(value.0)) };
-        ArrayRegister([arr[0] as i8, arr[1] as i8])
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<super::half::F32x2V2> for ArrayRegister<u8, 2> {
-    fn cast_from(value: Storage<super::half::F32x2V2>) -> Storage<Self> {
-        let mut arr = [0i32; 4];
-        unsafe { arch::_mm_storeu_si128(arr.as_mut_ptr() as *mut _, arch::_mm_cvttps_epi32(value.0)) };
-        ArrayRegister([arr[0] as u8, arr[1] as u8])
-    }
-}
 
 // --- x2 8 <-> f64 (ArrayRegister<i8,2> <-> F64x2V2 native) ---
 #[thermite_macros::inline_always]
@@ -773,22 +699,6 @@ impl CastRegister<ArrayRegister<i8, 2>> for super::F64x2V2 {
 impl CastRegister<ArrayRegister<u8, 2>> for super::F64x2V2 {
     fn cast_from(value: Storage<ArrayRegister<u8, 2>>) -> Storage<Self> {
         unsafe { arch::_mm_cvtepi32_pd(arch::_mm_setr_epi32(value.0[0] as i32, value.0[1] as i32, 0, 0)) }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<super::F64x2V2> for ArrayRegister<i8, 2> {
-    fn cast_from(value: Storage<super::F64x2V2>) -> Storage<Self> {
-        let mut arr = [0i32; 4];
-        unsafe { arch::_mm_storeu_si128(arr.as_mut_ptr() as *mut _, arch::_mm_cvttpd_epi32(value)) };
-        ArrayRegister([arr[0] as i8, arr[1] as i8])
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<super::F64x2V2> for ArrayRegister<u8, 2> {
-    fn cast_from(value: Storage<super::F64x2V2>) -> Storage<Self> {
-        let mut arr = [0i32; 4];
-        unsafe { arch::_mm_storeu_si128(arr.as_mut_ptr() as *mut _, arch::_mm_cvttpd_epi32(value)) };
-        ArrayRegister([arr[0] as u8, arr[1] as u8])
     }
 }
 
@@ -805,22 +715,6 @@ impl CastRegister<U8x4V2> for super::F32x4V2 {
         unsafe { arch::_mm_cvtepi32_ps(arch::_mm_cvtepu8_epi32(value.0)) }
     }
 }
-#[thermite_macros::inline_always]
-impl CastRegister<super::F32x4V2> for I8x4V2 {
-    fn cast_from(value: Storage<super::F32x4V2>) -> Storage<Self> {
-        ReducedRegister::new(unsafe {
-            arch::_mm_shuffle_epi8(arch::_mm_cvttps_epi32(value), arch::_mm_narrow_dword_to_byte_maskx_v2())
-        })
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<super::F32x4V2> for U8x4V2 {
-    fn cast_from(value: Storage<super::F32x4V2>) -> Storage<Self> {
-        ReducedRegister::new(unsafe {
-            arch::_mm_shuffle_epi8(arch::_mm_cvttps_epi32(value), arch::_mm_narrow_dword_to_byte_maskx_v2())
-        })
-    }
-}
 
 // --- x4 8 <-> f64 (I8x4V2 reduced <-> ArrayRegister<F64x2V2, 2>) ---
 #[thermite_macros::inline_always]
@@ -833,24 +727,6 @@ impl CastRegister<I8x4V2> for ArrayRegister<super::F64x2V2, 2> {
 impl CastRegister<U8x4V2> for ArrayRegister<super::F64x2V2, 2> {
     fn cast_from(value: Storage<U8x4V2>) -> Storage<Self> {
         ArrayRegister(unsafe { arch::_mm_cvtepi32_2pdx_v2(arch::_mm_cvtepu8_epi32(value.0)) })
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F64x2V2, 2>> for I8x4V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::F64x2V2, 2>>) -> Storage<Self> {
-        ReducedRegister::new(unsafe {
-            let i32s = arch::_mm_cvtt2pd_epi32x_v2(value.0);
-            arch::_mm_shuffle_epi8(i32s, arch::_mm_narrow_dword_to_byte_maskx_v2())
-        })
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F64x2V2, 2>> for U8x4V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::F64x2V2, 2>>) -> Storage<Self> {
-        ReducedRegister::new(unsafe {
-            let i32s = arch::_mm_cvtt2pd_epi32x_v2(value.0);
-            arch::_mm_shuffle_epi8(i32s, arch::_mm_narrow_dword_to_byte_maskx_v2())
-        })
     }
 }
 
@@ -875,28 +751,6 @@ impl CastRegister<U8x8V2> for ArrayRegister<super::F32x4V2, 2> {
         }
     }
 }
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F32x4V2, 2>> for I8x8V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::F32x4V2, 2>>) -> Storage<Self> {
-        unsafe {
-            let mask = arch::_mm_narrow_dword_to_byte_maskx_v2();
-            let lo = arch::_mm_shuffle_epi8(arch::_mm_cvttps_epi32(value.0[0]), mask);
-            let hi = arch::_mm_shuffle_epi8(arch::_mm_cvttps_epi32(value.0[1]), mask);
-            ReducedRegister::new(arch::_mm_unpacklo_epi32(lo, hi))
-        }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F32x4V2, 2>> for U8x8V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::F32x4V2, 2>>) -> Storage<Self> {
-        unsafe {
-            let mask = arch::_mm_narrow_dword_to_byte_maskx_v2();
-            let lo = arch::_mm_shuffle_epi8(arch::_mm_cvttps_epi32(value.0[0]), mask);
-            let hi = arch::_mm_shuffle_epi8(arch::_mm_cvttps_epi32(value.0[1]), mask);
-            ReducedRegister::new(arch::_mm_unpacklo_epi32(lo, hi))
-        }
-    }
-}
 
 // --- x8 8 <-> f64 (I8x8V2 reduced <-> ArrayRegister<F64x2V2, 4>) ---
 #[thermite_macros::inline_always]
@@ -916,34 +770,6 @@ impl CastRegister<U8x8V2> for ArrayRegister<super::F64x2V2, 4> {
             let lo = arch::_mm_cvtepi32_2pdx_v2(arch::_mm_cvtepu8_epi32(value.0));
             let hi = arch::_mm_cvtepi32_2pdx_v2(arch::_mm_cvtepu8_epi32(arch::_mm_srli_si128(value.0, 4)));
             ArrayRegister([lo[0], lo[1], hi[0], hi[1]])
-        }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F64x2V2, 4>> for I8x8V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::F64x2V2, 4>>) -> Storage<Self> {
-        let v = value.0;
-        unsafe {
-            let lo = arch::_mm_cvtt2pd_epi32x_v2([v[0], v[1]]);
-            let hi = arch::_mm_cvtt2pd_epi32x_v2([v[2], v[3]]);
-            let mask = arch::_mm_narrow_dword_to_byte_maskx_v2();
-            let lo = arch::_mm_shuffle_epi8(lo, mask);
-            let hi = arch::_mm_shuffle_epi8(hi, mask);
-            ReducedRegister::new(arch::_mm_unpacklo_epi32(lo, hi))
-        }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F64x2V2, 4>> for U8x8V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::F64x2V2, 4>>) -> Storage<Self> {
-        let v = value.0;
-        unsafe {
-            let lo = arch::_mm_cvtt2pd_epi32x_v2([v[0], v[1]]);
-            let hi = arch::_mm_cvtt2pd_epi32x_v2([v[2], v[3]]);
-            let mask = arch::_mm_narrow_dword_to_byte_maskx_v2();
-            let lo = arch::_mm_shuffle_epi8(lo, mask);
-            let hi = arch::_mm_shuffle_epi8(hi, mask);
-            ReducedRegister::new(arch::_mm_unpacklo_epi32(lo, hi))
         }
     }
 }
@@ -975,34 +801,6 @@ impl CastRegister<super::U8x16V2> for ArrayRegister<super::F32x4V2, 4> {
         }
     }
 }
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F32x4V2, 4>> for super::I8x16V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::F32x4V2, 4>>) -> Storage<Self> {
-        let v = value.0;
-        unsafe {
-            arch::_mm_cvt4epi32_epi8x_v2([
-                arch::_mm_cvttps_epi32(v[0]),
-                arch::_mm_cvttps_epi32(v[1]),
-                arch::_mm_cvttps_epi32(v[2]),
-                arch::_mm_cvttps_epi32(v[3]),
-            ])
-        }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F32x4V2, 4>> for super::U8x16V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::F32x4V2, 4>>) -> Storage<Self> {
-        let v = value.0;
-        unsafe {
-            arch::_mm_cvt4epi32_epi8x_v2([
-                arch::_mm_cvttps_epi32(v[0]),
-                arch::_mm_cvttps_epi32(v[1]),
-                arch::_mm_cvttps_epi32(v[2]),
-                arch::_mm_cvttps_epi32(v[3]),
-            ])
-        }
-    }
-}
 
 // --- x16 8 <-> f64 (I8x16V2 native <-> ArrayRegister<F64x2V2, 8>) ---
 #[thermite_macros::inline_always]
@@ -1026,34 +824,6 @@ impl CastRegister<super::U8x16V2> for ArrayRegister<super::F64x2V2, 8> {
             let c = arch::_mm_cvtepi32_2pdx_v2(arch::_mm_cvtepu8_epi32(arch::_mm_srli_si128(value, 8)));
             let d = arch::_mm_cvtepi32_2pdx_v2(arch::_mm_cvtepu8_epi32(arch::_mm_srli_si128(value, 12)));
             ArrayRegister([a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1]])
-        }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F64x2V2, 8>> for super::I8x16V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::F64x2V2, 8>>) -> Storage<Self> {
-        let v = value.0;
-        unsafe {
-            arch::_mm_cvt4epi32_epi8x_v2([
-                arch::_mm_cvtt2pd_epi32x_v2([v[0], v[1]]),
-                arch::_mm_cvtt2pd_epi32x_v2([v[2], v[3]]),
-                arch::_mm_cvtt2pd_epi32x_v2([v[4], v[5]]),
-                arch::_mm_cvtt2pd_epi32x_v2([v[6], v[7]]),
-            ])
-        }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F64x2V2, 8>> for super::U8x16V2 {
-    fn cast_from(value: Storage<ArrayRegister<super::F64x2V2, 8>>) -> Storage<Self> {
-        let v = value.0;
-        unsafe {
-            arch::_mm_cvt4epi32_epi8x_v2([
-                arch::_mm_cvtt2pd_epi32x_v2([v[0], v[1]]),
-                arch::_mm_cvtt2pd_epi32x_v2([v[2], v[3]]),
-                arch::_mm_cvtt2pd_epi32x_v2([v[4], v[5]]),
-                arch::_mm_cvtt2pd_epi32x_v2([v[6], v[7]]),
-            ])
         }
     }
 }

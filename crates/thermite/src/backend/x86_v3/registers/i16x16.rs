@@ -12,8 +12,7 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, ExtendRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister,
-        empty_reg, reg, reg_splat,
+        SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
     },
 };
 
@@ -475,20 +474,17 @@ impl CastRegister<I16x16V3> for ArrayRegister<super::I32x8V3, 2> {
     }
 }
 
-// Narrow i32x16 -> i16x16: truncate each 32-bit lane, then concat the two halves.
 #[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<super::I32x8V3, 2>> for I16x16V3 {
+    // Narrow i32x16 -> i16x16: truncate each 32-bit lane, then concat the two halves.
     fn cast_from(value: Storage<ArrayRegister<super::I32x8V3, 2>>) -> Storage<Self> {
         let lo = <super::I16x8V3 as CastRegister<super::I32x8V3>>::cast_from(value.0[0]);
         let hi = <super::I16x8V3 as CastRegister<super::I32x8V3>>::cast_from(value.0[1]);
         <Self as ConcatRegister<super::I16x8V3>>::concat(lo, hi)
     }
-}
 
-// Saturating narrow i32x16 -> i16x16 via a two-source `vpackssdw` over the two 256-bit halves,
-// then `vpermq` to restitch the interleaved 64-bit groups ([a.lo, b.lo, a.hi, b.hi] -> sequence).
-#[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::I32x8V3, 2>> for I16x16V3 {
+    // Saturating narrow i32x16 -> i16x16 via a two-source `vpackssdw` over the two 256-bit halves,
+    // then `vpermq` to restitch the interleaved 64-bit groups ([a.lo, b.lo, a.hi, b.hi] -> sequence).
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I32x8V3, 2>>) -> Storage<Self> {
         unsafe {
             let packed = arch::_mm256_packs_epi32(value.0[0], value.0[1]);
@@ -499,9 +495,21 @@ impl SaturatingCastRegister<ArrayRegister<super::I32x8V3, 2>> for I16x16V3 {
 
 // Saturating narrow i64x16 -> i16x16: clamp down to i32x16 (no 64-bit pack) then the pack above.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::I64x4V3, 4>> for I16x16V3 {
+impl CastRegister<ArrayRegister<super::I64x4V3, 4>> for I16x16V3 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I64x4V3, 4>>) -> Storage<Self> {
-        let words = <ArrayRegister<super::I32x8V3, 2> as SaturatingCastRegister<ArrayRegister<super::I64x4V3, 4>>>::saturating_cast_from(value);
-        <Self as SaturatingCastRegister<ArrayRegister<super::I32x8V3, 2>>>::saturating_cast_from(words)
+        let words =
+            <ArrayRegister<super::I32x8V3, 2> as CastRegister<ArrayRegister<super::I64x4V3, 4>>>::saturating_cast_from(
+                value,
+            );
+        <Self as CastRegister<ArrayRegister<super::I32x8V3, 2>>>::saturating_cast_from(words)
+    }
+
+    fn cast_from(value: Storage<ArrayRegister<super::I64x4V3, 4>>) -> Storage<Self> {
+        let v = value.0;
+        unsafe {
+            let lo = arch::_mm_cvt2epi64x4_epi16x_v3([v[0], v[1]]); // 8 words (lanes 0..8)
+            let hi = arch::_mm_cvt2epi64x4_epi16x_v3([v[2], v[3]]); // 8 words (lanes 8..16)
+            arch::_mm256_set_m128i(hi, lo)
+        }
     }
 }

@@ -313,6 +313,12 @@ impl_float_to_int_casts! {
     F64x2V1 as U64x2V1 => _mm_cvtpd_epu64x_v1 sat _mm_cvtpd_epu64_satx_v1 | _mm_cvtpd_epu64x_limited_v1, // f64x2 -> u64x2
 }
 
+// `u64x4 -> f32x4`, the one int -> float pair with no direct instruction on x86.
+// Composed through f64, where both legs already exist.
+impl_cast_via! {
+    ArrayRegister<U64x2V1, 2> as F32x4V1 => via ArrayRegister<F64x2V1, 2>,
+}
+
 // Cross-width float -> int saturating casts, one row per Simd lane count
 // (`[f32, f64, i32, u32, i64, u64, i16, u16, i8, u8]`), composed from the
 // same-width saturating casts above and the integer-narrowing saturating matrix.
@@ -320,14 +326,14 @@ impl_float_to_int_casts! {
 // `ArrayRegister` cast ladder in `register/array.rs` cannot bridge (the ladder
 // covers array<->array pairs whose lengths differ by a factor of two, bottoming
 // out in the x4 impls stamped here).
-impl_saturating_float_matrix! {
+impl_float_cast_matrix! {
     [half::F32x2V1, F64x2V1, half::I32x2V1, half::U32x2V1, I64x2V1, U64x2V1,
         ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>],
     [F32x4V1, ArrayRegister<F64x2V1, 2>, I32x4V1, U32x4V1, ArrayRegister<I64x2V1, 2>, ArrayRegister<U64x2V1, 2>,
         half16::I16x4V1, half16::U16x4V1, half8::I8x4V1, half8::U8x4V1],
 }
 
-impl_saturating_cast_via! {
+impl_cast_via! {
     // x8
     ArrayRegister<F32x4V1, 2> as I16x8V1 => via ArrayRegister<I32x4V1, 2>,
     ArrayRegister<F32x4V1, 2> as half8::I8x8V1 => via ArrayRegister<I32x4V1, 2>,

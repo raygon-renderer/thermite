@@ -990,9 +990,30 @@ section.
 
 `cast` converts between element types while preserving the lane count, in any direction:
 widening, narrowing, signed to unsigned, int to float. It follows the same semantics scalar
-`as` would, including saturating float-to-int. `fast_cast` gives that up for fewer
-instructions when you've already ruled out the problematic inputs, and `saturating_cast`
-covers narrowing between integers of the same signedness.
+`as` would, with one exception. Float to int is exact only for in-range finite inputs. A NaN
+or out-of-range lane gives you whatever the backend does, which on x86 is the "indefinite"
+integer `INT::MIN`, not the 0 and the clamp scalar `as` produces.
+
+That's deliberate. `f32x4 -> i32x4` is a single `cvttps2dq`, and the exact answer costs 5
+instructions (a compare against 2^31, an unordered compare, an XOR and an ANDNOT). Most
+kernels have already bounded their inputs and shouldn't have to pay for it.
+
+When you do need `as` exactly, `saturating_cast` is it. NaN goes to 0 and everything else
+clamps to the destination MIN/MAX. It resolves for any pair `cast` resolves for, because the
+two are methods on one trait that default to each other, but it only _differs_ from `cast`
+where the hardware gives it something to differ about: float to int, and narrowing between
+integers of the same signedness. Everywhere else it falls through to `cast`, which for a
+widening conversion is already exact, since nothing can go out of range.
+
+The one place that falls through and shouldn't be trusted is a sign-changing integer cast.
+There is no saturating `i32 -> u32`, so it wraps, which is what `as` does but not what the
+method name suggests. Ask for `cast` there and say what you meant.
+
+`fast_cast` goes the other way and stays narrow in every configuration, for when you've
+already ruled out the problematic inputs. The `strict_ieee754` feature points every
+float-source `cast` at the saturating implementation so the two agree, and leaves integer
+casts alone, since `as` wraps for int-to-int and redirecting them would clamp where the
+language wraps.
 
 Masks have their own conversion. A mask from an `f32x8` comparison and one from an `i32x8`
 comparison are the same eight booleans but different types, so `mask.cast()` reinterprets

@@ -509,6 +509,7 @@ impl UnsignedIntegerRegister for U64x2V3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<<Scalar as Simd>::u32x2> for U64x2V3 {
     fn cast_from(value: Storage<<Scalar as Simd>::u32x2>) -> Storage<Self> {
         unsafe { arch::_mm_setr_epi32(value.0[0] as i32, 0, value.0[1] as i32, 0) }

@@ -12,8 +12,8 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
-        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, Storage, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage,
+        UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -353,7 +353,7 @@ impl UnsignedIntegerRegister for U8x16V1 {}
 
 // Saturating narrow u16x16 -> u8x16: clamp each half (`min_epu16x_v1`) then two-source `packuswb`.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::U16x8V1, 2>> for U8x16V1 {
+impl CastRegister<ArrayRegister<super::U16x8V1, 2>> for U8x16V1 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U16x8V1, 2>>) -> Storage<Self> {
         unsafe {
             let max = arch::_mm_set1_epi16(0xFF);
@@ -362,22 +362,38 @@ impl SaturatingCastRegister<ArrayRegister<super::U16x8V1, 2>> for U8x16V1 {
             arch::_mm_packus_epi16(lo, hi)
         }
     }
+
+    fn cast_from(value: Storage<ArrayRegister<super::U16x8V1, 2>>) -> Storage<Self> {
+        unsafe { arch::_mm_cvt2epi16_epi8x_v1(value.0) }
+    }
 }
 
 // SSE2 has no `packusdw`, so u32x16 -> u8x16 and u64x16 -> u8x16 clamp into range + truncating narrow.
 macro_rules! sat_clamp_narrow {
-    ($(($from:ty, $fe:ty)),* $(,)?) => {$(
-        #[thermite_macros::inline_always]
-        impl SaturatingCastRegister<$from> for U8x16V1 {
-            fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
-                let hi = <$from as Register>::splat(u8::MAX as $fe);
-                let clamped = <$from as NumericRegister>::min(value, hi);
-                <Self as CastRegister<$from>>::cast_from(clamped)
-            }
+    ($from:ty, $fe:ty) => {
+        #[inline(always)]
+        fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
+            let hi = <$from as Register>::splat(u8::MAX as $fe);
+            let clamped = <$from as NumericRegister>::min(value, hi);
+            <Self as CastRegister<$from>>::cast_from(clamped)
         }
-    )*};
+    };
 }
-sat_clamp_narrow! {
-    (ArrayRegister<super::U32x4V1, 4>, u32),
-    (ArrayRegister<super::U64x2V1, 8>, u64),
+
+#[thermite_macros::inline_always]
+impl CastRegister<ArrayRegister<super::U32x4V1, 4>> for U8x16V1 {
+    sat_clamp_narrow!(ArrayRegister<super::U32x4V1, 4>, u32);
+
+    fn cast_from(value: Storage<ArrayRegister<super::U32x4V1, 4>>) -> Storage<Self> {
+        unsafe { arch::_mm_cvt4epi32_epi8x_v1(value.0) }
+    }
+}
+
+#[thermite_macros::inline_always]
+impl CastRegister<ArrayRegister<super::U64x2V1, 8>> for U8x16V1 {
+    sat_clamp_narrow!(ArrayRegister<super::U64x2V1, 8>, u64);
+
+    fn cast_from(value: Storage<ArrayRegister<super::U64x2V1, 8>>) -> Storage<Self> {
+        unsafe { arch::_mm_cvt8epi64_epi8x_v1(value.0) }
+    }
 }

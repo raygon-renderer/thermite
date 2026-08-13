@@ -1,9 +1,21 @@
 use super::arch;
 
 use crate::register::{
-    CastRegister, ConcatRegister, IndexableRegister, NumericRegister, Register, SaturatingCastRegister, Storage,
+    CastRegister, ConcatRegister, IndexableRegister, NumericRegister, Register, Storage,
     reduced::{HalfRegister2, ReducedRegister},
 };
+
+macro_rules! sat_clamp_narrow {
+    ($from:ty, $fe:ty, $ie:ty) => {
+        #[inline(always)]
+        fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
+            let lo = <$from as Register>::splat(<$ie>::MIN as $fe);
+            let hi = <$from as Register>::splat(<$ie>::MAX as $fe);
+            let clamped = <$from as NumericRegister>::min(<$from as NumericRegister>::max(value, lo), hi);
+            <Self as CastRegister<$from>>::cast_from(clamped)
+        }
+    };
+}
 
 pub type F32x2V2 = HalfRegister2<super::F32x4V2>;
 pub type I32x2V2 = HalfRegister2<super::I32x4V2>;
@@ -138,20 +150,6 @@ impl CastRegister<super::F64x2V2> for F32x2V2 {
 }
 
 #[thermite_macros::inline_always]
-impl CastRegister<super::F64x2V2> for I32x2V2 {
-    fn cast_from(value: Storage<super::F64x2V2>) -> Storage<Self> {
-        ReducedRegister::new(unsafe { arch::_mm_cvttpd_epi32(value) })
-    }
-}
-
-#[thermite_macros::inline_always]
-impl CastRegister<super::F64x2V2> for U32x2V2 {
-    fn cast_from(value: Storage<super::F64x2V2>) -> Storage<Self> {
-        ReducedRegister::new(unsafe { arch::_mm_cvtpd_epu32x_v2(value) })
-    }
-}
-
-#[thermite_macros::inline_always]
 impl CastRegister<I32x2V2> for super::F64x2V2 {
     fn cast_from(value: Storage<I32x2V2>) -> Storage<Self> {
         unsafe { arch::_mm_cvtepi32_pd(value.0) }
@@ -170,6 +168,8 @@ impl CastRegister<super::U64x2V2> for U32x2V2 {
     fn cast_from(value: Storage<super::U64x2V2>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_shuffle_epi32(value, 0b10_00_10_00) })
     }
+
+    sat_clamp_narrow!(super::U64x2V2, u64, u32);
 }
 
 #[thermite_macros::inline_always]
@@ -184,28 +184,12 @@ impl CastRegister<super::I64x2V2> for I32x2V2 {
     fn cast_from(value: Storage<super::I64x2V2>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_shuffle_epi32(value, 0b10_00_10_00) })
     }
+
+    sat_clamp_narrow!(super::I64x2V2, i64, i32);
 }
 
 // Saturating narrow i64 -> i32: no SSE 64-bit saturating pack, so clamp into range with the
 // (polyfilled) 64-bit min/max and reuse the truncating narrow above.
-macro_rules! sat_clamp_narrow {
-    ($(($from:ty, $fe:ty, $into:ty, $ie:ty)),* $(,)?) => {$(
-        #[thermite_macros::inline_always]
-        impl SaturatingCastRegister<$from> for $into {
-            fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
-                let lo = <$from as Register>::splat(<$ie>::MIN as $fe);
-                let hi = <$from as Register>::splat(<$ie>::MAX as $fe);
-                let clamped = <$from as NumericRegister>::min(<$from as NumericRegister>::max(value, lo), hi);
-                <Self as CastRegister<$from>>::cast_from(clamped)
-            }
-        }
-    )*};
-}
-
-sat_clamp_narrow! {
-    (super::I64x2V2, i64, I32x2V2, i32),
-    (super::U64x2V2, u64, U32x2V2, u32),
-}
 
 #[thermite_macros::inline_always]
 impl IndexableRegister<super::U64x2V2> for F32x2V2 {}

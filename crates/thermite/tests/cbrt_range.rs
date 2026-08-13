@@ -30,11 +30,17 @@ macro_rules! suite {
                     assert_eq!(v.cbrt_p::<Precision>().extract::<0>(), x, "f64 cbrt({x}) @Best");
                 }
                 assert!(
-                    Vector::<<$b as Simd>::f32x8>::splat(f32::NAN).cbrt().extract::<0>().is_nan(),
+                    Vector::<<$b as Simd>::f32x8>::splat(f32::NAN)
+                        .cbrt()
+                        .extract::<0>()
+                        .is_nan(),
                     "f32 cbrt(NaN)"
                 );
                 assert!(
-                    Vector::<<$b as Simd>::f64x4>::splat(f64::NAN).cbrt().extract::<0>().is_nan(),
+                    Vector::<<$b as Simd>::f64x4>::splat(f64::NAN)
+                        .cbrt()
+                        .extract::<0>()
+                        .is_nan(),
                     "f64 cbrt(NaN)"
                 );
             }
@@ -47,7 +53,10 @@ macro_rules! suite {
                     let got = Vector::<<$b as Simd>::f64x4>::splat(x).cbrt().extract::<0>();
                     let want = libm::cbrt(x);
                     let rel = ((got - want) / want).abs();
-                    assert!(rel <= 1e-14, "cbrt({x:e}): got {got:e}, want {want:e} (rel {rel:e})");
+                    assert!(
+                        rel <= 1e-14,
+                        "cbrt({x:e}): got {got:e}, want {want:e} (rel {rel:e})"
+                    );
                 }
             }
 
@@ -78,11 +87,13 @@ macro_rules! suite {
                         ("Best", v.cbrt_p::<Precision>().extract::<0>()),
                     ] {
                         let rel = ((got - want) / want).abs();
-                        assert!(rel <= 1e-14, "f64 cbrt({x:e}) @{tier}: got {got:e}, want {want:e}");
+                        assert!(
+                            rel <= 1e-14,
+                            "f64 cbrt({x:e}) @{tier}: got {got:e}, want {want:e}"
+                        );
                     }
                 }
             }
-
         }
     };
 }

@@ -450,9 +450,9 @@ impl_type_casts! {
     F32x4V3 as F64x4V3 => _mm256_cvtps_pd, // f32x4 -> f64x4
     F64x4V3 as F32x4V3 => _mm256_cvtpd_ps, // f64x4 -> f32x4
     U32x4V3 as U64x4V3 => _mm256_cvtepu32_epi64, // u32x4 -> u64x4
-    U64x4V3 as U32x4V3 => _mm256_cvtepi64_epi32_v3, // u64x4 -> u32x4
+    // U64x4V3 -> U32x4V3 lives in `half.rs` (needs both cast strengths).
     I32x4V3 as I64x4V3 => _mm256_cvtepi32_epi64, // i32x4 -> i64x4
-    I64x4V3 as I32x4V3 => _mm256_cvtepi64_epi32_v3, // i64x2 -> i32x4
+    // I64x4V3 -> I32x4V3 lives in `half.rs` (needs both cast strengths).
 
     // 16-bit self + sibling (i16<->u16). i16<->i32 widen/narrow live in-module.
     I16x8V3 as I16x8V3 => identity, I16x16V3 as I16x16V3 => identity,
@@ -482,10 +482,16 @@ impl_float_to_int_casts! {
     F64x4V3 as U64x4V3 => _mm256_cvtpd_epu64x_v3 sat _mm256_cvtpd_epu64_satx_v3 | _mm256_cvtpd_epu64x_limited_v3, // f64x4 -> u64x4
 }
 
+// `u64x4 -> f32x4`, the one int -> float pair with no direct instruction on x86.
+// Composed through f64, where both legs already exist.
+impl_cast_via! {
+    U64x4V3 as F32x4V3 => via F64x4V3,
+}
+
 // Cross-width float -> int saturating casts, one row per Simd lane count
 // (`[f32, f64, i32, u32, i64, u64, i16, u16, i8, u8]`), composed from the
 // same-width saturating casts above and the integer-narrowing saturating matrix.
-impl_saturating_float_matrix! {
+impl_float_cast_matrix! {
     [F32x2V3, F64x2V3, I32x2V3, U32x2V3, I64x2V3, U64x2V3,
         ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>],
     [F32x4V3, F64x4V3, I32x4V3, U32x4V3, I64x4V3, U64x4V3,
@@ -494,7 +500,7 @@ impl_saturating_float_matrix! {
         I16x8V3, U16x8V3, half8::I8x8V3, half8::U8x8V3],
 }
 
-impl_saturating_cast_via! {
+impl_cast_via! {
     // x16: pairs the ArrayRegister cast ladder cannot bridge (the ladder covers
     // the factor-of-two array<->array pairs from the impls stamped above)
     ArrayRegister<F32x8V3, 2> as I16x16V3 => via ArrayRegister<I32x8V3, 2>,

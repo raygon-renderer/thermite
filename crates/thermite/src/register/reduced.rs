@@ -15,8 +15,8 @@ use crate::{
 use super::{
     BitCastRegister, BitshiftRegister, BitwiseRegister, CastMaskRegister, CastRegister, CoreRegister, ExtendRegister,
     FloatRegister, IndexableRegister, IntegerRegister, Lanes, LinAlg3Register, MaskRegister, NativeCapability,
-    NumericRegister, PartialOrdRegister, Register, SaturatingCastRegister, SignedIntegerRegister, SignedRegister,
-    Storage, UnsignedIntegerRegister, ValidLinAlg3Length, ZeroUpper,
+    NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister, SignedRegister, Storage,
+    UnsignedIntegerRegister, ValidLinAlg3Length, ZeroUpper,
 };
 
 use generic_array::{
@@ -693,28 +693,20 @@ impl<R: BitshiftRegister, N: Unsigned> BitshiftRegister for ReducedRegister<R, N
     #[conditional] fn rorv(value: Storage<Self>, count: Storage<Self::Unsigned>) -> Storage<Self> {}
 }
 
+#[thermite_macros::inline_always]
 impl<FROM, TO, N: Unsigned> CastRegister<ReducedRegister<FROM, N>> for ReducedRegister<TO, N>
 where
     TO: CoreReducible<N> + CastRegister<FROM>,
     FROM: CoreReducible<N>,
 {
-    #[inline(always)]
     fn cast_from(value: Storage<ReducedRegister<FROM, N>>) -> Storage<Self> {
         Self(TO::cast_from(value.0), PhantomData)
     }
 
-    #[inline(always)]
     fn fast_cast_from(value: Storage<ReducedRegister<FROM, N>>) -> Storage<Self> {
         Self(TO::fast_cast_from(value.0), PhantomData)
     }
-}
 
-impl<FROM, TO, N: Unsigned> SaturatingCastRegister<ReducedRegister<FROM, N>> for ReducedRegister<TO, N>
-where
-    TO: CoreReducible<N> + SaturatingCastRegister<FROM>,
-    FROM: CoreReducible<N>,
-{
-    #[inline(always)]
     fn saturating_cast_from(value: Storage<ReducedRegister<FROM, N>>) -> Storage<Self> {
         Self(TO::saturating_cast_from(value.0), PhantomData)
     }

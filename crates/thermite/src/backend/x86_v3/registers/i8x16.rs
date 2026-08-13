@@ -11,8 +11,8 @@ use generic_array::{
 use crate::{
     isa::InstructionSet,
     register::{
-        BitshiftRegister, BitwiseRegister, CoreRegister, ExtendRegister, IntegerRegister, InterleaveRegister,
-        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, SaturatingCastRegister,
+        BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
         SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
     },
 };
@@ -455,34 +455,51 @@ impl SignedIntegerRegister for I8x16V3 {
     }
 }
 
-// Saturating narrow i16x16 -> i8x16 via `vpacksswb`. Pack `(v, v)` and restitch the
-// two populated 64-bit groups with `vpermq` (see `i16x8.rs` for the lane-crossing note).
+// Saturating narrow i16x16 -> i8x16 via `vpacksswb`, splitting to 128 bits first.
+// Same reason as the `i32 -> i16` note in `i16x8.rs`: the 256-bit pack intrinsic gets
+// canonicalized into clamp + truncate and the clamps do not fold back out.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<super::I16x16V3> for I8x16V3 {
+impl CastRegister<super::I16x16V3> for I8x16V3 {
     fn saturating_cast_from(value: Storage<super::I16x16V3>) -> Storage<Self> {
         unsafe {
-            let packed = arch::_mm256_packs_epi16(value, value);
-            arch::_mm256_castsi256_si128(arch::_mm256_permute4x64_epi64(packed, 0b00_00_10_00))
+            let lo = arch::_mm256_castsi256_si128(value);
+            let hi = arch::_mm256_extracti128_si256(value, 1);
+            arch::_mm_packs_epi16(lo, hi)
         }
+    }
+
+    fn cast_from(value: Storage<super::I16x16V3>) -> Storage<Self> {
+        unsafe { arch::_mm256_cvtepi16_epi8x_v3(value) }
     }
 }
 
 // i32x16 -> i8x16: compose two packs (i32x16 -> i16x16 -> i8x16).
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::I32x8V3, 2>> for I8x16V3 {
+impl CastRegister<ArrayRegister<super::I32x8V3, 2>> for I8x16V3 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I32x8V3, 2>>) -> Storage<Self> {
-        let words =
-            <super::I16x16V3 as SaturatingCastRegister<ArrayRegister<super::I32x8V3, 2>>>::saturating_cast_from(value);
-        <Self as SaturatingCastRegister<super::I16x16V3>>::saturating_cast_from(words)
+        let words = <super::I16x16V3 as CastRegister<ArrayRegister<super::I32x8V3, 2>>>::saturating_cast_from(value);
+        <Self as CastRegister<super::I16x16V3>>::saturating_cast_from(words)
+    }
+
+    fn cast_from(value: Storage<ArrayRegister<super::I32x8V3, 2>>) -> Storage<Self> {
+        unsafe { arch::_mm_cvt2epi32x8_epi8x_v3(value.0) }
     }
 }
 
 // i64x16 -> i8x16: clamp down to i32x16, then the two packs above.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::I64x4V3, 4>> for I8x16V3 {
+impl CastRegister<ArrayRegister<super::I64x4V3, 4>> for I8x16V3 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I64x4V3, 4>>) -> Storage<Self> {
-        let words =
-            <super::I16x16V3 as SaturatingCastRegister<ArrayRegister<super::I64x4V3, 4>>>::saturating_cast_from(value);
-        <Self as SaturatingCastRegister<super::I16x16V3>>::saturating_cast_from(words)
+        let words = <super::I16x16V3 as CastRegister<ArrayRegister<super::I64x4V3, 4>>>::saturating_cast_from(value);
+        <Self as CastRegister<super::I16x16V3>>::saturating_cast_from(words)
+    }
+
+    fn cast_from(value: Storage<ArrayRegister<super::I64x4V3, 4>>) -> Storage<Self> {
+        let v = value.0;
+        unsafe {
+            let lo = arch::_mm_cvt2epi64x4_epi8x_v3([v[0], v[1]]); // 8 bytes in low 64 bits
+            let hi = arch::_mm_cvt2epi64x4_epi8x_v3([v[2], v[3]]);
+            arch::_mm_unpacklo_epi64(lo, hi)
+        }
     }
 }

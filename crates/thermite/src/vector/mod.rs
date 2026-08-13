@@ -1376,10 +1376,13 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// Float-to-int lanes that are NaN or out of the destination's range
     /// produce a backend-defined value (x86 hardware conversions return the
     /// "indefinite" integer, `INT::MIN`, where scalar `as` would saturate).
-    /// For exact `as` semantics on every input - NaN -> 0, out-of-range
-    /// clamps - use [`saturating_cast`](Self::saturating_cast). Under the
-    /// `strict_ieee754` feature, float-to-int `cast` itself routes to the
-    /// saturating implementation.
+    /// For exact `as` semantics on every input (NaN gives 0, out-of-range
+    /// clamps) use [`saturating_cast`](Self::saturating_cast).
+    ///
+    /// The `strict_ieee754` feature points every **float-source** cast at the
+    /// saturating implementation, so the two agree under it. Integer sources
+    /// are left alone, deliberately: `as` wraps for int-to-int and so does
+    /// `cast`, so redirecting them would clamp where the language wraps.
     #[inline(always)] fn cast<INTO>(self) -> INTO
     where
         INTO: CastVector<Self>,
@@ -1419,15 +1422,21 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// element range, rather than wrapping (integers) or producing a
     /// backend-defined value (float-to-int) like [`cast`](Self::cast).
     ///
-    /// Resolves for narrowing, same-signedness integer conversions
-    /// (`i64 -> ... -> i8`, `u64 -> ... -> u8`) and for same-width
-    /// float-to-int conversions (`f32 -> i32/u32`, `f64 -> i64/u64`), where it
-    /// has exact Rust `as` semantics: NaN -> 0, out-of-range clamps to
-    /// MIN/MAX. Widening or sign-changing casts have no `SaturatingCastVector`
-    /// impl and must use [`cast`](Self::cast). See [`SaturatingCastVector`].
+    /// Distinct from [`cast`](Self::cast) for narrowing, same-signedness integer
+    /// conversions (`i64 -> ... -> i8`, `u64 -> ... -> u8`) and for every
+    /// float-to-int pair at a given lane count (`f32`/`f64` into any of
+    /// `i8`/`i16`/`i32`/`i64` and their unsigned forms), where it has exact Rust
+    /// `as` semantics. NaN gives 0, out-of-range clamps to MIN/MAX.
+    ///
+    /// Every other conversion resolves too, falling through to
+    /// [`cast`](Self::cast) because it has no separate saturating lowering.
+    /// That is exact for widening conversions, which lose nothing. It is *not*
+    /// what the name suggests for sign-changing integer casts, which wrap:
+    /// there is no saturating `i32 -> u32`, so ask for [`cast`](Self::cast)
+    /// and say what you meant.
     #[inline(always)] fn saturating_cast<INTO>(self) -> INTO
     where
-        INTO: SaturatingCastVector<Self>,
+        INTO: CastVector<Self>,
     {
         INTO::saturating_cast_from(self)
     }
@@ -1647,16 +1656,59 @@ pub trait BitshiftVector:
 /// converted into `Self` with the same semantics as Rust's `as` operator on
 /// the underlying scalar elements. Most users should call
 /// [`GenericVector::cast`] rather than these methods directly.
+///
+/// # Float to int
+///
+/// Float to int matches `as` for in-range finite lanes, truncating toward zero.
+/// A NaN or out-of-range lane gets a **backend-defined** value instead. x86's
+/// hardware conversions hand back the "indefinite" integer (`INT::MIN`) for
+/// every such lane, where scalar `as` gives 0 for NaN and clamps the rest.
+///
+/// The fixup is not free. `f32x4 -> i32x4` is one `cvttps2dq`, and the exact
+/// form is 5 instructions (a compare against 2^31, an unordered compare, an XOR
+/// and an ANDNOT on top of it). A kernel that has already bounded its inputs
+/// would pay that on every cast, so `cast` keeps the bare conversion.
+///
+/// [`saturating_cast_from`](Self::saturating_cast_from), reached through
+/// [`GenericVector::saturating_cast`], is the exact form, and covers every
+/// float-to-int pair at a given lane count. `strict_ieee754` points
+/// float-source `cast_from` at it too, so the two agree under that feature and
+/// every such cast pays the 5 instructions.
+///
+/// Integer sources are left alone by that feature, deliberately. `as` wraps for
+/// int-to-int, which is already what `cast_from` does, so redirecting them would
+/// clamp where the language wraps.
 pub trait CastVector<FROM: Sized>: Sized {
     /// Convert a vector of type `FROM` into `Self`, lane-by-lane, using `as`
-    /// semantics on each element.
+    /// semantics on each element. See the trait docs for what float-to-int
+    /// does with NaN and out-of-range lanes.
     fn cast_from(from: FROM) -> Self;
 
     /// Convert this vector into a vector of type `FROM`, lane-by-lane.
     fn cast_into(self) -> FROM;
 
+    /// Convert lane-by-lane, clamping out-of-range values to `Self`'s element
+    /// range rather than wrapping (integers) or producing a backend-defined
+    /// value (float to int).
+    ///
+    /// Float to int is exactly Rust's `as` here. NaN gives 0, and anything out
+    /// of range clamps to the destination MIN/MAX. Meaningful for narrowing
+    /// same-sign integer pairs and for every float-to-int pair; conversions with
+    /// no distinct saturating lowering (widening, sign-changing, float to float)
+    /// fall through to [`cast_from`](Self::cast_from), which for the widening
+    /// cases is already exact.
+    #[inline(always)]
+    fn saturating_cast_from(from: FROM) -> Self {
+        Self::cast_from(from)
+    }
+
     /// Like [`cast_from`](Self::cast_from), but may take a faster path that
     /// relaxes IEEE corner cases. See [`GenericVector::fast_cast`].
+    ///
+    /// Float-to-int keeps its narrow domain in every configuration,
+    /// `strict_ieee754` included. This is the operation whose out-of-range
+    /// behavior is unspecified by definition, so that feature has nothing to
+    /// tighten here.
     #[inline(always)]
     fn fast_cast_from(from: FROM) -> Self {
         Self::cast_from(from)
@@ -1679,23 +1731,6 @@ pub trait CastVector<FROM: Sized>: Sized {
 pub trait BitCastVector<FROM: Sized>: Sized {
     /// Reinterpret the bit pattern of `bits` as a value of `Self`.
     fn from_bits(bits: FROM) -> Self;
-}
-
-/// Vector-layer mirror of [`SaturatingCastRegister`](crate::register::SaturatingCastRegister):
-/// a narrowing, same-signedness cast that clamps out-of-range values to the
-/// destination element range instead of wrapping like [`CastVector`].
-///
-/// Implemented only for narrowing same-sign integer pairs (`i64 -> ... -> i8`,
-/// `u64 -> ... -> u8`, including skip-level pairs). Widening and sign-changing
-/// conversions are not saturating and go through [`CastVector`]. Most users
-/// reach this through [`GenericVector::saturating_cast`] rather than naming the
-/// trait directly.
-///
-/// Blanket-implemented for every `Vector<INTO>` whose register implements
-/// [`SaturatingCastRegister<FROM>`](crate::register::SaturatingCastRegister).
-pub trait SaturatingCastVector<FROM: Sized>: Sized {
-    /// Narrow `from` into `Self`, clamping each lane to `Self`'s element range.
-    fn saturating_cast_from(from: FROM) -> Self;
 }
 
 /// A `u16`/`u8` integer vector reinterpreted as a vector of *packed floats* (format `S`: fp16,
@@ -2758,7 +2793,7 @@ macro_rules! scan_ladder {
             if const { Self::LANES >  8 } { v = $op(v, v.align::<8>(f)); }
             if const { Self::LANES > 16 } { v = $op(v, v.align::<16>(f)); }
             if const { Self::LANES > 32 } { v = $op(v, v.align::<32>(f)); }
-        };
+            };
         v
     }};
 
@@ -2792,11 +2827,11 @@ macro_rules! scan_ladder {
                         v = $op(v, f.align::<60>(v));
                         v = $op(v, f.align::<56>(v));
                         v = $op(v, f.align::<48>(v));
-                        v = $op(v, f.align::<32>(v)); }
-                // unreachable: guarded by the `if const` above. Panicking is the right
-                // failure mode if a width ever slips past that guard.
-                _ => unreachable!(),
-            };
+                            v = $op(v, f.align::<32>(v)); }
+                    // unreachable: guarded by the `if const` above. Panicking is the right
+                    // failure mode if a width ever slips past that guard.
+                    _ => unreachable!(),
+                };
             v
         } else {
             // `fill` is the lane-0 broadcast either way: reversing makes it the last
@@ -3020,8 +3055,7 @@ pub trait FloatVectorWithBits:
     unsafe fn native_powf<P: Policy>(self, exp: Self) -> Self;
 
     /// Return a signed integer vector that is capable of encapsulating
-    /// the "total order" of the floating point values in this vector,
-    /// such that when compared as integers, the ordering is the same
+    /// the "total order" of the floating point values in this vector, /// such that when compared as integers, the ordering is the same
     /// as the floating point ordering, including NaNs, in the following order:
     ///
     /// - negative quiet NaN

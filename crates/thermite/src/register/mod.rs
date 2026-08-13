@@ -2280,6 +2280,25 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
 
 /// A trait for registers that can be cast to/from other registers,
 /// including of varying element types.
+///
+/// Three strengths of the same conversion, weakest domain first:
+/// [`fast_cast_from`](Self::fast_cast_from) (unspecified outside a narrow
+/// range), [`cast_from`](Self::cast_from) (`as`, but only guaranteed for
+/// in-range finite inputs), and
+/// [`saturating_cast_from`](Self::saturating_cast_from) (`as` on every input).
+///
+/// # Implementing
+///
+/// `cast_from` and `saturating_cast_from` **default to each other**, so a
+/// backend provides whichever ones it has a distinct lowering for and gets the
+/// rest for free. A pair whose hardware conversion is already `as`-exact
+/// (AArch64 `FCVTZS`, wasm `trunc_sat`, anything in the scalar backend) needs
+/// only one of them. A pair where they genuinely differ, which on x86 is every
+/// float -> int conversion, provides both.
+///
+/// **Overriding neither is infinite mutual recursion.** It is not a compile
+/// error, so it shows up as a hang or a stack overflow. The differential cast
+/// suites are what catch it.
 pub trait CastRegister<FROM: CoreRegister>: CoreRegister {
     /// Cast a register from another register type.
     ///
@@ -2287,51 +2306,69 @@ pub trait CastRegister<FROM: CoreRegister>: CoreRegister {
     /// **for in-range finite inputs only**: out-of-range or NaN lanes produce a
     /// backend-defined value (x86 returns the hardware "indefinite" integer,
     /// `INT::MIN`, where scalar `as` would saturate). For exact `as` semantics
-    /// on every input - NaN -> 0, out-of-range clamps - use
-    /// [`SaturatingCastRegister`]. Under the `strict_ieee754` feature,
-    /// float -> int `cast` itself routes to the saturating implementation.
-    fn cast_from(value: Storage<FROM>) -> Storage<Self>;
+    /// on every input (NaN -> 0, out-of-range clamps) use
+    /// [`saturating_cast_from`](Self::saturating_cast_from).
+    ///
+    /// Integer narrowing wraps here, the same way `as` does.
+    #[inline(always)]
+    fn cast_from(value: Storage<FROM>) -> Storage<Self> {
+        Self::saturating_cast_from(value)
+    }
+
+    /// Cast that clamps (saturates) out-of-range source values to the
+    /// destination element's representable range, instead of the wrapping
+    /// truncation (integer) or backend-defined indefinite value (float -> int)
+    /// [`cast_from`](Self::cast_from) produces.
+    ///
+    /// Meaningful in two directions:
+    ///
+    /// - **narrowing, same-signedness integers** (`i64 -> i32 -> i16 -> i8`,
+    ///   `u64 -> u32 -> u16 -> u8`, including skip-level pairs such as
+    ///   `i64 -> i8`). Widening conversions lose nothing, so the default
+    ///   (`cast_from`) is already exact for them. Sign-changing conversions
+    ///   have no saturating lowering and fall through to the wrapping default,
+    ///   which is what `as` does but not what the name promises: prefer
+    ///   [`cast_from`](Self::cast_from) there and say what you meant.
+    /// - **float -> int, every pair** at a given lane count (`f32`/`f64` into
+    ///   any of `i8`/`i16`/`i32`/`i64` and their unsigned forms), with exact
+    ///   Rust `as` semantics: NaN -> 0, out-of-range clamps to the destination
+    ///   MIN/MAX.
+    ///
+    /// # Reference semantics
+    ///
+    /// Defined by the scalar backend and matched lane-for-lane by every
+    /// hardware (`pack*`-based) implementation: clamp the source value into
+    /// `[INTO::MIN, INTO::MAX]`, then convert. For unsigned destinations
+    /// `INTO::MIN` is `0`, so only the high end is clamped. Saturation is
+    /// idempotent across nested ranges, so a direct `i64 -> i8` is bit-identical
+    /// to chaining `i64 -> i32 -> i16 -> i8`.
+    ///
+    /// Only the same-width float -> int casts (`f32 -> i32/u32`,
+    /// `f64 -> i64/u64`) are primitive. The rest compose out of those. A
+    /// narrowing destination goes through the same-width int and then the
+    /// saturating integer narrow, and `f32` into a 64-bit int widens exactly to
+    /// `f64` first. Either way the clamp lands at the destination's range rather
+    /// than an intermediate one, which is what keeps the composition
+    /// bit-identical to a direct `as`.
+    #[inline(always)]
+    fn saturating_cast_from(value: Storage<FROM>) -> Storage<Self> {
+        Self::cast_from(value)
+    }
 
     /// Cast a register to another register type, potentially faster
     /// when the values are within a certain range, otherwise
     /// unspecified values are returned. This method is safe in the
     /// Rust sense, but may not be safe in the sense that values
     /// may not be preserved across the cast.
+    ///
+    /// Float -> int keeps its narrow-domain shortcut in every configuration,
+    /// `strict_ieee754` included. This is the "unspecified out of range"
+    /// operation by definition, so the feature only redirects the vector
+    /// layer's `cast`.
     #[inline(always)]
     fn fast_cast_from(value: Storage<FROM>) -> Storage<Self> {
         Self::cast_from(value)
     }
-}
-
-/// A cast that clamps (saturates) out-of-range source values to the
-/// destination element's representable range, instead of the wrapping
-/// truncation (integer) or backend-defined indefinite value (float -> int)
-/// [`CastRegister`] produces.
-///
-/// Implemented in two directions:
-///
-/// - **narrowing, same-signedness integers**
-///   (`i64 -> i32 -> i16 -> i8`, `u64 -> u32 -> u16 -> u8`, including
-///   skip-level pairs such as `i64 -> i8`). Widening conversions lose nothing
-///   and go through [`CastRegister`]; sign-changing conversions are
-///   intentionally out of scope (use [`CastRegister`], which wraps).
-/// - **same-width float -> int** (`f32 -> i32/u32`, `f64 -> i64/u64`), with
-///   exact Rust `as` semantics: NaN -> 0, out-of-range clamps to the
-///   destination MIN/MAX. This is the checked counterpart to the fast
-///   [`CastRegister`] float -> int path, whose out-of-range/NaN results are
-///   backend-defined.
-///
-/// # Reference semantics
-///
-/// Defined by the scalar backend and matched lane-for-lane by every
-/// hardware (`pack*`-based) implementation: clamp the source value into
-/// `[INTO::MIN, INTO::MAX]`, then convert. For unsigned destinations
-/// `INTO::MIN` is `0`, so only the high end is clamped. Saturation is
-/// idempotent across nested ranges, so a direct `i64 -> i8` is bit-identical
-/// to chaining `i64 -> i32 -> i16 -> i8`.
-pub trait SaturatingCastRegister<FROM: CoreRegister>: CoreRegister {
-    /// Narrow `value` into `Self`, clamping each lane to `Self`'s element range.
-    fn saturating_cast_from(value: Storage<FROM>) -> Storage<Self>;
 }
 
 /// A trait for registers that can be reinterpreted as other registers,

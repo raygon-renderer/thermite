@@ -540,7 +540,7 @@ macro_rules! oracle_shift {
 }
 
 /// Differential test for a float -> int `saturating_cast`
-/// (`<Dst as SaturatingCastRegister<Src>>`) against the scalar backend, whose
+/// (`<Dst as CastRegister<Src>>`) against the scalar backend, whose
 /// float -> int saturating impl is literally `value as _`. Unlike `cast_diff!`
 /// there is no domain prep: saturating casts are total (`as` semantics:
 /// NaN -> 0, out-of-range clamps), so the raw corpus - NaN, infinities, and
@@ -548,21 +548,17 @@ macro_rules! oracle_shift {
 #[macro_export]
 macro_rules! sat_cast_diff {
     ($label:expr, $src_ut:ty, $dst_ut:ty, $src_rf:ty, $dst_rf:ty, $se:ty) => {{
-        use ::thermite::register::SaturatingCastRegister;
+        use ::thermite::register::CastRegister;
         let mut rng = $crate::harness::rng();
         let lanes =
             <<$src_ut as ::thermite::register::CoreRegister>::Lanes as ::generic_array::typenum::Unsigned>::USIZE;
         for input in $crate::harness::corpus::<$se>(lanes, &mut rng) {
-            let got = $crate::harness::read::<$dst_ut>(
-                &<$dst_ut as SaturatingCastRegister<$src_ut>>::saturating_cast_from(
-                    $crate::harness::make_array::<$src_ut>(&input),
-                ),
-            );
-            let want = $crate::harness::read::<$dst_rf>(
-                &<$dst_rf as SaturatingCastRegister<$src_rf>>::saturating_cast_from(
-                    $crate::harness::make_array::<$src_rf>(&input),
-                ),
-            );
+            let got = $crate::harness::read::<$dst_ut>(&<$dst_ut as CastRegister<$src_ut>>::saturating_cast_from(
+                $crate::harness::make_array::<$src_ut>(&input),
+            ));
+            let want = $crate::harness::read::<$dst_rf>(&<$dst_rf as CastRegister<$src_rf>>::saturating_cast_from(
+                $crate::harness::make_array::<$src_rf>(&input),
+            ));
             $crate::harness::assert_lanes_eq(
                 concat!($label, " [saturating_cast vs scalar `as`]"),
                 &[],

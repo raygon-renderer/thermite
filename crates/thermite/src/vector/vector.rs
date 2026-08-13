@@ -16,8 +16,8 @@ use crate::{
     register::{
         self, BitCastRegister, BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, ExtendRegister,
         FloatRegister, IndexableRegister, IntegerRegister, LinAlg3Register, LinAlg4Register, NewRegister,
-        NumericRegister, PartialOrdRegister, Register, SaturatingCastRegister, SignedIntegerRegister, SignedRegister,
-        Storage, UnsignedIntegerRegister,
+        NumericRegister, PartialOrdRegister, Register, SignedIntegerRegister, SignedRegister, Storage,
+        UnsignedIntegerRegister,
     },
 };
 
@@ -92,20 +92,51 @@ where
     INTO: Register + CastRegister<FROM>,
 {
     fn cast_from(from: Vector<FROM>) -> Self {
-        Vector(<INTO as CastRegister<FROM>>::cast_from(from.0))
+        if const { strict_saturates::<FROM>() } {
+            Vector(<INTO as CastRegister<FROM>>::saturating_cast_from(from.0))
+        } else {
+            Vector(<INTO as CastRegister<FROM>>::cast_from(from.0))
+        }
     }
 
     fn cast_into(self) -> Vector<FROM> {
-        Vector(<FROM as CastRegister<INTO>>::cast_from(self.0))
-    }
-
-    fn fast_cast_from(from: Vector<FROM>) -> Self {
-        Vector(<INTO as CastRegister<FROM>>::fast_cast_from(from.0))
+        if const { strict_saturates::<INTO>() } {
+            Vector(<FROM as CastRegister<INTO>>::saturating_cast_from(self.0))
+        } else {
+            Vector(<FROM as CastRegister<INTO>>::cast_from(self.0))
+        }
     }
 
     fn fast_cast_into(self) -> Vector<FROM> {
         Vector(<FROM as CastRegister<INTO>>::fast_cast_from(self.0))
     }
+
+    fn saturating_cast_from(from: Vector<FROM>) -> Self {
+        Vector(<INTO as CastRegister<FROM>>::saturating_cast_from(from.0))
+    }
+
+    fn fast_cast_from(from: Vector<FROM>) -> Self {
+        Vector(<INTO as CastRegister<FROM>>::fast_cast_from(from.0))
+    }
+}
+
+/// The whole `strict_ieee754` cast redirect, in one place.
+///
+/// `cast` is only allowed to diverge from `as` where the SOURCE can hold a NaN
+/// or a magnitude the destination cannot represent, which is to say where the
+/// source is a float. `strict_ieee754` closes that gap by sending those casts to
+/// the saturating lowering, which is `as`-exact on every input.
+///
+/// Keyed on the source element rather than the destination, and deliberately
+/// not on "is the destination an integer": an integer source narrowing to a
+/// smaller integer is _already_ exactly `as`, because `as` wraps there and so
+/// does `cast_from`. Redirecting those would clamp where the language wraps,
+/// turning the feature into a correctness regression. Float to float lands here
+/// too and is harmless, since those pairs have no distinct saturating lowering
+/// and the default sends them straight back to `cast_from`.
+#[inline(always)]
+const fn strict_saturates<R: Register>() -> bool {
+    cfg!(feature = "strict_ieee754") && <R::Element as crate::element::Element>::IS_FLOAT
 }
 
 #[thermite_macros::inline_always]
@@ -116,17 +147,6 @@ where
 {
     fn from_bits(bits: Vector<FROM>) -> Self {
         Vector(<INTO as BitCastRegister<FROM>>::from_bits(bits.0))
-    }
-}
-
-#[thermite_macros::inline_always]
-impl<FROM, INTO> SaturatingCastVector<Vector<FROM>> for Vector<INTO>
-where
-    FROM: Register,
-    INTO: Register + SaturatingCastRegister<FROM>,
-{
-    fn saturating_cast_from(from: Vector<FROM>) -> Self {
-        Vector(<INTO as SaturatingCastRegister<FROM>>::saturating_cast_from(from.0))
     }
 }
 
@@ -594,12 +614,12 @@ impl<R: NumericRegister> NumericVector for Vector<R> {
     // Concrete vectors already have the `CastVector` relationship in both directions;
     // these just name it, so that generic code needing a float <-> integer conversion
     // does not have to carry a bound the composites cannot satisfy.
-    fn to_signed_integer(self) -> Self::Signed { <Self::Signed as CastVector<Self>>::cast_from(self) }
-    fn from_signed_integer(v: Self::Signed) -> Self { <Self::Signed as CastVector<Self>>::cast_into(v) }
-    fn to_unsigned_integer(self) -> Self::Unsigned { <Self::Unsigned as CastVector<Self>>::cast_from(self) }
-    fn from_unsigned_integer(v: Self::Unsigned) -> Self { <Self::Unsigned as CastVector<Self>>::cast_into(v) }
-    fn fast_to_signed_integer(self) -> Self::Signed { <Self::Signed as CastVector<Self>>::fast_cast_from(self) }
-    fn fast_to_unsigned_integer(self) -> Self::Unsigned { <Self::Unsigned as CastVector<Self>>::fast_cast_from(self) }
+    fn to_signed_integer(self) -> Self::Signed {<Self::Signed as CastVector<Self>>::cast_from(self)}
+    fn from_signed_integer(v: Self::Signed) -> Self {<Self::Signed as CastVector<Self>>::cast_into(v)}
+    fn to_unsigned_integer(self) -> Self::Unsigned {<Self::Unsigned as CastVector<Self>>::cast_from(self)}
+    fn from_unsigned_integer(v: Self::Unsigned) -> Self {<Self::Unsigned as CastVector<Self>>::cast_into(v)}
+    fn fast_to_signed_integer(self) -> Self::Signed {<Self::Signed as CastVector<Self>>::fast_cast_from(self)}
+    fn fast_to_unsigned_integer(self) -> Self::Unsigned {<Self::Unsigned as CastVector<Self>>::fast_cast_from(self)}
 
     fn is_zero(self) -> Self::Mask { self.cmp_eq(Self::ZERO) }
 

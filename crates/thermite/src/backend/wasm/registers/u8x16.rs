@@ -10,12 +10,13 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
-        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, Storage, UnsignedIntegerRegister, ZeroUpper, array::ArrayRegister, empty_reg,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage,
+        UnsignedIntegerRegister, ZeroUpper, array::ArrayRegister, empty_reg,
     },
 };
 
 use super::arch;
+use super::half8::store_qwords;
 
 #[cfg_attr(not(feature = "document_registers"), doc(hidden))]
 #[derive(Debug, Clone, Copy, Hash)]
@@ -336,18 +337,22 @@ impl UnsignedIntegerRegister for U8x16Wasm {}
 
 // Saturating narrow u16x16 -> u8x16: clamp each half (`u16x8.min`) then two-source `u8x16.narrow_i16x8_u`.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::U16x8Wasm, 2>> for U8x16Wasm {
+impl CastRegister<ArrayRegister<super::U16x8Wasm, 2>> for U8x16Wasm {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U16x8Wasm, 2>>) -> Storage<Self> {
         let max = arch::u16x8_splat(0xFF);
         let lo = arch::u16x8_min(value.0[0], max);
         let hi = arch::u16x8_min(value.0[1], max);
         arch::u8x16_narrow_i16x8(lo, hi)
     }
+
+    fn cast_from(value: Storage<ArrayRegister<super::U16x8Wasm, 2>>) -> Storage<Self> {
+        unsafe { arch::narrow_2xi16x8_to_bytes(value.0) }
+    }
 }
 
 // Saturating narrow u32x16 -> u8x16: clamp + `u16x8.narrow_i32x4_u` to u16, then clamp + `u8x16.narrow_i16x8_u`.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::U32x4Wasm, 4>> for U8x16Wasm {
+impl CastRegister<ArrayRegister<super::U32x4Wasm, 4>> for U8x16Wasm {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U32x4Wasm, 4>>) -> Storage<Self> {
         let m32 = arch::u32x4_splat(0xFFFF);
         let w0 = arch::u16x8_narrow_i32x4(arch::u32x4_min(value.0[0], m32), arch::u32x4_min(value.0[1], m32));
@@ -355,15 +360,35 @@ impl SaturatingCastRegister<ArrayRegister<super::U32x4Wasm, 4>> for U8x16Wasm {
         let m16 = arch::u16x8_splat(0xFF);
         arch::u8x16_narrow_i16x8(arch::u16x8_min(w0, m16), arch::u16x8_min(w1, m16))
     }
+
+    fn cast_from(value: Storage<ArrayRegister<super::U32x4Wasm, 4>>) -> Storage<Self> {
+        unsafe { arch::narrow_4xi32x4_to_bytes(value.0) }
+    }
 }
 
 // Saturating narrow u64x16 -> u8x16: clamp the high end + truncating narrow.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::U64x2Wasm, 8>> for U8x16Wasm {
+impl CastRegister<ArrayRegister<super::U64x2Wasm, 8>> for U8x16Wasm {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x2Wasm, 8>>) -> Storage<Self> {
         type Src = ArrayRegister<super::U64x2Wasm, 8>;
         let hi = <Src as Register>::splat(u8::MAX as u64);
         let clamped = <Src as NumericRegister>::min(value, hi);
         <Self as CastRegister<Src>>::cast_from(clamped)
+    }
+
+    fn cast_from(value: Storage<ArrayRegister<super::U64x2Wasm, 8>>) -> Storage<Self> {
+        let v = value.0;
+        let a = store_qwords(v[0]);
+        let b = store_qwords(v[1]);
+        let c = store_qwords(v[2]);
+        let d = store_qwords(v[3]);
+        let e = store_qwords(v[4]);
+        let f = store_qwords(v[5]);
+        let g = store_qwords(v[6]);
+        let h = store_qwords(v[7]);
+        arch::i8x16(
+            a[0] as i8, a[1] as i8, b[0] as i8, b[1] as i8, c[0] as i8, c[1] as i8, d[0] as i8, d[1] as i8, e[0] as i8,
+            e[1] as i8, f[0] as i8, f[1] as i8, g[0] as i8, g[1] as i8, h[0] as i8, h[1] as i8,
+        )
     }
 }

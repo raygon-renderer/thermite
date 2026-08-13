@@ -278,9 +278,8 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
             <Self::Element as FloatElement>::HAS_SUBNORMALS
                 && !matches!(P::POLICY.denormal_behavior, DenormalBehavior::Ignore)
         } {
-            if const {
-                P::POLICY.avoid_branching || matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
-            } || crate::unlikely(zero_exp.any())
+            if const { P::POLICY.avoid_branching || matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) }
+                || crate::unlikely(zero_exp.any())
             {
                 let exp_bias: Self::SignedBits = crate::const_splat!(<Self> = <S: FloatVectorWithBits>
                     <S::SignedBits as GenericVector>::Element: <S::Element as FloatElementWithBits>::EXP_BIAS);

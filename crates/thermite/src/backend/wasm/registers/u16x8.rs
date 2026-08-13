@@ -11,8 +11,8 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
-        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, Storage, UnsignedIntegerRegister, ZeroUpper, array::ArrayRegister, empty_reg,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage,
+        UnsignedIntegerRegister, ZeroUpper, array::ArrayRegister, empty_reg,
     },
 };
 
@@ -386,9 +386,9 @@ impl CastRegister<U16x8Wasm> for ArrayRegister<super::U32x4Wasm, 2> {
     }
 }
 
-// Narrow u32x8 -> u16x8: truncate the low 16 bits of each 32-bit lane (wrapping, like `as`).
 #[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<super::U32x4Wasm, 2>> for U16x8Wasm {
+    // Narrow u32x8 -> u16x8: truncate the low 16 bits of each 32-bit lane (wrapping, like `as`).
     #[rustfmt::skip]
     fn cast_from(value: Storage<ArrayRegister<super::U32x4Wasm, 2>>) -> Storage<Self> {
         arch::i8x16_shuffle::<
@@ -396,11 +396,8 @@ impl CastRegister<ArrayRegister<super::U32x4Wasm, 2>> for U16x8Wasm {
             16, 17, 20, 21, 24, 25, 28, 29,
         >(value.0[0], value.0[1])
     }
-}
 
-// Saturating narrow u32x8 -> u16x8: clamp each half (`u32x4.min`) then two-source `u16x8.narrow_i32x4_u`.
-#[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::U32x4Wasm, 2>> for U16x8Wasm {
+    // Saturating narrow u32x8 -> u16x8: clamp each half (`u32x4.min`) then two-source `u16x8.narrow_i32x4_u`.
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U32x4Wasm, 2>>) -> Storage<Self> {
         let max = arch::u32x4_splat(0xFFFF);
         let lo = arch::u32x4_min(value.0[0], max);
@@ -411,11 +408,15 @@ impl SaturatingCastRegister<ArrayRegister<super::U32x4Wasm, 2>> for U16x8Wasm {
 
 // Saturating narrow u64x8 -> u16x8: clamp the high end + truncating narrow.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::U64x2Wasm, 4>> for U16x8Wasm {
+impl CastRegister<ArrayRegister<super::U64x2Wasm, 4>> for U16x8Wasm {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x2Wasm, 4>>) -> Storage<Self> {
         type Src = ArrayRegister<super::U64x2Wasm, 4>;
         let hi = <Src as Register>::splat(u16::MAX as u64);
         let clamped = <Src as NumericRegister>::min(value, hi);
         <Self as CastRegister<Src>>::cast_from(clamped)
+    }
+
+    fn cast_from(value: Storage<ArrayRegister<super::U64x2Wasm, 4>>) -> Storage<Self> {
+        unsafe { arch::narrow_4xi64x2_to_words(value.0) }
     }
 }

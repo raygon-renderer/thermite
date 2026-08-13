@@ -87,17 +87,29 @@ fn ldexp_f32_flush_edges<S: Simd>(name: &str) {
     };
 
     // the reported cases
-    assert_eq!(ldexp(1.5, -200).to_bits(), 0.0f32.to_bits(), "[{name}] ldexp(1.5, -200)");
+    assert_eq!(
+        ldexp(1.5, -200).to_bits(),
+        0.0f32.to_bits(),
+        "[{name}] ldexp(1.5, -200)"
+    );
     assert_eq!(ldexp(1.0, i32::MAX), f32::INFINITY, "[{name}] ldexp(1.0, i32::MAX)");
 
     // exponent saturation / overflow encodes inf, not NaN
-    assert_eq!(ldexp(1.0, i32::MIN).to_bits(), 0.0f32.to_bits(), "[{name}] ldexp(1.0, i32::MIN)");
+    assert_eq!(
+        ldexp(1.0, i32::MIN).to_bits(),
+        0.0f32.to_bits(),
+        "[{name}] ldexp(1.0, i32::MIN)"
+    );
     assert_eq!(ldexp(1.5, 300), f32::INFINITY, "[{name}] ldexp(1.5, 300)");
     assert_eq!(ldexp(-1.5, 300), f32::NEG_INFINITY, "[{name}] ldexp(-1.5, 300)");
     assert_eq!(ldexp(f32::MAX, 1), f32::INFINITY, "[{name}] ldexp(MAX, 1)");
 
     // underflow keeps the sign of zero
-    assert_eq!(ldexp(-1.5, -200).to_bits(), (-0.0f32).to_bits(), "[{name}] ldexp(-1.5, -200)");
+    assert_eq!(
+        ldexp(-1.5, -200).to_bits(),
+        (-0.0f32).to_bits(),
+        "[{name}] ldexp(-1.5, -200)"
+    );
 
     // in-range values still match libm exactly (skip subnormal expectations:
     // this is the FlushToZero path, subnormal results flush by design)
@@ -114,7 +126,11 @@ fn ldexp_f32_flush_edges<S: Simd>(name: &str) {
     // non-finite inputs pass through, for any exponent
     for e in [-1000, 0, 1000, i32::MIN, i32::MAX] {
         assert_eq!(ldexp(f32::INFINITY, e), f32::INFINITY, "[{name}] ldexp(inf, {e})");
-        assert_eq!(ldexp(f32::NEG_INFINITY, e), f32::NEG_INFINITY, "[{name}] ldexp(-inf, {e})");
+        assert_eq!(
+            ldexp(f32::NEG_INFINITY, e),
+            f32::NEG_INFINITY,
+            "[{name}] ldexp(-inf, {e})"
+        );
         assert!(ldexp(f32::NAN, e).is_nan(), "[{name}] ldexp(NaN, {e})");
     }
 
@@ -149,10 +165,22 @@ fn ldexp_f64_flush_edges<S: Simd>(name: &str) {
             .extract::<0>()
     };
 
-    assert_eq!(ldexp(1.5, -2000).to_bits(), 0.0f64.to_bits(), "[{name}] ldexp(1.5, -2000)");
-    assert_eq!(ldexp(-1.5, -2000).to_bits(), (-0.0f64).to_bits(), "[{name}] ldexp(-1.5, -2000)");
+    assert_eq!(
+        ldexp(1.5, -2000).to_bits(),
+        0.0f64.to_bits(),
+        "[{name}] ldexp(1.5, -2000)"
+    );
+    assert_eq!(
+        ldexp(-1.5, -2000).to_bits(),
+        (-0.0f64).to_bits(),
+        "[{name}] ldexp(-1.5, -2000)"
+    );
     assert_eq!(ldexp(1.0, i64::MAX), f64::INFINITY, "[{name}] ldexp(1.0, i64::MAX)");
-    assert_eq!(ldexp(1.0, i64::MIN).to_bits(), 0.0f64.to_bits(), "[{name}] ldexp(1.0, i64::MIN)");
+    assert_eq!(
+        ldexp(1.0, i64::MIN).to_bits(),
+        0.0f64.to_bits(),
+        "[{name}] ldexp(1.0, i64::MIN)"
+    );
     assert_eq!(ldexp(1.5, 3000), f64::INFINITY, "[{name}] ldexp(1.5, 3000)");
     assert_eq!(ldexp(f64::MAX, 1), f64::INFINITY, "[{name}] ldexp(MAX, 1)");
 
@@ -211,8 +239,14 @@ fn trig_large_args_best_f64<S: Simd>(name: &str) {
     // non-finite still propagates NaN through the Payne-Hanek branch
     for x in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
         let (s, c) = Vector::<S::f64x4>::splat(x).sin_cos_p::<Precision>();
-        assert!(s.extract::<0>().is_nan(), "[{name}] sin_p::<Precision>({x}) should be NaN");
-        assert!(c.extract::<0>().is_nan(), "[{name}] cos_p::<Precision>({x}) should be NaN");
+        assert!(
+            s.extract::<0>().is_nan(),
+            "[{name}] sin_p::<Precision>({x}) should be NaN"
+        );
+        assert!(
+            c.extract::<0>().is_nan(),
+            "[{name}] cos_p::<Precision>({x}) should be NaN"
+        );
     }
 }
 
@@ -239,8 +273,14 @@ fn trig_large_args_best_f32<S: Simd>(name: &str) {
 
     for x in [f32::INFINITY, f32::NEG_INFINITY, f32::NAN] {
         let (s, c) = Vector::<S::f32x8>::splat(x).sin_cos_p::<Precision>();
-        assert!(s.extract::<0>().is_nan(), "[{name}] sinf_p::<Precision>({x}) should be NaN");
-        assert!(c.extract::<0>().is_nan(), "[{name}] cosf_p::<Precision>({x}) should be NaN");
+        assert!(
+            s.extract::<0>().is_nan(),
+            "[{name}] sinf_p::<Precision>({x}) should be NaN"
+        );
+        assert!(
+            c.extract::<0>().is_nan(),
+            "[{name}] cosf_p::<Precision>({x}) should be NaN"
+        );
     }
 }
 

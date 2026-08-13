@@ -1,4 +1,4 @@
-//! Saturating-narrow cast (`SaturatingCastRegister`) differential audit.
+//! Saturating-narrow cast (`CastRegister`) differential audit.
 //!
 //! The x86 backends lower these to the hardware saturating pack instructions
 //! (`vpackssdw`/`vpacksswb`, and `vpminu* + vpackus*` for the unsigned-source
@@ -18,7 +18,7 @@ mod harness;
 
 use harness::Tol;
 use thermite::backend::scalar::Scalar;
-use thermite::register::{CoreRegister, SaturatingCastRegister};
+use thermite::register::{CastRegister, CoreRegister};
 use thermite::simd::Simd;
 
 /// One saturating-narrow pair: x86 backend pack vs scalar clamp oracle, bit-exact.
@@ -28,12 +28,13 @@ macro_rules! sat_diff {
         let mut rng = harness::rng();
         let lanes = <<<$b as Simd>::$src as CoreRegister>::Lanes as generic_array::typenum::Unsigned>::USIZE;
         for input in harness::corpus::<$se>(lanes, &mut rng) {
-            let got = harness::read::<<$b as Simd>::$dst>(&<<$b as Simd>::$dst as SaturatingCastRegister<
-                <$b as Simd>::$src,
-            >>::saturating_cast_from(harness::make_array::<
-                <$b as Simd>::$src,
-            >(&input)));
-            let want = harness::read::<<Scalar as Simd>::$dst>(&<<Scalar as Simd>::$dst as SaturatingCastRegister<
+            let got =
+                harness::read::<<$b as Simd>::$dst>(
+                    &<<$b as Simd>::$dst as CastRegister<<$b as Simd>::$src>>::saturating_cast_from(
+                        harness::make_array::<<$b as Simd>::$src>(&input),
+                    ),
+                );
+            let want = harness::read::<<Scalar as Simd>::$dst>(&<<Scalar as Simd>::$dst as CastRegister<
                 <Scalar as Simd>::$src,
             >>::saturating_cast_from(
                 harness::make_array::<<Scalar as Simd>::$src>(&input),

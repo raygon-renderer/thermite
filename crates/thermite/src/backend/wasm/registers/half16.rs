@@ -7,52 +7,55 @@ use generic_array::typenum::U4;
 use super::arch;
 
 use crate::register::{
-    CastRegister, ConcatRegister, ExtendRegister, IndexableRegister, NumericRegister, Register, SaturatingCastRegister,
-    Storage, array::ArrayRegister, reduced::ReducedRegister,
+    CastRegister, ConcatRegister, ExtendRegister, IndexableRegister, NumericRegister, Register, Storage,
+    array::ArrayRegister, reduced::ReducedRegister,
 };
 
 // --- saturating narrows into 16-bit ---
 
-// i32x4 -> i16x4 via `i16x8.narrow_i32x4_s` (low half holds the result).
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<super::I32x4Wasm> for I16x4Wasm {
+impl CastRegister<super::I32x4Wasm> for I16x4Wasm {
+    // i32x4 -> i16x4 via `i16x8.narrow_i32x4_s` (low half holds the result).
     fn saturating_cast_from(value: Storage<super::I32x4Wasm>) -> Storage<Self> {
         ReducedRegister::new(arch::i16x8_narrow_i32x4(value, value))
     }
+
+    // --- x4 narrow i32 -> i16 (truncate low 16 bits per lane into the low 4 i16 lanes) ---
+    #[rustfmt::skip]
+    fn cast_from(value: Storage<super::I32x4Wasm>) -> Storage<Self> {
+        ReducedRegister::new(arch::i8x16_shuffle::<
+            0, 1, 4, 5, 8, 9, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7,
+        >(value, value))
+    }
 }
-// u32x4 -> u16x4: `u16x8.narrow_i32x4_u` reads a signed source, so clamp the high end first.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<super::U32x4Wasm> for U16x4Wasm {
+impl CastRegister<super::U32x4Wasm> for U16x4Wasm {
+    // u32x4 -> u16x4: `u16x8.narrow_i32x4_u` reads a signed source, so clamp the high end first.
     fn saturating_cast_from(value: Storage<super::U32x4Wasm>) -> Storage<Self> {
         let c = arch::u32x4_min(value, arch::u32x4_splat(0xFFFF));
         ReducedRegister::new(arch::u16x8_narrow_i32x4(c, c))
+    }
+
+    #[rustfmt::skip]
+    fn cast_from(value: Storage<super::U32x4Wasm>) -> Storage<Self> {
+        ReducedRegister::new(arch::i8x16_shuffle::<
+            0, 1, 4, 5, 8, 9, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7,
+        >(value, value))
     }
 }
 
 // WASM has no 64-bit narrow, so `i64 -> i16` and the 2-lane `i32/i64 -> i16` combos with a
 // scalar `ArrayRegister` destination clamp into range (register `min`/`max`) + truncating narrow.
 macro_rules! sat_clamp_narrow16 {
-    ($(($from:ty, $fe:ty, $into:ty, $ie:ty)),* $(,)?) => {$(
-        #[thermite_macros::inline_always]
-        impl SaturatingCastRegister<$from> for $into {
-            fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
-                let lo = <$from as Register>::splat(<$ie>::MIN as $fe);
-                let hi = <$from as Register>::splat(<$ie>::MAX as $fe);
-                let clamped = <$from as NumericRegister>::min(<$from as NumericRegister>::max(value, lo), hi);
-                <Self as CastRegister<$from>>::cast_from(clamped)
-            }
+    ($from:ty, $fe:ty, $ie:ty) => {
+        #[inline(always)]
+        fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
+            let lo = <$from as Register>::splat(<$ie>::MIN as $fe);
+            let hi = <$from as Register>::splat(<$ie>::MAX as $fe);
+            let clamped = <$from as NumericRegister>::min(<$from as NumericRegister>::max(value, lo), hi);
+            <Self as CastRegister<$from>>::cast_from(clamped)
         }
-    )*};
-}
-sat_clamp_narrow16! {
-    (ArrayRegister<super::I64x2Wasm, 2>, i64, I16x4Wasm, i16),
-    (ArrayRegister<super::U64x2Wasm, 2>, u64, U16x4Wasm, u16),
-    (super::half::I32x2Wasm, i32, ArrayRegister<i16, 2>, i16),
-    (super::half::U32x2Wasm, u32, ArrayRegister<u16, 2>, u16),
-    (super::I64x2Wasm, i64, ArrayRegister<i16, 2>, i16),
-    (super::U64x2Wasm, u64, ArrayRegister<u16, 2>, u16),
-    (ArrayRegister<super::I64x2Wasm, 8>, i64, ArrayRegister<super::I16x8Wasm, 2>, i16),
-    (ArrayRegister<super::U64x2Wasm, 8>, u64, ArrayRegister<super::U16x8Wasm, 2>, u16),
+    };
 }
 
 /// 4-lane signed 16-bit register, backed by the low 4 lanes of a 128-bit `I16x8Wasm`.
@@ -172,27 +175,6 @@ impl CastRegister<U16x4Wasm> for super::U32x4Wasm {
     }
 }
 
-// --- x4 narrow i32 -> i16 (truncate low 16 bits per lane into the low 4 i16 lanes) ---
-#[thermite_macros::inline_always]
-impl CastRegister<super::I32x4Wasm> for I16x4Wasm {
-    #[rustfmt::skip]
-    fn cast_from(value: Storage<super::I32x4Wasm>) -> Storage<Self> {
-        ReducedRegister::new(arch::i8x16_shuffle::<
-            0, 1, 4, 5, 8, 9, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7,
-        >(value, value))
-    }
-}
-
-#[thermite_macros::inline_always]
-impl CastRegister<super::U32x4Wasm> for U16x4Wasm {
-    #[rustfmt::skip]
-    fn cast_from(value: Storage<super::U32x4Wasm>) -> Storage<Self> {
-        ReducedRegister::new(arch::i8x16_shuffle::<
-            0, 1, 4, 5, 8, 9, 12, 13, 0, 1, 2, 3, 4, 5, 6, 7,
-        >(value, value))
-    }
-}
-
 // --- x2 widen i16 -> i32 (ArrayRegister<i16,2> -> I32x2Wasm reduced) ---
 #[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<i16, 2>> for super::half::I32x2Wasm {
@@ -216,6 +198,8 @@ impl CastRegister<super::half::I32x2Wasm> for ArrayRegister<i16, 2> {
         unsafe { arch::v128_store(arr.as_mut_ptr() as *mut _, value.0) };
         ArrayRegister([arr[0] as i16, arr[1] as i16])
     }
+
+    sat_clamp_narrow16!(super::half::I32x2Wasm, i32, i16);
 }
 
 #[thermite_macros::inline_always]
@@ -225,6 +209,8 @@ impl CastRegister<super::half::U32x2Wasm> for ArrayRegister<u16, 2> {
         unsafe { arch::v128_store(arr.as_mut_ptr() as *mut _, value.0) };
         ArrayRegister([arr[0] as u16, arr[1] as u16])
     }
+
+    sat_clamp_narrow16!(super::half::U32x2Wasm, u32, u16);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -274,6 +260,8 @@ impl CastRegister<super::I64x2Wasm> for ArrayRegister<i16, 2> {
         let a = store_qwords(value);
         ArrayRegister([a[0] as i16, a[1] as i16])
     }
+
+    sat_clamp_narrow16!(super::I64x2Wasm, i64, i16);
 }
 #[thermite_macros::inline_always]
 impl CastRegister<super::U64x2Wasm> for ArrayRegister<u16, 2> {
@@ -281,6 +269,8 @@ impl CastRegister<super::U64x2Wasm> for ArrayRegister<u16, 2> {
         let a = store_qwords(value);
         ArrayRegister([a[0] as u16, a[1] as u16])
     }
+
+    sat_clamp_narrow16!(super::U64x2Wasm, u64, u16);
 }
 
 // --- x4 widen i16 -> i64 (low 4 words -> two 2x i64 lanes) ---
@@ -322,6 +312,8 @@ impl CastRegister<ArrayRegister<super::I64x2Wasm, 2>> for I16x4Wasm {
             0,
         ))
     }
+
+    sat_clamp_narrow16!(ArrayRegister<super::I64x2Wasm, 2>, i64, i16);
 }
 #[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<super::U64x2Wasm, 2>> for U16x4Wasm {
@@ -339,6 +331,8 @@ impl CastRegister<ArrayRegister<super::U64x2Wasm, 2>> for U16x4Wasm {
             0,
         ))
     }
+
+    sat_clamp_narrow16!(ArrayRegister<super::U64x2Wasm, 2>, u64, u16);
 }
 
 // --- x8 widen i16 -> i64 (8 words -> four 2x i64 lanes) ---
@@ -367,19 +361,6 @@ impl CastRegister<super::U16x8Wasm> for ArrayRegister<super::U64x2Wasm, 4> {
     }
 }
 
-// --- x8 narrow i64 -> i16 (word 0 of each of 8 lanes -> 8 words) ---
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::I64x2Wasm, 4>> for super::I16x8Wasm {
-    fn cast_from(value: Storage<ArrayRegister<super::I64x2Wasm, 4>>) -> Storage<Self> {
-        unsafe { arch::narrow_4xi64x2_to_words(value.0) }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::U64x2Wasm, 4>> for super::U16x8Wasm {
-    fn cast_from(value: Storage<ArrayRegister<super::U64x2Wasm, 4>>) -> Storage<Self> {
-        unsafe { arch::narrow_4xi64x2_to_words(value.0) }
-    }
-}
 
 // --- x16 widen i16 -> i64 (ArrayRegister<I16x8Wasm, 2> -> ArrayRegister<I64x2Wasm, 8>) ---
 #[thermite_macros::inline_always]
@@ -415,6 +396,8 @@ impl CastRegister<ArrayRegister<super::I64x2Wasm, 8>> for ArrayRegister<super::I
             ])
         }
     }
+
+    sat_clamp_narrow16!(ArrayRegister<super::I64x2Wasm, 8>, i64, i16);
 }
 #[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<super::U64x2Wasm, 8>> for ArrayRegister<super::U16x8Wasm, 2> {
@@ -427,6 +410,8 @@ impl CastRegister<ArrayRegister<super::U64x2Wasm, 8>> for ArrayRegister<super::U
             ])
         }
     }
+
+    sat_clamp_narrow16!(ArrayRegister<super::U64x2Wasm, 8>, u64, u16);
 }
 
 // ---------------------------------------------------------------------------------------
@@ -461,20 +446,6 @@ impl CastRegister<ArrayRegister<u16, 2>> for super::half::F32x2Wasm {
         ReducedRegister::new(arch::f32x4_convert_i32x4(ints))
     }
 }
-#[thermite_macros::inline_always]
-impl CastRegister<super::half::F32x2Wasm> for ArrayRegister<i16, 2> {
-    fn cast_from(value: Storage<super::half::F32x2Wasm>) -> Storage<Self> {
-        let a = store_dwords(arch::i32x4_trunc_sat_f32x4(value.0));
-        ArrayRegister([a[0] as i16, a[1] as i16])
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<super::half::F32x2Wasm> for ArrayRegister<u16, 2> {
-    fn cast_from(value: Storage<super::half::F32x2Wasm>) -> Storage<Self> {
-        let a = store_dwords(arch::i32x4_trunc_sat_f32x4(value.0));
-        ArrayRegister([a[0] as u16, a[1] as u16])
-    }
-}
 
 // --- x2 (ArrayRegister<i16,2> <-> F64x2Wasm native) ---
 #[thermite_macros::inline_always]
@@ -491,20 +462,6 @@ impl CastRegister<ArrayRegister<u16, 2>> for super::F64x2Wasm {
         arch::f64x2_convert_low_i32x4(ints)
     }
 }
-#[thermite_macros::inline_always]
-impl CastRegister<super::F64x2Wasm> for ArrayRegister<i16, 2> {
-    fn cast_from(value: Storage<super::F64x2Wasm>) -> Storage<Self> {
-        let a = unsafe { arch::f64x2_to_2xi32(value) };
-        ArrayRegister([a[0] as i16, a[1] as i16])
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<super::F64x2Wasm> for ArrayRegister<u16, 2> {
-    fn cast_from(value: Storage<super::F64x2Wasm>) -> Storage<Self> {
-        let a = unsafe { arch::f64x2_to_2xi32(value) };
-        ArrayRegister([a[0] as u16, a[1] as u16])
-    }
-}
 
 // --- x4 (I16x4Wasm <-> F32x4Wasm native) ---
 #[thermite_macros::inline_always]
@@ -519,38 +476,6 @@ impl CastRegister<U16x4Wasm> for super::F32x4Wasm {
         arch::f32x4_convert_i32x4(arch::i32x4_extend_low_u16x8(value.0))
     }
 }
-#[thermite_macros::inline_always]
-impl CastRegister<super::F32x4Wasm> for I16x4Wasm {
-    fn cast_from(value: Storage<super::F32x4Wasm>) -> Storage<Self> {
-        let a = store_dwords(arch::i32x4_trunc_sat_f32x4(value));
-        ReducedRegister::new(arch::i16x8(
-            a[0] as i16,
-            a[1] as i16,
-            a[2] as i16,
-            a[3] as i16,
-            0,
-            0,
-            0,
-            0,
-        ))
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<super::F32x4Wasm> for U16x4Wasm {
-    fn cast_from(value: Storage<super::F32x4Wasm>) -> Storage<Self> {
-        let a = store_dwords(arch::i32x4_trunc_sat_f32x4(value));
-        ReducedRegister::new(arch::i16x8(
-            a[0] as i16,
-            a[1] as i16,
-            a[2] as i16,
-            a[3] as i16,
-            0,
-            0,
-            0,
-            0,
-        ))
-    }
-}
 
 // --- x4 (I16x4Wasm <-> ArrayRegister<F64x2Wasm, 2>) ---
 #[thermite_macros::inline_always]
@@ -563,44 +488,6 @@ impl CastRegister<I16x4Wasm> for ArrayRegister<super::F64x2Wasm, 2> {
 impl CastRegister<U16x4Wasm> for ArrayRegister<super::F64x2Wasm, 2> {
     fn cast_from(value: Storage<U16x4Wasm>) -> Storage<Self> {
         unsafe { ArrayRegister(arch::i32x4_to_2xf64x2(arch::i32x4_extend_low_u16x8(value.0))) }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F64x2Wasm, 2>> for I16x4Wasm {
-    fn cast_from(value: Storage<ArrayRegister<super::F64x2Wasm, 2>>) -> Storage<Self> {
-        unsafe {
-            let lo = arch::f64x2_to_2xi32(value.0[0]);
-            let hi = arch::f64x2_to_2xi32(value.0[1]);
-            ReducedRegister::new(arch::i16x8(
-                lo[0] as i16,
-                lo[1] as i16,
-                hi[0] as i16,
-                hi[1] as i16,
-                0,
-                0,
-                0,
-                0,
-            ))
-        }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F64x2Wasm, 2>> for U16x4Wasm {
-    fn cast_from(value: Storage<ArrayRegister<super::F64x2Wasm, 2>>) -> Storage<Self> {
-        unsafe {
-            let lo = arch::f64x2_to_2xi32(value.0[0]);
-            let hi = arch::f64x2_to_2xi32(value.0[1]);
-            ReducedRegister::new(arch::i16x8(
-                lo[0] as i16,
-                lo[1] as i16,
-                hi[0] as i16,
-                hi[1] as i16,
-                0,
-                0,
-                0,
-                0,
-            ))
-        }
     }
 }
 
@@ -619,40 +506,6 @@ impl CastRegister<super::U16x8Wasm> for ArrayRegister<super::F32x4Wasm, 2> {
         let lo = arch::i32x4_extend_low_u16x8(value);
         let hi = arch::i32x4_extend_low_u16x8(arch::i64x2_shuffle::<1, 1>(value, value));
         ArrayRegister([arch::f32x4_convert_i32x4(lo), arch::f32x4_convert_i32x4(hi)])
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F32x4Wasm, 2>> for super::I16x8Wasm {
-    fn cast_from(value: Storage<ArrayRegister<super::F32x4Wasm, 2>>) -> Storage<Self> {
-        let lo = store_dwords(arch::i32x4_trunc_sat_f32x4(value.0[0]));
-        let hi = store_dwords(arch::i32x4_trunc_sat_f32x4(value.0[1]));
-        arch::i16x8(
-            lo[0] as i16,
-            lo[1] as i16,
-            lo[2] as i16,
-            lo[3] as i16,
-            hi[0] as i16,
-            hi[1] as i16,
-            hi[2] as i16,
-            hi[3] as i16,
-        )
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F32x4Wasm, 2>> for super::U16x8Wasm {
-    fn cast_from(value: Storage<ArrayRegister<super::F32x4Wasm, 2>>) -> Storage<Self> {
-        let lo = store_dwords(arch::i32x4_trunc_sat_f32x4(value.0[0]));
-        let hi = store_dwords(arch::i32x4_trunc_sat_f32x4(value.0[1]));
-        arch::i16x8(
-            lo[0] as i16,
-            lo[1] as i16,
-            lo[2] as i16,
-            lo[3] as i16,
-            hi[0] as i16,
-            hi[1] as i16,
-            hi[2] as i16,
-            hi[3] as i16,
-        )
     }
 }
 
@@ -678,48 +531,6 @@ impl CastRegister<super::U16x8Wasm> for ArrayRegister<super::F64x2Wasm, 4> {
             let a = arch::i32x4_to_2xf64x2(lo);
             let b = arch::i32x4_to_2xf64x2(hi);
             ArrayRegister([a[0], a[1], b[0], b[1]])
-        }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F64x2Wasm, 4>> for super::I16x8Wasm {
-    fn cast_from(value: Storage<ArrayRegister<super::F64x2Wasm, 4>>) -> Storage<Self> {
-        unsafe {
-            let a = arch::f64x2_to_2xi32(value.0[0]);
-            let b = arch::f64x2_to_2xi32(value.0[1]);
-            let c = arch::f64x2_to_2xi32(value.0[2]);
-            let d = arch::f64x2_to_2xi32(value.0[3]);
-            arch::i16x8(
-                a[0] as i16,
-                a[1] as i16,
-                b[0] as i16,
-                b[1] as i16,
-                c[0] as i16,
-                c[1] as i16,
-                d[0] as i16,
-                d[1] as i16,
-            )
-        }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F64x2Wasm, 4>> for super::U16x8Wasm {
-    fn cast_from(value: Storage<ArrayRegister<super::F64x2Wasm, 4>>) -> Storage<Self> {
-        unsafe {
-            let a = arch::f64x2_to_2xi32(value.0[0]);
-            let b = arch::f64x2_to_2xi32(value.0[1]);
-            let c = arch::f64x2_to_2xi32(value.0[2]);
-            let d = arch::f64x2_to_2xi32(value.0[3]);
-            arch::i16x8(
-                a[0] as i16,
-                a[1] as i16,
-                b[0] as i16,
-                b[1] as i16,
-                c[0] as i16,
-                c[1] as i16,
-                d[0] as i16,
-                d[1] as i16,
-            )
         }
     }
 }
@@ -759,82 +570,6 @@ impl CastRegister<ArrayRegister<super::U16x8Wasm, 2>> for ArrayRegister<super::F
             let c = arch::i32x4_to_2xf64x2(q2);
             let d = arch::i32x4_to_2xf64x2(q3);
             ArrayRegister([a[0], a[1], b[0], b[1], c[0], c[1], d[0], d[1]])
-        }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F64x2Wasm, 8>> for ArrayRegister<super::I16x8Wasm, 2> {
-    fn cast_from(value: Storage<ArrayRegister<super::F64x2Wasm, 8>>) -> Storage<Self> {
-        let v = value.0;
-        unsafe {
-            let a = arch::f64x2_to_2xi32(v[0]);
-            let b = arch::f64x2_to_2xi32(v[1]);
-            let c = arch::f64x2_to_2xi32(v[2]);
-            let d = arch::f64x2_to_2xi32(v[3]);
-            let e = arch::f64x2_to_2xi32(v[4]);
-            let f = arch::f64x2_to_2xi32(v[5]);
-            let g = arch::f64x2_to_2xi32(v[6]);
-            let h = arch::f64x2_to_2xi32(v[7]);
-            ArrayRegister([
-                arch::i16x8(
-                    a[0] as i16,
-                    a[1] as i16,
-                    b[0] as i16,
-                    b[1] as i16,
-                    c[0] as i16,
-                    c[1] as i16,
-                    d[0] as i16,
-                    d[1] as i16,
-                ),
-                arch::i16x8(
-                    e[0] as i16,
-                    e[1] as i16,
-                    f[0] as i16,
-                    f[1] as i16,
-                    g[0] as i16,
-                    g[1] as i16,
-                    h[0] as i16,
-                    h[1] as i16,
-                ),
-            ])
-        }
-    }
-}
-#[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::F64x2Wasm, 8>> for ArrayRegister<super::U16x8Wasm, 2> {
-    fn cast_from(value: Storage<ArrayRegister<super::F64x2Wasm, 8>>) -> Storage<Self> {
-        let v = value.0;
-        unsafe {
-            let a = arch::f64x2_to_2xi32(v[0]);
-            let b = arch::f64x2_to_2xi32(v[1]);
-            let c = arch::f64x2_to_2xi32(v[2]);
-            let d = arch::f64x2_to_2xi32(v[3]);
-            let e = arch::f64x2_to_2xi32(v[4]);
-            let f = arch::f64x2_to_2xi32(v[5]);
-            let g = arch::f64x2_to_2xi32(v[6]);
-            let h = arch::f64x2_to_2xi32(v[7]);
-            ArrayRegister([
-                arch::i16x8(
-                    a[0] as i16,
-                    a[1] as i16,
-                    b[0] as i16,
-                    b[1] as i16,
-                    c[0] as i16,
-                    c[1] as i16,
-                    d[0] as i16,
-                    d[1] as i16,
-                ),
-                arch::i16x8(
-                    e[0] as i16,
-                    e[1] as i16,
-                    f[0] as i16,
-                    f[1] as i16,
-                    g[0] as i16,
-                    g[1] as i16,
-                    h[0] as i16,
-                    h[1] as i16,
-                ),
-            ])
         }
     }
 }

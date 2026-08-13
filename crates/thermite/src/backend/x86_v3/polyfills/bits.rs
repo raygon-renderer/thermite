@@ -358,7 +358,7 @@ pub unsafe fn _mm256_zeroupper_mask_epi64<Z: ZeroUpper>() -> __m256i {
 //
 // One wrinkle over the 128-bit case: `_mm256_packs_epi32` packs per 128-bit
 // half, so the result is [a.lo, b.lo, a.hi, b.hi] in 64-bit groups rather than
-// [a, b]. The usual fix is a `vpermq` restitch (see the `SaturatingCastRegister`
+// [a, b]. The usual fix is a `vpermq` restitch (see the `CastRegister`
 // impl for `I16x16V3`); a popcount does not care, so this deliberately skips it
 // - that permute is exactly the instruction the whole exercise is here to save.
 // ---------------------------------------------------------------------------

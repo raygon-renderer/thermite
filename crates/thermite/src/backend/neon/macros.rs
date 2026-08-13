@@ -1529,15 +1529,14 @@ macro_rules! neon_widen_casts {
                 }
             }
 
+            // `vmovn` truncates and `vqmovn` saturates, so this pair is one of the
+            // few where both strengths are a distinct single instruction.
             #[thermite_macros::inline_always]
             impl crate::register::CastRegister<ArrayRegister<$wide_reg, 2>> for $narrow_reg {
                 fn cast_from(value: Storage<ArrayRegister<$wide_reg, 2>>) -> Storage<Self> {
                     unsafe { arch::[<vmovn_high_ $w>](arch::[<vmovn_ $w>](value.0[0]), value.0[1]) }
                 }
-            }
 
-            #[thermite_macros::inline_always]
-            impl crate::register::SaturatingCastRegister<ArrayRegister<$wide_reg, 2>> for $narrow_reg {
                 fn saturating_cast_from(value: Storage<ArrayRegister<$wide_reg, 2>>) -> Storage<Self> {
                     unsafe { arch::[<vqmovn_high_ $w>](arch::[<vqmovn_ $w>](value.0[0]), value.0[1]) }
                 }

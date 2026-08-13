@@ -322,6 +322,7 @@ impl<E: ScalarValue + Element> Element for Compensated<E> {
     const ORDER_MAX: Self = Self { value: E::ORDER_MAX, error: E::ZERO };
     const ORDER_MIN: Self = Self { value: E::ORDER_MIN, error: E::ZERO };
     const HAS_UNORDERED: bool = E::HAS_UNORDERED;
+    const IS_FLOAT: bool = E::IS_FLOAT;
 
     fn from_i8(value: i8) -> Self { Self { value: E::from_i8(value), error: E::ZERO } }
     fn from_u8(value: u8) -> Self { Self { value: E::from_u8(value), error: E::ZERO } }

@@ -1607,28 +1607,20 @@ where
     }
 }
 
+#[thermite_macros::inline_always]
 impl<FROM: CoreRegister, INTO: CastRegister<FROM, Lanes = FROM::Lanes>, const N: usize>
     CastRegister<ArrayRegister<FROM, N>> for ArrayRegister<INTO, N>
 where
     Const<N>: ToUInt<Output: ArrayLength + Mul<FROM::Lanes, Output: Lanes>>,
 {
-    #[inline(always)]
     fn cast_from(value: Storage<ArrayRegister<FROM, N>>) -> Storage<Self> {
         Self(value.0.map(INTO::cast_from))
     }
 
-    #[inline(always)]
     fn fast_cast_from(value: Storage<ArrayRegister<FROM, N>>) -> Storage<Self> {
         Self(value.0.map(INTO::fast_cast_from))
     }
-}
 
-impl<FROM: CoreRegister, INTO: SaturatingCastRegister<FROM, Lanes = FROM::Lanes>, const N: usize>
-    SaturatingCastRegister<ArrayRegister<FROM, N>> for ArrayRegister<INTO, N>
-where
-    Const<N>: ToUInt<Output: ArrayLength + Mul<FROM::Lanes, Output: Lanes>>,
-{
-    #[inline(always)]
     fn saturating_cast_from(value: Storage<ArrayRegister<FROM, N>>) -> Storage<Self> {
         Self(value.0.map(INTO::saturating_cast_from))
     }
@@ -1722,8 +1714,7 @@ macro_rules! impl_casts {
 
 impl_casts!(CastMaskRegister::mask_from);
 impl_casts!(BitCastRegister::from_bits);
-impl_casts!(CastRegister::cast_from, fast_cast_from);
-impl_casts!(SaturatingCastRegister::saturating_cast_from);
+impl_casts!(CastRegister::cast_from, fast_cast_from, saturating_cast_from);
 
 macro_rules! impl_indexable {
     ($a:literal $b:literal $c:literal) => {paste::paste! {

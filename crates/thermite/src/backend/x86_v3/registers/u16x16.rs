@@ -10,8 +10,8 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, ConcatRegister, CoreRegister, ExtendRegister, IntegerRegister,
-        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, Storage, UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
+        InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register, Storage,
+        UnsignedIntegerRegister, array::ArrayRegister, empty_reg, reg,
     },
 };
 
@@ -429,20 +429,17 @@ impl CastRegister<U16x16V3> for ArrayRegister<super::U32x8V3, 2> {
     }
 }
 
-// Narrow u32x16 -> u16x16: truncate each 32-bit lane, then concat the two halves.
 #[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<super::U32x8V3, 2>> for U16x16V3 {
+    // Narrow u32x16 -> u16x16: truncate each 32-bit lane, then concat the two halves.
     fn cast_from(value: Storage<ArrayRegister<super::U32x8V3, 2>>) -> Storage<Self> {
         let lo = <super::U16x8V3 as CastRegister<super::U32x8V3>>::cast_from(value.0[0]);
         let hi = <super::U16x8V3 as CastRegister<super::U32x8V3>>::cast_from(value.0[1]);
         <Self as ConcatRegister<super::U16x8V3>>::concat(lo, hi)
     }
-}
 
-// Saturating narrow u32x16 -> u16x16: clamp each half (`vpminud`) then a two-source `vpackusdw` +
-// `vpermq` restitch (the `_u` pack reads a signed source, so the clamp keeps lanes in range).
-#[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::U32x8V3, 2>> for U16x16V3 {
+    // Saturating narrow u32x16 -> u16x16: clamp each half (`vpminud`) then a two-source `vpackusdw` +
+    // `vpermq` restitch (the `_u` pack reads a signed source, so the clamp keeps lanes in range).
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U32x8V3, 2>>) -> Storage<Self> {
         unsafe {
             let max = arch::_mm256_set1_epi32(0xFFFF);
@@ -455,9 +452,21 @@ impl SaturatingCastRegister<ArrayRegister<super::U32x8V3, 2>> for U16x16V3 {
 
 // Saturating narrow u64x16 -> u16x16: clamp down to u32x16 then the pack above.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::U64x4V3, 4>> for U16x16V3 {
+impl CastRegister<ArrayRegister<super::U64x4V3, 4>> for U16x16V3 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U64x4V3, 4>>) -> Storage<Self> {
-        let words = <ArrayRegister<super::U32x8V3, 2> as SaturatingCastRegister<ArrayRegister<super::U64x4V3, 4>>>::saturating_cast_from(value);
-        <Self as SaturatingCastRegister<ArrayRegister<super::U32x8V3, 2>>>::saturating_cast_from(words)
+        let words =
+            <ArrayRegister<super::U32x8V3, 2> as CastRegister<ArrayRegister<super::U64x4V3, 4>>>::saturating_cast_from(
+                value,
+            );
+        <Self as CastRegister<ArrayRegister<super::U32x8V3, 2>>>::saturating_cast_from(words)
+    }
+
+    fn cast_from(value: Storage<ArrayRegister<super::U64x4V3, 4>>) -> Storage<Self> {
+        let v = value.0;
+        unsafe {
+            let lo = arch::_mm_cvt2epi64x4_epi16x_v3([v[0], v[1]]);
+            let hi = arch::_mm_cvt2epi64x4_epi16x_v3([v[2], v[3]]);
+            arch::_mm256_set_m128i(hi, lo)
+        }
     }
 }

@@ -520,14 +520,6 @@ impl SignedIntegerRegister for I64x2V1 {
 }
 
 #[thermite_macros::inline_always]
-impl CastRegister<ArrayRegister<super::I64x2V1, 2>> for super::I32x4V1 {
-    fn cast_from(value: Storage<ArrayRegister<super::I64x2V1, 2>>) -> Storage<Self> {
-        let (lo, hi) = <ArrayRegister<super::I64x2V1, 2> as ConcatRegister<super::I64x2V1>>::split(value);
-        unsafe { arch::_mm_cvtepi64_epi32x_v1(lo, hi) }
-    }
-}
-
-#[thermite_macros::inline_always]
 impl CastRegister<<Scalar as Simd>::i32x2> for I64x2V1 {
     fn cast_from(value: Storage<<Scalar as Simd>::i32x2>) -> Storage<Self> {
         unsafe { arch::_mm_cvtepi32_epi64x_v1(arch::_mm_setr_epi32(value.0[0], value.0[1], 0, 0)) }

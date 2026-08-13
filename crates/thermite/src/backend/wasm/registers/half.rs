@@ -1,5 +1,5 @@
 use crate::register::{
-    CastRegister, ConcatRegister, IndexableRegister, NumericRegister, Register, SaturatingCastRegister, Storage,
+    CastRegister, ConcatRegister, IndexableRegister, NumericRegister, Register, Storage,
     reduced::{HalfRegister2, ReducedRegister},
 };
 
@@ -7,21 +7,15 @@ use super::arch;
 
 // Saturating narrow i64 -> i32: no 64-bit narrow on WASM, so clamp + truncating narrow.
 macro_rules! sat_clamp_narrow {
-    ($(($from:ty, $fe:ty, $into:ty, $ie:ty)),* $(,)?) => {$(
-        #[thermite_macros::inline_always]
-        impl SaturatingCastRegister<$from> for $into {
-            fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
-                let lo = <$from as Register>::splat(<$ie>::MIN as $fe);
-                let hi = <$from as Register>::splat(<$ie>::MAX as $fe);
-                let clamped = <$from as NumericRegister>::min(<$from as NumericRegister>::max(value, lo), hi);
-                <Self as CastRegister<$from>>::cast_from(clamped)
-            }
+    ($from:ty, $fe:ty, $ie:ty) => {
+        #[inline(always)]
+        fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
+            let lo = <$from as Register>::splat(<$ie>::MIN as $fe);
+            let hi = <$from as Register>::splat(<$ie>::MAX as $fe);
+            let clamped = <$from as NumericRegister>::min(<$from as NumericRegister>::max(value, lo), hi);
+            <Self as CastRegister<$from>>::cast_from(clamped)
         }
-    )*};
-}
-sat_clamp_narrow! {
-    (super::I64x2Wasm, i64, I32x2Wasm, i32),
-    (super::U64x2Wasm, u64, U32x2Wasm, u32),
+    };
 }
 
 pub type F32x2Wasm = HalfRegister2<super::F32x4Wasm>;
@@ -167,6 +161,8 @@ impl CastRegister<super::I64x2Wasm> for I32x2Wasm {
             11, // (padding, ignored by ReducedRegister)
         >(value, value))
     }
+
+    sat_clamp_narrow!(super::I64x2Wasm, i64, i32);
 }
 
 #[thermite_macros::inline_always]
@@ -201,6 +197,8 @@ impl CastRegister<super::U64x2Wasm> for U32x2Wasm {
             11, // (padding, ignored by ReducedRegister)
         >(value, value))
     }
+
+    sat_clamp_narrow!(super::U64x2Wasm, u64, u32);
 }
 
 #[thermite_macros::inline_always]

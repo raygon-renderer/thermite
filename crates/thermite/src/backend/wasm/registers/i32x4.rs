@@ -7,9 +7,8 @@ use crate::{
     isa::InstructionSet,
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, IntegerRegister, InterleaveRegister,
-        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register,
-        SaturatingCastRegister, ShuffleRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper,
-        array::ArrayRegister,
+        MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, PermuteRegister, Register, ShuffleRegister,
+        SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister,
     },
 };
 
@@ -469,11 +468,8 @@ impl CastRegister<ArrayRegister<super::I64x2Wasm, 2>> for I32x4Wasm {
             24, 25, 26, 27  // Hi Vec, Lane 1 (Low bits)
         >(value.0[0], value.0[1])
     }
-}
 
-// Saturating narrow i64x4 -> i32x4: no 64-bit narrow on WASM, so clamp + truncating narrow.
-#[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::I64x2Wasm, 2>> for I32x4Wasm {
+    // Saturating narrow i64x4 -> i32x4: no 64-bit narrow on WASM, so clamp + truncating narrow.
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I64x2Wasm, 2>>) -> Storage<Self> {
         type Src = ArrayRegister<super::I64x2Wasm, 2>;
         let lo = <Src as Register>::splat(i32::MIN as i64);

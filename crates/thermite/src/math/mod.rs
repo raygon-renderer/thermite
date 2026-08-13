@@ -263,7 +263,7 @@ decl_math! {
         /// arithmetic.
         ///
         /// A caller whose exponent is known to stay in range (anything fed by
-        /// [`frexp`](Self::frexp), for instance) can drop all of it with
+        /// `frexp`, for instance) can drop all of it with
         /// `ldexp_p::<CheckOverflow<P, false>>(exp)`, leaving an add, a shift
         /// and an or. Out-of-domain inputs are then garbage in, garbage out.
         fn ldexp[][](self: Self, exp: Self::SignedBits) -> Self;

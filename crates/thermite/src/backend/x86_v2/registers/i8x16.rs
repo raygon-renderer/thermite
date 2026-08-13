@@ -9,8 +9,7 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister,
-        empty_reg, reg, reg_splat,
+        SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
     },
 };
 
@@ -464,15 +463,19 @@ impl SignedIntegerRegister for I8x16V2 {
 
 // Saturating narrow i16x16 -> i8x16 via a single two-source `packsswb`.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::I16x8V2, 2>> for I8x16V2 {
+impl CastRegister<ArrayRegister<super::I16x8V2, 2>> for I8x16V2 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I16x8V2, 2>>) -> Storage<Self> {
         unsafe { arch::_mm_packs_epi16(value.0[0], value.0[1]) }
+    }
+
+    fn cast_from(value: Storage<ArrayRegister<super::I16x8V2, 2>>) -> Storage<Self> {
+        unsafe { arch::_mm_cvt2epi16_epi8x_v2(value.0) }
     }
 }
 
 // Saturating narrow i32x16 -> i8x16: three `packssdw`/`packsswb` instructions, no clamp.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::I32x4V2, 4>> for I8x16V2 {
+impl CastRegister<ArrayRegister<super::I32x4V2, 4>> for I8x16V2 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I32x4V2, 4>>) -> Storage<Self> {
         unsafe {
             let w0 = arch::_mm_packs_epi32(value.0[0], value.0[1]); // i16x8
@@ -480,16 +483,24 @@ impl SaturatingCastRegister<ArrayRegister<super::I32x4V2, 4>> for I8x16V2 {
             arch::_mm_packs_epi16(w0, w1) // i8x16
         }
     }
+
+    fn cast_from(value: Storage<ArrayRegister<super::I32x4V2, 4>>) -> Storage<Self> {
+        unsafe { arch::_mm_cvt4epi32_epi8x_v2(value.0) }
+    }
 }
 
 // Saturating narrow i64x16 -> i8x16: no SSE 64-bit pack, so clamp + truncating narrow.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::I64x2V2, 8>> for I8x16V2 {
+impl CastRegister<ArrayRegister<super::I64x2V2, 8>> for I8x16V2 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I64x2V2, 8>>) -> Storage<Self> {
         type Src = ArrayRegister<super::I64x2V2, 8>;
         let lo = <Src as Register>::splat(i8::MIN as i64);
         let hi = <Src as Register>::splat(i8::MAX as i64);
         let clamped = <Src as NumericRegister>::min(<Src as NumericRegister>::max(value, lo), hi);
         <Self as CastRegister<Src>>::cast_from(clamped)
+    }
+
+    fn cast_from(value: Storage<ArrayRegister<super::I64x2V2, 8>>) -> Storage<Self> {
+        unsafe { arch::_mm_cvt8epi64_epi8x_v2(value.0) }
     }
 }

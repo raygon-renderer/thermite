@@ -629,4 +629,13 @@ impl CastRegister<ArrayRegister<I64x4V3, 2>> for super::I32x8V3 {
             arch::_mm256_setr_m128i(lo, hi)
         }
     }
+
+    // AVX2 has no 64-bit pack, so clamp into range and reuse the truncating narrow above.
+    fn saturating_cast_from(value: Storage<ArrayRegister<I64x4V3, 2>>) -> Storage<Self> {
+        type Src = ArrayRegister<I64x4V3, 2>;
+        let lo = <Src as Register>::splat(i32::MIN as i64);
+        let hi = <Src as Register>::splat(i32::MAX as i64);
+        let clamped = <Src as NumericRegister>::min(<Src as NumericRegister>::max(value, lo), hi);
+        <Self as CastRegister<Src>>::cast_from(clamped)
+    }
 }

@@ -147,6 +147,7 @@ impl<E: DualValue + Element, const N: usize> Element for Dual<E, N> {
     const ORDER_MAX: Self = Self::constant(E::ORDER_MAX);
     const ORDER_MIN: Self = Self::constant(E::ORDER_MIN);
     const HAS_UNORDERED: bool = E::HAS_UNORDERED;
+    const IS_FLOAT: bool = E::IS_FLOAT;
 
     #[inline(always)] fn from_i8(value: i8) -> Self { Self::constant(E::from_i8(value)) }
     #[inline(always)] fn from_u8(value: u8) -> Self { Self::constant(E::from_u8(value)) }

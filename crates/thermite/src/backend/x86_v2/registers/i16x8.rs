@@ -9,8 +9,7 @@ use crate::{
     register::{
         BitshiftRegister, BitwiseRegister, CastRegister, CoreRegister, ExtendRegister, IntegerRegister,
         InterleaveRegister, MaskElement, MaskRegister, NumericRegister, PartialOrdRegister, Register,
-        SaturatingCastRegister, SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister,
-        empty_reg, reg, reg_splat,
+        SignedIntegerRegister, SignedRegister, Storage, ZeroUpper, array::ArrayRegister, empty_reg, reg, reg_splat,
     },
 };
 
@@ -481,9 +480,9 @@ impl CastRegister<I16x8V2> for ArrayRegister<super::I32x4V2, 2> {
     }
 }
 
-// Narrow i32x8 -> i16x8: truncate the low 16 bits of each 32-bit lane (wrapping, like `as`).
 #[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<super::I32x4V2, 2>> for I16x8V2 {
+    // Narrow i32x8 -> i16x8: truncate the low 16 bits of each 32-bit lane (wrapping, like `as`).
     fn cast_from(value: Storage<ArrayRegister<super::I32x4V2, 2>>) -> Storage<Self> {
         unsafe {
             let pick_lo16 = arch::_mm_setr_epi8(0, 1, 4, 5, 8, 9, 12, 13, -1, -1, -1, -1, -1, -1, -1, -1);
@@ -493,12 +492,9 @@ impl CastRegister<ArrayRegister<super::I32x4V2, 2>> for I16x8V2 {
             arch::_mm_unpacklo_epi64(lo, hi)
         }
     }
-}
 
-// Saturating narrow i32x8 -> i16x8 via a single two-source `packssdw`. At 128 bits the pack
-// does not cross lanes: `packs(a, b)` yields `[sat(a), sat(b)]` already in order.
-#[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::I32x4V2, 2>> for I16x8V2 {
+    // Saturating narrow i32x8 -> i16x8 via a single two-source `packssdw`. At 128 bits the pack
+    // does not cross lanes: `packs(a, b)` yields `[sat(a), sat(b)]` already in order.
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I32x4V2, 2>>) -> Storage<Self> {
         unsafe { arch::_mm_packs_epi32(value.0[0], value.0[1]) }
     }
@@ -506,12 +502,16 @@ impl SaturatingCastRegister<ArrayRegister<super::I32x4V2, 2>> for I16x8V2 {
 
 // Saturating narrow i64x8 -> i16x8: no SSE 64-bit pack, so clamp + truncating narrow.
 #[thermite_macros::inline_always]
-impl SaturatingCastRegister<ArrayRegister<super::I64x2V2, 4>> for I16x8V2 {
+impl CastRegister<ArrayRegister<super::I64x2V2, 4>> for I16x8V2 {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::I64x2V2, 4>>) -> Storage<Self> {
         type Src = ArrayRegister<super::I64x2V2, 4>;
         let lo = <Src as Register>::splat(i16::MIN as i64);
         let hi = <Src as Register>::splat(i16::MAX as i64);
         let clamped = <Src as NumericRegister>::min(<Src as NumericRegister>::max(value, lo), hi);
         <Self as CastRegister<Src>>::cast_from(clamped)
+    }
+
+    fn cast_from(value: Storage<ArrayRegister<super::I64x2V2, 4>>) -> Storage<Self> {
+        unsafe { arch::_mm_cvt4epi64_epi16x_v2(value.0) }
     }
 }

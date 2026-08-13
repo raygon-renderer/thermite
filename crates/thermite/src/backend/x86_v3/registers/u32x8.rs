@@ -570,6 +570,7 @@ impl UnsignedIntegerRegister for U32x8V3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl CastRegister<U32x8V3> for ArrayRegister<super::U64x4V3, 2> {
     fn cast_from(value: Storage<U32x8V3>) -> Storage<Self> {
         let (lo, hi) = U32x8V3::split(value);

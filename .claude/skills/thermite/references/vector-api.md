@@ -91,10 +91,17 @@ V::HAS_NATIVE_ALIGN    // whether that's one instruction or a shuffle+blend fall
     // lane walk. Composites (Dual/Compensated/Complex) forward their inner vector's.
 
 // Casting
-v.cast::<W>()         // numeric cast, like `as`
-v.fast_cast::<W>()    // faster, may skip edge cases
+v.cast::<W>()         // numeric cast, like `as`. FLOAT -> INT is `as` only for in-range
+                      // finite lanes. NaN/out-of-range is backend-defined (x86: INT::MIN,
+                      // not 0/clamp). `strict_ieee754` routes every FLOAT-SOURCE cast to
+                      // saturating_cast. Integer casts keep wrapping, which is what `as` does.
+v.fast_cast::<W>()    // faster, may skip edge cases (stays narrow even under strict_ieee754)
 v.into_bits::<W>()    // zero-cost bit reinterpret
-v.saturating_cast::<W>()
+v.saturating_cast::<W>()  // exact `as`: NaN -> 0, out-of-range clamps to MIN/MAX. Same trait
+                      // as `cast`, the two default to each other, so this resolves for every
+                      // pair. Differs only for float -> int and same-sign integer narrowing.
+                      // Elsewhere it falls through to `cast` (exact for widening, WRAPPING
+                      // for sign-changing, where no saturating form exists).
 
 // Shuffles (swizzle.rs; `Swizzle` trait + `swizzle!` macro)
 a.swizzle(b, indices)              // runtime-index two-vector shuffle

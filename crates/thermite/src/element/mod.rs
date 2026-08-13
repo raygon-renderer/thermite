@@ -60,6 +60,12 @@ pub trait Element: 'static + Sized + Copy + Default + PartialEq + PartialOrd + c
     /// inner element's value rather than restate it.
     const HAS_UNORDERED: bool = false;
 
+    /// Whether this is a floating-point element type. This is distinct
+    /// from `HAS_UNORDERED` because some float types may
+    /// not have NaN and so are ordered, but still have some special
+    /// properties of floats.
+    const IS_FLOAT: bool = false;
+
     fn from_i8(value: i8) -> Self;
     fn from_u8(value: u8) -> Self;
     fn from_u16(value: u16) -> Self;
@@ -156,6 +162,7 @@ macro_rules! impl_element {
             const ORDER_MIN: Self = <$f>::NEG_INFINITY;
 
             const HAS_UNORDERED: bool = true;
+            const IS_FLOAT: bool = true;
 
             #[inline(always)] fn from_i8(value: i8) -> Self { value as $f }
             #[inline(always)] fn from_u8(value: u8) -> Self { value as $f }
