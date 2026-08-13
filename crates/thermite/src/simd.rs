@@ -839,23 +839,29 @@ pub trait Simd3A: Simd<
 
     type f32x3A: WellFormedFloatRegister<Bits = Self::u32x3A, SignedBits = Self::i32x3A> + LinAlg3Register
         + FullyInteroperable<Self::i32x3A, Self::u32x3A, Lanes = U3, Element = f32, Unsigned = Self::u32x3A, Signed = Self::i32x3A>
-        + CastRegister<Self::f64x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>;
+        + CastRegister<Self::f64x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>
+        + CastRegister<Self::i64x3A> + CastRegister<Self::u64x3A>;
     type i32x3A: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f32x3A, Self::u32x3A, Lanes = U3, Element = i32, Unsigned = Self::u32x3A, Signed = Self::i32x3A>
-        + CastRegister<Self::i64x3A> + CastRegister<Self::f32x3A> + CastRegister<Self::f64x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>;
+        + CastRegister<Self::i64x3A> + CastRegister<Self::f32x3A> + CastRegister<Self::f64x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>
+        + CastRegister<Self::u64x3A>;
     type u32x3A: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f32x3A, Self::i32x3A, Lanes = U3, Element = u32, Unsigned = Self::u32x3A, Signed = Self::i32x3A>
-        + CastRegister<Self::u64x3A> + CastRegister<Self::f32x3A> + CastRegister<Self::f64x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>;
+        + CastRegister<Self::u64x3A> + CastRegister<Self::f32x3A> + CastRegister<Self::f64x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>
+        + CastRegister<Self::i64x3A>;
 
     type f64x3A: WellFormedFloatRegister<Bits = Self::u64x3A, SignedBits = Self::i64x3A> + LinAlg3Register
         + FullyInteroperable<Self::i64x3A, Self::u64x3A, Lanes = U3, Element = f64, Unsigned = Self::u64x3A, Signed = Self::i64x3A>
-        + CastRegister<Self::f32x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>;
+        + CastRegister<Self::f32x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>
+        + CastRegister<Self::i32x3A> + CastRegister<Self::u32x3A>;
     type i64x3A: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f64x3A, Self::u64x3A, Lanes = U3, Element = i64, Unsigned = Self::u64x3A, Signed = Self::i64x3A>
-        + CastRegister<Self::i32x3A> + CastRegister<Self::f64x3A> + CastRegister<Self::f32x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>;
+        + CastRegister<Self::i32x3A> + CastRegister<Self::f64x3A> + CastRegister<Self::f32x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>
+        + CastRegister<Self::u32x3A>;
     type u64x3A: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f64x3A, Self::i64x3A, Lanes = U3, Element = u64, Unsigned = Self::u64x3A, Signed = Self::i64x3A>
-        + CastRegister<Self::u32x3A> + CastRegister<Self::f64x3A> + CastRegister<Self::f32x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>;}
+        + CastRegister<Self::u32x3A> + CastRegister<Self::f64x3A> + CastRegister<Self::f32x3A> + IndexedBy<Self::usizex3A, Self::u32x3A, Self::u64x3A>
+        + CastRegister<Self::i32x3A>;}
 
 impl<S: Simd> Simd3A for S {
     type usizex3A = ReducedRegister<S::usizex4, U1>;
@@ -895,23 +901,29 @@ pub trait Simd3: Simd3A<
 
     type f32x3: WellFormedFloatRegister<Bits = Self::u32x3, SignedBits = Self::i32x3> + LinAlg3Register
         + FullyInteroperable<Self::i32x3, Self::u32x3, Lanes = U3, Element = f32, Unsigned = Self::u32x3, Signed = Self::i32x3>
-        + CastRegister<Self::f64x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>;
+        + CastRegister<Self::f64x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>
+        + CastRegister<Self::i64x3> + CastRegister<Self::u64x3>;
     type i32x3: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f32x3, Self::u32x3, Lanes = U3, Element = i32, Unsigned = Self::u32x3, Signed = Self::i32x3>
-        + CastRegister<Self::i64x3> + CastRegister<Self::f32x3> + CastRegister<Self::f64x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>;
+        + CastRegister<Self::i64x3> + CastRegister<Self::f32x3> + CastRegister<Self::f64x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>
+        + CastRegister<Self::u64x3>;
     type u32x3: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f32x3, Self::i32x3, Lanes = U3, Element = u32, Unsigned = Self::u32x3, Signed = Self::i32x3>
-        + CastRegister<Self::u64x3> + CastRegister<Self::f32x3> + CastRegister<Self::f64x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>;
+        + CastRegister<Self::u64x3> + CastRegister<Self::f32x3> + CastRegister<Self::f64x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>
+        + CastRegister<Self::i64x3>;
 
     type f64x3: WellFormedFloatRegister<Bits = Self::u64x3, SignedBits = Self::i64x3> + LinAlg3Register
         + FullyInteroperable<Self::i64x3, Self::u64x3, Lanes = U3, Element = f64, Unsigned = Self::u64x3, Signed = Self::i64x3>
-        + CastRegister<Self::f32x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>;
+        + CastRegister<Self::f32x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>
+        + CastRegister<Self::i32x3> + CastRegister<Self::u32x3>;
     type i64x3: WellFormedSignedIntegerRegister
         + FullyInteroperable<Self::f64x3, Self::u64x3, Lanes = U3, Element = i64, Unsigned = Self::u64x3, Signed = Self::i64x3>
-        + CastRegister<Self::i32x3> + CastRegister<Self::f64x3> + CastRegister<Self::f32x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>;
+        + CastRegister<Self::i32x3> + CastRegister<Self::f64x3> + CastRegister<Self::f32x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>
+        + CastRegister<Self::u32x3>;
     type u64x3: WellFormedUnsignedIntegerRegister
         + FullyInteroperable<Self::f64x3, Self::i64x3, Lanes = U3, Element = u64, Unsigned = Self::u64x3, Signed = Self::i64x3>
-        + CastRegister<Self::u32x3> + CastRegister<Self::f64x3> + CastRegister<Self::f32x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>;}
+        + CastRegister<Self::u32x3> + CastRegister<Self::f64x3> + CastRegister<Self::f32x3> + IndexedBy<Self::usizex3, Self::u32x3, Self::u64x3>
+        + CastRegister<Self::i32x3>;}
 
 /// Names every SIMD register a backend offers, parameterized by a single
 /// type-level lane count `Width`.
@@ -2054,7 +2066,10 @@ pub trait Simd3AVectors:
             <Self as Simd3AVectors>::usizex3A,
             <Self as Simd3AVectors>::u32x3A,
             <Self as Simd3AVectors>::u64x3A,
-        >;
+        > + CastVector<<Self as Simd3AVectors>::i32x3A>
+        + CastVector<<Self as Simd3AVectors>::i64x3A>
+        + CastVector<<Self as Simd3AVectors>::u32x3A>
+        + CastVector<<Self as Simd3AVectors>::u64x3A>;
     type i32x3A: SignedIntegerVector<Lanes = U3, Element = i32>
         + CastVector<<Self as Simd3AVectors>::i64x3A>
         + SwizzleVector
@@ -2062,7 +2077,10 @@ pub trait Simd3AVectors:
             <Self as Simd3AVectors>::usizex3A,
             <Self as Simd3AVectors>::u32x3A,
             <Self as Simd3AVectors>::u64x3A,
-        >;
+        > + CastVector<<Self as Simd3AVectors>::f32x3A>
+        + CastVector<<Self as Simd3AVectors>::f64x3A>
+        + CastVector<<Self as Simd3AVectors>::u32x3A>
+        + CastVector<<Self as Simd3AVectors>::u64x3A>;
     type u32x3A: UnsignedIntegerVector<Lanes = U3, Element = u32>
         + CastVector<<Self as Simd3AVectors>::u64x3A>
         + SwizzleVector
@@ -2070,7 +2088,10 @@ pub trait Simd3AVectors:
             <Self as Simd3AVectors>::usizex3A,
             <Self as Simd3AVectors>::u32x3A,
             <Self as Simd3AVectors>::u64x3A,
-        >;
+        > + CastVector<<Self as Simd3AVectors>::f32x3A>
+        + CastVector<<Self as Simd3AVectors>::f64x3A>
+        + CastVector<<Self as Simd3AVectors>::i32x3A>
+        + CastVector<<Self as Simd3AVectors>::i64x3A>;
 
     type f64x3A: FloatVector<Lanes = U3, Element = f64>
         + LinAlg3Vector
@@ -2080,7 +2101,10 @@ pub trait Simd3AVectors:
             <Self as Simd3AVectors>::usizex3A,
             <Self as Simd3AVectors>::u32x3A,
             <Self as Simd3AVectors>::u64x3A,
-        >;
+        > + CastVector<<Self as Simd3AVectors>::i32x3A>
+        + CastVector<<Self as Simd3AVectors>::i64x3A>
+        + CastVector<<Self as Simd3AVectors>::u32x3A>
+        + CastVector<<Self as Simd3AVectors>::u64x3A>;
     type i64x3A: SignedIntegerVector<Lanes = U3, Element = i64>
         + CastVector<<Self as Simd3AVectors>::i32x3A>
         + SwizzleVector
@@ -2088,7 +2112,10 @@ pub trait Simd3AVectors:
             <Self as Simd3AVectors>::usizex3A,
             <Self as Simd3AVectors>::u32x3A,
             <Self as Simd3AVectors>::u64x3A,
-        >;
+        > + CastVector<<Self as Simd3AVectors>::f32x3A>
+        + CastVector<<Self as Simd3AVectors>::f64x3A>
+        + CastVector<<Self as Simd3AVectors>::u32x3A>
+        + CastVector<<Self as Simd3AVectors>::u64x3A>;
     type u64x3A: UnsignedIntegerVector<Lanes = U3, Element = u64>
         + CastVector<<Self as Simd3AVectors>::u32x3A>
         + SwizzleVector
@@ -2096,7 +2123,10 @@ pub trait Simd3AVectors:
             <Self as Simd3AVectors>::usizex3A,
             <Self as Simd3AVectors>::u32x3A,
             <Self as Simd3AVectors>::u64x3A,
-        >;
+        > + CastVector<<Self as Simd3AVectors>::f32x3A>
+        + CastVector<<Self as Simd3AVectors>::f64x3A>
+        + CastVector<<Self as Simd3AVectors>::i32x3A>
+        + CastVector<<Self as Simd3AVectors>::i64x3A>;
 }
 
 /// Marker companion to [`Simd3AVectors`] that also exposes each vector's
@@ -2149,29 +2179,53 @@ pub trait Simd3Vectors:
         + LinAlg3Vector
         + CastVector<<Self as Simd3Vectors>::f64x3>
         + SwizzleVector
-        + VectorIndexedBy<<Self as Simd3Vectors>::usizex3, <Self as Simd3Vectors>::u32x3, <Self as Simd3Vectors>::u64x3>;
+        + VectorIndexedBy<<Self as Simd3Vectors>::usizex3, <Self as Simd3Vectors>::u32x3, <Self as Simd3Vectors>::u64x3>
+        + CastVector<<Self as Simd3Vectors>::i32x3>
+        + CastVector<<Self as Simd3Vectors>::i64x3>
+        + CastVector<<Self as Simd3Vectors>::u32x3>
+        + CastVector<<Self as Simd3Vectors>::u64x3>;
     type i32x3: SignedIntegerVector<Lanes = U3, Element = i32>
         + CastVector<<Self as Simd3Vectors>::i64x3>
         + SwizzleVector
-        + VectorIndexedBy<<Self as Simd3Vectors>::usizex3, <Self as Simd3Vectors>::u32x3, <Self as Simd3Vectors>::u64x3>;
+        + VectorIndexedBy<<Self as Simd3Vectors>::usizex3, <Self as Simd3Vectors>::u32x3, <Self as Simd3Vectors>::u64x3>
+        + CastVector<<Self as Simd3Vectors>::f32x3>
+        + CastVector<<Self as Simd3Vectors>::f64x3>
+        + CastVector<<Self as Simd3Vectors>::u32x3>
+        + CastVector<<Self as Simd3Vectors>::u64x3>;
     type u32x3: UnsignedIntegerVector<Lanes = U3, Element = u32>
         + CastVector<<Self as Simd3Vectors>::u64x3>
         + SwizzleVector
-        + VectorIndexedBy<<Self as Simd3Vectors>::usizex3, <Self as Simd3Vectors>::u32x3, <Self as Simd3Vectors>::u64x3>;
+        + VectorIndexedBy<<Self as Simd3Vectors>::usizex3, <Self as Simd3Vectors>::u32x3, <Self as Simd3Vectors>::u64x3>
+        + CastVector<<Self as Simd3Vectors>::f32x3>
+        + CastVector<<Self as Simd3Vectors>::f64x3>
+        + CastVector<<Self as Simd3Vectors>::i32x3>
+        + CastVector<<Self as Simd3Vectors>::i64x3>;
 
     type f64x3: FloatVector<Lanes = U3, Element = f64>
         + LinAlg3Vector
         + CastVector<<Self as Simd3Vectors>::f32x3>
         + SwizzleVector
-        + VectorIndexedBy<<Self as Simd3Vectors>::usizex3, <Self as Simd3Vectors>::u32x3, <Self as Simd3Vectors>::u64x3>;
+        + VectorIndexedBy<<Self as Simd3Vectors>::usizex3, <Self as Simd3Vectors>::u32x3, <Self as Simd3Vectors>::u64x3>
+        + CastVector<<Self as Simd3Vectors>::i32x3>
+        + CastVector<<Self as Simd3Vectors>::i64x3>
+        + CastVector<<Self as Simd3Vectors>::u32x3>
+        + CastVector<<Self as Simd3Vectors>::u64x3>;
     type i64x3: SignedIntegerVector<Lanes = U3, Element = i64>
         + CastVector<<Self as Simd3Vectors>::i32x3>
         + SwizzleVector
-        + VectorIndexedBy<<Self as Simd3Vectors>::usizex3, <Self as Simd3Vectors>::u32x3, <Self as Simd3Vectors>::u64x3>;
+        + VectorIndexedBy<<Self as Simd3Vectors>::usizex3, <Self as Simd3Vectors>::u32x3, <Self as Simd3Vectors>::u64x3>
+        + CastVector<<Self as Simd3Vectors>::f32x3>
+        + CastVector<<Self as Simd3Vectors>::f64x3>
+        + CastVector<<Self as Simd3Vectors>::u32x3>
+        + CastVector<<Self as Simd3Vectors>::u64x3>;
     type u64x3: UnsignedIntegerVector<Lanes = U3, Element = u64>
         + CastVector<<Self as Simd3Vectors>::u32x3>
         + SwizzleVector
-        + VectorIndexedBy<<Self as Simd3Vectors>::usizex3, <Self as Simd3Vectors>::u32x3, <Self as Simd3Vectors>::u64x3>;
+        + VectorIndexedBy<<Self as Simd3Vectors>::usizex3, <Self as Simd3Vectors>::u32x3, <Self as Simd3Vectors>::u64x3>
+        + CastVector<<Self as Simd3Vectors>::f32x3>
+        + CastVector<<Self as Simd3Vectors>::f64x3>
+        + CastVector<<Self as Simd3Vectors>::i32x3>
+        + CastVector<<Self as Simd3Vectors>::i64x3>;
 }
 
 /// Marker companion to [`Simd3Vectors`] that also exposes each vector's

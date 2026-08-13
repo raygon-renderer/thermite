@@ -54,14 +54,21 @@ fn assert_vcast<FROM, TO: CastVector<FROM>>() {}
 /// unordered pair exactly once and each directed pair exactly once, without
 /// needing to compare two idents for equality to skip the self-pairs - which
 /// `macro_rules!` cannot do.
-macro_rules! concrete_pairs {
-    ($b:ty;) => {};
-    ($b:ty; $head:ident $(, $tail:ident)*) => {
+macro_rules! concrete_pairs_in {
+    ($b:ty, $tr:ident;) => {};
+    ($b:ty, $tr:ident; $head:ident $(, $tail:ident)*) => {
         $(
-            assert_cast::<<$b as Simd>::$head, <$b as Simd>::$tail>();
-            assert_cast::<<$b as Simd>::$tail, <$b as Simd>::$head>();
+            assert_cast::<<$b as $tr>::$head, <$b as $tr>::$tail>();
+            assert_cast::<<$b as $tr>::$tail, <$b as $tr>::$head>();
         )*
-        concrete_pairs!($b; $($tail),*);
+        concrete_pairs_in!($b, $tr; $($tail),*);
+    };
+}
+
+/// The power-of-two lane counts, whose slots live on `Simd`.
+macro_rules! concrete_pairs {
+    ($b:ty; $($slot:ident),* $(,)?) => {
+        concrete_pairs_in!($b, Simd; $($slot),*);
     };
 }
 
@@ -138,6 +145,43 @@ mod neon {
     }
 }
 
+/// The 3-lane slots, which are a 6x6 matrix rather than 10x10: they carry only
+/// the 32- and 64-bit types, there being no 3-lane 8- or 16-bit register.
+///
+/// They are backed by `ReducedRegister<_, U1>` over the 4-lane registers, so
+/// every pair is implemented by the reduced blanket and none of this needs a
+/// backend lowering - but the bounds still have to be *declared* for generic
+/// code to reach them, on four traits rather than two (`Simd3A`/`Simd3` and
+/// their two vector mirrors).
+macro_rules! each_lane3 {
+    ($mac:ident, $b:ty, $tr:ident, $vtr:ident) => {
+        $mac!($b, $tr; f32x3A, f64x3A, i32x3A, u32x3A, i64x3A, u64x3A);
+        $mac!($b, $vtr; f32x3, f64x3, i32x3, u32x3, i64x3, u64x3);
+    };
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+mod x86_3lane {
+    use super::*;
+    use thermite::simd::{Simd3, Simd3A};
+
+    macro_rules! backend_exists3 {
+        ($($modname:ident => $b:ty),* $(,)?) => {$(
+            #[test]
+            fn $modname() {
+                each_lane3!(concrete_pairs_in, $b, Simd3A, Simd3);
+            }
+        )*};
+    }
+
+    backend_exists3! {
+        scalar_3lane_exists => thermite::backend::scalar::Scalar,
+        v1_3lane_exists => thermite::backend::x86_v1::X86V1,
+        v2_3lane_exists => thermite::backend::x86_v2::X86V2,
+        v3_3lane_exists => thermite::backend::x86_v3::X86V3,
+    }
+}
+
 /// Question 2: every pair is reachable from generic code, at both layers.
 ///
 /// These are never called. A generic body is type-checked against the trait's
@@ -157,5 +201,30 @@ mod generic_reachability {
     /// the layer user code actually touches.
     pub fn vectors<S: SimdVectors>() {
         each_lane!(generic_pairs, assert_vcast);
+    }
+
+    // The 3-lane slots, on all four of the traits that carry them.
+    use thermite::simd::{Simd3, Simd3A, Simd3AVectors, Simd3Vectors};
+
+    macro_rules! pairs3 {
+        ($assert:ident; $($slot:ident),* $(,)?) => {
+            generic_pairs!($assert; $($slot),*);
+        };
+    }
+
+    pub fn registers_3a<S: Simd3A>() {
+        pairs3!(assert_cast; f32x3A, f64x3A, i32x3A, u32x3A, i64x3A, u64x3A);
+    }
+
+    pub fn registers_3<S: Simd3>() {
+        pairs3!(assert_cast; f32x3, f64x3, i32x3, u32x3, i64x3, u64x3);
+    }
+
+    pub fn vectors_3a<S: Simd3AVectors>() {
+        pairs3!(assert_vcast; f32x3A, f64x3A, i32x3A, u32x3A, i64x3A, u64x3A);
+    }
+
+    pub fn vectors_3<S: Simd3Vectors>() {
+        pairs3!(assert_vcast; f32x3, f64x3, i32x3, u32x3, i64x3, u64x3);
     }
 }
