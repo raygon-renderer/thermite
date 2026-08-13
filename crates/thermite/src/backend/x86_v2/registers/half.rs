@@ -150,6 +150,13 @@ impl CastRegister<super::F64x2V2> for F32x2V2 {
 }
 
 #[thermite_macros::inline_always]
+impl CastRegister<U32x2V2> for super::F64x2V2 {
+    fn cast_from(value: Storage<U32x2V2>) -> Storage<Self> {
+        unsafe { arch::_mm_cvtepu32_pdx_v1(value.0) }
+    }
+}
+
+#[thermite_macros::inline_always]
 impl CastRegister<I32x2V2> for super::F64x2V2 {
     fn cast_from(value: Storage<I32x2V2>) -> Storage<Self> {
         unsafe { arch::_mm_cvtepi32_pd(value.0) }

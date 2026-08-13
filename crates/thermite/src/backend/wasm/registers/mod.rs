@@ -423,6 +423,94 @@ impl_float_cast_matrix! {
         ArrayRegister<U64x2Wasm, 2>, half16::I16x4Wasm, half16::U16x4Wasm, half8::I8x4Wasm, half8::U8x4Wasm],
 }
 
+// Sign-changing integer casts. Same row layout and same "only the pairs the
+// ArrayRegister ladder cannot bridge" split as the float matrix above. Every
+// pair is a same-signedness width change plus a free reinterpret, so each lowers
+// to exactly the instructions of its same-signedness twin.
+impl_sign_cast_matrix! {
+    [F32x2Wasm, F64x2Wasm, I32x2Wasm, U32x2Wasm, I64x2Wasm, U64x2Wasm,
+        ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>],
+    [F32x4Wasm, ArrayRegister<F64x2Wasm, 2>, I32x4Wasm, U32x4Wasm, ArrayRegister<I64x2Wasm, 2>,
+        ArrayRegister<U64x2Wasm, 2>, half16::I16x4Wasm, half16::U16x4Wasm, half8::I8x4Wasm, half8::U8x4Wasm],
+}
+
+// The wide rows take only the 8/16 <-> 32/64 half: their 32- and 64-bit slots
+// are `ArrayRegister`s a factor of two apart, so the ladder derives the
+// 32 <-> 64 crossings and stamping them here would conflict. The 8/16-bit slots
+// are native registers, which the ladder cannot reach.
+impl_sign_cast_matrix_8_16_to_32_64! {
+    [ArrayRegister<I32x4Wasm, 2>, ArrayRegister<U32x4Wasm, 2>, ArrayRegister<I64x2Wasm, 4>, ArrayRegister<U64x2Wasm, 4>,
+        I16x8Wasm, U16x8Wasm, half8::I8x8Wasm, half8::U8x8Wasm],
+}
+
+// At x16 only the 8-bit slot is still a native register; the 16-bit slot has
+// become an `ArrayRegister` too, so the ladder derives its crossings.
+impl_sign_cast_matrix_8_to_32_64! {
+    [ArrayRegister<I32x4Wasm, 4>, ArrayRegister<U32x4Wasm, 4>, ArrayRegister<I64x2Wasm, 8>, ArrayRegister<U64x2Wasm, 8>,
+        I8x16Wasm, U8x16Wasm],
+}
+
+// The 16 <-> 64 crossings at x16, the one shape the ladder does not reach: the
+// 16-bit slot is `ArrayRegister<_, 2>` against the 64-bit slot's
+// `ArrayRegister<_, 8>`, a factor of four apart in one step.
+impl_cast_from_via! {
+    ArrayRegister<I16x8Wasm, 2> as ArrayRegister<U64x2Wasm, 8> => via ArrayRegister<I64x2Wasm, 8>,
+    ArrayRegister<U16x8Wasm, 2> as ArrayRegister<I64x2Wasm, 8> => via ArrayRegister<U64x2Wasm, 8>,
+    ArrayRegister<I64x2Wasm, 8> as ArrayRegister<U16x8Wasm, 2> => via ArrayRegister<I16x8Wasm, 2>,
+    ArrayRegister<U64x2Wasm, 8> as ArrayRegister<I16x8Wasm, 2> => via ArrayRegister<U16x8Wasm, 2>,
+}
+
+// The 8 <-> 16 pairs; the x2 row already has them from the scalar impls.
+impl_sign_cast_matrix_8_16! {
+    [half16::I16x4Wasm, half16::U16x4Wasm, half8::I8x4Wasm, half8::U8x4Wasm],
+    [I16x8Wasm, U16x8Wasm, half8::I8x8Wasm, half8::U8x8Wasm],
+    [ArrayRegister<I16x8Wasm, 2>, ArrayRegister<U16x8Wasm, 2>, I8x16Wasm, U8x16Wasm],
+}
+
+// 64-bit int -> f32, composed through f64. The double rounding is harmless:
+// f64's 53 mantissa bits are past the 2p+2 threshold at which rounding to f64
+// and then to f32 provably matches rounding straight to f32.
+//
+// `cast_from` only - an int -> float conversion cannot leave the destination's
+// range, only lose precision, so a saturating body would be dead weight.
+impl_cast_from_via! {
+    I64x2Wasm as F32x2Wasm => via F64x2Wasm,
+    U64x2Wasm as F32x2Wasm => via F64x2Wasm,
+    ArrayRegister<I64x2Wasm, 2> as F32x4Wasm => via ArrayRegister<F64x2Wasm, 2>,
+}
+
+// 32-bit int -> f64. wasm has both halves of this natively
+// (`f64x2.convert_low_i32x4_s` / `_u`), so it is one instruction per output
+// register rather than the widen-then-convert NEON uses or the magic-constant
+// sequence x86 needs for the unsigned side.
+#[thermite_macros::inline_always]
+impl crate::register::CastRegister<I32x2Wasm> for F64x2Wasm {
+    fn cast_from(value: Storage<I32x2Wasm>) -> Storage<Self> {
+        unsafe { arch::f64x2_convert_low_i32x4(value.0) }
+    }
+}
+
+#[thermite_macros::inline_always]
+impl crate::register::CastRegister<U32x2Wasm> for F64x2Wasm {
+    fn cast_from(value: Storage<U32x2Wasm>) -> Storage<Self> {
+        unsafe { arch::f64x2_convert_low_u32x4(value.0) }
+    }
+}
+
+#[thermite_macros::inline_always]
+impl crate::register::CastRegister<I32x4Wasm> for ArrayRegister<F64x2Wasm, 2> {
+    fn cast_from(value: Storage<I32x4Wasm>) -> Storage<Self> {
+        ArrayRegister(unsafe { arch::i32x4_to_2xf64x2(value) })
+    }
+}
+
+#[thermite_macros::inline_always]
+impl crate::register::CastRegister<U32x4Wasm> for ArrayRegister<F64x2Wasm, 2> {
+    fn cast_from(value: Storage<U32x4Wasm>) -> Storage<Self> {
+        ArrayRegister(unsafe { arch::u32x4_to_2xf64x2(value) })
+    }
+}
+
 impl_cast_via! {
     // x8 (wide rows are partial: the ArrayRegister cast ladder bridges the
     // factor-of-two array<->array pairs from the x4 impls stamped above)

@@ -339,10 +339,15 @@ impl UnsignedIntegerRegister for U8x16Wasm {}
 #[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<super::U16x8Wasm, 2>> for U8x16Wasm {
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U16x8Wasm, 2>>) -> Storage<Self> {
+        // Clamped first, so the low half of each lane is already the saturated
+        // result and the truncating narrow is exact. See `half16.rs`'s
+        // `u32x4 -> u16x4` for why this avoids the saturating narrow.
         let max = arch::u16x8_splat(0xFF);
-        let lo = arch::u16x8_min(value.0[0], max);
-        let hi = arch::u16x8_min(value.0[1], max);
-        arch::u8x16_narrow_i16x8(lo, hi)
+
+        <Self as CastRegister<ArrayRegister<super::U16x8Wasm, 2>>>::cast_from(ArrayRegister([
+            arch::u16x8_min(value.0[0], max),
+            arch::u16x8_min(value.0[1], max),
+        ]))
     }
 
     fn cast_from(value: Storage<ArrayRegister<super::U16x8Wasm, 2>>) -> Storage<Self> {
@@ -353,12 +358,33 @@ impl CastRegister<ArrayRegister<super::U16x8Wasm, 2>> for U8x16Wasm {
 // Saturating narrow u32x16 -> u8x16: clamp + `u16x8.narrow_i32x4_u` to u16, then clamp + `u8x16.narrow_i16x8_u`.
 #[thermite_macros::inline_always]
 impl CastRegister<ArrayRegister<super::U32x4Wasm, 4>> for U8x16Wasm {
+    // Clamp straight into `[0, 0xFF]` in the 32-bit domain, then gather the low
+    // byte of each lane. `cast_from` is not reusable here - its
+    // `narrow_4xi32x4_to_bytes` is a scalar store-and-rebuild - so the byte
+    // gather is spelled out. Two 8-byte halves, then a splice.
+    //
+    // The previous form stepped down through `u16x8.narrow_i32x4_u` and
+    // `u8x16.narrow_i16x8_u`; see `half16.rs`'s `u32x4 -> u16x4` for why those
+    // are avoided. Clamping once at the destination range rather than twice also
+    // makes this two instructions shorter.
+    #[rustfmt::skip]
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U32x4Wasm, 4>>) -> Storage<Self> {
-        let m32 = arch::u32x4_splat(0xFFFF);
-        let w0 = arch::u16x8_narrow_i32x4(arch::u32x4_min(value.0[0], m32), arch::u32x4_min(value.0[1], m32));
-        let w1 = arch::u16x8_narrow_i32x4(arch::u32x4_min(value.0[2], m32), arch::u32x4_min(value.0[3], m32));
-        let m16 = arch::u16x8_splat(0xFF);
-        arch::u8x16_narrow_i16x8(arch::u16x8_min(w0, m16), arch::u16x8_min(w1, m16))
+        let max = arch::u32x4_splat(0xFF);
+        let a = arch::u32x4_min(value.0[0], max);
+        let b = arch::u32x4_min(value.0[1], max);
+        let c = arch::u32x4_min(value.0[2], max);
+        let d = arch::u32x4_min(value.0[3], max);
+
+        let lo = arch::i8x16_shuffle::<
+            0, 4, 8, 12, 16, 20, 24, 28, 0, 0, 0, 0, 0, 0, 0, 0,
+        >(a, b);
+        let hi = arch::i8x16_shuffle::<
+            0, 4, 8, 12, 16, 20, 24, 28, 0, 0, 0, 0, 0, 0, 0, 0,
+        >(c, d);
+
+        arch::i8x16_shuffle::<
+            0, 1, 2, 3, 4, 5, 6, 7, 16, 17, 18, 19, 20, 21, 22, 23,
+        >(lo, hi)
     }
 
     fn cast_from(value: Storage<ArrayRegister<super::U32x4Wasm, 4>>) -> Storage<Self> {

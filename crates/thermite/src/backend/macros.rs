@@ -1021,6 +1021,147 @@ macro_rules! impl_cast_via_widen {
     };
 }
 
+/// Cross-width casts composed from two legs, defining **only** `cast_from` and
+/// leaving `saturating_cast_from` to default to it. For pairs where the two
+/// strengths are the same conversion, which is every pair this stamps.
+///
+/// Two families qualify, both matching the scalar oracle:
+///
+/// - **sign-changing integer**, composed as a same-signedness width change
+///   (`$mid`, the source's signedness at the destination's width) then the free
+///   same-width sign reinterpret. Scalar has no saturating lowering for these
+///   either - `impl_nontrivial_casts!` stamps one `value as _` body and lets the
+///   default do the rest - so `as` semantics are the whole contract.
+/// - **int -> float**, which cannot go out of range, only lose precision, so
+///   `cast_from` is already exact and a separate saturating body would be dead
+///   weight.
+///
+/// Threading both strengths through the legs, as [`impl_cast_via`] does, would
+/// pick up the clamp from a same-signedness narrow leg and disagree with the
+/// oracle: `300u32 -> i8` would give `127` where scalar gives `44`.
+macro_rules! impl_cast_from_via {
+    ($($from:ty as $to:ty => via $mid:ty),* $(,)?) => {
+        const _: () = {$(
+            #[thermite_macros::inline_always]
+            impl $crate::register::CastRegister<$from> for $to {
+                fn cast_from(value: Storage<$from>) -> Storage<Self> {
+                    <Self as $crate::register::CastRegister<$mid>>::cast_from(
+                        <$mid as $crate::register::CastRegister<$from>>::cast_from(value),
+                    )
+                }
+            }
+        )*};
+    };
+}
+
+/// The sign-changing pairs crossing between the 8-bit ladder and the 32/64-bit
+/// one. Row layout: `[i32, u32, i64, u64, i8, u8]`.
+///
+/// Which crossings need stating is a property of the row's register shapes, not
+/// of the element types, which is why these come in three separately-invocable
+/// pieces. The array cast ladder in `register/array.rs` derives a pair only when
+/// BOTH endpoints are `ArrayRegister`s; a native register on either end puts the
+/// pair here. At the widest lane counts a backend's 8-bit slot is typically the
+/// last native one left.
+macro_rules! impl_sign_cast_matrix_8_to_32_64 {
+    ($([$i32:ty, $u32:ty, $i64:ty, $u64:ty, $i8:ty, $u8:ty]),* $(,)?) => {$(
+        impl_cast_from_via! {
+            // widen: extend in the source's signedness, then reinterpret
+            $i8 as $u32 => via $i32,
+            $i8 as $u64 => via $i64,
+            $u8 as $i32 => via $u32,
+            $u8 as $i64 => via $u64,
+            // narrow: truncate in the source's signedness, then reinterpret
+            $i32 as $u8 => via $i8,
+            $u32 as $i8 => via $u8,
+            $i64 as $u8 => via $i8,
+            $u64 as $i8 => via $u8,
+        }
+    )*};
+}
+
+/// The sign-changing pairs crossing between the 16-bit ladder and the 32/64-bit
+/// one. Row layout: `[i32, u32, i64, u64, i16, u16]`. See
+/// [`impl_sign_cast_matrix_8_to_32_64`] for why this is separable.
+macro_rules! impl_sign_cast_matrix_16_to_32_64 {
+    ($([$i32:ty, $u32:ty, $i64:ty, $u64:ty, $i16:ty, $u16:ty]),* $(,)?) => {$(
+        impl_cast_from_via! {
+            $i16 as $u32 => via $i32,
+            $i16 as $u64 => via $i64,
+            $u16 as $i32 => via $u32,
+            $u16 as $i64 => via $u64,
+            $i32 as $u16 => via $i16,
+            $u32 as $i16 => via $u16,
+            $i64 as $u16 => via $i16,
+            $u64 as $i16 => via $u16,
+        }
+    )*};
+}
+
+/// Both of the 8/16-bit crossing halves. Row layout:
+/// `[i32, u32, i64, u64, i16, u16, i8, u8]`.
+macro_rules! impl_sign_cast_matrix_8_16_to_32_64 {
+    ($([$i32:ty, $u32:ty, $i64:ty, $u64:ty, $i16:ty, $u16:ty, $i8:ty, $u8:ty]),* $(,)?) => {$(
+        impl_sign_cast_matrix_8_to_32_64! {
+            [$i32, $u32, $i64, $u64, $i8, $u8]
+        }
+        impl_sign_cast_matrix_16_to_32_64! {
+            [$i32, $u32, $i64, $u64, $i16, $u16]
+        }
+    )*};
+}
+
+/// The four sign-changing 32 <-> 64 crossings, for one or more lane-count rows.
+/// Row layout: `[i32, u32, i64, u64]`.
+///
+/// Kept apart from [`impl_sign_cast_matrix_8_16_to_32_64`] because a row whose
+/// 32- and 64-bit slots are both `ArrayRegister`s a factor of two apart gets
+/// these from the array cast ladder, and stamping them anyway is a coherence
+/// conflict rather than a duplicate.
+macro_rules! impl_sign_cast_matrix_32_64 {
+    ($([$i32:ty, $u32:ty, $i64:ty, $u64:ty]),* $(,)?) => {$(
+        impl_cast_from_via! {
+            $i32 as $u64 => via $i64,
+            $u32 as $i64 => via $u64,
+            $i64 as $u32 => via $i32,
+            $u64 as $i32 => via $u32,
+        }
+    )*};
+}
+
+/// Both halves of the sign-changing matrix for one or more lane-count rows, in
+/// the same row layout as [`impl_float_cast_matrix`]:
+/// `[f32, f64, i32, u32, i64, u64, i16, u16, i8, u8]` (the two float slots are
+/// unused here, kept so a backend can pass one row shape to both macros).
+///
+/// For a row where the array ladder already derives the 32 <-> 64 crossings,
+/// invoke [`impl_sign_cast_matrix_8_16_to_32_64`] alone instead.
+macro_rules! impl_sign_cast_matrix {
+    ($([$f32:ty, $f64:ty, $i32:ty, $u32:ty, $i64:ty, $u64:ty, $i16:ty, $u16:ty, $i8:ty, $u8:ty]),* $(,)?) => {$(
+        impl_sign_cast_matrix_8_16_to_32_64! {
+            [$i32, $u32, $i64, $u64, $i16, $u16, $i8, $u8]
+        }
+        impl_sign_cast_matrix_32_64! {
+            [$i32, $u32, $i64, $u64]
+        }
+    )*};
+}
+
+/// The 8 <-> 16 sign-changing pairs, split out of [`impl_sign_cast_matrix`]
+/// because the 2-lane rows get them from the scalar `ArrayRegister` impls and
+/// would collide. Row layout is the four integer slots only:
+/// `[i16, u16, i8, u8]`.
+macro_rules! impl_sign_cast_matrix_8_16 {
+    ($([$i16:ty, $u16:ty, $i8:ty, $u8:ty]),* $(,)?) => {$(
+        impl_cast_from_via! {
+            $i8 as $u16 => via $i16,
+            $u8 as $i16 => via $u16,
+            $i16 as $u8 => via $i8,
+            $u16 as $i8 => via $u8,
+        }
+    )*};
+}
+
 /// Stamp the full cross-width float -> int cast matrix for one or more
 /// lane-count rows of a backend's `Simd` slot types. The same-width float -> int
 /// casts and the integer-narrowing matrix must already exist for the row;

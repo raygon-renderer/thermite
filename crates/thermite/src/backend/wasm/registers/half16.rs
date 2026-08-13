@@ -30,10 +30,22 @@ impl CastRegister<super::I32x4Wasm> for I16x4Wasm {
 }
 #[thermite_macros::inline_always]
 impl CastRegister<super::U32x4Wasm> for U16x4Wasm {
-    // u32x4 -> u16x4: `u16x8.narrow_i32x4_u` reads a signed source, so clamp the high end first.
+    // u32x4 -> u16x4: clamp the high end, then take the low half of each lane.
+    //
+    // The obvious lowering is `u16x8.narrow_i32x4_u`, but that reads its source
+    // as *signed*, so it needs the unsigned clamp in front of it - and that pair
+    // is miscompiled by LLVM as shipped in Rust 1.97.1. There, the intrinsic
+    // lowers to `max_s(x, 0); min_s(x, 0xFFFF); narrow`, whose signed clamps
+    // look redundant with our unsigned `min`; dropping the `min` leaves
+    // `max_s(0xFFFF_FFFF, 0) == 0`, so `f32::MAX -> u8` came out `0` instead of
+    // `255`. Nightly 1.99 emits the bare instruction and is unaffected.
+    //
+    // Truncating instead of saturating removes the hazard rather than working
+    // around it: after the clamp every lane is within `[0, 0xFFFF]`, so the low
+    // 16 bits ARE the saturated result, and no signed-source instruction is
+    // involved for anything to fold against. It is also one instruction shorter.
     fn saturating_cast_from(value: Storage<super::U32x4Wasm>) -> Storage<Self> {
-        let c = arch::u32x4_min(value, arch::u32x4_splat(0xFFFF));
-        ReducedRegister::new(arch::u16x8_narrow_i32x4(c, c))
+        <Self as CastRegister<super::U32x4Wasm>>::cast_from(arch::u32x4_min(value, arch::u32x4_splat(0xFFFF)))
     }
 
     #[rustfmt::skip]

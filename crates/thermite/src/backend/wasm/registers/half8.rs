@@ -42,10 +42,12 @@ impl CastRegister<super::half16::I16x4Wasm> for I8x4Wasm {
 }
 #[thermite_macros::inline_always]
 impl CastRegister<super::U16x8Wasm> for U8x8Wasm {
-    // Unsigned `u16 -> u8`: clamp the high end (`u8x16.narrow_i16x8_u` reads a signed source).
+    // Unsigned `u16 -> u8`: clamp the high end, then truncate.
     fn saturating_cast_from(value: Storage<super::U16x8Wasm>) -> Storage<Self> {
-        let c = arch::u16x8_min(value, arch::u16x8_splat(0xFF));
-        ReducedRegister::new(arch::u8x16_narrow_i16x8(c, c))
+        // Clamped first, so the low half of each lane is already the saturated
+        // result and the truncating narrow is exact. See `half16.rs`'s
+        // `u32x4 -> u16x4` for why this avoids the saturating narrow.
+        <Self as CastRegister<super::U16x8Wasm>>::cast_from(arch::u16x8_min(value, arch::u16x8_splat(0xFF)))
     }
 
     #[rustfmt::skip]
@@ -58,8 +60,13 @@ impl CastRegister<super::U16x8Wasm> for U8x8Wasm {
 #[thermite_macros::inline_always]
 impl CastRegister<super::half16::U16x4Wasm> for U8x4Wasm {
     fn saturating_cast_from(value: Storage<super::half16::U16x4Wasm>) -> Storage<Self> {
-        let c = arch::u16x8_min(value.0, arch::u16x8_splat(0xFF));
-        ReducedRegister::new(arch::u8x16_narrow_i16x8(c, c))
+        // Clamped first, so the low half of each lane is already the saturated
+        // result and the truncating narrow is exact. See `half16.rs`'s
+        // `u32x4 -> u16x4` for why this avoids the saturating narrow.
+        <Self as CastRegister<super::half16::U16x4Wasm>>::cast_from(ReducedRegister::new(arch::u16x8_min(
+            value.0,
+            arch::u16x8_splat(0xFF),
+        )))
     }
 
     #[rustfmt::skip]

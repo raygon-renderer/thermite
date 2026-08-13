@@ -15,6 +15,22 @@ pub unsafe fn _mm256_cvtepu32_psx_v3(x: __m256i) -> __m256 {
     ymm0
 }
 
+/// POLYFILL: `u32x4 -> f64x4`. The 256-bit twin of `_mm_cvtepu32_pdx_v1`
+///
+/// Same magic-constant argument, and likewise exact for every `u32`: zero-extend
+/// into the mantissa of `2^52`, subtract `2^52` back off. Three instructions
+/// plus the constant, against the ~8 of routing through the full-range
+/// `_mm256_cvtepu64_pdx_v3`, which is what composing `u32 -> u64 -> f64` would
+/// have cost.
+#[inline(always)]
+pub unsafe fn _mm256_cvtepu32_pdx_v3(v: __m128i) -> __m256d {
+    let magic_i = _mm256_set1_epi64x(0x4330000000000000u64 as i64); // 2^52 as f64 bits
+    let zext = _mm256_cvtepu32_epi64(v);
+    let biased = _mm256_or_si256(zext, magic_i);
+
+    _mm256_sub_pd(_mm256_castsi256_pd(biased), _mm256_castsi256_pd(magic_i))
+}
+
 /// Only works for inputs in the range: [-2^51, 2^51]
 #[inline(always)]
 pub unsafe fn _mm256_cvtpd_epi64x_limited_v3(mut x: __m256d) -> __m256i {

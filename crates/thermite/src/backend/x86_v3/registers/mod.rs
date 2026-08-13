@@ -68,7 +68,7 @@ impl_newregister!(
 use crate::{
     element::FindUSize,
     isa::InstructionSet,
-    register::{IndexableRegister, Storage, array::ArrayRegister},
+    register::{ConcatRegister, IndexableRegister, Storage, array::ArrayRegister},
     simd::{HasIsa, NativeIsa, NativeSimd, Simd, Simd3, Simd3A},
 };
 
@@ -446,6 +446,12 @@ impl_type_casts! {
     I64x4V3 as U64x4V3 => identity, // i64x4 -> u64x4
     U64x4V3 as I64x4V3 => identity, // u64x4 -> i64x4
 
+    // 32-bit int -> f64: `vcvtdq2pd` is native and signed-only, so the unsigned
+    // form takes the magic-constant polyfill (exact, three instructions) rather
+    // than routing through the full-range 64-bit conversion.
+    I32x4V3 as F64x4V3 => _mm256_cvtepi32_pd, // i32x4 -> f64x4
+    U32x4V3 as F64x4V3 => _mm256_cvtepu32_pdx_v3, // u32x4 -> f64x4
+
     // simple precision casts, others are implemented in-module
     F32x4V3 as F64x4V3 => _mm256_cvtps_pd, // f32x4 -> f64x4
     F64x4V3 as F32x4V3 => _mm256_cvtpd_ps, // f64x4 -> f32x4
@@ -482,10 +488,47 @@ impl_float_to_int_casts! {
     F64x4V3 as U64x4V3 => _mm256_cvtpd_epu64x_v3 sat _mm256_cvtpd_epu64_satx_v3 | _mm256_cvtpd_epu64x_limited_v3, // f64x4 -> u64x4
 }
 
-// `u64x4 -> f32x4`, the one int -> float pair with no direct instruction on x86.
-// Composed through f64, where both legs already exist.
-impl_cast_via! {
+// 64-bit int -> f32, the direction x86 has no instruction for at any level.
+// Composed through f64, where both legs exist. The double rounding is harmless:
+// f64 carries 53 mantissa bits against f32's 24, comfortably past the 2p+2
+// threshold at which a round-to-f64-then-round-to-f32 is provably identical to
+// rounding straight to f32.
+//
+// `cast_from` only - an int -> float conversion cannot leave the destination's
+// range, only lose precision, so `saturating_cast_from` defaulting to it is
+// already exact and a separate body would be dead weight.
+impl_cast_from_via! {
+    I64x2V3 as F32x2V3 => via F64x2V3,
+    U64x2V3 as F32x2V3 => via F64x2V3,
+    I64x4V3 as F32x4V3 => via F64x4V3,
     U64x4V3 as F32x4V3 => via F64x4V3,
+    ArrayRegister<I64x4V3, 2> as F32x8V3 => via ArrayRegister<F64x4V3, 2>,
+    ArrayRegister<U64x4V3, 2> as F32x8V3 => via ArrayRegister<F64x4V3, 2>,
+}
+
+// 32-bit int -> f64 at 8 lanes: two 128-bit halves, one convert each. Composing
+// through i64 instead would drag in the full-range 64-bit magic-number
+// conversion for what `vcvtdq2pd` does in a single instruction.
+//
+// The x16 rungs are not stated: the array cast ladder in `register/array.rs`
+// derives `ArrayRegister<F64x4V3, 4>` from these, and stamping them would be a
+// coherence conflict.
+#[thermite_macros::inline_always]
+impl crate::register::CastRegister<I32x8V3> for ArrayRegister<F64x4V3, 2> {
+    fn cast_from(value: Storage<I32x8V3>) -> Storage<Self> {
+        let (lo, hi) = I32x8V3::split(value);
+
+        unsafe { ArrayRegister([arch::_mm256_cvtepi32_pd(lo), arch::_mm256_cvtepi32_pd(hi)]) }
+    }
+}
+
+#[thermite_macros::inline_always]
+impl crate::register::CastRegister<U32x8V3> for ArrayRegister<F64x4V3, 2> {
+    fn cast_from(value: Storage<U32x8V3>) -> Storage<Self> {
+        let (lo, hi) = U32x8V3::split(value);
+
+        unsafe { ArrayRegister([arch::_mm256_cvtepu32_pdx_v3(lo), arch::_mm256_cvtepu32_pdx_v3(hi)]) }
+    }
 }
 
 // Cross-width float -> int saturating casts, one row per Simd lane count
@@ -498,6 +541,52 @@ impl_float_cast_matrix! {
         half16::I16x4V3, half16::U16x4V3, half8::I8x4V3, half8::U8x4V3],
     [F32x8V3, ArrayRegister<F64x4V3, 2>, I32x8V3, U32x8V3, ArrayRegister<I64x4V3, 2>, ArrayRegister<U64x4V3, 2>,
         I16x8V3, U16x8V3, half8::I8x8V3, half8::U8x8V3],
+}
+
+// Sign-changing integer casts, one row per Simd lane count. Composed as a
+// same-signedness width change followed by the free same-width reinterpret, so
+// every pair is exactly the instruction sequence of its same-signedness twin.
+// `cast_from` only - see `impl_cast_from_via!` for why saturating is left to
+// default here.
+impl_sign_cast_matrix! {
+    [F32x2V3, F64x2V3, I32x2V3, U32x2V3, I64x2V3, U64x2V3,
+        ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>],
+    [F32x4V3, F64x4V3, I32x4V3, U32x4V3, I64x4V3, U64x4V3,
+        half16::I16x4V3, half16::U16x4V3, half8::I8x4V3, half8::U8x4V3],
+    [F32x8V3, ArrayRegister<F64x4V3, 2>, I32x8V3, U32x8V3, ArrayRegister<I64x4V3, 2>, ArrayRegister<U64x4V3, 2>,
+        I16x8V3, U16x8V3, half8::I8x8V3, half8::U8x8V3],
+}
+
+// x16 is the row the matrix macro cannot take whole: both 32 <-> 64 slots are
+// `ArrayRegister`s a factor of two apart, so the array cast ladder
+// (`impl_casts!` in `register/array.rs`) already derives those pairs from the x8
+// row above and stamping them here is a coherence conflict. Everything reaching
+// the native 8/16-bit registers still needs stating.
+impl_cast_from_via! {
+    I8x16V3 as ArrayRegister<U32x8V3, 2> => via ArrayRegister<I32x8V3, 2>,
+    I8x16V3 as ArrayRegister<U64x4V3, 4> => via ArrayRegister<I64x4V3, 4>,
+    U8x16V3 as ArrayRegister<I32x8V3, 2> => via ArrayRegister<U32x8V3, 2>,
+    U8x16V3 as ArrayRegister<I64x4V3, 4> => via ArrayRegister<U64x4V3, 4>,
+    I16x16V3 as ArrayRegister<U32x8V3, 2> => via ArrayRegister<I32x8V3, 2>,
+    I16x16V3 as ArrayRegister<U64x4V3, 4> => via ArrayRegister<I64x4V3, 4>,
+    U16x16V3 as ArrayRegister<I32x8V3, 2> => via ArrayRegister<U32x8V3, 2>,
+    U16x16V3 as ArrayRegister<I64x4V3, 4> => via ArrayRegister<U64x4V3, 4>,
+    ArrayRegister<I32x8V3, 2> as U8x16V3 => via I8x16V3,
+    ArrayRegister<I32x8V3, 2> as U16x16V3 => via I16x16V3,
+    ArrayRegister<U32x8V3, 2> as I8x16V3 => via U8x16V3,
+    ArrayRegister<U32x8V3, 2> as I16x16V3 => via U16x16V3,
+    ArrayRegister<I64x4V3, 4> as U8x16V3 => via I8x16V3,
+    ArrayRegister<I64x4V3, 4> as U16x16V3 => via I16x16V3,
+    ArrayRegister<U64x4V3, 4> as I8x16V3 => via U8x16V3,
+    ArrayRegister<U64x4V3, 4> as I16x16V3 => via U16x16V3,
+}
+
+// The 8 <-> 16 sign-changing pairs. Omitted for the 2-lane row, which already
+// has them from the scalar `ArrayRegister` impls.
+impl_sign_cast_matrix_8_16! {
+    [half16::I16x4V3, half16::U16x4V3, half8::I8x4V3, half8::U8x4V3],
+    [I16x8V3, U16x8V3, half8::I8x8V3, half8::U8x8V3],
+    [I16x16V3, U16x16V3, I8x16V3, U8x16V3],
 }
 
 impl_cast_via! {

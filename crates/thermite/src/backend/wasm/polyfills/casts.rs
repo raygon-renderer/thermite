@@ -217,6 +217,14 @@ pub unsafe fn i32x4_to_2xf64x2(ints: v128) -> [v128; 2] {
     ]
 }
 
+#[inline(always)]
+pub unsafe fn u32x4_to_2xf64x2(ints: v128) -> [v128; 2] {
+    [
+        f64x2_convert_low_u32x4(ints),
+        f64x2_convert_low_u32x4(i32x4_shuffle::<2, 3, 2, 3>(ints, ints)),
+    ]
+}
+
 // ---------------------------------------------------------------------------
 // Bitmask -> lane mask (the inverse of `*_bitmask`). SIMD128 has no
 // bits-to-mask instruction, so broadcast the packed bits, AND with a per-lane

@@ -179,6 +179,20 @@ pub unsafe fn _mm_cvtepi64_pdx_v1(v: __m128i) -> __m128d {
                        _mm_add_pd(v_hi_dbl, _mm_castsi128_pd(v_lo))     // (v_hi - magic_d_all) + v_lo  Do not assume associativity of floating point addition !!
 }
 
+/// Exact for every `u32` and branchless, via the standard magic-constant trick:
+/// a `u32` fits in a `f64` mantissa with room to spare, so zero-extending it
+/// into the low bits of the `f64` encoding of `2^52` yields exactly `2^52 + x`,
+/// and one subtraction recovers `x`. No rounding step is involved, so this is
+/// bit-exact rather than merely accurate.
+#[inline(always)]
+pub unsafe fn _mm_cvtepu32_pdx_v1(v: __m128i) -> __m128d {
+    let magic_i = _mm_set1_epi64x(0x4330000000000000u64 as i64); // 2^52 as f64 bits
+    let zext = _mm_cvtepu32_epi64x_v1(v);
+    let biased = _mm_or_si128(zext, magic_i);
+
+    _mm_sub_pd(_mm_castsi128_pd(biased), _mm_castsi128_pd(magic_i))
+}
+
 /// POLYFILL: `_mm_cvtepi32_epi64` (SSE4.1 `pmovsxdq`) - sign-extend the low
 /// two `i32` lanes to `i64`.
 #[inline(always)]
@@ -524,4 +538,11 @@ pub unsafe fn _mm_cvttpd_2i32x_v1(v: __m128d) -> [i32; 2] {
 #[inline(always)]
 pub unsafe fn _mm_cvtepi32_2pdx_v1(ints: __m128i) -> [__m128d; 2] {
     [_mm_cvtepi32_pd(ints), _mm_cvtepi32_pd(_mm_srli_si128(ints, 8))]
+}
+
+// Unsigned twin of the above. `cvtdq2pd` is signed-only at every x86 level, so
+// this goes through the magic-constant conversion rather than the instruction.
+#[inline(always)]
+pub unsafe fn _mm_cvtepu32_2pdx_v1(ints: __m128i) -> [__m128d; 2] {
+    [_mm_cvtepu32_pdx_v1(ints), _mm_cvtepu32_pdx_v1(_mm_srli_si128(ints, 8))]
 }

@@ -397,12 +397,17 @@ impl CastRegister<ArrayRegister<super::U32x4Wasm, 2>> for U16x8Wasm {
         >(value.0[0], value.0[1])
     }
 
-    // Saturating narrow u32x8 -> u16x8: clamp each half (`u32x4.min`) then two-source `u16x8.narrow_i32x4_u`.
+    // Saturating narrow u32x8 -> u16x8: clamp each half, then truncate.
     fn saturating_cast_from(value: Storage<ArrayRegister<super::U32x4Wasm, 2>>) -> Storage<Self> {
+        // Clamped first, so the low half of each lane is already the saturated
+        // result and the truncating narrow is exact. See `half16.rs`'s
+        // `u32x4 -> u16x4` for why this avoids the saturating narrow.
         let max = arch::u32x4_splat(0xFFFF);
-        let lo = arch::u32x4_min(value.0[0], max);
-        let hi = arch::u32x4_min(value.0[1], max);
-        arch::u16x8_narrow_i32x4(lo, hi)
+
+        <Self as CastRegister<ArrayRegister<super::U32x4Wasm, 2>>>::cast_from(ArrayRegister([
+            arch::u32x4_min(value.0[0], max),
+            arch::u32x4_min(value.0[1], max),
+        ]))
     }
 }
 

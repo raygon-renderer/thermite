@@ -169,6 +169,74 @@ impl_float_cast_matrix! {
         ArrayRegister<U64x2Neon, 2>, half16::I16x4Neon, half16::U16x4Neon, half8::I8x4Neon, half8::U8x4Neon],
 }
 
+// Sign-changing integer casts. Same row layout and same "only the pairs the
+// ArrayRegister ladder cannot bridge" split as the float matrix above. Every
+// pair is a same-signedness width change plus a free reinterpret, so each lowers
+// to exactly the instructions of its same-signedness twin.
+impl_sign_cast_matrix! {
+    [F32x2Neon, F64x2Neon, I32x2Neon, U32x2Neon, I64x2Neon, U64x2Neon,
+        ArrayRegister<i16, 2>, ArrayRegister<u16, 2>, ArrayRegister<i8, 2>, ArrayRegister<u8, 2>],
+    [F32x4Neon, ArrayRegister<F64x2Neon, 2>, I32x4Neon, U32x4Neon, ArrayRegister<I64x2Neon, 2>,
+        ArrayRegister<U64x2Neon, 2>, half16::I16x4Neon, half16::U16x4Neon, half8::I8x4Neon, half8::U8x4Neon],
+}
+
+// The wide rows take only the 8/16 <-> 32/64 half: their 32- and 64-bit slots
+// are `ArrayRegister`s a factor of two apart, so the ladder derives the
+// 32 <-> 64 crossings and stamping them here would conflict. The 8/16-bit slots
+// are native registers, which the ladder cannot reach.
+impl_sign_cast_matrix_8_16_to_32_64! {
+    [ArrayRegister<I32x4Neon, 2>, ArrayRegister<U32x4Neon, 2>, ArrayRegister<I64x2Neon, 4>, ArrayRegister<U64x2Neon, 4>,
+        I16x8Neon, U16x8Neon, half8::I8x8Neon, half8::U8x8Neon],
+}
+
+// At x16 only the 8-bit slot is still a native register; the 16-bit slot has
+// become an `ArrayRegister` too, so the ladder derives its crossings.
+impl_sign_cast_matrix_8_to_32_64! {
+    [ArrayRegister<I32x4Neon, 4>, ArrayRegister<U32x4Neon, 4>, ArrayRegister<I64x2Neon, 8>, ArrayRegister<U64x2Neon, 8>,
+        I8x16Neon, U8x16Neon],
+}
+
+// The 16 <-> 64 crossings at x16, the one shape the ladder does not reach: the
+// 16-bit slot is `ArrayRegister<_, 2>` against the 64-bit slot's
+// `ArrayRegister<_, 8>`, a factor of four apart in one step.
+impl_cast_from_via! {
+    ArrayRegister<I16x8Neon, 2> as ArrayRegister<U64x2Neon, 8> => via ArrayRegister<I64x2Neon, 8>,
+    ArrayRegister<U16x8Neon, 2> as ArrayRegister<I64x2Neon, 8> => via ArrayRegister<U64x2Neon, 8>,
+    ArrayRegister<I64x2Neon, 8> as ArrayRegister<U16x8Neon, 2> => via ArrayRegister<I16x8Neon, 2>,
+    ArrayRegister<U64x2Neon, 8> as ArrayRegister<I16x8Neon, 2> => via ArrayRegister<U16x8Neon, 2>,
+}
+
+// The 8 <-> 16 pairs; the x2 row already has them from the scalar impls.
+impl_sign_cast_matrix_8_16! {
+    [half16::I16x4Neon, half16::U16x4Neon, half8::I8x4Neon, half8::U8x4Neon],
+    [I16x8Neon, U16x8Neon, half8::I8x8Neon, half8::U8x8Neon],
+    [ArrayRegister<I16x8Neon, 2>, ArrayRegister<U16x8Neon, 2>, I8x16Neon, U8x16Neon],
+}
+
+// 64-bit int -> f32, composed through f64. The double rounding is harmless:
+// f64's 53 mantissa bits are past the 2p+2 threshold at which rounding to f64
+// and then to f32 provably matches rounding straight to f32.
+//
+// `cast_from` only - an int -> float conversion cannot leave the destination's
+// range, only lose precision, so a saturating body would be dead weight.
+impl_cast_from_via! {
+    I64x2Neon as F32x2Neon => via F64x2Neon,
+    U64x2Neon as F32x2Neon => via F64x2Neon,
+    ArrayRegister<I64x2Neon, 2> as F32x4Neon => via ArrayRegister<F64x2Neon, 2>,
+}
+
+// 32-bit int -> f64. NEON converts 64-bit integers to double natively
+// (`vcvtq_f64_s64`/`vcvtq_f64_u64`, and unsigned as well as signed), so widening
+// first and converting is two instructions and there is nothing to hand-write -
+// the contrast with x86, which has no unsigned convert at any level and needs a
+// magic-constant polyfill for it.
+impl_cast_from_via! {
+    I32x2Neon as F64x2Neon => via I64x2Neon,
+    U32x2Neon as F64x2Neon => via U64x2Neon,
+    I32x4Neon as ArrayRegister<F64x2Neon, 2> => via ArrayRegister<I64x2Neon, 2>,
+    U32x4Neon as ArrayRegister<F64x2Neon, 2> => via ArrayRegister<U64x2Neon, 2>,
+}
+
 impl_cast_via! {
     // x8 (wide rows are partial: the ArrayRegister cast ladder bridges the
     // factor-of-two array<->array pairs from the x4 impls stamped above)
