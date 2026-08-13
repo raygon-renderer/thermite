@@ -395,6 +395,31 @@ pub enum ThermitePrecisionPolicy {
     HighPrecision = 1,
 }
 
+impl ThermitePrecisionPolicy {
+    /// Rebuilds a policy from its raw discriminant, mapping anything else,
+    /// including a value C invented, onto [`Self::DefaultPolicy`].
+    ///
+    /// Every entry point that accepts a policy across the C boundary launders it
+    /// through here first. `VTable::get_static` matches an exhaustive set of enum
+    /// variants, which LLVM is entitled to lower as an *unguarded* table lookup
+    /// indexed by the discriminant (it does exactly that on AArch64), so an
+    /// out-of-range integer would index off the end of that table. Matching on the
+    /// `i32` instead gives the default arm something real to catch: the AArch64
+    /// lowering becomes two `csel`s over three known table addresses, with no
+    /// indexed load anywhere.
+    #[inline(always)]
+    fn from_raw(raw: i32) -> Self {
+        const HIGH_PERFORMANCE: i32 = ThermitePrecisionPolicy::HighPerformance as i32;
+        const HIGH_PRECISION: i32 = ThermitePrecisionPolicy::HighPrecision as i32;
+
+        match raw {
+            HIGH_PERFORMANCE => Self::HighPerformance,
+            HIGH_PRECISION => Self::HighPrecision,
+            _ => Self::DefaultPolicy,
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(i32)]
 pub enum ThermiteDenormalResult {
@@ -566,7 +591,6 @@ macro_rules! decl_methods {
         ),* $(,)?]),+
     ) => {paste::paste! {
         #[repr(C)]
-        #[derive(Clone, Copy)]
         pub struct VTable {
             pub disable_denormals: unsafe extern "C" fn() -> ThermiteDenormalResult,
             pub enable_denormals: unsafe extern "C" fn() -> ThermiteDenormalResult,
@@ -588,9 +612,14 @@ macro_rules! decl_methods {
             pub name: *const c_char,
         }
 
-        // SAFETY: a `VTable` is immutable once constructed (all uses are `const`-built
-        // statics); `name` points to a static null-terminated string, and fn pointers
-        // are freely shareable. The raw pointer field is what blocks the auto impl.
+        // SAFETY: `VTable` has no interior mutability. `name` is the only raw
+        // pointer, it always points to a static null-terminated string, and fn
+        // pointers are freely shareable. That one raw pointer field is the only
+        // reason the auto impl does not apply, and the per-(policy, ISA) tables in
+        // `VTable::get_static` are `static`s, which requires `Sync`.
+        //
+        // `thermite_init_vtable` does write through a caller-owned `*mut VTable`,
+        // but that path never produces a `&VTable`, so it is outside this claim.
         unsafe impl Sync for VTable {}
 
         decl_methods!(POLICY DefaultPolicy =>
@@ -680,16 +709,6 @@ macro_rules! vt {
 }
 
 impl VTable {
-    /// The table for `policy` on this machine, by value.
-    ///
-    /// Only for `thermite_init_vtable`, which fills a caller-owned struct.
-    /// Everything internal publishes [`VTable::get_static`] through
-    /// `THERMITE_VTABLE` instead, and never copies a table.
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
-    pub fn get(policy: ThermitePrecisionPolicy) -> Self {
-        *Self::get_static(policy)
-    }
-
     /// The immutable static table for `policy` on this machine.
     ///
     /// A reference rather than a value, so it can be published through an
@@ -737,15 +756,7 @@ impl VTable {
 
     #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
     pub fn init() {
-        const HIGH_PERFORMANCE: i32 = ThermitePrecisionPolicy::HighPerformance as i32;
-        const HIGH_PRECISION: i32 = ThermitePrecisionPolicy::HighPrecision as i32;
-
-        // Anything else, including a discriminant C invented, lands on the default.
-        let policy = match THERMITE_POLICY.load(Ordering::SeqCst) {
-            HIGH_PERFORMANCE => ThermitePrecisionPolicy::HighPerformance,
-            HIGH_PRECISION => ThermitePrecisionPolicy::HighPrecision,
-            _ => ThermitePrecisionPolicy::DefaultPolicy,
-        };
+        let policy = ThermitePrecisionPolicy::from_raw(THERMITE_POLICY.load(Ordering::SeqCst));
 
         let table = Self::get_static(policy);
         THERMITE_VTABLE.store(table as *const VTable as *mut VTable, Ordering::SeqCst);
@@ -761,7 +772,36 @@ impl VTable {
 #[inline(never)]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn thermite_init_vtable(vtable: *mut VTable, policy: ThermitePrecisionPolicy) {
-    unsafe { *vtable = VTable::get(policy) };
+    // Filled a slot at a time with atomic stores, deliberately, for two reasons.
+    //
+    // `*vtable = *VTable::get_static(policy)` is a two-kilobyte struct assignment,
+    // and LLVM lowers that to a call to `memcpy` - which this library has no way to
+    // resolve, having no `DT_NEEDED` entries at all. On musl that is an undefined
+    // symbol and the artifact job rejects the shared object. An atomic store is
+    // never recognized back into a `memcpy`, so the loop stays a loop.
+    //
+    // It also makes re-initializing a table that is already in use survivable. Each
+    // slot is one pointer-sized atomic store, so a thread calling through the table
+    // reads either the old function or the new one, never a torn pointer. Worst
+    // case it takes a mixed pair - the previous backend for one call and the new
+    // one for the next, both correct in isolation.
+    //
+    // `Relaxed` is the whole requirement: the code behind every one of these
+    // pointers exists before the library is loaded, so there is nothing to publish
+    // and no ordering between slots to establish. Only the tearing matters.
+    const WORDS: usize = size_of::<VTable>() / size_of::<*mut ()>();
+    const { assert!(size_of::<VTable>().is_multiple_of(size_of::<*mut ()>())) };
+
+    let src = VTable::get_static(ThermitePrecisionPolicy::from_raw(policy as i32)) as *const VTable as *const *mut ();
+    let dst = vtable.cast::<*mut ()>();
+
+    for i in 0..WORDS {
+        // SAFETY: `vtable` is a valid, aligned `VTable` per this function's contract,
+        // and `AtomicPtr` has the layout of the pointer it wraps, so every slot in it
+        // is a well-formed `AtomicPtr<()>`. The two non-pointer slots (`alignment`,
+        // `name`) are pointer-sized as well and copy bit-for-bit.
+        unsafe { AtomicPtr::from_ptr(dst.add(i)).store(src.add(i).read(), Ordering::Relaxed) };
+    }
 }
 
 /// Initializes the Thermite FFI, setting up the function pointers based on the current precision policy and available instruction set.
