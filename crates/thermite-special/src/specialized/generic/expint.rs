@@ -3,9 +3,7 @@ use thermite::{
     mask::GenericMask,
     math::{
         CoreMathWithPolicy as _, FloatConsts, TranscendentalMathWithPolicy as _,
-        policy::{
-            Policy, PrecisionPolicy,
-        },
+        policy::{Policy, PrecisionPolicy},
     },
     register::FloatElement,
     vector::FloatVectorWithBits,
@@ -369,8 +367,10 @@ where
         if const { N <= 2 } {
             e_prev = x_is_zero.select(V::INFINITY, e_prev);
         } else {
-            e_prev = x_is_zero
-                .select(V::splat(E::ONE / E::from_int(const { N as thermite::LargeInt - 2 })), e_prev);
+            e_prev = x_is_zero.select(
+                V::splat(E::ONE / E::from_int(const { N as thermite::LargeInt - 2 })),
+                e_prev,
+            );
         }
 
         // Negative x: NaN, and NaN in, NaN out.

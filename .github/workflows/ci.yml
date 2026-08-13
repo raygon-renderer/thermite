@@ -95,7 +95,8 @@ jobs:
       # nothing for test binaries.
       - name: Run wasm test suite
         run: >
-          cargo test $PKG_CORE --no-default-features --features wasm,std
+          cargo test $PKG_CORE $PKGS_PUBLISHED --no-default-features
+          --features thermite/wasm,thermite/std,thermite-special/wasm,thermite-complex/dual,thermite-complex/special,thermite-complex/compensated
           --target wasm32-wasip1 --tests -- --test-threads=1
         env:
           CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime

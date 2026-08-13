@@ -24,7 +24,7 @@ std = ["thermite/std"]
 # Lets a `Dual` be the storage of a `Complex`, i.e. `Complex<Dual<V, N>>`:
 # complex arithmetic that also carries derivatives.
 dual = ["dep:thermite-dual"]
-# Special functions (erf/erfc and the polynomial families) over the complex plane.
+# Special functions over the complex plane.
 special = ["dep:thermite-special"]
 # Lets a `Compensated` be the storage of a `Complex`, i.e. `Complex<Compensated<V>>`
 compensated = ["dep:thermite-compensated"]

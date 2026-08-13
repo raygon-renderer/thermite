@@ -3,9 +3,7 @@ use thermite::{
         TranscendentalMathWithPolicy,
         policy::{
             DenormalBehavior, PrecisionPolicy,
-            policies::{
-                CheckOverflow, ExtraPrecision, MediumPrecision, WorstPrecision,
-            },
+            policies::{CheckOverflow, ExtraPrecision, MediumPrecision, WorstPrecision},
         },
         specialized::SpecializedTranscendentalMath,
     },

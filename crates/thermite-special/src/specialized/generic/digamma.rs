@@ -1,10 +1,7 @@
 use thermite::{
     element::FloatElementWithBits,
     mask::GenericMask,
-    math::{
-        CoreMathWithPolicy as _, TranscendentalMathWithPolicy as _, policy::Policy,
-        specialized::FlushDenormals,
-    },
+    math::{CoreMathWithPolicy as _, TranscendentalMathWithPolicy as _, policy::Policy, specialized::FlushDenormals},
     prelude::*,
 };
 
