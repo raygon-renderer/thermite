@@ -6,6 +6,14 @@ env:
   CARGO_TERM_COLOR: always
   RUSTUP_TOOLCHAIN: stable
 
+  PKG_CORE: "-p thermite"
+
+  PKGS_PUBLISHED: >-
+    -p thermite-special
+    -p thermite-dual
+    -p thermite-compensated
+    -p thermite-complex
+
 jobs:
   test:
     name: Test (stable, std)
@@ -20,38 +28,19 @@ jobs:
       - name: Install cargo-nextest
         uses: taiki-e/install-action@nextest
 
-      # Scoped to `-p thermite`: the rest of the workspace targets other ISAs
-      # (spirv/neon/wasm) or is mid-rewrite, so a `--workspace` run won't build on
-      # an x86_64 host. `std` is additive and lights up the fmt-gated panic paths.
-      #
-      # nextest schedules every test as its own process across all cores instead
-      # of running each test binary to completion in turn. It deliberately does
-      # not support doctests, so those get their own step - dropping it would
-      # silently stop gating ~24 tests.
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
       - name: Run tests
         if: ${{ !contains(github.event.head_commit.message, '[skip tests]') }}
-        run: cargo nextest run -p thermite --features std
+        run: cargo nextest run $PKG_CORE --features std
 
       - name: Run doctests
-        run: cargo test -p thermite --features std --doc
+        run: cargo test $PKG_CORE --features std --doc
 
-      # The wasm backend is build-only here (no SIMD128 runtime on the runner).
-      - name: Check wasm backend builds
-        run: |
-          rustup target add wasm32-unknown-unknown
-          cargo check -p thermite --target wasm32-unknown-unknown --no-default-features --features wasm
-
-      # Compile-gate every companion, including the ones with no test suite of
-      # their own (thermite-blas), since silent rot is how the FFI crate once
-      # broke unnoticed. This runs even under `[skip tests]`.
       - name: Check companion crates
-        run: >
-          cargo check -p thermite-special -p thermite-sdf
-          -p thermite-geometry -p thermite-dual -p thermite-compensated
-          -p thermite-complex -p thermite-blas -p thermite-sort
+        run: cargo check $PKGS_PUBLISHED
 
-      # ...and actually run their suites.
-      #
       # thermite-complex needs its optional features named explicitly: `dual`,
       # `special` and `compensated` gate the nested-storage impls, and more than
       # half its tests (64 of 116) only compile with them on. Package-qualified
@@ -59,15 +48,86 @@ jobs:
       - name: Test companion crates
         if: ${{ !contains(github.event.head_commit.message, '[skip tests]') }}
         run: >
-          cargo nextest run
-          -p thermite-special -p thermite-dual -p thermite-compensated
-          -p thermite-complex -p thermite-sort -p thermite-sdf
-          -p thermite-geometry
+          cargo nextest run $PKGS_PUBLISHED
           --features thermite-complex/dual,thermite-complex/special,thermite-complex/compensated
 
       # The bench suite is x86-only kernels; not run here, just kept compiling.
       - name: Check benches build
-        run: cargo check -p thermite --benches
+        run: cargo check $PKG_CORE --benches
+
+  # Runs the wasm-applicable suites for real on `wasm32-wasip1`, rather than
+  # merely compile-checking the backend. This is the gate that would have caught
+  # the signed `f64 -> i64` bias-unbias bug in the `_limited` cast polyfill,
+  # which only the wasm backend uses and which turned `powf(2.1, -2.0)` into inf.
+  #
+  # No custom host needed: cargo's target runner is the stock wasmtime CLI, from
+  # the Bytecode Alliance's own release binaries (`taiki-e/install-action`, the
+  # same action nextest and llvm-cov already come from). `tests/wasm-runner` is
+  # the local equivalent for `just wasm-test`; building its ~225-crate
+  # wasmtime+cranelift tree on every CI run would be pure waste.
+  #
+  # `simd128`/`relaxed-simd` codegen flags come from `.cargo/config.toml`; the
+  # runtime side needs no flag, since wasmtime has had relaxed-simd on by
+  # default since v15 (and a module using it would fail validation, not
+  # silently degrade, so the suite passing is proof it is enabled).
+  wasm:
+    name: Test (wasm32-wasip1)
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, '[skip tests]') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+
+      - name: Install wasmtime
+        uses: taiki-e/install-action@wasmtime
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      # `--tests` excludes the criterion benches (native-only kernels). wasip1
+      # has no threads, so libtest has to run single-threaded. LTO is forced off
+      # because fat LTO is a known LLVM weak spot on 32-bit targets and buys
+      # nothing for test binaries.
+      - name: Run wasm test suite
+        run: >
+          cargo test $PKG_CORE --no-default-features --features wasm,std
+          --target wasm32-wasip1 --tests -- --test-threads=1
+        env:
+          CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime
+          CARGO_PROFILE_RELEASE_LTO: "false"
+
+  neon:
+    name: Test (aarch64, NEON)
+    runs-on: ubuntu-24.04-arm
+    if: ${{ !contains(github.event.head_commit.message, '[skip tests]') }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo nextest run $PKG_CORE --features std
+
+      - name: Run doctests
+        run: cargo test $PKG_CORE --features std --doc
+
+      - name: Test companion crates
+        run: >
+          cargo nextest run $PKGS_PUBLISHED
+          --features thermite-complex/dual,thermite-complex/special,thermite-complex/compensated
 
   # thermite-ffi needs nightly and must be built in isolation (its
   # #[panic_handler] conflicts with any sibling that links std), so it gets
@@ -83,6 +143,9 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@nightly
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
 
       - name: Check thermite-ffi
         run: cargo check --profile release-ffi -p thermite-ffi
@@ -107,6 +170,9 @@ jobs:
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
 
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
       # NOT `--all-features`: thermite's features select mutually exclusive
       # backends (spirv/neon/wasm/avx512-tier*/std_simd) that cannot co-compile on
       # x86_64. `--ignore-run-fail` still produces a number if an accepted
@@ -114,7 +180,7 @@ jobs:
       # `jq` is preinstalled on the ubuntu runners.
       - name: Measure coverage
         run: |
-          cargo llvm-cov -p thermite --features std --ignore-run-fail --json --summary-only > coverage.json
+          cargo llvm-cov $PKG_CORE --features std --ignore-run-fail --json --summary-only > coverage.json
           COVERAGE=$(jq '.data[0].totals.lines.percent' coverage.json)
           COVERAGE=$(printf '%.1f' "$COVERAGE")
           echo "COVERAGE=$COVERAGE" >> "$GITHUB_ENV"
