@@ -21,6 +21,7 @@ rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
 default = ["special"]
 special = ["dep:thermite-special"]
 std = ["thermite/std"]
+wasm = ["thermite/wasm"]
 
 [dependencies]
 thermite = { workspace = true }

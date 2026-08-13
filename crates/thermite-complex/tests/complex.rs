@@ -261,9 +261,24 @@ fn lexicographic_ordering() {
 
 /// The interleaved (re, im, re, im, ...) layout must round-trip through the
 /// load/store engine, and the lane ops must hit the right lanes.
+///
+/// The rest of this file runs on the 1-lane scalar backend, but this one needs a
+/// genuinely multi-lane register, so it has to name a backend. Which one does not
+/// matter - only that `LANES > 1` - hence one per arch rather than x86 only.
 #[test]
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "wasm32", feature = "wasm"),
+    target_arch = "aarch64"
+))]
 fn lanes_and_memory() {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     type CW = Complex<thermite::backend::x86_v2::f64x2>;
+    #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+    type CW = Complex<thermite::backend::wasm::f64x2>;
+    #[cfg(target_arch = "aarch64")]
+    type CW = Complex<thermite::backend::neon::f64x2>;
 
     let elems: Vec<Complex<f64>> = (0..CW::LANES)
         .map(|i| Complex::new(i as f64 + 1.0, -(i as f64) - 1.0))

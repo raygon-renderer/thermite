@@ -14,6 +14,19 @@ env:
     -p thermite-compensated
     -p thermite-complex
 
+  # Feature set for the wasm job.
+  FEATURES_WASM: >-
+    thermite/wasm
+    thermite/std
+    thermite-special/wasm
+    thermite-compensated/wasm
+    thermite-complex/wasm
+    thermite-dual/special
+    thermite-compensated/special
+    thermite-complex/dual
+    thermite-complex/special
+    thermite-complex/compensated
+
 jobs:
   test:
     name: Test (stable, std)
@@ -96,7 +109,7 @@ jobs:
       - name: Run wasm test suite
         run: >
           cargo test $PKG_CORE $PKGS_PUBLISHED --no-default-features
-          --features thermite/wasm,thermite/std,thermite-special/wasm,thermite-complex/dual,thermite-complex/special,thermite-complex/compensated
+          --features "$FEATURES_WASM"
           --target wasm32-wasip1 --tests -- --test-threads=1
         env:
           CARGO_TARGET_WASM32_WASIP1_RUNNER: wasmtime

@@ -204,8 +204,22 @@ mod x86 {
 /// exactly `0.0`, while the double-double keeps the epsilons in the error term
 /// and recovers their sum once the `1.0` cancels out.
 #[test]
+#[cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    all(target_arch = "wasm32", feature = "wasm"),
+    target_arch = "aarch64"
+))]
 fn catastrophic_cancellation() {
+    // Needs exactly 8 f64 lanes. On every backend but AVX-512 that is a composite of
+    // native registers, which is fine here - the scan is what is under test, not the width.
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     use thermite::backend::x86_v3::f64x8;
+    #[cfg(target_arch = "aarch64")]
+    use thermite::backend::neon::f64x8;
+    #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+    use thermite::backend::wasm::f64x8;
+
     type C = Compensated<f64x8>;
 
     const EPS: f64 = 1.0e-18;

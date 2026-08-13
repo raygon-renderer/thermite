@@ -21,6 +21,7 @@ rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
 
 [features]
 std = ["thermite/std"]
+wasm = ["thermite/wasm"]
 # Lets a `Dual` be the storage of a `Complex`, i.e. `Complex<Dual<V, N>>`:
 # complex arithmetic that also carries derivatives.
 dual = ["dep:thermite-dual"]
