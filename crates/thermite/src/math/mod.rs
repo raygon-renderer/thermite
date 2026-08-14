@@ -611,6 +611,53 @@ decl_math! {
         /// (e.g. the two-argument log-sum-exp).
         fn logaddexp[][](self: Self, other: Self) -> Self;
 
+        /// Returns `$\ln\left(\sum_{i} e^{x_i}\right)$` over `N` values, computed in a
+        /// numerically stable way that avoids overflow.
+        ///
+        /// The N-ary [`logaddexp`](RealMath::logaddexp): normalizing a set of log-weights,
+        /// the denominator of a log-softmax, the forward pass of an HMM. The largest term is
+        /// factored out first, so no intermediate exponential can overflow whatever the
+        /// inputs are.
+        ///
+        /// `N = 0` gives `-inf`, the empty sum and the identity of `logaddexp`, so folding
+        /// this over any partition of the inputs agrees with running it over all of them at
+        /// once. Above the `Worst` precision policy the non-dominant terms go through
+        /// `ln_1p`, which keeps the answer accurate when one weight dominates.
+        ///
+        /// # Examples
+        ///
+        /// ```
+        /// use thermite::prelude::*;
+        ///
+        /// type V = Vector<f64>;
+        ///
+        /// // Overflows outright if evaluated as `ln(e^1000 + e^1001 + e^999)`.
+        /// let y = V::logsumexp_n([V::splat(1000.0), V::splat(1001.0), V::splat(999.0)]);
+        /// assert!((y.extract::<0>() - 1001.4076059644443).abs() < 1e-12);
+        /// ```
+        fn logsumexp_n[const N: usize][N](values: [Self; N]) -> Self;
+
+        /// Returns `$\ln(e^{a} - e^{b})$` where `a = self` and `b = other`, computed in a
+        /// numerically stable way that avoids overflow.
+        ///
+        /// The subtractive counterpart of [`logaddexp`](RealMath::logaddexp), for removing a
+        /// term from a log-domain sum (a leave-one-out normalizer, a difference of
+        /// cumulative distribution functions in log space). Evaluated as
+        /// `$a + \ln(1 - e^{-(a - b)})$` via [`ln1m_expnx`](TranscendentalMath::ln1m_expnx),
+        /// so no intermediate exponential overflows and the precision ladder is that
+        /// kernel's.
+        ///
+        /// At `Average` precision and above, `$\ln(1 - e^{-x})$` is split into two regimes
+        /// at `$\ln 2$`, keeping the subtraction inside `exp_m1` below the split and inside
+        /// `ln_1p` above it, which is accurate at both ends of the gap. A single
+        /// `$(1 - e^{-x})$` followed by a log loses the small gaps to cancellation and the
+        /// large ones to `$1 - e^{-x}$` rounding to exactly 1. Below `Average`,
+        /// `ln1m_expnx`'s cheaper forms apply, with the accuracy losses those tiers accept.
+        ///
+        /// The result exists only for `a >= b`, and is `-inf` at `a == b`. An `a < b` input
+        /// is out of domain and gives NaN at `Average` precision and above.
+        fn logsubexp[][](self: Self, other: Self) -> Self;
+
         /// Generalized smoothstep function of Order `2N-1`. Note: The "smoothness"
         /// for higher order is in terms of the number of continuous derivatives,
         /// not in terms of visual smoothness, though they are related in some ways.

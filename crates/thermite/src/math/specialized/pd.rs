@@ -22,14 +22,56 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealMath<f64> for V {
         let x = self;
         let n = ((x + Self::PI) * (Self::FRAC_1_PI * Self::HALF)).floor();
 
-        if const { Self::HAS_TRUE_FMA || P::POLICY.precision.le(PrecisionPolicy::Average) } {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
             return n.nmul_adde(Self::TAU, x);
         }
 
-        // Cody-Waite: split TAU so n * tau_hi is exact
-        let tau_hi: V = crate::const_splat!(f64: hexf::hexf64!("0x1.921fb54442d18p+2"));
-        let tau_lo: V = crate::const_splat!(f64: hexf::hexf64!("0x1.1a62633145c07p-52"));
-        (x - n * tau_hi) - n * tau_lo
+        // Cody-Waite against the TRUE 2 pi, not against fl(2 pi). The dominant error at
+        // large |x| is not the rounding of `n * TAU` (a fused step makes that
+        // single-rounded for free), it is that TAU is only 2 pi to half an ulp, so even a
+        // perfectly fused `x - n * TAU` drifts by `n * 2.45e-16`. That is 0.04 rad by
+        // x = 1e15, a WRONG angle once it crosses the +-pi seam, which is exactly what
+        // the old FMA branch did.
+        let mut r = if const { Self::HAS_TRUE_FMA } {
+            // Two fused steps: tau_hi is fl(2 pi) == TAU (full mantissa, so the FMA
+            // multiplies it exactly), tau_lo the next 53 bits, together 2 pi to ~1e-32
+            // relative. The estimating forms ARE single fused instructions on this
+            // hardware, so emulated FMA is never used.
+            let tau_hi: V = crate::const_splat!(f64: hexf::hexf64!("0x1.921fb54442d18p+2"));
+            let tau_lo: V = crate::const_splat!(f64: hexf::hexf64!("0x1.1a62633145c07p-52"));
+
+            let r = n.nmul_adde(tau_hi, x);
+            n.nmul_adde(tau_lo, r)
+        } else {
+            // No FMA: exact-by-construction split, plain mul/sub only. The 24-bit parts
+            // make `n * tau_a` and `n * tau_b` exact products while bits(n) <= 29
+            // (24 + 29 = 53), the first subtraction is exact by Sterbenz (x and
+            // n * tau_a agree to within a factor of two), and the remaining subtractions
+            // are correctly rounded at the RESULT's magnitude, so the whole chain lands
+            // within ~1.5 ulp of pi. The full-mantissa tail takes the constant to
+            // 2 pi * 2^-101.
+            //
+            // Valid to |x| <~ 2^29 * 2 pi ~ 3.4e9. Past that the products start rounding
+            // and accuracy decays gradually toward the naive form's (3.3e-6 rad at
+            // 1e11), still confined to [-pi, pi) by the repair below. The FMA path above
+            // reaches ~2^53 * pi instead.
+            let tau_a: V = crate::const_splat!(f64: hexf::hexf64!("0x1.921fb60000000p+2"));
+            let tau_b: V = crate::const_splat!(f64: hexf::hexf64!("-0x1.777a5c0000000p-23"));
+            let tau_c: V = crate::const_splat!(f64: hexf::hexf64!("-0x1.ee59d9cceba40p-48"));
+
+            ((x - n * tau_a) - n * tau_b) - n * tau_c
+        };
+
+        // The floor can land one period off: its quotient rounds (`x + pi` alone costs up
+        // to half an ulp of x), so near a seam `n` is off by one and `r` by 2 pi. One
+        // masked add/sub each way repairs it. Beyond |x| ~ 2^53 * pi the quotient's own
+        // ulp exceeds one period and the result degrades to "some representative of an
+        // angle". At that magnitude ulp(x) > 2 pi, so the input no longer determines an
+        // angle anyway.
+        r = r.add_c(r.cmp_lt(-Self::PI), Self::TAU);
+        r = r.sub_c(r.cmp_ge(Self::PI), Self::TAU);
+
+        r
     }
 }
 
@@ -717,12 +759,19 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn ln1m_expnx<P: Policy>(self) -> Self {
+        // f64 has no fast rational approximation (unlike f32's Medium path), so below
+        // Average this keeps the cheap naive form and its documented failure modes at the
+        // extremes. Average and up get the accurate two-branch kernel.
+        if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
+            return super::generic::ln1m_expnx_internal::<V, f64, P>(self);
+        }
+
         (V::ONE - (-self).exp_p::<P>()).ln_p::<P>()
     }
 
     #[inline(always)]
     fn ln1m_expnx_ext<P: Policy>(self, _lnx: Self) -> Self {
-        (V::ONE - (-self).exp_p::<P>()).ln_p::<P>()
+        self.ln1m_expnx_p::<P>()
     }
 }
 
@@ -992,6 +1041,20 @@ fn pow2n_d<V: FloatVectorWithBits<Element = f64>>(n: V) -> V {
     V::from_bits(V::Bits::from_bits(n + (bias + pow2_52)) << 52)
 }
 
+/// Split 2^n into two multiplications so neither one leaves normal range, the
+/// counterpart of `ps.rs`'s `pow2n_f_safe`. This is what lets the Best-tier exp
+/// family cover its entire domain: one `pow2n_d` caps the scale at `2^1023`, which
+/// forfeits results in `(2^1023 * 1.42, DBL_MAX]` and every subnormal, while two
+/// halves reach both ends exactly.
+#[inline(always)]
+fn pow2n_d_safe<V: FloatVectorWithBits<Element = f64>>(n: V) -> (V, V) {
+    // Split n into two halves, each comfortably inside the exponent range
+    let half = n.scale(0.5).floor();
+    let other = n - half;
+
+    (pow2n_d(half), pow2n_d(other))
+}
+
 #[inline(always)]
 fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: u8>(x0: V) -> V {
     let mut x = x0.flush_denormals::<P>();
@@ -1021,7 +1084,16 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
             x *= V::LN_10;
         }
         _ => {
-            max_x = const { if MODE == EXP_MODE_EXP { 708.39 } else { 709.7 } };
+            // The single-`pow2n_d` bound: `round(x * log2 e)` (minus one for EXPH)
+            // must stay <= 1023, and `(1 + z) * 2^1023` tops out at ~1.42 * 2^1023,
+            // safely below DBL_MAX. The Best tier replaces these bounds with the
+            // true per-mode domain below, using the two-part `pow2n_d_safe`.
+            max_x = const {
+                match MODE {
+                    EXP_MODE_EXPH => 710.11, // round(x log2 e) <= 1024, minus one after the shift
+                    _ => 709.42,             // EXP / EXPM1: round(x log2 e) <= 1023
+                }
+            };
 
             let ln2d_hi: V = crate::const_splat!(f64: -0.693145751953125);
             let ln2d_lo: V = crate::const_splat!(f64: -1.42860682030941723212E-6);
@@ -1056,37 +1128,78 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
         1.0 / 6227020800.0,
     ]);
 
-    // `pow2n_d` builds the exponent field with an integer add, so an `r` past the
-    // format's exponent range carries into the *sign* bit and the result wraps to a
-    // negative number rather than saturating: `exp(800)` returned -8.436e-270, and
-    // `sinh_cosh(800)` a negative `cosh`. The range fixup below repairs that, but only
-    // under `check_overflow` - the two policies that turn it off (`UltraPerformance`,
-    // `HighPerformance`) were left with the wrap.
-    //
-    // Two instructions restore saturation for them. The bounds are the ends of the
-    // biased exponent: `r = -1023` is the all-zero field, i.e. +0, so underflow lands
-    // on exactly zero, and `r = 1023` is the largest finite power of two.
-    //
-    // Deliberately 1023 and not 1024. The all-ones field would be infinity, and the
-    // recombination below is `z * n2 + n2` - where `z` is exactly zero whenever the
-    // reduced argument is (every integer input to `exp2`, for one), so `0 * inf` would
-    // hand back NaN for the cleanest inputs in the range. Saturating one exponent
-    // lower keeps everything finite: overflow tops out near MAX rather than at
-    // infinity, which is the same contract the f32 path has always had, and it is why
-    // `sinh/cosh` at these policies now cancels to 1.0 instead of `inf/inf`.
-    if const { !P::POLICY.check_overflow } {
-        r = r.clamp(crate::const_splat!(f64: -1023.0), crate::const_splat!(f64: 1023.0));
-    }
+    z = if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
+        // Two-part scaling reaches the full domain: results past `1.42 * 2^1023`
+        // (which one `pow2n_d` cannot form) and the whole subnormal range, matching
+        // the f32 Best path. The extra multiply is nothing next to this tier's
+        // polynomial.
+        let (n2a, n2b) = pow2n_d_safe::<V>(r);
 
-    let n2 = pow2n_d::<V>(r);
+        match MODE {
+            EXP_MODE_EXPM1 | EXP_MODE_POW2M1 | EXP_MODE_POW10M1 => {
+                z.mul_adde(n2a, n2a - V::ONE).mul_adde(n2b, n2b - V::ONE)
+            }
+            _ => z.mul_adde(n2a, n2a) * n2b, // (z + 1) * n2a * n2b
+        }
+    } else {
+        // `pow2n_d` builds the exponent field with an integer add, so an `r` outside
+        // `[-1023, 1023]` carries into the _sign_ bit and the result wraps to a negative
+        // number rather than saturating: `exp(800)` returned -8.436e-270, `exph(-709)`
+        // returned -9.8e307, and `exp_m1(-709.5)` garbage instead of -1.
+        //
+        // The low side wraps _inside_ the range gate (EXPH's `r - 1` and EXPM1's wider
+        // gate both reach -1024), so it is saturated unconditionally. `r = -1023` is the
+        // all-zero exponent field, i.e. +0, which makes every underflow land on exactly
+        // zero, and on exactly -1 for the M1 modes, since `z * 0 + (0 - 1)` is -1
+        // whatever `z` holds.
+        //
+        // The high side only wraps past the gate, whose select repairs it under
+        // `check_overflow`. The clamp stays for the policies that turn that off
+        // (`UltraPerformance`, `HighPerformance`). Deliberately 1023 and not 1024,
+        // because the all-ones field would be infinity and the recombination is
+        // `z * n2 + n2`, where `z` is exactly zero whenever the reduced argument is
+        // (every integer input to `exp2`, for one), so `0 * inf` would hand back NaN for
+        // the cleanest inputs in the range. Saturating one exponent lower keeps
+        // everything finite, the same contract the f32 path has always had.
+        let mut rc = r.max(crate::const_splat!(f64: -1023.0));
 
-    z = match MODE {
-        EXP_MODE_EXPM1 | EXP_MODE_POW2M1 | EXP_MODE_POW10M1 => z.mul_adde(n2, n2 - V::ONE),
-        _ => z.mul_adde(n2, n2), // (z + 1.0f) * n2
+        if const { !P::POLICY.check_overflow } {
+            rc = rc.min(crate::const_splat!(f64: 1023.0));
+        }
+
+        let n2 = pow2n_d::<V>(rc);
+
+        match MODE {
+            EXP_MODE_EXPM1 | EXP_MODE_POW2M1 | EXP_MODE_POW10M1 => z.mul_adde(n2, n2 - V::ONE),
+            _ => z.mul_adde(n2, n2), // (z + 1.0f) * n2
+        }
     };
 
     if const { P::POLICY.check_overflow } {
-        let in_range = x0.abs().cmp_lt(V::splat(max_x)) & x0.is_finite();
+        let mut in_range = x0.is_finite();
+
+        if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
+            // With `pow2n_d_safe` the kernel is exact over the whole domain, so the
+            // gate can sit at the true per-mode bounds (as the f32 path does): the
+            // high end is where the result overflows the format, the low end where
+            // it underflows to zero (or saturates at -1 for the M1 modes).
+            #[rustfmt::skip]
+            let (min_x, max_x) = const { match MODE {
+                EXP_MODE_EXP => (-745.2, 709.78),      // (ln(2^-1075), ln(DBL_MAX))
+                EXP_MODE_EXPM1 => (-708.39, 709.78),   // (below: exactly -1, ln(DBL_MAX))
+                EXP_MODE_EXPH => (-744.5, 710.47),     // EXP shifted by ln 2 either side
+                EXP_MODE_POW2 => (-1075.0, 1024.0),    // (2^-1075 rounds to 0, log2(DBL_MAX))
+                EXP_MODE_POW2M1 => (-1075.0, 1024.0),
+                EXP_MODE_POW10 => (-323.6, 308.25),    // (log10(2^-1075), log10(DBL_MAX))
+                EXP_MODE_POW10M1 => (-323.6, 308.25),
+
+                _ => panic!("Invalid MODE for exp_d_internal"),
+            }};
+
+            in_range &= x0.cmp_ge(V::splat(min_x)) & x0.cmp_le(V::splat(max_x));
+        } else {
+            in_range &= x0.abs().cmp_lt(V::splat(max_x));
+        }
 
         if crate::likely(in_range.all()) {
             return z;

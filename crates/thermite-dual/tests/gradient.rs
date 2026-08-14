@@ -236,6 +236,32 @@ fn hypot_gradient() {
     assert!(close(h.dual[1].extract::<0>(), 0.8, 1e-9));
 }
 
+/// The log-domain sum/difference reach `Dual` through the generic `RealMath`
+/// defaults (no override), so this pins that those defaults are differentiable:
+/// the max/select and mask work inside them must not sever the dual part.
+#[test]
+fn log_domain_gradients() {
+    // d/dx_i logsumexp = softmax_i, so the partials sum to 1.
+    let (a, b) = (0.5_f64, 2.0_f64);
+    let x = D::variable(V::splat(a), 0);
+    let y = D::variable(V::splat(b), 1);
+
+    let s = D::logsumexp_n([x, y, D::constant(V::splat(-1.0))]);
+    let total = (a.exp() + b.exp() + (-1.0f64).exp()).ln();
+
+    assert!(close(s.re.extract::<0>(), total, 1e-12));
+    assert!(close(s.dual[0].extract::<0>(), (a - total).exp(), 1e-12));
+    assert!(close(s.dual[1].extract::<0>(), (b - total).exp(), 1e-12));
+
+    // ln(e^b - e^a): d/db = e^b/(e^b - e^a), d/da = -e^a/(e^b - e^a).
+    let d = y.logsubexp(x);
+    let denom = b.exp() - a.exp();
+
+    assert!(close(d.re.extract::<0>(), denom.ln(), 1e-12));
+    assert!(close(d.dual[1].extract::<0>(), b.exp() / denom, 1e-9));
+    assert!(close(d.dual[0].extract::<0>(), -a.exp() / denom, 1e-9));
+}
+
 #[test]
 fn inverse_smoothstep_implicit_derivative() {
     // N=3 inverse_smoothstep runs a Newton loop internally; the Dual override must

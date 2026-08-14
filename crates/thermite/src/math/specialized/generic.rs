@@ -52,7 +52,7 @@ where
         }
 
         let res = x2 / V::splat(const { E::ConstInt::<{ 120 }>::VALUE });
-        return x2.mul_add(res - V::FRAC_1_6, V::ONE);
+        return x2.mul_adde(res - V::FRAC_1_6, V::ONE);
     }
 
     // For very small x, sinc(x) ~ 1 - x^2/6 + x^4/120
@@ -66,6 +66,46 @@ where
 
     if const { P::POLICY.check_overflow } {
         y = x.is_infinite().select(V::ZERO, y);
+    }
+
+    y
+}
+
+/// High-precision `$\ln(1 - e^{-x})$`, shared by the f32 and f64 backends at
+/// `Average` precision and above.
+///
+/// No single expression covers the domain. `(1 - exp(-x)).ln()` loses small `x` to
+/// cancellation (`-inf` below one ulp of 1, ~1e13 ulp just above it) and large `x`
+/// to `1 - e^{-x}` rounding to exactly 1 past `x ~ 36`, returning 0 where the answer
+/// is `~-e^{-x}`, a relative error of 1. The split at `$\ln 2$` is Maechler (2012):
+/// below it the subtraction lives inside `exp_m1`, above it inside `ln_1p`, and each
+/// is exact where it is used. Measured at <= 0.9 ulp over `x in [1e-28, 1e6]` for f64.
+///
+/// Each side costs two transcendentals, and real inputs cluster (a log-domain gap is
+/// usually all-small or all-large across a vector), so when the policy allows
+/// branching, a side no lane needs is skipped.
+///
+/// Deriving the `exp` from the `exp_m1` (`e^{-x} = 1 + expm1(-x)`, exact by Sterbenz
+/// for `x > ln 2`) does not work. `expm1(-x)` has already rounded to exactly -1 by
+/// `x ~ 36`, which reintroduces the large-`x` failure at the same measured 8.8e15 ulp.
+///
+/// Domain: `x >= 0`, with `ln1m_expnx(0) = -inf` and negative `x` yielding NaN.
+#[inline(always)]
+pub fn ln1m_expnx_internal<V, E: FloatElement, P>(x: V) -> V
+where
+    V: FloatVectorWithBits<Element = E> + SpecializedTranscendentalMath<E>,
+    P: Policy,
+{
+    let is_lo = x.cmp_le(V::LN_2);
+
+    let mut y = V::ZERO;
+
+    if const { P::POLICY.avoid_branching } || is_lo.any() {
+        y = (-V::exp_m1::<P>(-x)).ln::<P>();
+    }
+
+    if const { P::POLICY.avoid_branching } || !is_lo.all() {
+        y = is_lo.select(y, V::ln_1p::<P>(-V::exp::<P>(-x)));
     }
 
     y
@@ -115,7 +155,7 @@ where
         // unlike sinc, which has x^2/120 with 120 being an exact integer,
         // sinc_pi has pi^4/120, and since pi is irrational and imprecise anyway, we
         // can avoid the exact division by 120 in favor of multiplying by pi^4/120
-        return x2.mul_add(x2.mul_sube(pi_4_frac_120, pi_2_frac_6), V::ONE);
+        return x2.mul_adde(x2.mul_sube(pi_4_frac_120, pi_2_frac_6), V::ONE);
     }
 
     // for very small x, sinc_pi(x) ~ 1 - (pi^2/6)*x^2 + (pi^4/120)*x^4

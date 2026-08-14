@@ -40,7 +40,7 @@ use crate::{
         policy::policies::{ExtraPrecision, LessPrecision},
     },
     register::NativeCapability,
-    vector::*,
+    vector::{ops::BitAndNot, *},
 };
 
 // use super::MathWithPolicy;
@@ -789,13 +789,53 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     #[inline(always)]
     fn compound<P: Policy>(self, n: Self) -> Self {
         // (1 + x)^n = exp(n * ln(1 + x)); routing through ln_1p keeps it accurate for small x.
-        Self::exp::<P>(n * Self::ln_1p::<P>(self))
+        let l = Self::ln_1p::<P>(self);
+        let p = n * l;
+
+        // The Dekker residual below is only a residual if the product is single rounded,
+        // which without FMA hardware would mean emulated FMA, never used in these
+        // kernels. Non-FMA backends keep the uncorrected form (mean ~3.5 vs ~1.8 ulp
+        // over a dense sweep) rather than pay the emulation.
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) || !Self::HAS_TRUE_FMA } {
+            return Self::exp::<P>(p);
+        }
+
+        // Any absolute error in the exponent is relative error in the result, and at a
+        // large |n * l| the product's own rounding dominates everything: half an ulp of
+        // p = 488 (x = 0.05, n = 1e4) is 2.8e-14, i.e. ~250 ulp of the answer. The Dekker
+        // residual recovers that term exactly (a single fused instruction on this
+        // hardware), and first-order correction is all it needs, since
+        // e^(p + lo) = e^p * (1 + lo + O(lo^2)) with lo^2 < 1e-27 relative. What remains
+        // is n * (the single-width error of `ln_1p` itself). Shrinking that needs a
+        // double-double log core.
+        let p_lo = n.mul_sube(l, p);
+        let e = Self::exp::<P>(p);
+
+        // The correction is only meaningful (and only safe) on a finite result: a
+        // legitimate overflow gives e = inf, where `p_lo * inf + inf` is NaN for a
+        // negative residual.
+        e.is_finite().select(p_lo.mul_adde(e, e), e)
     }
 
     #[inline(always)]
     fn powf_m1<P: Policy>(self, e: Self) -> Self {
         // x^e - 1 = expm1(e * ln(x)); avoids the outer cancellation of pow(x, e) - 1.
-        Self::exp_m1::<P>(e * Self::ln::<P>(self))
+        let l = Self::ln::<P>(self);
+        let p = e * l;
+
+        // As in `compound`, the residual needs a real FMA. Non-FMA backends keep the
+        // uncorrected form rather than pay emulation.
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) || !Self::HAS_TRUE_FMA } {
+            return Self::exp_m1::<P>(p);
+        }
+
+        // Same Dekker product-residual as `compound` (see there): expm1(p + lo) =
+        // expm1(p) + e^p * lo = r + (r + 1) * lo to first order.
+        let p_lo = e.mul_sube(l, p);
+        let r = Self::exp_m1::<P>(p);
+
+        // As in `compound`: no correction on an overflowed (infinite) result.
+        r.is_finite().select(p_lo.mul_adde(r + Self::ONE, r), r)
     }
 
     #[inline(always)]
@@ -841,7 +881,7 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
                 }
 
                 // initial guess using reduced precision
-                let mut y = x.powf_p::<LessPrecision<P>>(Self::splat(E::from_ratio(1, N as crate::LargeInt)));
+                let y = x.powf_p::<LessPrecision<P>>(Self::splat(E::from_ratio(1, N as crate::LargeInt)));
 
                 // One iteration of Halley's method for nth root
                 let y_n = y.powi_p::<P>(N as i32);
@@ -849,16 +889,32 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
                 let np1 = Self::splat(E::from_int((N + 1) as crate::LargeInt));
                 let nm1 = Self::splat(E::from_int((N - 1) as crate::LargeInt));
 
-                let n = y * (x - y_n); // half of numerator
-                let d = y_n.mul_adde(np1, x * nm1);
+                // Dimensionless form of the correction: q = y^N / x is ~1 whatever the
+                // magnitude of x, so t ~ guess_error / 2N and nothing here can overflow
+                // or underflow. The textbook `y * (x - y^N) / ((N+1) y^N + (N-1) x)` has
+                // an O(x^{(N+1)/N}) numerator: for N = 5 it overflowed past x ~ 1e269
+                // (returning sign-garbage infinities) and underflowed to zero below
+                // x ~ 1e-250, silently dropping the refinement there. The extra
+                // division's rounding only perturbs t by ~ulp, an O(ulp/2N) relative
+                // effect on y, far below the final rounding.
+                let q = y_n / x;
+                let t = (Self::ONE - q) / q.mul_adde(np1, nm1);
 
-                y += (n + n) / d;
+                // y += 2*y*t
+                let mut y2 = t.mul_adde(y + y, y);
 
-                if const { N & 1 == 1 } {
-                    y = y.neg_c(is_neg);
+                if const { P::POLICY.check_overflow } {
+                    // x = 0 makes q = 0/0 and x = inf makes 1 - inf/inf: NaN in t,
+                    // while the uncorrected guess is already exact for both. NaN
+                    // inputs still pass through (the guess is NaN too).
+                    y2 = (x.cmp_eq(Self::ZERO) | x.is_infinite()).select(y, y2);
                 }
 
-                y
+                if const { N & 1 == 1 } {
+                    y2 = y2.neg_c(is_neg);
+                }
+
+                y2
             }
         }
     }
@@ -1119,6 +1175,107 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         if const { P::POLICY.check_overflow } {
             // a == b == +-inf makes a - b NaN; the answer is that infinity (= m).
             r = d.is_nan().select(m, r);
+        }
+
+        r
+    }
+
+    #[inline(always)]
+    fn logsumexp_n<P: Policy, const N: usize>(mut values: [Self; N]) -> Self {
+        // The empty sum is 0, and ln(0) = -inf: the identity element of logaddexp,
+        // so folding logsumexp_n over any partition of the inputs agrees.
+        if const { N == 0 } {
+            return Self::NEG_INFINITY;
+        }
+
+        if const { N == 1 } {
+            return values[0];
+        }
+
+        // The pairwise form is a max, a subtract and one exp. The general path below
+        // cannot beat that, and `logaddexp` already handles its own edge cases.
+        if const { N == 2 } {
+            return Self::logaddexp::<P>(values[0], values[1]);
+        }
+
+        // Tree-reduced max, and then a tree-reduced sum below: the max gates every
+        // exp and the sum gates the final log, so both reductions sit on the
+        // critical path, where O(log N) dependency depth beats a running fold's
+        // O(N). (`reduce_array` copies, so `values` is still intact after this.)
+        let m = algorithms::reduce_array(values, |a, b| a.max(b));
+
+        let mut r;
+
+        if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+            let mut i = 0;
+            while i < N {
+                values[i] = Self::exp::<P>(values[i] - m);
+                i += 1;
+            }
+
+            algorithms::reduce_in_place(&mut values, |a, b| a + b);
+
+            r = m + Self::ln::<P>(values[0]);
+        } else {
+            // Sum every term _except_ the dominant one, so the total can go into
+            // `ln_1p`. The one term at the max contributes exactly exp(0) = 1, which is
+            // the term `ln_1p` supplies exactly. Summing it in and taking `ln` instead
+            // would round `1 + s` before the log ever saw `s`, and in the usual
+            // log-domain case (one weight dominating the rest) that rounding is the whole
+            // answer.
+            //
+            // `used` is what keeps ties honest: duplicates of the max must still
+            // contribute, so exactly the first lane-wise occurrence is dropped. It is a
+            // serial chain across the loop, but of single-cycle bitwise ops, so the exps
+            // around it stay independent.
+            let mut used = <Self::Mask as GenericMask>::FALSY;
+
+            let mut i = 0;
+            while i < N {
+                let d = values[i] - m;
+                let dominant = d.cmp_eq(Self::ZERO).bitandnot(used);
+
+                used |= dominant;
+                values[i] = Self::exp::<P>(d).nz(dominant);
+
+                i += 1;
+            }
+
+            algorithms::reduce_in_place(&mut values, |a, b| a + b);
+
+            r = m + Self::ln_1p::<P>(values[0]);
+        }
+
+        if const { P::POLICY.check_overflow } {
+            // An infinite (or NaN) max is the answer: every difference against it is
+            // NaN otherwise. All-(-inf) inputs are the log-domain zero and must stay
+            // -inf rather than becoming NaN, which is what makes this worth a select.
+            r = m.is_finite().select(r, m);
+        }
+
+        r
+    }
+
+    #[inline(always)]
+    fn logsubexp<P: Policy>(self, other: Self) -> Self {
+        // ln(e^a - e^b) = a + ln(1 - e^-(a - b)). Nothing here needs a max: the gap has
+        // to be positive for the result to exist at all, so the subtraction is already
+        // the stable one.
+        let d = self - other;
+
+        // `ln(1 - e^-d)` is exactly `ln1m_expnx` of the gap, and the element ladders carry
+        // the regime handling. At Average and above both f32 and f64 use the shared
+        // two-branch Maechler kernel (`generic::ln1m_expnx_internal`, whose docs cover why
+        // no single expression survives both ends of the gap). The lower tiers keep their
+        // cheap forms (f32: the clamped rational approximation, f64: the naive
+        // expression) with the accuracy losses those tiers accept.
+        let mut r = self + Self::ln1m_expnx::<P>(d);
+
+        if const { P::POLICY.check_overflow } {
+            // a == b == -inf is the log-domain 0 - 0: the difference is NaN, but the
+            // answer is 0, i.e. -inf. (a == b == +inf correctly stays NaN, since
+            // inf - inf is not defined.)
+            r = (d.is_nan() & self.cmp_eq(Self::NEG_INFINITY)).select(Self::NEG_INFINITY, r);
         }
 
         r

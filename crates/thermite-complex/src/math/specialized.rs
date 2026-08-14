@@ -194,6 +194,19 @@ pub trait SpecializedComplexMath<E>: ComplexVector<Element = E> {
     /// Builds a complex number from a polar representation `r * exp(i*theta)`.
     fn from_polar<P: Policy>(r: Self::Real, theta: Self::Real) -> Self;
 
+    /// The unit complex number at angle `theta`, `$e^{i\theta} = \cos\theta + i\sin\theta$`.
+    ///
+    /// The `r = 1` case of [`from_polar`](Self::from_polar), which is one `sin_cos` and
+    /// nothing else. No multiply by the modulus, and no zero-modulus guard to run: that
+    /// guard is there to keep `0 * cos(inf)` from going NaN, and a unit modulus cannot
+    /// collapse.
+    #[inline(always)]
+    fn from_angle<P: Policy>(theta: Self::Real) -> Self {
+        let (s, c) = theta.sin_cos_p::<P>();
+
+        Self::from_parts(c, s)
+    }
+
     /// Raises `self` to a *real* power.
     fn powfr<P: Policy>(self, e: Self::Real) -> Self;
 

@@ -242,6 +242,173 @@ macro_rules! real_suite {
                     }
                 }
             }
+
+            /// `logsumexp_n` against a direct oracle over a domain where the naive
+            /// `ln(sum(exp))` is safe, plus the large-magnitude shift that makes the
+            /// function worth having, plus the log-domain edge cases.
+            #[test]
+            fn log_domain_sum() {
+                let mut rng = harness::rng();
+
+                for _ in 0..TRIALS {
+                    let (va, a) = mk(&mut rng, -12.0, 12.0);
+                    let (vb, b) = mk(&mut rng, -12.0, 12.0);
+                    let (vc, c) = mk(&mut rng, -12.0, 12.0);
+                    let (vd, d) = mk(&mut rng, -12.0, 12.0);
+
+                    let lse = |xs: &[f64]| xs.iter().map(|&x| x.exp()).sum::<f64>().ln();
+
+                    // N = 2 delegates to logaddexp; 3 and 4 take the general path.
+                    let w2: Vec<f64> = (0..L).map(|i| lse(&[a[i], b[i]])).collect();
+                    close("logsumexp_n<2>", &rd(V::logsumexp_n([va, vb])), &w2);
+
+                    let w3: Vec<f64> = (0..L).map(|i| lse(&[a[i], b[i], c[i]])).collect();
+                    close("logsumexp_n<3>", &rd(V::logsumexp_n([va, vb, vc])), &w3);
+
+                    let w4: Vec<f64> = (0..L).map(|i| lse(&[a[i], b[i], c[i], d[i]])).collect();
+                    close("logsumexp_n<4>", &rd(V::logsumexp_n([va, vb, vc, vd])), &w4);
+
+                    // Shifting every input by a constant shifts the result by it exactly,
+                    // which is the whole point: `exp(1000.0)` alone is +inf.
+                    let k = 1000.0;
+                    let shifted = rd(V::logsumexp_n([
+                        va + V::splat(k as $e), vb + V::splat(k as $e), vc + V::splat(k as $e),
+                    ]));
+                    let want: Vec<f64> = w3.iter().map(|&w| w + k).collect();
+                    close("logsumexp_n<3> shifted", &shifted, &want);
+                }
+
+                // N = 1 is the identity, N = 0 the identity element of logaddexp.
+                let x = V::splat(2.5 as $e);
+                assert_eq!(rd(V::logsumexp_n([x]))[0], 2.5, "{} logsumexp_n<1>", stringify!($mod));
+                assert!(rd(V::logsumexp_n::<0>([]))[0] == f64::NEG_INFINITY, "{} logsumexp_n<0>", stringify!($mod));
+
+                // Ties must all count: three equal terms are ln(3) above one of them.
+                let t = V::splat(4.0 as $e);
+                close("logsumexp_n ties", &rd(V::logsumexp_n([t, t, t])), &[4.0 + 3.0f64.ln(); L]);
+
+                // The log-domain zero stays zero rather than going NaN.
+                let zero = V::NEG_INFINITY;
+                assert_eq!(
+                    rd(V::logsumexp_n([zero, zero, zero]))[0],
+                    f64::NEG_INFINITY,
+                    "{} logsumexp_n(all -inf)", stringify!($mod)
+                );
+                // ...and a -inf term is simply absent from the sum.
+                close("logsumexp_n with -inf term", &rd(V::logsumexp_n([t, zero, t])), &[4.0 + 2.0f64.ln(); L]);
+                assert!(
+                    rd(V::logsumexp_n([V::INFINITY, t, t]))[0].is_infinite(),
+                    "{} logsumexp_n(+inf)", stringify!($mod)
+                );
+            }
+
+            /// `logsubexp` inverts `logaddexp`, and holds up where the naive
+            /// `ln(e^a - e^b)` overflows.
+            #[test]
+            fn log_domain_difference() {
+                let mut rng = harness::rng();
+
+                for _ in 0..TRIALS {
+                    let (va, a) = mk(&mut rng, -12.0, 12.0);
+                    let (vg, g) = mk(&mut rng, 0.5, 12.0);
+
+                    // b = a - gap, so a > b strictly (the domain of logsubexp).
+                    let vb = va - vg;
+                    let b: Vec<f64> = (0..L).map(|i| a[i] - g[i]).collect();
+
+                    let want: Vec<f64> = (0..L).map(|i| (a[i].exp() - b[i].exp()).ln()).collect();
+                    close("logsubexp", &rd(va.logsubexp(vb)), &want);
+
+                    // It undoes logaddexp: logsubexp(logaddexp(a, b), b) == a.
+                    close("logsubexp(logaddexp(a,b),b)", &rd(va.logaddexp(vb).logsubexp(vb)), &a);
+
+                    // Same shift-invariance as the sum, past where exp() overflows.
+                    let k = 1000.0;
+                    let shifted = rd((va + V::splat(k as $e)).logsubexp(vb + V::splat(k as $e)));
+                    close("logsubexp shifted", &shifted, &want.iter().map(|&w| w + k).collect::<Vec<_>>());
+                }
+
+                // Both ends of the gap, where the single-expression `(1 - exp(-d)).ln()`
+                // form fails: a small gap cancels it to zero (it returns -inf), and a
+                // large one rounds `1 - exp(-d)` to exactly 1 (it returns exactly 0).
+                // Checked by RELATIVE error, since the large-gap answer is ~1e-9 and an
+                // absolute tolerance would not notice a wrong one.
+                for &(a, d) in &[(0.0, 1.0e-14), (0.0, 1.0e-6), (5.0, 1.0e-5), (0.0, 12.0), (0.0, 40.0)] {
+                    let va = V::splat(a as $e);
+                    let vb = V::splat((a - d) as $e);
+
+                    // The gap the kernel actually receives, which is not the one named
+                    // above whenever `a` is too large to hold it (f32 at a = 5 cannot
+                    // represent a 1e-5 gap at all). Judge against that, or this measures
+                    // the test's own input encoding instead of the function.
+                    let (a_act, d_act) = (rd(va)[0], rd(va - vb)[0]);
+                    // Branch-correct scalar oracle: the small-gap form alone reads 0
+                    // past d ~ 36, where `expm1(-d)` has already rounded to -1.
+                    let want = a_act + if d_act <= core::f64::consts::LN_2 {
+                        (-(-d_act).exp_m1()).ln()
+                    } else {
+                        (-(-d_act).exp()).ln_1p()
+                    };
+
+                    let got = rd(va.logsubexp(vb))[0];
+
+                    assert!(
+                        (got - want).abs() <= 1.0e-5 * want.abs(),
+                        "{} logsubexp(a={}, gap={:e}): got {} want {} (rel {:e})",
+                        stringify!($mod), a, d_act, got, want, (got - want).abs() / want.abs()
+                    );
+                }
+
+                // a < b is out of domain above the Worst policy.
+                assert!(
+                    rd(V::splat(1.0 as $e).logsubexp(V::splat(2.0 as $e)))[0].is_nan(),
+                    "{} logsubexp(a < b) should be NaN", stringify!($mod)
+                );
+
+                // The `ln1m_expnx` kernel logsubexp delegates to, directly: a log-spaced
+                // sweep of the whole gap range against the branch-correct scalar oracle,
+                // by RELATIVE error (the large-x answer is ~-e^-x, far below any
+                // absolute tolerance). This is the only coverage that kernel has.
+                use thermite::math::TranscendentalMath;
+                for k in -60..=11 {
+                    let x = (10.0f64).powf(k as f64 / 2.0) as $e;
+                    let xa = rd(V::splat(x))[0];
+
+                    let want = if xa <= core::f64::consts::LN_2 {
+                        (-(-xa).exp_m1()).ln()
+                    } else {
+                        (-(-xa).exp()).ln_1p()
+                    };
+
+                    // Past the format's reach the exact answer (~-e^-x) is subnormal
+                    // or below in the element type, and the default denormal policy
+                    // flushes: a 0 there is tier behavior, not a kernel error. (This
+                    // also skips where the f64 oracle itself has degenerated to 0.)
+                    if want.abs() < <$e>::MIN_POSITIVE as f64 {
+                        continue;
+                    }
+
+                    let got = rd(V::splat(x).ln1m_expnx())[0];
+
+                    assert!(
+                        (got - want).abs() <= 1.0e-5 * want.abs(),
+                        "{} ln1m_expnx({xa:e}): got {got:e} want {want:e}", stringify!($mod)
+                    );
+                }
+
+                // Domain edges: ln(1 - e^0) = ln(0) = -inf, and negative x is NaN.
+                assert_eq!(rd(V::ZERO.ln1m_expnx())[0], f64::NEG_INFINITY, "{} ln1m_expnx(0)", stringify!($mod));
+                assert!(rd(V::splat(-1.0 as $e).ln1m_expnx())[0].is_nan(), "{} ln1m_expnx(-1)", stringify!($mod));
+
+                // a == b is the log-domain zero; all-(-inf) is 0 - 0 and must not be NaN.
+                let x = V::splat(3.0 as $e);
+                assert_eq!(rd(x.logsubexp(x))[0], f64::NEG_INFINITY, "{} logsubexp(a, a)", stringify!($mod));
+                assert_eq!(
+                    rd(V::NEG_INFINITY.logsubexp(V::NEG_INFINITY))[0],
+                    f64::NEG_INFINITY,
+                    "{} logsubexp(-inf, -inf)", stringify!($mod)
+                );
+            }
         }
     };
 }

@@ -364,6 +364,56 @@ fn complex_math_polar() {
     }
 }
 
+/// `from_angle(theta)` is the `r = 1` case of `from_polar`, exactly, and lands on
+/// the unit circle for every angle including the ones past a range reduction.
+#[test]
+fn complex_math_from_angle() {
+    let angles = [
+        0.0,
+        0.25,
+        core::f64::consts::FRAC_PI_2,
+        core::f64::consts::PI,
+        -core::f64::consts::PI,
+        -2.75,
+        7.0,
+        -1e6,
+        1e8,
+    ];
+
+    for theta in angles {
+        let t = V::splat(theta);
+
+        // The defining identity, at both policies: exactly `from_polar` with r = 1,
+        // down to the bit, since the only difference is a multiply by one and a
+        // zero-modulus guard that a unit modulus can never trip.
+        assert_eq!(
+            parts(C::from_angle(t)),
+            parts(C::from_polar(V::ONE, t)),
+            "from_angle({theta}) != from_polar(1, {theta})"
+        );
+        assert_eq!(
+            parts(C::from_angle_p::<Precision>(t)),
+            parts(C::from_polar_p::<Precision>(V::ONE, t)),
+            "from_angle_p({theta}) != from_polar_p(1, {theta})"
+        );
+
+        // On the unit circle whatever the range reduction did with the angle.
+        assert!(
+            (C::from_angle(t).norm().extract::<0>() - 1.0).abs() <= 1e-12,
+            "from_angle({theta}) off the unit circle"
+        );
+
+        // Against `e^(i theta)`. Only at `Precision`: the default policy's range
+        // reduction is not expected to hold an absolute angle for `theta = 1e8`.
+        assert_close(
+            "from_angle == exp(i*theta)",
+            C::from_angle_p::<Precision>(t),
+            (num_complex::Complex64::i() * theta).exp(),
+            1e-13,
+        );
+    }
+}
+
 /// The real-argument powers/logs, and the overflow-safe inverse/division.
 #[test]
 fn complex_math_real_arguments() {
@@ -422,7 +472,7 @@ fn finv_survives_where_inv_overflows() {
 #[test]
 fn generic_over_complex_math() {
     fn unit<T: ComplexMath>(z: T) -> T {
-        T::from_polar(<T::Real as NumericVector>::ONE, z.arg())
+        T::from_angle(z.arg())
     }
 
     let z = unit(c(3.0, 4.0));

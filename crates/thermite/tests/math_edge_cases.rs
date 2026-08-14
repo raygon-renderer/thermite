@@ -300,14 +300,211 @@ fn trig_large_args_average_clamp<S: Simd>(name: &str) {
 }
 
 // -------------------------------------------------------
+// exp-family shoulders: the last binade before overflow and the subnormal
+// underflow zone. Each of these was a real defect:
+//
+// - f64 `exp(709)` returned inf (gate at 708.39; ln(DBL_MAX) is 709.78), and at
+//   Best precision the whole subnormal range returned 0
+// - f64 `exph(-709)` returned -9.8e307: EXPH's `r - 1` reached -1024, which
+//   wraps `pow2n_d`'s biased exponent through the sign bit INSIDE the range gate
+// - f64 `exp_m1(-709.5)` returned garbage instead of -1 for the same reason
+// - f32 `exp_m1(88.5)` returned NaN at the DEFAULT policy (r = 128 is the NaN
+//   exponent field; the answer, 2.7e38, is finite), and `exp_m1(-88.5)` -2.1e38
+// - f32 `exph(88.9)` at Medium was NaN: 2^t overflowed before the halving
+// -------------------------------------------------------
+
+fn exp_shoulders_f64<S: Simd>(name: &str) {
+    type P = Precision;
+
+    let e = |x: f64| Vector::<S::f64x4>::splat(x).exp_p::<P>().extract::<0>();
+    let h = |x: f64| Vector::<S::f64x4>::splat(x).exph_p::<P>().extract::<0>();
+    let m1 = |x: f64| Vector::<S::f64x4>::splat(x).exp_m1_p::<P>().extract::<0>();
+
+    // Best tier reaches the true domain edges via two-part scaling.
+    let got = e(709.78);
+    assert!(
+        got.is_finite() && (got - 1.7928227943945155e308).abs() < 1e294,
+        "[{name}] exp(709.78) should be ~1.79e308, got {got:e}"
+    );
+    assert!(e(709.79).is_infinite(), "[{name}] exp(709.79) overflows");
+
+    // ...including subnormal results down to the very last one.
+    let got = e(-745.0);
+    assert!(got > 0.0 && got < 1e-323, "[{name}] exp(-745) should be the min subnormal, got {got:e}");
+    let got = h(-709.0);
+    assert!(
+        (got - 6.083903753117115e-309).abs() < 1e-315,
+        "[{name}] exph(-709) should be ~6.08e-309, got {got:e}"
+    );
+
+    // exph gets ln 2 more than exp on both sides.
+    assert!(h(710.4).is_finite(), "[{name}] exph(710.4) is representable");
+    assert!(m1(-709.5) == -1.0, "[{name}] exp_m1(-709.5) saturates to exactly -1");
+
+    let got = Vector::<S::f64x4>::splat(1023.9).exp2_p::<P>().extract::<0>();
+    assert!(got.is_finite() && got > 1.6e308, "[{name}] exp2(1023.9) finite, got {got:e}");
+    let got = Vector::<S::f64x4>::splat(-1070.0).exp2_p::<P>().extract::<0>();
+    assert!(got > 0.0, "[{name}] exp2(-1070) is a subnormal, got {got:e}");
+    let got = Vector::<S::f64x4>::splat(308.2).exp10_p::<P>().extract::<0>();
+    assert!(got.is_finite() && got > 1.5e308, "[{name}] exp10(308.2) finite, got {got:e}");
+
+    // Average tier: single-scale, but the widened gate and the low-side clamp
+    // must hold - sign-garbage was returned inside the old gate.
+    let ha = |x: f64| Vector::<S::f64x4>::splat(x).exph_p::<Performance>().extract::<0>();
+    let ma = |x: f64| Vector::<S::f64x4>::splat(x).exp_m1_p::<Performance>().extract::<0>();
+
+    assert!(
+        Vector::<S::f64x4>::splat(709.0).exp_p::<Performance>().extract::<0>().is_finite(),
+        "[{name}] Average exp(709) is representable (gate was 708.39)"
+    );
+    assert!(ha(710.0).is_finite(), "[{name}] Average exph(710) is representable");
+    let got = ha(-709.0);
+    assert!(got == 0.0 && got.is_sign_positive(), "[{name}] Average exph(-709) flushes to +0, got {got:e}");
+    assert!(ma(-709.5) == -1.0, "[{name}] Average exp_m1(-709.5) is exactly -1, got {:e}", ma(-709.5));
+}
+
+fn exp_shoulders_f32<S: Simd>(name: &str) {
+    // Best tier (already asymmetric): unchanged contract.
+    let got = Vector::<S::f32x8>::splat(89.3f32).exph_p::<Precision>().extract::<0>();
+    assert!(got.is_finite() && got > 3.0e38, "[{name}] Best exph(89.3) finite, got {got:e}");
+
+    // Default policy: the NaN and sign-garbage cases.
+    let m1 = |x: f32| Vector::<S::f32x8>::splat(x).exp_m1_p::<Performance>().extract::<0>();
+
+    let got = m1(88.5);
+    assert!(got.is_infinite() && got > 0.0, "[{name}] Performance exp_m1(88.5) is +inf, NOT NaN; got {got:e}");
+    assert!(m1(-88.5) == -1.0, "[{name}] Performance exp_m1(-88.5) is exactly -1, got {:e}", m1(-88.5));
+
+    let got = Vector::<S::f32x8>::splat(-88.0f32).exph_p::<Performance>().extract::<0>();
+    assert!(got == 0.0 && got.is_sign_positive(), "[{name}] Performance exph(-88) flushes to +0, got {got:e}");
+
+    // The widened Performance gate: exp(88) is 1.65e38, representable.
+    let got = Vector::<S::f32x8>::splat(88.0f32).exp_p::<Performance>().extract::<0>();
+    assert!(got.is_finite() && got > 1.6e38, "[{name}] Performance exp(88) finite (gate was 87.3), got {got:e}");
+
+    // Medium tier: the halving now happens in the exponent, so neither end NaNs.
+    let hm = |x: f32| Vector::<S::f32x8>::splat(x).exph_p::<MediumP>().extract::<0>();
+
+    let got = hm(88.9);
+    assert!(
+        got.is_finite() && (got / 2.031188e38 - 1.0).abs() < 1e-2,
+        "[{name}] Medium exph(88.9) should be ~2.03e38, got {got:e}"
+    );
+    let got = hm(-88.5);
+    assert!(got == 0.0, "[{name}] Medium exph(-88.5) flushes to 0, got {got:e}");
+}
+
+// -------------------------------------------------------
+// nth_root at extreme magnitudes. The textbook Halley numerator
+// `y * (x - y^N)` is O(x^{(N+1)/N}): for N = 5 it overflowed past x ~ 1e269
+// (returning sign-garbage infinities), underflowed below x ~ 1e-250 (silently
+// dropping the refinement), and produced NaN at x = 0 and x = inf.
+// -------------------------------------------------------
+
+fn nth_root_extremes<S: Simd>(name: &str) {
+    fn check5<S: Simd>(name: &str, x: f64, want: f64) {
+        let got = Vector::<S::f64x4>::splat(x).nth_root_p::<Precision, 5>().extract::<0>();
+        assert!(
+            (got - want).abs() <= 1e-12 * want.abs(),
+            "[{name}] nth_root5({x:e}): got {got:e}, want {want:e}"
+        );
+    }
+
+    check5::<S>(name, 1e300, 1e60);
+    check5::<S>(name, -1e300, -1e60);
+    check5::<S>(name, 1e-300, 1e-60);
+    check5::<S>(name, 1e269, 6.309573444801933e53); // the old overflow threshold
+
+    // Degenerate inputs: the dimensionless step's q = y^N/x is 0/0 or inf/inf
+    // here, and the guard hands back the (already exact) guess instead.
+    let r5 = |x: f64| Vector::<S::f64x4>::splat(x).nth_root_p::<Precision, 5>().extract::<0>();
+    assert!(r5(0.0) == 0.0, "[{name}] nth_root5(0) = 0, got {:e}", r5(0.0));
+    assert!(r5(f64::INFINITY).is_infinite(), "[{name}] nth_root5(inf) = inf");
+    assert!(r5(f64::NEG_INFINITY) == f64::NEG_INFINITY, "[{name}] nth_root5(-inf) = -inf");
+    assert!(r5(f64::NAN).is_nan(), "[{name}] nth_root5(NaN) = NaN");
+
+    // N = 4 takes the same generic arm at Best; N = 7 stresses a higher power.
+    let got = Vector::<S::f64x4>::splat(1e300).nth_root_p::<Precision, 4>().extract::<0>();
+    assert!((got - 1e75).abs() <= 1e-12 * 1e75, "[{name}] nth_root4(1e300), got {got:e}");
+    let got = Vector::<S::f64x4>::splat(0.0).nth_root_p::<Precision, 4>().extract::<0>();
+    assert!(got == 0.0, "[{name}] nth_root4(0) = 0, got {got:e}");
+    let got = Vector::<S::f64x4>::splat(1e-294).nth_root_p::<Precision, 7>().extract::<0>();
+    assert!((got - 1e-42).abs() <= 1e-12 * 1e-42, "[{name}] nth_root7(1e-294), got {got:e}");
+
+    // The default policy shares the fixed arm.
+    let got = Vector::<S::f64x4>::splat(1e300).nth_root_p::<Performance, 5>().extract::<0>();
+    assert!((got - 1e60).abs() <= 1e-9 * 1e60, "[{name}] Performance nth_root5(1e300), got {got:e}");
+}
+
+// -------------------------------------------------------
+// wrap_angle at large |x|: the old Best path was `x - n * TAU` (fused), which
+// drifts by `n * (2pi - TAU)` ~ 0.04 rad by x = 1e15 and returned outright
+// WRONG angles (e.g. -3.164 for wrap_angle(1e15 + 1), true value +3.110).
+// The Cody-Waite pair carries 2pi to ~110 bits; expected values via mpmath.
+// -------------------------------------------------------
+
+fn wrap_angle_large_args<S: Simd>(name: &str) {
+    use thermite::vector::ops::MulAddExt;
+
+    type Vd<S> = Vector<<S as Simd>::f64x4>;
+    let w = |x: f64| Vector::<S::f64x4>::splat(x).wrap_angle_p::<Precision>().extract::<0>();
+
+    // Valid on every backend: within the exact-product range of the non-FMA
+    // split path (|x| <~ 2^29 * 2 pi ~ 3.4e9) and of course the FMA path.
+    for (x, want) in [
+        (1e8 + 1.0, 2.94269513450401446f64),
+        (-1e8 - 1.0, -2.94269513450401446),
+        (1e9 + 1.0, 1.5773954235013851694),
+        (3e9 + 1.0, 2.7321862705041555082),
+    ] {
+        let got = w(x);
+        assert!(
+            (got - want).abs() <= 1e-9,
+            "[{name}] wrap_angle({x:e}): got {got}, want {want}"
+        );
+    }
+
+    // The full range needs single-rounded products, which only FMA hardware
+    // provides (emulated FMA is never used in these kernels); the non-FMA split
+    // path degrades gradually out here but must stay confined to [-pi, pi).
+    if const { <Vd<S> as MulAddExt<Vd<S>, Vd<S>>>::HAS_TRUE_FMA } {
+        for (x, want) in [
+            (1e15 + 1.0, 3.1096981170701125979f64),
+            (5e15 + 1.0, -1.0178800290086099643),
+            (1e10 + 1.0, 0.49076892783426521717),
+        ] {
+            let got = w(x);
+            assert!(
+                (got - want).abs() <= 1e-9,
+                "[{name}] wrap_angle({x:e}): got {got}, want {want}"
+            );
+        }
+    } else {
+        for x in [1e10 + 1.0, 1e13, 1e15 + 1.0] {
+            let got = w(x);
+            assert!(
+                (-core::f64::consts::PI..core::f64::consts::PI).contains(&got),
+                "[{name}] wrap_angle({x:e}) escaped [-pi, pi): {got}"
+            );
+        }
+    }
+
+    // in range and congruent for f32 too, within the split path's validity
+    let got = Vector::<S::f32x8>::splat(3e5f32).wrap_angle_p::<Precision>().extract::<0>();
+    let want = 3.03432340346f32; // atan2(sin 3e5, cos 3e5) via mpmath
+    assert!(
+        (got - want).abs() <= 1e-4,
+        "[{name}] wrap_angle_f32(3e5): got {got}, want {want}"
+    );
+}
+
+// -------------------------------------------------------
 // Backend instantiations
 // -------------------------------------------------------
 
 macro_rules! suite {
     ($mod_name:ident, $backend:ty, $label:expr) => {
         mod $mod_name {
-            use super::*;
-
             #[test]
             fn ln1p_f32_medium() {
                 super::ln1p_f32_medium::<$backend>($label);
@@ -336,6 +533,26 @@ macro_rules! suite {
             #[test]
             fn trig_large_args_average_clamp() {
                 super::trig_large_args_average_clamp::<$backend>($label);
+            }
+
+            #[test]
+            fn exp_shoulders_f64() {
+                super::exp_shoulders_f64::<$backend>($label);
+            }
+
+            #[test]
+            fn exp_shoulders_f32() {
+                super::exp_shoulders_f32::<$backend>($label);
+            }
+
+            #[test]
+            fn nth_root_extremes() {
+                super::nth_root_extremes::<$backend>($label);
+            }
+
+            #[test]
+            fn wrap_angle_large_args() {
+                super::wrap_angle_large_args::<$backend>($label);
             }
         }
     };

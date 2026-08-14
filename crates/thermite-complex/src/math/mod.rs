@@ -104,6 +104,14 @@ decl_complex_math! {
         /// Builds a complex number from a polar representation `r * exp(i*theta)`.
         fn from_polar[][](r: Self::Real, theta: Self::Real) -> Self;
 
+        /// The unit complex number at angle `theta`, `$e^{i\theta} = \cos\theta + i\sin\theta$`.
+        ///
+        /// The `r = 1` case of [`from_polar`](ComplexMath::from_polar), and cheaper than
+        /// doing it that way, it's just one `sin_cos` and nothing else. This is the
+        /// rotation/phasor constructor, for twiddle factors, unit-circle sampling, and the
+        /// angle term of an [`expf`](ComplexMath::expf).
+        fn from_angle[][](theta: Self::Real) -> Self;
+
         /// Raises `self` to a real power.
         ///
         /// The complex-exponent form is [`powf`](thermite::math::TranscendentalMath::powf).
@@ -155,7 +163,7 @@ impl<V: RealFloatVector> SpecializedComplexMath<Complex<V::Element>> for Complex
         // is what every caller here wants: once the modulus has collapsed to zero the
         // result is the origin whatever direction it was approached from, but
         // `r * cos(theta)` still reads `0 * NaN`. `z^(1 + i)` at z = 0 has a genuine
-        // -inf angle - the spiral never settles - and comes out NaN without this.
+        // -inf angle (the spiral never settles) and comes out NaN without this.
         //
         // The `is_finite` test is what keeps it honest: a finite angle is left exactly
         // as it was, signed zeros included, so nothing well-defined moves.

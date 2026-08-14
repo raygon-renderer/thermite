@@ -830,7 +830,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             return x.ln1m_expnx_ext_p::<P>(x.ln_p::<P>());
         }
 
-        (V::ONE - (-x).exp_p::<P>()).ln_p::<P>()
+        super::generic::ln1m_expnx_internal::<V, f32, P>(x)
     }
 
     #[inline(always)]
@@ -898,14 +898,42 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
         let x = self;
         let n = ((x + Self::PI) * (Self::FRAC_1_PI * Self::HALF)).floor();
 
-        if const { Self::HAS_TRUE_FMA || P::POLICY.precision.le(PrecisionPolicy::Average) } {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
             return n.nmul_adde(Self::TAU, x);
         }
 
-        // Cody-Waite: split TAU so n * tau_hi is exact
-        let tau_hi: V = crate::const_splat!(f32: hexf::hexf32!("0x1.921fb60000000p+2"));
-        let tau_lo: V = crate::const_splat!(f32: hexf::hexf32!("-0x1.777a5c0000000p-23"));
-        (x - n * tau_hi) - n * tau_lo
+        // Cody-Waite against the TRUE 2 pi. See the f64 twin in `pd.rs` for the full
+        // story. fl32(2 pi) is 2 pi to only half an f32 ulp (1.7e-7), so a fused
+        // `x - n * TAU` alone drifts by `n * 1.7e-7`.
+        let mut r = if const { Self::HAS_TRUE_FMA } {
+            // Two fused steps (the estimating forms are single instructions here, so
+            // emulated FMA is never used): tau_hi = fl32(2 pi), tau_lo the next 24 bits.
+            let tau_hi: V = crate::const_splat!(f32: hexf::hexf32!("0x1.921fb60000000p+2"));
+            let tau_lo: V = crate::const_splat!(f32: hexf::hexf32!("-0x1.777a5c0000000p-23"));
+
+            let r = n.nmul_adde(tau_hi, x);
+            n.nmul_adde(tau_lo, r)
+        } else {
+            // No FMA: exact-by-construction split, plain mul/sub only, as in the f64
+            // twin. 8-bit parts keep `n * part` exact while bits(n) <= 16 (8 + 16 = 24),
+            // and with the full-mantissa tail the constant reaches 2 pi * 2^-49.
+            // Measured ~0.4 ulp within validity |x| <~ 2^16 * 2 pi ~ 4.1e5, decaying
+            // gradually beyond (the FMA path reaches ~2^24 pi).
+            let tau_a: V = crate::const_splat!(f32: hexf::hexf32!("0x1.92p+2"));
+            let tau_b: V = crate::const_splat!(f32: hexf::hexf32!("0x1.fcp-10"));
+            let tau_c: V = crate::const_splat!(f32: hexf::hexf32!("-0x1.58p-19"));
+            let tau_d: V = crate::const_splat!(f32: hexf::hexf32!("0x1.10b462p-28"));
+
+            (((x - n * tau_a) - n * tau_b) - n * tau_c) - n * tau_d
+        };
+
+        // One-period repair for a floor that landed on the wrong side of a seam. Beyond
+        // |x| ~ 2^24 * pi the f32 quotient stops determining the period at all
+        // (ulp(x) > 2 pi there).
+        r = r.add_c(r.cmp_lt(-Self::PI), Self::TAU);
+        r = r.sub_c(r.cmp_ge(Self::PI), Self::TAU);
+
+        r
     }
 
     #[inline(always)]
@@ -1352,18 +1380,30 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
             _ => unreachable!("Invalid MODE for exp_f_internal"),
         };
 
+        // Fold EXPH's halving into the exponent instead of multiplying by 0.5 after:
+        // one subtract replaces a multiply, and `2^t` no longer overflows to NaN a
+        // full binade before the halved result would (`exph(88.9)` was NaN while the
+        // answer, 2.03e38, is representable).
+        if const { MODE == EXP_MODE_EXPH } {
+            t -= V::ONE;
+        }
+
         // `ci` below scales by adding `i << 23` into the exponent field, which carries
-        // into the sign bit once `127 + i` leaves `[0, 255]` - the result wraps to a
+        // into the sign bit once `127 + i` leaves `[0, 255]`, so the result wraps to a
         // negative number instead of saturating. The range fixup at the end of this
-        // function repairs it, but only under `check_overflow`; `UltraPerformance` and
-        // `HighPerformance` turn that off and Medium precision lands right here.
-        //
-        // Clamping the base-2 exponent saturates to roughly `f32::MAX` rather than to
-        // infinity (the field tops out at 254, `cf`'s mantissa being non-zero - pinning
-        // it to 255 would make a NaN, which is worse than a large finite). Monotone and
-        // sign-correct, which the wrap was not.
+        // function repairs the high side under `check_overflow`, but the low side wraps
+        // _inside_ the range gate (EXPH's `t - 1` and EXPM1's gate both reach past -127,
+        // and `exp_m1(-88.5)` returned -2.1e38 instead of -1), so it is saturated
+        // unconditionally. `i = -127` is the all-zero exponent field, so underflow lands
+        // on a clean +0-ish subnormal, and the M1 modes on -1.
+        t = t.max(crate::const_splat!(f32: -127.0));
+
+        // The high-side clamp stays for the policies with no range fixup
+        // (`UltraPerformance`, `HighPerformance`). The field tops out at 254, `cf`'s
+        // mantissa being non-zero. Pinning it to 255 would make a NaN, which is worse
+        // than a large finite. Monotone and sign-correct, which the wrap was not.
         if const { !P::POLICY.check_overflow } {
-            t = t.clamp(crate::const_splat!(f32: -127.0), crate::const_splat!(f32: 127.0));
+            t = t.min(crate::const_splat!(f32: 127.0));
         }
 
         let fi = t.floor();
@@ -1401,9 +1441,9 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
         let z = V::from_bits(ci);
 
         match MODE {
-            EXP_MODE_EXPH => z.scale(0.5),
+            // EXPH's halving already happened in the exponent (`t -= 1` above)
             EXP_MODE_EXPM1 | EXP_MODE_POW2M1 | EXP_MODE_POW10M1 => z - V::ONE,
-            EXP_MODE_EXP | EXP_MODE_POW2 | EXP_MODE_POW10 => z,
+            EXP_MODE_EXP | EXP_MODE_EXPH | EXP_MODE_POW2 | EXP_MODE_POW10 => z,
             _ => unreachable!("Invalid MODE for exp_f_internal"),
         }
     } else {
@@ -1445,16 +1485,25 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
             .poly_rev_p::<P, _>(&[1.0 / 5040.0, 1.0 / 720.0, 1.0 / 120.0, 1.0 / 24.0, 1.0 / 6.0, 1.0 / 2.0])
             .mul_adde(x * x, x);
 
-        // As in the Medium path above and `exp_d_internal`: `pow2n_f` wraps through the
-        // sign bit without the range fixup. No built-in policy reaches here with
-        // `check_overflow` off (they are all Average or better *and* checked), so this
-        // is for custom policies; it costs nothing for the rest.
-        if const { !P::POLICY.check_overflow } {
-            r = r.clamp(crate::const_splat!(f32: -127.0), crate::const_splat!(f32: 127.0));
-        }
-
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
-            let n2 = pow2n_f::<V>(r);
+            // As in the Medium path above and `exp_d_internal`: `pow2n_f` wraps through
+            // the sign bit outside `[-127, 127]`. The low side wraps inside the range
+            // gate (EXPH's `r - 1` and EXPM1's gate reach -128, and `exph(-88)` returned
+            // -1.75e38), so it saturates unconditionally. `r = -127` is the all-zero
+            // field, landing underflow on +0 and the M1 modes on exactly -1. The high
+            // side only wraps past the gate, whose select repairs it under
+            // `check_overflow`. The clamp stays for the policies that turn that off
+            // (`UltraPerformance`, `HighPerformance`).
+            //
+            // Kept out of the Best branch below, since `pow2n_f_safe` needs the true `r`
+            // to form subnormal scales.
+            let mut rc = r.max(crate::const_splat!(f32: -127.0));
+
+            if const { !P::POLICY.check_overflow } {
+                rc = rc.min(crate::const_splat!(f32: 127.0));
+            }
+
+            let n2 = pow2n_f::<V>(rc);
 
             match MODE {
                 EXP_MODE_EXPM1 | EXP_MODE_POW2M1 | EXP_MODE_POW10M1 => z.mul_adde(n2, n2 - V::ONE),
@@ -1491,12 +1540,17 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
 
             in_range &= x0.cmp_ge(V::splat(min_x)) & x0.cmp_le(V::splat(max_x));
         } else {
+            // The single-scale bound: `round(x log2 e)` (minus one for EXPH) must stay
+            // <= 127, and `(1 + z) * 2^127` tops out safely below FLT_MAX. EXPH gets a
+            // binade more than EXPM1 from its exponent decrement. The two used to share
+            // 89.0, which put EXPM1's `r` at 128 (the NaN exponent field) for x in
+            // (88.4, 88.72], all finite results.
             #[rustfmt::skip]
             let max_x = const { match MODE {
-                EXP_MODE_EXP => 87.3,
+                EXP_MODE_EXP | EXP_MODE_EXPM1 => 88.3, // round(x log2 e) <= 127
                 EXP_MODE_POW2 | EXP_MODE_POW2M1 => 126.0,
                 EXP_MODE_POW10 | EXP_MODE_POW10M1 => 37.9,
-                EXP_MODE_EXPH | EXP_MODE_EXPM1 => 89.0,
+                EXP_MODE_EXPH => 89.0,                 // one binade higher
 
                 _ => panic!("Invalid MODE for exp_f_internal"),
             }};
