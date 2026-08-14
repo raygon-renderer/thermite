@@ -15,6 +15,12 @@ default-members = [
     "tests/wasm-runner",
 ]
 
+# Someone complained about setting `resolver = "3"` in a workspace with 2024 edition members,
+# but without it I get this warning, so I've added it back:
+# `warning: virtual workspace defaulting to `resolver = "1"` despite one or more
+#   workspace members being on edition 2024 which implies `resolver = "3"``
+resolver = "3"
+
 [workspace.package]
 version = "0.2.1"
 edition = "2024"
