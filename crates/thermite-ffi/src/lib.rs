@@ -1015,7 +1015,11 @@ decl_methods! {
         /// Computes ln(exp(a) + exp(b)) without overflowing on large inputs or
         /// underflowing on small ones. The log-sum-exp primitive behind softmax
         /// and most probability code that works in log space.
-        (a, b)logaddexp v logaddexp(y)
+        (a, b)logaddexp v logaddexp(y),
+        /// Computes ln(exp(a) - exp(b)) without overflowing on large inputs, the
+        /// subtractive counterpart of logaddexp. Defined for a >= b, and -inf at
+        /// a == b; a < b has no result and yields NaN at the higher precision policies.
+        (a, b)logsubexp v logsubexp(y)
     ],
     MAPPING: SpatialMathWithPolicy [
         (x, y)hypot v hypot(out)
