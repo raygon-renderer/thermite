@@ -644,7 +644,7 @@ where
         //   if y < 0:  res -= pi
 
         let x_is_neg = x_value.cmp_lt(V::ZERO);
-        let offset = Self::PI.neg_c(x_is_neg);
+        let offset = Self::PI.neg_c(y_is_neg);
 
         res = x_is_neg.select(res + offset, res);
 

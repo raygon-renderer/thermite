@@ -325,7 +325,6 @@ where
     //fn bessel_j<P: Policy, const N: usize>(self) -> Self {
     //    todo!()
     //}
-
 }
 
 /// All three of the shared `expint` kernel's decisions change over C. Everything else

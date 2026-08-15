@@ -330,7 +330,10 @@ fn exp_shoulders_f64<S: Simd>(name: &str) {
 
     // ...including subnormal results down to the very last one.
     let got = e(-745.0);
-    assert!(got > 0.0 && got < 1e-323, "[{name}] exp(-745) should be the min subnormal, got {got:e}");
+    assert!(
+        got > 0.0 && got < 1e-323,
+        "[{name}] exp(-745) should be the min subnormal, got {got:e}"
+    );
     let got = h(-709.0);
     assert!(
         (got - 6.083903753117115e-309).abs() < 1e-315,
@@ -342,11 +345,17 @@ fn exp_shoulders_f64<S: Simd>(name: &str) {
     assert!(m1(-709.5) == -1.0, "[{name}] exp_m1(-709.5) saturates to exactly -1");
 
     let got = Vector::<S::f64x4>::splat(1023.9).exp2_p::<P>().extract::<0>();
-    assert!(got.is_finite() && got > 1.6e308, "[{name}] exp2(1023.9) finite, got {got:e}");
+    assert!(
+        got.is_finite() && got > 1.6e308,
+        "[{name}] exp2(1023.9) finite, got {got:e}"
+    );
     let got = Vector::<S::f64x4>::splat(-1070.0).exp2_p::<P>().extract::<0>();
     assert!(got > 0.0, "[{name}] exp2(-1070) is a subnormal, got {got:e}");
     let got = Vector::<S::f64x4>::splat(308.2).exp10_p::<P>().extract::<0>();
-    assert!(got.is_finite() && got > 1.5e308, "[{name}] exp10(308.2) finite, got {got:e}");
+    assert!(
+        got.is_finite() && got > 1.5e308,
+        "[{name}] exp10(308.2) finite, got {got:e}"
+    );
 
     // Average tier: single-scale, but the widened gate and the low-side clamp
     // must hold - sign-garbage was returned inside the old gate.
@@ -354,33 +363,61 @@ fn exp_shoulders_f64<S: Simd>(name: &str) {
     let ma = |x: f64| Vector::<S::f64x4>::splat(x).exp_m1_p::<Performance>().extract::<0>();
 
     assert!(
-        Vector::<S::f64x4>::splat(709.0).exp_p::<Performance>().extract::<0>().is_finite(),
+        Vector::<S::f64x4>::splat(709.0)
+            .exp_p::<Performance>()
+            .extract::<0>()
+            .is_finite(),
         "[{name}] Average exp(709) is representable (gate was 708.39)"
     );
     assert!(ha(710.0).is_finite(), "[{name}] Average exph(710) is representable");
     let got = ha(-709.0);
-    assert!(got == 0.0 && got.is_sign_positive(), "[{name}] Average exph(-709) flushes to +0, got {got:e}");
-    assert!(ma(-709.5) == -1.0, "[{name}] Average exp_m1(-709.5) is exactly -1, got {:e}", ma(-709.5));
+    assert!(
+        got == 0.0 && got.is_sign_positive(),
+        "[{name}] Average exph(-709) flushes to +0, got {got:e}"
+    );
+    assert!(
+        ma(-709.5) == -1.0,
+        "[{name}] Average exp_m1(-709.5) is exactly -1, got {:e}",
+        ma(-709.5)
+    );
 }
 
 fn exp_shoulders_f32<S: Simd>(name: &str) {
     // Best tier (already asymmetric): unchanged contract.
     let got = Vector::<S::f32x8>::splat(89.3f32).exph_p::<Precision>().extract::<0>();
-    assert!(got.is_finite() && got > 3.0e38, "[{name}] Best exph(89.3) finite, got {got:e}");
+    assert!(
+        got.is_finite() && got > 3.0e38,
+        "[{name}] Best exph(89.3) finite, got {got:e}"
+    );
 
     // Default policy: the NaN and sign-garbage cases.
     let m1 = |x: f32| Vector::<S::f32x8>::splat(x).exp_m1_p::<Performance>().extract::<0>();
 
     let got = m1(88.5);
-    assert!(got.is_infinite() && got > 0.0, "[{name}] Performance exp_m1(88.5) is +inf, NOT NaN; got {got:e}");
-    assert!(m1(-88.5) == -1.0, "[{name}] Performance exp_m1(-88.5) is exactly -1, got {:e}", m1(-88.5));
+    assert!(
+        got.is_infinite() && got > 0.0,
+        "[{name}] Performance exp_m1(88.5) is +inf, NOT NaN; got {got:e}"
+    );
+    assert!(
+        m1(-88.5) == -1.0,
+        "[{name}] Performance exp_m1(-88.5) is exactly -1, got {:e}",
+        m1(-88.5)
+    );
 
-    let got = Vector::<S::f32x8>::splat(-88.0f32).exph_p::<Performance>().extract::<0>();
-    assert!(got == 0.0 && got.is_sign_positive(), "[{name}] Performance exph(-88) flushes to +0, got {got:e}");
+    let got = Vector::<S::f32x8>::splat(-88.0f32)
+        .exph_p::<Performance>()
+        .extract::<0>();
+    assert!(
+        got == 0.0 && got.is_sign_positive(),
+        "[{name}] Performance exph(-88) flushes to +0, got {got:e}"
+    );
 
     // The widened Performance gate: exp(88) is 1.65e38, representable.
     let got = Vector::<S::f32x8>::splat(88.0f32).exp_p::<Performance>().extract::<0>();
-    assert!(got.is_finite() && got > 1.6e38, "[{name}] Performance exp(88) finite (gate was 87.3), got {got:e}");
+    assert!(
+        got.is_finite() && got > 1.6e38,
+        "[{name}] Performance exp(88) finite (gate was 87.3), got {got:e}"
+    );
 
     // Medium tier: the halving now happens in the exponent, so neither end NaNs.
     let hm = |x: f32| Vector::<S::f32x8>::splat(x).exph_p::<MediumP>().extract::<0>();
@@ -420,20 +457,40 @@ fn nth_root_extremes<S: Simd>(name: &str) {
     let r5 = |x: f64| Vector::<S::f64x4>::splat(x).nth_root_p::<Precision, 5>().extract::<0>();
     assert!(r5(0.0) == 0.0, "[{name}] nth_root5(0) = 0, got {:e}", r5(0.0));
     assert!(r5(f64::INFINITY).is_infinite(), "[{name}] nth_root5(inf) = inf");
-    assert!(r5(f64::NEG_INFINITY) == f64::NEG_INFINITY, "[{name}] nth_root5(-inf) = -inf");
+    assert!(
+        r5(f64::NEG_INFINITY) == f64::NEG_INFINITY,
+        "[{name}] nth_root5(-inf) = -inf"
+    );
     assert!(r5(f64::NAN).is_nan(), "[{name}] nth_root5(NaN) = NaN");
 
     // N = 4 takes the same generic arm at Best; N = 7 stresses a higher power.
-    let got = Vector::<S::f64x4>::splat(1e300).nth_root_p::<Precision, 4>().extract::<0>();
-    assert!((got - 1e75).abs() <= 1e-12 * 1e75, "[{name}] nth_root4(1e300), got {got:e}");
-    let got = Vector::<S::f64x4>::splat(0.0).nth_root_p::<Precision, 4>().extract::<0>();
+    let got = Vector::<S::f64x4>::splat(1e300)
+        .nth_root_p::<Precision, 4>()
+        .extract::<0>();
+    assert!(
+        (got - 1e75).abs() <= 1e-12 * 1e75,
+        "[{name}] nth_root4(1e300), got {got:e}"
+    );
+    let got = Vector::<S::f64x4>::splat(0.0)
+        .nth_root_p::<Precision, 4>()
+        .extract::<0>();
     assert!(got == 0.0, "[{name}] nth_root4(0) = 0, got {got:e}");
-    let got = Vector::<S::f64x4>::splat(1e-294).nth_root_p::<Precision, 7>().extract::<0>();
-    assert!((got - 1e-42).abs() <= 1e-12 * 1e-42, "[{name}] nth_root7(1e-294), got {got:e}");
+    let got = Vector::<S::f64x4>::splat(1e-294)
+        .nth_root_p::<Precision, 7>()
+        .extract::<0>();
+    assert!(
+        (got - 1e-42).abs() <= 1e-12 * 1e-42,
+        "[{name}] nth_root7(1e-294), got {got:e}"
+    );
 
     // The default policy shares the fixed arm.
-    let got = Vector::<S::f64x4>::splat(1e300).nth_root_p::<Performance, 5>().extract::<0>();
-    assert!((got - 1e60).abs() <= 1e-9 * 1e60, "[{name}] Performance nth_root5(1e300), got {got:e}");
+    let got = Vector::<S::f64x4>::splat(1e300)
+        .nth_root_p::<Performance, 5>()
+        .extract::<0>();
+    assert!(
+        (got - 1e60).abs() <= 1e-9 * 1e60,
+        "[{name}] Performance nth_root5(1e300), got {got:e}"
+    );
 }
 
 // -------------------------------------------------------
@@ -490,7 +547,9 @@ fn wrap_angle_large_args<S: Simd>(name: &str) {
     }
 
     // in range and congruent for f32 too, within the split path's validity
-    let got = Vector::<S::f32x8>::splat(3e5f32).wrap_angle_p::<Precision>().extract::<0>();
+    let got = Vector::<S::f32x8>::splat(3e5f32)
+        .wrap_angle_p::<Precision>()
+        .extract::<0>();
     let want = 3.03432340346f32; // atan2(sin 3e5, cos 3e5) via mpmath
     assert!(
         (got - want).abs() <= 1e-4,

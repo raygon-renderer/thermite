@@ -231,4 +231,3 @@ pub trait SpecializedComplexMath<E>: ComplexVector<Element = E> {
         self * rhs.finv::<P>()
     }
 }
-
