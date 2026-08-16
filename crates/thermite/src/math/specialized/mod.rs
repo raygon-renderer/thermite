@@ -50,6 +50,15 @@ use generic_array::{ArrayLength, GenericArray, typenum::Unsigned};
 
 mod generic;
 
+/// Scalarized `libm` machinery for the [`Reference`](PrecisionPolicy::Reference) tier.
+///
+/// Public because the sibling crates wire their own reference arms with it
+/// (`thermite-special` maps `erf`/`tgamma`/`lgamma` onto libm the same way), and
+/// `#[doc(hidden)]` because that is the only audience. Depend on the tier's contract,
+/// not on these helpers.
+#[doc(hidden)]
+pub mod reference;
+
 impl<E, V> SpecializedFloatMath<E> for V
 where
     E: FloatElement,

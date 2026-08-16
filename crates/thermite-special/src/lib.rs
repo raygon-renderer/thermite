@@ -32,9 +32,9 @@ pub mod primal_tables;
 
 use crate::specialized::{CarlsonKind, EllipticKind, WrapTo};
 
-// The spherical-harmonic support items: generic callers of `spherical_harmonics`
-// must name `ShConsts` in a where-clause, so it has to be reachable from the root.
-pub use crate::specialized::{CONDON_SHORTLEY, MAX_SH_DEGREE, NO_PHASE, ShConsts, ShTable};
+// Spherical-harmonic support: `ShTable` appears in the public signatures below, and
+// `MAX_SH_DEGREE` is the documented degree at which they leave the unrolled path.
+pub use crate::specialized::{MAX_SH_DEGREE, ShTable};
 
 /// Elliptic integral request structs and the traits they implement:
 ///
@@ -649,13 +649,13 @@ decl_math! {
         /// `L` up to [`MAX_SH_DEGREE`] (above that it takes the rolled general path,
         /// which is correct at any degree but roughly 10x slower).
         ///
-        /// `CS` picks the phase convention: [`NO_PHASE`] gives the standard real-SH
-        /// tables (`$Y_{11} = \sqrt{3/4\pi}\,x$`), [`CONDON_SHORTLEY`] negates every
-        /// odd-`|m|` harmonic to match Sloan's `SHEval` and the physics convention
-        /// (`$Y_{11} = -\sqrt{3/4\pi}\,x$`). The choice is baked into a constant
-        /// table, so neither costs an instruction, but mixing the two silently
-        /// corrupts any projection/reconstruction round-trip, which is why it must
-        /// be named.
+        /// `CS` picks the phase convention. `false` gives the standard real-SH
+        /// tables (`$Y_{11} = \sqrt{3/4\pi}\,x$`); `true` applies the Condon-Shortley
+        /// `$(-1)^{|m|}$` phase, negating every odd-`|m|` harmonic to match Sloan's
+        /// `SHEval` and the physics convention (`$Y_{11} = -\sqrt{3/4\pi}\,x$`). The
+        /// choice is baked into a constant table, so neither costs an instruction,
+        /// but mixing the two silently corrupts any projection/reconstruction
+        /// round-trip, which is why it must be named.
         ///
         /// `N` must equal `(L + 1)^2` (compile-time checked). The direction is
         /// assumed unit-length, and nothing renormalizes. See
@@ -664,19 +664,19 @@ decl_math! {
         ///
         /// ```
         /// use thermite::prelude::*;
-        /// use thermite_special::{CONDON_SHORTLEY, NO_PHASE, RealSpecialMath};
+        /// use thermite_special::RealSpecialMath;
         ///
         /// type V = Vector<f64>;
         /// let (x, y, z) = (V::splat(0.6), V::splat(0.0), V::splat(0.8));
         ///
         /// let mut sh = [V::ZERO; 9];
-        /// V::spherical_harmonics::<2, 9, NO_PHASE>(x, y, z, &mut sh);
+        /// V::spherical_harmonics::<2, 9, false>(x, y, z, &mut sh);
         /// // Y(1,1) = sqrt(3/4pi) * x
         /// assert!((sh[3].extract::<0>() - 0.48860251190292 * 0.6).abs() < 1e-14);
         ///
-        /// // The other convention negates odd |m|, and agrees on even |m|.
+        /// // Condon-Shortley negates odd |m|, and agrees on even |m|.
         /// let mut cs = [V::ZERO; 9];
-        /// V::spherical_harmonics::<2, 9, CONDON_SHORTLEY>(x, y, z, &mut cs);
+        /// V::spherical_harmonics::<2, 9, true>(x, y, z, &mut cs);
         /// assert_eq!(cs[3].extract::<0>(), -sh[3].extract::<0>());
         /// assert_eq!(cs[8].extract::<0>(), sh[8].extract::<0>());
         /// ```
@@ -700,14 +700,14 @@ decl_math! {
         ///
         /// ```
         /// use thermite::prelude::*;
-        /// use thermite_special::{NO_PHASE, RealSpecialMath, ShTable};
+        /// use thermite_special::{RealSpecialMath, ShTable};
         ///
         /// type V = Vector<f64>;
         /// const L: usize = 3;
         /// const N: usize = (L + 1) * (L + 1);
         ///
         /// let mut table = ShTable::<V, N>::zeroed();
-        /// V::spherical_harmonics_table::<L, N, NO_PHASE>(&mut table);
+        /// V::spherical_harmonics_table::<L, N, false>(&mut table);
         ///
         /// let mut sh = [V::ZERO; N];
         /// for &(x, y, z) in &[(1.0, 0.0, 0.0), (0.0, 1.0, 0.0)] {

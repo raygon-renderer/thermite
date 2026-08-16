@@ -758,8 +758,8 @@ pub use generic::elliptic::{
 // the same way as the elliptic internals: the tables trait must be nameable by generic
 // callers, and the tests drive the kernels through this path.
 pub use generic::sh::{
-    CONDON_SHORTLEY, MAX_DEGREE as MAX_SH_DEGREE, NO_PHASE, ShConsts, ShTable, sh_d_impl, sh_eval_d_impl, sh_eval_impl,
-    sh_eval_lifted_impl, sh_eval_mixed_impl, sh_impl, sh_table_impl,
+    MAX_DEGREE as MAX_SH_DEGREE, ShConsts, ShTable, sh_d_impl, sh_eval_d_impl, sh_eval_impl, sh_eval_lifted_impl,
+    sh_eval_mixed_impl, sh_impl, sh_table_impl,
 };
 
 /// Specialized implementation trait for real-only special math functions.

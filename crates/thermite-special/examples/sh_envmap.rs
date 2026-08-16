@@ -46,7 +46,7 @@
 use std::f32::consts::PI;
 
 use thermite::prelude::*;
-use thermite_special::{NO_PHASE, RealSpecialMath};
+use thermite_special::RealSpecialMath;
 
 /// Face order is the usual cubemap one: +X, -X, +Y, -Y, +Z, -Z.
 const FACES: usize = 6;
@@ -217,7 +217,7 @@ fn project_kernel<S: FloatSimd<f32>, const L: usize, const N: usize>(
         let w = V::<S>::from_slice(&lw[..lanes]);
 
         let mut basis = [V::<S>::ZERO; N];
-        V::<S>::spherical_harmonics::<L, N, NO_PHASE>(x, y, z, &mut basis);
+        V::<S>::spherical_harmonics::<L, N, false>(x, y, z, &mut basis);
 
         for c in 0..3 {
             let radiance = V::<S>::from_slice(&lc[c][..lanes]) * w;
@@ -268,7 +268,7 @@ fn reconstruct_kernel<S: FloatSimd<f32>, const L: usize, const N: usize>(
         let z = V::<S>::from_slice(&lz[..lanes]);
 
         let mut basis = [V::<S>::ZERO; N];
-        V::<S>::spherical_harmonics::<L, N, NO_PHASE>(x, y, z, &mut basis);
+        V::<S>::spherical_harmonics::<L, N, false>(x, y, z, &mut basis);
 
         let mut rgb = [V::<S>::ZERO; 3];
         for c in 0..3 {

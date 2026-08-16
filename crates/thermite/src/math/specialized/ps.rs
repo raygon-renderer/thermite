@@ -8,6 +8,8 @@ use core::f32::consts::{FRAC_1_PI, FRAC_PI_2, LN_10, LOG2_E, SQRT_2};
 
 use super::*;
 
+use super::reference::{is_reference, map1, map1x2, map2};
+
 // The `PrimalProjection<Primal = V>` pin: the rigid `PrimalProjection` supertrait
 // of `SpecializedCoreMath` shadows the fixpoint blanket impl on a generic `V`, so
 // without it `V::Primal` would not normalize to `V` in the `poly_primal` body.
@@ -41,6 +43,15 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedPrimalMath<f32> for V {}
 
 #[rustfmt::skip]
 impl<V: FloatVectorWithBits<Element = f32>> SpecializedSpatialMath<f32> for V {
+    #[inline(always)]
+    fn hypot<P: Policy>(self, y: Self) -> Self {
+        if const { is_reference::<P>() } {
+            return map2(self, y, libm::hypotf);
+        }
+
+        Self::hypot_n::<P, 2>([self, y])
+    }
+
     #[inline(always)] fn l2_norm_squared<P: Policy>(self) -> Self { self * self }
     #[inline(always)] fn l2_norm<P: Policy>(self) -> Self { self.abs() }
     #[inline(always)] fn l1_norm<P: Policy>(self) -> Self { self.abs() }
@@ -59,11 +70,23 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn log_n<P: Policy, const N: usize>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return match N {
+                2 => map1(self, |x| libm::log2(x as f64) as f32),
+                10 => map1(self, |x| libm::log10(x as f64) as f32),
+                _ => map1(self, |x| (libm::log(x as f64) / libm::log(N as f64)) as f32),
+            };
+        }
+
         super::generic::log_n_internal::<V, f32, P, N>(self)
     }
 
     #[inline(always)]
     fn sin_cos<P: Policy>(self) -> (Self, Self) {
+        if const { is_reference::<P>() } {
+            return map1x2(self, libm::sincosf);
+        }
+
         if const {
             P::POLICY.precision.le(PrecisionPolicy::Average)
                 && Self::NATIVE_CAP.has(NativeCapability::SIN | NativeCapability::COS)
@@ -76,6 +99,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn sin<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::sinf);
+        }
+
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::SIN) } {
             return unsafe { self.native_sin::<P>() };
         }
@@ -85,6 +112,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn cos<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::cosf);
+        }
+
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::COS) } {
             return unsafe { self.native_cos::<P>() };
         }
@@ -94,6 +125,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn tan<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::tanf);
+        }
+
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::TAN) } {
             return unsafe { self.native_tan::<P>() };
         }
@@ -193,6 +228,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn sinh_cosh<P: Policy>(self) -> (Self, Self) {
+        if const { is_reference::<P>() } {
+            return map1x2(self, |v| (libm::sinhf(v), libm::coshf(v)));
+        }
+
         let x0 = self;
         let x = x0.abs().flush_denormals::<P>();
         let y = x.exph_p::<P>();
@@ -219,6 +258,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn sinh<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::sinhf);
+        }
+
         let x0 = self;
         let x = x0.abs().flush_denormals::<P>();
 
@@ -255,6 +298,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn cosh<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::coshf);
+        }
+
         let y = self.abs().exph_p::<P>();
         y + V::FRAC_1_4 / y
     }
@@ -262,6 +309,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
     #[inline(always)]
     #[rustfmt::skip]
     fn tanh<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::tanhf);
+        }
+
         let x0 = self;
         let one = V::ONE;
 
@@ -312,16 +363,28 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn asin<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::asinf);
+        }
+
         asin_f_internal::<P, Self, false>(self)
     }
 
     #[inline(always)]
     fn acos<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::acosf);
+        }
+
         asin_f_internal::<P, Self, true>(self)
     }
 
     #[inline(always)]
     fn atan<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::atanf);
+        }
+
         let x = self;
         let t = x.abs().flush_denormals::<P>();
 
@@ -376,6 +439,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn asinh<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::asinhf);
+        }
+
         let x0 = self;
 
         let x = x0.abs().flush_denormals::<P>();
@@ -420,6 +487,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn acosh<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::acoshf);
+        }
+
         let x0 = self.flush_denormals::<P>();
         let x1 = x0 - V::ONE;
 
@@ -468,6 +539,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn atanh<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::atanhf);
+        }
+
         let x = self.abs().flush_denormals::<P>();
 
         let x_small = x.cmp_lt(V::HALF);
@@ -510,41 +585,73 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn exp<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::expf);
+        }
+
         exp_f_internal::<P, Self, EXP_MODE_EXP>(self)
     }
 
     #[inline(always)]
     fn exph<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, |x| (libm::exp(x as f64) * 0.5) as f32);
+        }
+
         exp_f_internal::<P, Self, EXP_MODE_EXPH>(self)
     }
 
     #[inline(always)]
     fn exp2<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::exp2f);
+        }
+
         exp_f_internal::<P, Self, EXP_MODE_POW2>(self)
     }
 
     #[inline(always)]
     fn exp10<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::exp10f);
+        }
+
         exp_f_internal::<P, Self, EXP_MODE_POW10>(self)
     }
 
     #[inline(always)]
     fn exp_m1<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::expm1f);
+        }
+
         exp_f_internal::<P, Self, EXP_MODE_EXPM1>(self)
     }
 
     #[inline(always)]
     fn exp2_m1<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, |x| (libm::exp2(x as f64) - 1.0) as f32);
+        }
+
         exp_f_internal::<P, Self, EXP_MODE_POW2M1>(self)
     }
 
     #[inline(always)]
     fn exp10_m1<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, |x| (libm::exp10(x as f64) - 1.0) as f32);
+        }
+
         exp_f_internal::<P, Self, EXP_MODE_POW10M1>(self)
     }
 
     #[inline(always)]
     fn powf<P: Policy>(self, y: Self) -> Self {
+        if const { is_reference::<P>() } {
+            return map2(self, y, libm::powf);
+        }
+
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) && Self::NATIVE_CAP.has(NativeCapability::POWF) } {
             return unsafe { self.native_powf::<P>(y) };
         }
@@ -721,6 +828,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn cbrt<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::cbrtf);
+        }
+
         let x = self.flush_denormals::<P>();
 
         let b1: V::Bits = crate::const_splat!(u32: 709958130); // B1 = (127-127.0/3-0.03306235651)*2**23
@@ -828,26 +939,46 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
     #[inline(always)]
     fn ln<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::logf);
+        }
+
         ln_f_internal::<P, Self, false>(self)
     }
 
     #[inline(always)]
     fn ln_1p<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::log1pf);
+        }
+
         ln_f_internal::<P, Self, true>(self)
     }
 
     #[inline(always)]
     fn log2<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::log2f);
+        }
+
         ln_2_internal::<P, Self>(self)
     }
 
     #[inline(always)]
     fn log10<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::log10f);
+        }
+
         ln_10_internal::<P, Self>(self)
     }
 
     #[inline(always)]
     fn ln1m_expnx<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, |x| libm::log1p(-libm::exp(-(x as f64))) as f32);
+        }
+
         let x = self;
 
         if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
@@ -962,6 +1093,10 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
 
     #[inline(always)]
     fn atan2<P: Policy>(self, x: Self) -> Self {
+        if const { is_reference::<P>() } {
+            return map2(self, x, libm::atan2f);
+        }
+
         let y = self;
         let neg_one = V::NEG_ONE;
         let zero = V::ZERO;

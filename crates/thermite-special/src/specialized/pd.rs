@@ -6,6 +6,7 @@ use thermite::{
             policies::{CheckOverflow, ExtraPrecision, WorstPrecision},
         },
         specialized::SpecializedTranscendentalMath,
+        specialized::reference::{is_reference, map1, map1x2},
     },
     prelude::*,
 };
@@ -176,22 +177,38 @@ where
     #[inline(always)]
     #[allow(const_item_mutation)]
     fn erf<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::erf);
+        }
+
         erf_d_internal::<Self, P, false, false>(self, &mut V::EMPTY)
     }
 
     #[inline(always)]
     #[allow(const_item_mutation)]
     fn erfc<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::erfc);
+        }
+
         erf_d_internal::<Self, P, true, false>(self, &mut V::EMPTY)
     }
 
     #[inline(always)]
     fn lgamma<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::lgamma);
+        }
+
         Self::lgamma_r::<P>(self).0
     }
 
     #[inline(always)]
     fn tgamma<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::tgamma);
+        }
+
         let z = self;
 
         if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
@@ -342,6 +359,14 @@ where
 
     #[inline(always)]
     fn lgamma_r<P: Policy>(self) -> (Self, Self) {
+        if const { is_reference::<P>() } {
+            // libm hands the sign back as an `i32`; this trait carries it as a float.
+            return map1x2(self, |x| {
+                let (v, s) = libm::lgamma_r(x);
+                (v, s as f64)
+            });
+        }
+
         generic::gamma::lgamma_r_impl::<P, _, _, _>(self, &crate::tables::LANCZOS_F64)
     }
 

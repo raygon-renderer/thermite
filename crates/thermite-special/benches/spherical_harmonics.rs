@@ -14,7 +14,7 @@ use std::hint::black_box;
 use thermite::backend::x86_v3::X86V3;
 use thermite::prelude::*;
 use thermite_dual::Dual;
-use thermite_special::{NO_PHASE, RealPrimalMath, RealSpecialMath, ShTable};
+use thermite_special::{RealPrimalMath, RealSpecialMath, ShTable};
 
 type V = Vector<<X86V3 as Simd>::f32x8>;
 
@@ -46,7 +46,7 @@ fn bench(c: &mut Criterion) {
         let mut out = [V::ZERO; N];
         b.iter(|| {
             for &(x, y, z) in &dirs {
-                V::spherical_harmonics::<L, N, NO_PHASE>(black_box(x), y, z, &mut out);
+                V::spherical_harmonics::<L, N, false>(black_box(x), y, z, &mut out);
                 black_box(&out);
             }
         })
@@ -57,7 +57,7 @@ fn bench(c: &mut Criterion) {
         let (mut dx, mut dy, mut dz) = ([V::ZERO; N], [V::ZERO; N], [V::ZERO; N]);
         b.iter(|| {
             for &(x, y, z) in &dirs {
-                V::spherical_harmonics_d::<L, N, NO_PHASE>(black_box(x), y, z, &mut out, &mut dx, &mut dy, &mut dz);
+                V::spherical_harmonics_d::<L, N, false>(black_box(x), y, z, &mut out, &mut dx, &mut dy, &mut dz);
                 black_box(&out);
             }
         })
@@ -66,7 +66,7 @@ fn bench(c: &mut Criterion) {
     // The hoisted-table path, for callers sweeping many directions.
     group.bench_function("real/value-with-table", |b| {
         let mut table = ShTable::<V, N>::zeroed();
-        V::spherical_harmonics_table::<L, N, NO_PHASE>(&mut table);
+        V::spherical_harmonics_table::<L, N, false>(&mut table);
         let mut out = [V::ZERO; N];
         b.iter(|| {
             for &(x, y, z) in &dirs {
@@ -84,7 +84,7 @@ fn bench(c: &mut Criterion) {
         let mut out = [D::constant(V::ZERO); N];
         b.iter(|| {
             for &(x, y, z) in &dirs {
-                D::spherical_harmonics::<L, N, NO_PHASE>(
+                D::spherical_harmonics::<L, N, false>(
                     D::constant(black_box(x)),
                     D::constant(y),
                     D::constant(z),
@@ -99,7 +99,7 @@ fn bench(c: &mut Criterion) {
         let mut out = [D::constant(V::ZERO); N];
         b.iter(|| {
             for &(x, y, z) in &dirs {
-                D::spherical_harmonics::<L, N, NO_PHASE>(
+                D::spherical_harmonics::<L, N, false>(
                     D::variable(black_box(x), 0),
                     D::variable(y, 1),
                     D::variable(z, 2),
@@ -123,7 +123,7 @@ fn bench(c: &mut Criterion) {
         let mut out = [D::constant(V::ZERO); N];
         b.iter(|| {
             for &(x, y, z) in &dirs {
-                D::spherical_harmonics::<L, N, NO_PHASE>(col(black_box(x), 0), col(y, 1), col(z, 2), &mut out);
+                D::spherical_harmonics::<L, N, false>(col(black_box(x), 0), col(y, 1), col(z, 2), &mut out);
                 black_box(&out);
             }
         })

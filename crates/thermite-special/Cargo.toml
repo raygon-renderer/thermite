@@ -30,9 +30,9 @@ cfg-if = "1"
 crunchy = "0.2"
 thermite = { workspace = true }
 paste = "1"
+libm = { version = "0.2.15", default-features = false, features = ["arch"] }
 
 [dev-dependencies]
-libm = "0.2.15"
 lambert_w = "2.0.0"
 image = { version = "0.25", default-features = false, features = ["png", "hdr"] }
 # `special` is what carries their `SpecializedRealSpecialMath` impls, and the workspace

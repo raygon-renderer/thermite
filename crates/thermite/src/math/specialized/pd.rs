@@ -4,6 +4,8 @@ use core::f64::consts::{LN_10, LOG2_E, SQRT_2};
 
 use super::*;
 
+use super::reference::{is_reference, map1, map1x2, map2};
+
 // The `PrimalProjection<Primal = V>` pin: the rigid `PrimalProjection` supertrait
 // of `SpecializedCoreMath` shadows the fixpoint blanket impl on a generic `V`, so
 // without it `V::Primal` would not normalize to `V` in the `poly_primal` body.
@@ -38,6 +40,10 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedPrimalMath<f64> for V {}
 impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealMath<f64> for V {
     #[inline(always)]
     fn atan2<P: Policy>(self, x: Self) -> Self {
+        if const { is_reference::<P>() } {
+            return map2(self, x, libm::atan2);
+        }
+
         atan_internal::<Self, P, true>(self, x)
     }
 
@@ -101,6 +107,15 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealMath<f64> for V {
 
 #[rustfmt::skip]
 impl<V: FloatVectorWithBits<Element = f64>> SpecializedSpatialMath<f64> for V {
+    #[inline(always)]
+    fn hypot<P: Policy>(self, y: Self) -> Self {
+        if const { is_reference::<P>() } {
+            return map2(self, y, libm::hypot);
+        }
+
+        Self::hypot_n::<P, 2>([self, y])
+    }
+
     #[inline(always)] fn l2_norm_squared<P: Policy>(self) -> Self { self * self }
     #[inline(always)] fn l2_norm<P: Policy>(self) -> Self { self.abs() }
     #[inline(always)] fn l1_norm<P: Policy>(self) -> Self { self.abs() }
@@ -124,7 +139,39 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn sin_cos<P: Policy>(self) -> (Self, Self) {
+        if const { is_reference::<P>() } {
+            return map1x2(self, libm::sincos);
+        }
+
         sincos_d_internal::<P, V, false>(self)
+    }
+
+    #[inline(always)]
+    fn sin<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::sin);
+        }
+
+        Self::sin_cos::<P>(self).0
+    }
+
+    #[inline(always)]
+    fn cos<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::cos);
+        }
+
+        Self::sin_cos::<P>(self).1
+    }
+
+    #[inline(always)]
+    fn tan<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::tan);
+        }
+
+        let (s, c) = Self::sin_cos::<P>(self);
+        s / c
     }
 
     #[inline(always)]
@@ -134,6 +181,10 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn sinh_cosh<P: Policy>(self) -> (Self, Self) {
+        if const { is_reference::<P>() } {
+            return map1x2(self, |v| (libm::sinh(v), libm::cosh(v)));
+        }
+
         let x0 = self;
         let x = x0.abs().flush_denormals::<P>();
         let y = x.exph_p::<P>();
@@ -172,6 +223,10 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn sinh<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::sinh);
+        }
+
         let x0 = self;
         let x = x0.abs().flush_denormals::<P>();
 
@@ -216,12 +271,20 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn cosh<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::cosh);
+        }
+
         let y = self.abs().exph_p::<P>();
         y + V::FRAC_1_4 / y
     }
 
     #[inline(always)]
     fn tanh<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::tanh);
+        }
+
         let x0 = self;
         let x = x0.abs().flush_denormals::<P>();
 
@@ -268,21 +331,37 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn asin<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::asin);
+        }
+
         asin_internal::<Self, P, false>(self)
     }
 
     #[inline(always)]
     fn acos<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::acos);
+        }
+
         asin_internal::<Self, P, true>(self)
     }
 
     #[inline(always)]
     fn atan<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::atan);
+        }
+
         atan_internal::<Self, P, false>(self, V::ZERO)
     }
 
     #[inline(always)]
     fn asinh<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::asinh);
+        }
+
         let x0 = self;
         let x = x0.abs().flush_denormals::<P>();
         let x2 = x * x;
@@ -331,6 +410,10 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn acosh<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::acosh);
+        }
+
         let x0 = self.flush_denormals::<P>();
         let x1 = x0 - V::ONE;
 
@@ -391,6 +474,10 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn atanh<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::atanh);
+        }
+
         let x0 = self;
         let x = x0.abs().flush_denormals::<P>();
 
@@ -442,6 +529,10 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn exp<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::exp);
+        }
+
         exp_d_internal::<Self, P, EXP_MODE_EXP>(self)
     }
 
@@ -452,16 +543,28 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn exp2<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::exp2);
+        }
+
         exp_d_internal::<Self, P, EXP_MODE_POW2>(self)
     }
 
     #[inline(always)]
     fn exp10<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::exp10);
+        }
+
         exp_d_internal::<Self, P, EXP_MODE_POW10>(self)
     }
 
     #[inline(always)]
     fn exp_m1<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::expm1);
+        }
+
         exp_d_internal::<Self, P, EXP_MODE_EXPM1>(self)
     }
 
@@ -477,6 +580,10 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn powf<P: Policy>(self, y: Self) -> Self {
+        if const { is_reference::<P>() } {
+            return map2(self, y, libm::pow);
+        }
+
         let x0 = self;
 
         // define constants
@@ -661,6 +768,10 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn cbrt<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::cbrt);
+        }
+
         let x = self.flush_denormals::<P>();
 
         let b1 = crate::const_splat!(u64: 715094163); // B1 = (1023-1023/3-0.03306235651)*2**20
@@ -763,21 +874,37 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
     #[inline(always)]
     fn ln<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::log);
+        }
+
         ln_d_internal::<Self, P, false>(self)
     }
 
     #[inline(always)]
     fn ln_1p<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::log1p);
+        }
+
         ln_d_internal::<Self, P, true>(self)
     }
 
     #[inline(always)]
     fn log2<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::log2);
+        }
+
         ln_d_internal::<Self, P, false>(self).scale(FloatConsts::LOG2_E)
     }
 
     #[inline(always)]
     fn log10<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::log10);
+        }
+
         ln_d_internal::<Self, P, false>(self).scale(FloatConsts::LOG10_E)
     }
 

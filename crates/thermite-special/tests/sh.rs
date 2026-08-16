@@ -21,7 +21,7 @@ use std::f64::consts::PI;
 use thermite::math::policy::DefaultPolicy;
 use thermite::prelude::*;
 use thermite_special::specialized::{sh_d_impl, sh_eval_d_impl, sh_eval_impl, sh_impl, sh_table_impl};
-use thermite_special::{CONDON_SHORTLEY, MAX_SH_DEGREE, NO_PHASE, RealPrimalMath, RealSpecialMath, ShTable};
+use thermite_special::{MAX_SH_DEGREE, RealPrimalMath, RealSpecialMath, ShTable};
 
 type V64 = Vector<f64>;
 type V32 = Vector<f32>;
@@ -31,7 +31,7 @@ const N: usize = (L + 1) * (L + 1);
 
 fn sh64(x: f64, y: f64, z: f64) -> [f64; N] {
     let mut out = [V64::splat(0.0); N];
-    sh_impl::<DefaultPolicy, f64, V64, L, N, NO_PHASE>(V64::splat(x), V64::splat(y), V64::splat(z), &mut out);
+    sh_impl::<DefaultPolicy, f64, V64, L, N, false>(V64::splat(x), V64::splat(y), V64::splat(z), &mut out);
 
     let mut res = [0.0; N];
     for i in 0..N {
@@ -210,7 +210,7 @@ fn sh_gradients_finite_difference() {
         let mut ddx = [V64::splat(0.0); N];
         let mut ddy = [V64::splat(0.0); N];
         let mut ddz = [V64::splat(0.0); N];
-        sh_d_impl::<DefaultPolicy, f64, V64, L, N, NO_PHASE>(
+        sh_d_impl::<DefaultPolicy, f64, V64, L, N, false>(
             V64::splat(x),
             V64::splat(y),
             V64::splat(z),
@@ -249,11 +249,11 @@ fn sh_gradients_finite_difference() {
     }
 }
 
-/// The `CONDON_SHORTLEY` path against Sloan's published `SHEval3` (_Efficient
+/// The Condon-Shortley (`CS = true`) path against Sloan's published `SHEval3` (_Efficient
 /// Spherical Harmonic Evaluation_, JCGT 2(2), 2013, Listing 2), transcribed from the
 /// paper. An external reference for the phased convention, and a second independent
 /// confirmation of the unphased basis too, because Listing 2 agrees with our
-/// `NO_PHASE` values on even `|m|` and negates only odd `|m|`.
+/// unphased values on even `|m|` and negates only odd `|m|`.
 #[test]
 fn sh_condon_shortley_vs_sloan_sheval3() {
     const L3: usize = 2;
@@ -286,10 +286,10 @@ fn sh_condon_shortley_vs_sloan_sheval3() {
         p[4] = tmp_c * s1;
 
         let mut cs = [V64::splat(0.0); N3];
-        V64::spherical_harmonics::<L3, N3, CONDON_SHORTLEY>(V64::splat(x), V64::splat(y), V64::splat(z), &mut cs);
+        V64::spherical_harmonics::<L3, N3, true>(V64::splat(x), V64::splat(y), V64::splat(z), &mut cs);
 
         let mut np = [V64::splat(0.0); N3];
-        V64::spherical_harmonics::<L3, N3, NO_PHASE>(V64::splat(x), V64::splat(y), V64::splat(z), &mut np);
+        V64::spherical_harmonics::<L3, N3, false>(V64::splat(x), V64::splat(y), V64::splat(z), &mut np);
 
         for i in 0..N3 {
             let got = cs[i].extract::<0>();
@@ -319,7 +319,7 @@ fn sh_condon_shortley_gradients() {
 
     let eval_cs = |x: f64, y: f64, z: f64| -> [f64; N] {
         let mut o = [V64::splat(0.0); N];
-        V64::spherical_harmonics::<L, N, CONDON_SHORTLEY>(V64::splat(x), V64::splat(y), V64::splat(z), &mut o);
+        V64::spherical_harmonics::<L, N, true>(V64::splat(x), V64::splat(y), V64::splat(z), &mut o);
         let mut r = [0.0; N];
         for i in 0..N {
             r[i] = o[i].extract::<0>();
@@ -332,7 +332,7 @@ fn sh_condon_shortley_gradients() {
 
         let mut o = [V64::splat(0.0); N];
         let (mut gx, mut gy, mut gz) = ([V64::splat(0.0); N], [V64::splat(0.0); N], [V64::splat(0.0); N]);
-        V64::spherical_harmonics_d::<L, N, CONDON_SHORTLEY>(
+        V64::spherical_harmonics_d::<L, N, true>(
             V64::splat(x),
             V64::splat(y),
             V64::splat(z),
@@ -369,14 +369,14 @@ fn sh_public_trait_surface() {
 
     // Default-policy trait method.
     let mut out = [V64::splat(0.0); N];
-    V64::spherical_harmonics::<L, N, NO_PHASE>(V64::splat(x), V64::splat(y), V64::splat(z), &mut out);
+    V64::spherical_harmonics::<L, N, false>(V64::splat(x), V64::splat(y), V64::splat(z), &mut out);
     for i in 0..N {
         assert_eq!(out[i].extract::<0>(), want[i], "trait value [{i}] diverges from kernel");
     }
 
     // Policy variant.
     let mut out_p = [V64::splat(0.0); N];
-    V64::spherical_harmonics_p::<DefaultPolicy, L, N, NO_PHASE>(
+    V64::spherical_harmonics_p::<DefaultPolicy, L, N, false>(
         V64::splat(x),
         V64::splat(y),
         V64::splat(z),
@@ -386,7 +386,7 @@ fn sh_public_trait_surface() {
 
     // Scalar aggregate (exercises the &mut [E; N] Unwrap reinterpret).
     let mut out_s = [0.0f64; N];
-    f64::scalar_spherical_harmonics::<L, N, NO_PHASE>(x, y, z, &mut out_s);
+    f64::scalar_spherical_harmonics::<L, N, false>(x, y, z, &mut out_s);
     for i in 0..N {
         assert_eq!(out_s[i], want[i], "scalar value [{i}] diverges from kernel");
     }
@@ -402,7 +402,7 @@ fn sh_public_trait_surface() {
         f: [0.0; N],
         mf: [0.0; N],
     };
-    f64::scalar_spherical_harmonics_table::<L, N, NO_PHASE>(&mut table_s);
+    f64::scalar_spherical_harmonics_table::<L, N, false>(&mut table_s);
     let mut out_ts = [0.0f64; N];
     f64::scalar_spherical_harmonics_with::<L, N>(&table_s, x, y, z, &mut out_ts);
     for i in 0..N {
@@ -412,7 +412,7 @@ fn sh_public_trait_surface() {
     // Gradient surface, value slots only (FD already validates the derivatives).
     let mut o = [V64::splat(0.0); N];
     let (mut gx, mut gy, mut gz) = ([V64::splat(0.0); N], [V64::splat(0.0); N], [V64::splat(0.0); N]);
-    V64::spherical_harmonics_d::<L, N, NO_PHASE>(
+    V64::spherical_harmonics_d::<L, N, false>(
         V64::splat(x),
         V64::splat(y),
         V64::splat(z),
@@ -425,7 +425,7 @@ fn sh_public_trait_surface() {
 
     let mut os = [0.0f64; N];
     let (mut gxs, mut gys, mut gzs) = ([0.0f64; N], [0.0f64; N], [0.0f64; N]);
-    f64::scalar_spherical_harmonics_d::<L, N, NO_PHASE>(x, y, z, &mut os, &mut gxs, &mut gys, &mut gzs);
+    f64::scalar_spherical_harmonics_d::<L, N, false>(x, y, z, &mut os, &mut gxs, &mut gys, &mut gzs);
     assert_eq!(os[7], want[7]);
     assert_eq!(gzs[2], gz[2].extract::<0>());
 }
@@ -438,7 +438,7 @@ fn sh_f32_matches_f64() {
         let (x, y, z) = rng.unit();
 
         let mut out32 = [V32::splat(0.0); N];
-        sh_impl::<DefaultPolicy, f32, V32, L, N, NO_PHASE>(
+        sh_impl::<DefaultPolicy, f32, V32, L, N, false>(
             V32::splat(x as f32),
             V32::splat(y as f32),
             V32::splat(z as f32),
@@ -483,11 +483,11 @@ fn sh_fast_vs_general_lowering() {
 
             // The unrolled kernel takes CS as a const, so both arms are spelled out.
             if cs {
-                sh_impl::<DefaultPolicy, f64, V64, L, N, CONDON_SHORTLEY>(vx, vy, vz, &mut fast);
-                sh_table_impl::<V64, L, N, CONDON_SHORTLEY>(&mut table);
+                sh_impl::<DefaultPolicy, f64, V64, L, N, true>(vx, vy, vz, &mut fast);
+                sh_table_impl::<V64, L, N, true>(&mut table);
             } else {
-                sh_impl::<DefaultPolicy, f64, V64, L, N, NO_PHASE>(vx, vy, vz, &mut fast);
-                sh_table_impl::<V64, L, N, NO_PHASE>(&mut table);
+                sh_impl::<DefaultPolicy, f64, V64, L, N, false>(vx, vy, vz, &mut fast);
+                sh_table_impl::<V64, L, N, false>(&mut table);
             }
             sh_eval_impl::<V64, L, N>(&table, vx, vy, vz, &mut slow);
 
@@ -513,10 +513,10 @@ fn sh_fast_vs_general_gradients() {
 
         let mut fo = [V64::splat(0.0); N];
         let (mut fx, mut fy, mut fz) = ([V64::splat(0.0); N], [V64::splat(0.0); N], [V64::splat(0.0); N]);
-        sh_d_impl::<DefaultPolicy, f64, V64, L, N, NO_PHASE>(vx, vy, vz, &mut fo, &mut fx, &mut fy, &mut fz);
+        sh_d_impl::<DefaultPolicy, f64, V64, L, N, false>(vx, vy, vz, &mut fo, &mut fx, &mut fy, &mut fz);
 
         let mut table = ShTable::<V64, N>::zeroed();
-        sh_table_impl::<V64, L, N, NO_PHASE>(&mut table);
+        sh_table_impl::<V64, L, N, false>(&mut table);
         let mut so = [V64::splat(0.0); N];
         let (mut sx, mut sy, mut sz) = ([V64::splat(0.0); N], [V64::splat(0.0); N], [V64::splat(0.0); N]);
         sh_eval_d_impl::<V64, L, N>(&table, vx, vy, vz, &mut so, &mut sx, &mut sy, &mut sz);
@@ -551,7 +551,7 @@ fn sh_beyond_max_degree() {
         let (x, y, z) = rng.unit();
 
         let mut out = [V64::splat(0.0); NB];
-        V64::spherical_harmonics::<LB, NB, NO_PHASE>(V64::splat(x), V64::splat(y), V64::splat(z), &mut out);
+        V64::spherical_harmonics::<LB, NB, false>(V64::splat(x), V64::splat(y), V64::splat(z), &mut out);
 
         for l in 0..=LB {
             for m in -(l as i64)..=(l as i64) {
@@ -572,10 +572,10 @@ fn sh_beyond_max_degree() {
 #[test]
 fn sh_table_override_matches_computed() {
     let mut computed = ShTable::<V64, N>::zeroed();
-    sh_table_impl::<V64, L, N, NO_PHASE>(&mut computed);
+    sh_table_impl::<V64, L, N, false>(&mut computed);
 
     let mut splatted = ShTable::<V64, N>::zeroed();
-    V64::spherical_harmonics_table::<L, N, NO_PHASE>(&mut splatted);
+    V64::spherical_harmonics_table::<L, N, false>(&mut splatted);
 
     for (name, a, b) in [
         ("qmm", &computed.qmm, &splatted.qmm),
@@ -603,14 +603,14 @@ fn sh_hoisted_table_matches_one_shot() {
     let mut rng = Rng(0x5A5A_0F0F_3C3C_1E1E);
 
     let mut table = ShTable::<V64, N>::zeroed();
-    V64::spherical_harmonics_table::<L, N, CONDON_SHORTLEY>(&mut table);
+    V64::spherical_harmonics_table::<L, N, true>(&mut table);
 
     for _ in 0..25 {
         let (x, y, z) = rng.unit();
         let (vx, vy, vz) = (V64::splat(x), V64::splat(y), V64::splat(z));
 
         let mut one_shot = [V64::splat(0.0); N];
-        V64::spherical_harmonics::<L, N, CONDON_SHORTLEY>(vx, vy, vz, &mut one_shot);
+        V64::spherical_harmonics::<L, N, true>(vx, vy, vz, &mut one_shot);
 
         let mut hoisted = [V64::splat(0.0); N];
         V64::spherical_harmonics_with::<L, N>(&table, vx, vy, vz, &mut hoisted);
@@ -639,7 +639,7 @@ fn sh_mixed_evaluator_matches_single_type() {
     let mut rng = Rng(0x0E11_2A7C_5F03_9B6D);
 
     let mut table = ShTable::<V64, N>::zeroed();
-    sh_table_impl::<V64, L, N, NO_PHASE>(&mut table);
+    sh_table_impl::<V64, L, N, false>(&mut table);
 
     for _ in 0..50 {
         let (x, y, z) = rng.unit();

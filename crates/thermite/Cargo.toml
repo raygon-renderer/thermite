@@ -172,6 +172,7 @@ spirv-std-macros.workspace = true
 [dev-dependencies]
 glam = "0.33"
 rand = "0.10"
+libm = "0.2.15"
 num-traits = { version = "0.2.19", default-features = true }
 image = { version = "0.25", default-features = false, features = ["png"] }
 

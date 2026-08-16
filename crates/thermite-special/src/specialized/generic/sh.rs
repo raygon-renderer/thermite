@@ -3,9 +3,10 @@
 //! # Conventions
 //!
 //! Orthonormal real spherical harmonics. The `CS` const parameter selects the phase
-//! convention, either [`NO_PHASE`] (the standard real-SH tables, sphericart, most math
-//! references) or [`CONDON_SHORTLEY`]. Everything below describes [`NO_PHASE`]. See
-//! [the phase section](#the-condon-shortley-phase) for what the other one changes.
+//! convention: `false` for the standard real-SH tables (sphericart, most math
+//! references), `true` for the Condon-Shortley phase. Everything below describes
+//! `CS = false`. See [the phase section](#the-condon-shortley-phase) for what the
+//! other one changes.
 //!
 //! ```math
 //! \int_{S^2} Y_{\ell m}^2 \, d\Omega = 1,
@@ -37,8 +38,8 @@
 //! Sloan's widely-copied `SHEval` generated code (_Efficient Spherical Harmonic
 //! Evaluation_, JCGT 2(2), 2013) **does** carry the phase. Its diagonal recurrence
 //! is `P_m^m = (1 - 2m) P_{m-1}^{m-1}`, negative for every `m >= 1`. Its order-3
-//! listing emits `pSH[3] = -0.48860251 * x`, matching [`CONDON_SHORTLEY`] here, while
-//! [`NO_PHASE`] gives `+0.48860251 * x`.
+//! listing emits `pSH[3] = -0.48860251 * x`, matching `CS = true` here, while
+//! `CS = false` gives `+0.48860251 * x`.
 //!
 //! `CS` is baked into the constant table, so neither choice costs an instruction.
 //! Internally it is applied in two places, the second easy to overlook: the diagonal
@@ -298,14 +299,6 @@ const fn build_f32<const L: usize, const N: usize, const CS: bool>() -> ShTable<
         mf: arr_to_f32(&t.mf),
     }
 }
-
-/// `CS` argument selecting **no** Condon-Shortley phase (the real-SH tables,
-/// sphericart, and most math references). This is the conventional default here.
-pub const NO_PHASE: bool = false;
-
-/// `CS` argument selecting the Condon-Shortley `$(-1)^{|m|}$` phase (Sloan's
-/// `SHEval`, and the physics convention).
-pub const CONDON_SHORTLEY: bool = true;
 
 /// Compile-time spherical-harmonic coefficient tables for one element type, at one
 /// degree and one phase convention.

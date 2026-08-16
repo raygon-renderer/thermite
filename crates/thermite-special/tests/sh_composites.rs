@@ -16,7 +16,7 @@ use thermite::prelude::*;
 use thermite_compensated::Compensated;
 use thermite_dual::Dual;
 use thermite_special::specialized::sh_impl;
-use thermite_special::{NO_PHASE, RealSpecialMath};
+use thermite_special::RealSpecialMath;
 
 type V64 = Vector<f64>;
 
@@ -26,7 +26,7 @@ const N: usize = (L + 1) * (L + 1);
 /// Plain `f64` reference, straight through the unrolled kernel.
 fn reference(x: f64, y: f64, z: f64) -> [f64; N] {
     let mut out = [V64::splat(0.0); N];
-    sh_impl::<DefaultPolicy, f64, V64, L, N, NO_PHASE>(V64::splat(x), V64::splat(y), V64::splat(z), &mut out);
+    sh_impl::<DefaultPolicy, f64, V64, L, N, false>(V64::splat(x), V64::splat(y), V64::splat(z), &mut out);
 
     let mut r = [0.0; N];
     for i in 0..N {
@@ -54,7 +54,7 @@ fn sh_compensated_matches_f64() {
         let want = reference(x, y, z);
 
         let mut out = [C::new(V64::splat(0.0)); N];
-        C::spherical_harmonics::<L, N, NO_PHASE>(
+        C::spherical_harmonics::<L, N, false>(
             C::new(V64::splat(x)),
             C::new(V64::splat(y)),
             C::new(V64::splat(z)),
@@ -90,7 +90,7 @@ fn sh_dual_identity_jacobian_matches_analytic_gradients() {
         // Analytic gradients from the primal form.
         let mut a_val = [V64::splat(0.0); N];
         let (mut a_dx, mut a_dy, mut a_dz) = ([V64::splat(0.0); N], [V64::splat(0.0); N], [V64::splat(0.0); N]);
-        V64::spherical_harmonics_d::<L, N, NO_PHASE>(
+        V64::spherical_harmonics_d::<L, N, false>(
             V64::splat(x),
             V64::splat(y),
             V64::splat(z),
@@ -102,7 +102,7 @@ fn sh_dual_identity_jacobian_matches_analytic_gradients() {
 
         // The same thing by forward-mode AD over the value form.
         let mut out = [D::constant(V64::splat(0.0)); N];
-        D::spherical_harmonics::<L, N, NO_PHASE>(
+        D::spherical_harmonics::<L, N, false>(
             D::variable(V64::splat(x), 0),
             D::variable(V64::splat(y), 1),
             D::variable(V64::splat(z), 2),
@@ -158,7 +158,7 @@ fn sh_dual_chains_through_an_upstream_parameter() {
         let _ = td;
 
         let mut out = [D::constant(V64::splat(0.0)); N];
-        D::spherical_harmonics::<L, N, NO_PHASE>(x, y, z, &mut out);
+        D::spherical_harmonics::<L, N, false>(x, y, z, &mut out);
 
         let h = 1e-6;
         let (hi, lo) = (eval(t + h), eval(t - h));
@@ -187,10 +187,10 @@ fn sh_composite_and_real_agree_at_low_degree() {
     let (x, y, z) = (0.267261241912424, 0.534522483824849, 0.801783725737273);
 
     let mut real = [V64::splat(0.0); NS];
-    V64::spherical_harmonics::<LS, NS, NO_PHASE>(V64::splat(x), V64::splat(y), V64::splat(z), &mut real);
+    V64::spherical_harmonics::<LS, NS, false>(V64::splat(x), V64::splat(y), V64::splat(z), &mut real);
 
     let mut comp = [C::new(V64::splat(0.0)); NS];
-    C::spherical_harmonics::<LS, NS, NO_PHASE>(
+    C::spherical_harmonics::<LS, NS, false>(
         C::new(V64::splat(x)),
         C::new(V64::splat(y)),
         C::new(V64::splat(z)),
@@ -217,7 +217,7 @@ fn sh_dual_constant_seeding_is_flat_and_exact() {
         let want = reference(x, y, z);
 
         let mut out = [D::constant(V64::splat(0.0)); N];
-        D::spherical_harmonics::<L, N, NO_PHASE>(
+        D::spherical_harmonics::<L, N, false>(
             D::constant(V64::splat(x)),
             D::constant(V64::splat(y)),
             D::constant(V64::splat(z)),
@@ -265,10 +265,10 @@ fn sh_dual_fast_and_general_paths_agree() {
 
     for &(x, y, z) in DIRS {
         let mut fast = [D::constant(V64::splat(0.0)); N];
-        D::spherical_harmonics::<L, N, NO_PHASE>(unit(x, 0), unit(y, 1), unit(z, 2), &mut fast);
+        D::spherical_harmonics::<L, N, false>(unit(x, 0), unit(y, 1), unit(z, 2), &mut fast);
 
         let mut general = [D::constant(V64::splat(0.0)); N];
-        D::spherical_harmonics::<L, N, NO_PHASE>(scaled(x, 0), scaled(y, 1), scaled(z, 2), &mut general);
+        D::spherical_harmonics::<L, N, false>(scaled(x, 0), scaled(y, 1), scaled(z, 2), &mut general);
 
         for i in 0..N {
             let (a, b) = (fast[i].value().extract::<0>(), general[i].value().extract::<0>());
@@ -303,7 +303,7 @@ fn sh_nested_dual_still_works() {
     let want = reference(x, y, z);
 
     let mut out = [c(0.0); N];
-    Outer::spherical_harmonics::<L, N, NO_PHASE>(c(x), c(y), c(z), &mut out);
+    Outer::spherical_harmonics::<L, N, false>(c(x), c(y), c(z), &mut out);
 
     for i in 0..N {
         let got = out[i].value().value().extract::<0>();

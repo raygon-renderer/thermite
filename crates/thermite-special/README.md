@@ -98,12 +98,12 @@ coefficients out for callers sweeping many directions at high degree.
 
 ```rust,ignore
 let mut sh = [V::ZERO; 9];
-V::spherical_harmonics::<2, 9, NO_PHASE>(x, y, z, &mut sh);
+V::spherical_harmonics::<2, 9, false>(x, y, z, &mut sh);
 ```
 
-The `CS` parameter picks the phase convention, `NO_PHASE` for the standard real-SH
-tables or `CONDON_SHORTLEY` to match Sloan's `SHEval` and physics. Mixing the two silently
-corrupts any projection/reconstruction round trip, so it has to be named.
+The `CS` parameter picks the phase convention: `false` for the standard real-SH tables,
+`true` for the Condon-Shortley phase, matching Sloan's `SHEval` and physics. Mixing the
+two silently corrupts any projection/reconstruction round trip, so it has to be named.
 
 See `examples/sh_envmap.rs` for a full HDR environment map projected onto the basis and
 reconstructed, including the ringing artifacts and the sinc window that removes them.

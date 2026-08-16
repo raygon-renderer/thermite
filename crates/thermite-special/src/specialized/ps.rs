@@ -6,6 +6,7 @@ use thermite::{
             policies::{CheckOverflow, ExtraPrecision, MediumPrecision, WorstPrecision},
         },
         specialized::SpecializedTranscendentalMath,
+        specialized::reference::{is_reference, map1, map1x2, map2},
     },
     prelude::*,
     register::NativeCapability,
@@ -208,17 +209,29 @@ where
     #[inline(always)]
     #[allow(const_item_mutation)]
     fn erf<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::erff);
+        }
+
         erf_f_internal::<Self, P, false, false>(self, &mut V::EMPTY)
     }
 
     #[inline(always)]
     #[allow(const_item_mutation)]
     fn erfc<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::erfcf);
+        }
+
         erf_f_internal::<Self, P, true, false>(self, &mut V::EMPTY)
     }
 
     #[inline(always)]
     fn logistic_sigmoid<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, |x| (1.0 / (1.0 + libm::exp(-(x as f64)))) as f32);
+        }
+
         if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
             let is_pos = self.is_positive();
             let x = self.neg_c(is_pos); // conditionally negate if positive
@@ -259,11 +272,19 @@ where
 
     #[inline(always)]
     fn lgamma<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::lgammaf);
+        }
+
         Self::lgamma_r::<P>(self).0
     }
 
     #[inline(always)]
     fn tgamma<P: Policy>(self) -> Self {
+        if const { is_reference::<P>() } {
+            return map1(self, libm::tgammaf);
+        }
+
         let z = self;
 
         if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
@@ -291,6 +312,16 @@ where
 
     #[inline(always)]
     fn beta<P: Policy>(a: Self, b: Self) -> Self {
+        if const { is_reference::<P>() } {
+            return map2(a, b, |a, b| {
+                let (a, b) = (a as f64, b as f64);
+                let (la, sa) = libm::lgamma_r(a);
+                let (lb, sb) = libm::lgamma_r(b);
+                let (lab, sab) = libm::lgamma_r(a + b);
+                (libm::exp(la + lb - lab) * ((sa * sb * sab) as f64)) as f32
+            });
+        }
+
         generic::gamma::beta_impl::<P, _, _, _>(a, b, &crate::tables::LANCZOS_F32)
     }
 
@@ -787,6 +818,13 @@ where
 
     #[inline(always)]
     fn lgamma_r<P: Policy>(self) -> (Self, Self) {
+        if const { is_reference::<P>() } {
+            return map1x2(self, |x| {
+                let (v, s) = libm::lgammaf_r(x);
+                (v, s as f32)
+            });
+        }
+
         let z = self.flush_denormals_p::<P>();
         let mut signum = Self::ONE;
 
@@ -847,6 +885,13 @@ where
 
     #[inline(always)]
     fn gelu<P: Policy>(self, alpha: Self) -> Self {
+        if const { is_reference::<P>() } {
+            return map2(self, alpha, |x, a| {
+                let (x, a) = (x as f64, a as f64);
+                (0.5 * x * libm::erfc(-a * x * core::f64::consts::FRAC_1_SQRT_2)) as f32
+            });
+        }
+
         let x = self;
 
         let alpha_x = alpha * x;
