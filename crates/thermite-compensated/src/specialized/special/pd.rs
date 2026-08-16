@@ -13,5 +13,16 @@
 use thermite::prelude::*;
 
 use super::SpecializedCompensatedSpecialMath;
+use crate::Compensated;
 
-impl<V: FloatVector<Element = f64>> SpecializedCompensatedSpecialMath<f64> for V {}
+impl<V: FloatVector<Element = f64>> SpecializedCompensatedSpecialMath<f64> for V {
+    const INV_LANGEVIN_STEPS: usize = 1;
+
+    #[inline(always)]
+    fn dd_const(hi: f64, lo: f64) -> Compensated<Self> {
+        Compensated {
+            value: Self::splat(hi),
+            error: Self::splat(lo),
+        }
+    }
+}

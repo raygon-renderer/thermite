@@ -771,6 +771,11 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
     fn erfinv<P: Policy>(self) -> Self;
     fn probit<P: Policy>(self) -> Self;
 
+    fn langevin<P: Policy>(self) -> Self;
+    fn inv_langevin<P: Policy>(self) -> Self;
+    fn langevin_1m<P: Policy>(self) -> Self;
+    fn inv_langevin_1m<P: Policy>(self) -> Self;
+
     #[inline(always)]
     fn gelu<P: Policy>(self, alpha: Self) -> Self {
         let alpha_x = alpha * self;
@@ -1144,6 +1149,11 @@ pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> + PrimalPr
 
         (y, dy)
     }
+
+    /// `L(x)` and `L'(x)`. The derivative falls out of the value's own intermediates
+    /// on both branches (see `generic::langevin`), so there is no default here that
+    /// would recompute it.
+    fn langevin_d<P: Policy>(self) -> (Self, Self);
 
     #[inline(always)]
     fn algebraic_swish_d<P: Policy>(self) -> (Self, Self) {

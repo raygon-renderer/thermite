@@ -47,3 +47,7 @@ criterion = { version = "0.8", features = ["html_reports"] }
 [[bench]]
 name = "spherical_harmonics"
 harness = false
+
+[[bench]]
+name = "langevin"
+harness = false

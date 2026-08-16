@@ -370,6 +370,42 @@ where
     }
 
     #[inline(always)]
+    fn langevin<P: Policy>(self) -> Self {
+        let x = self.re;
+        let l = x.langevin_p::<P>();
+        self.chain(l, langevin_deriv::<P, V>(x, l))
+    }
+
+    #[inline(always)]
+    fn inv_langevin<P: Policy>(self) -> Self {
+        // d/dy L^-1(y) = 1/L'(x) at x = L^-1(y).
+        let x = self.re.inv_langevin_p::<P>();
+        self.chain(x, langevin_deriv::<P, V>(x, self.re).reciprocal_p::<P>())
+    }
+
+    // The complement pair: same derivatives up to sign.
+    #[inline(always)]
+    fn langevin_1m<P: Policy>(self) -> Self {
+        let x = self.re;
+        // `langevin_deriv` reads L on its |x| <= 1 branch, and 1 - (1 - L) has lost L
+        // entirely for tiny x (the value is 1 to the last bit while L' = 1/3), so L is
+        // evaluated on its own there. Only the small lanes pay the second polynomial.
+        let l = if x.abs().cmp_le(V::ONE).any() {
+            x.langevin_p::<P>()
+        } else {
+            V::ZERO
+        };
+        self.chain(x.langevin_1m_p::<P>(), -langevin_deriv::<P, V>(x, l))
+    }
+
+    // (`langevin_deriv` reads L only for |x| <= 1, i.e. t >= 0.69, where 1 - t is exact.)
+    #[inline(always)]
+    fn inv_langevin_1m<P: Policy>(self) -> Self {
+        let x = self.re.inv_langevin_1m_p::<P>();
+        self.chain(x, -langevin_deriv::<P, V>(x, V::ONE - self.re).reciprocal_p::<P>())
+    }
+
+    #[inline(always)]
     fn lgamma_r<P: Policy>(self) -> (Self, Self) {
         let (v, sign) = self.re.lgamma_r_p::<P>();
         // Same derivative as `lgamma`. The sign is piecewise constant in x, so it
@@ -384,4 +420,37 @@ where
 impl<V, E: 'static, const N: usize> thermite_special::specialized::ExpIntDetails<Dual<E, N>, Dual<V, N>> for Dual<V, N> where
     Dual<V, N>: thermite::vector::FloatVector<Element = Dual<E, N>>
 {
+}
+
+/// `L'(x)` given `l = L(x)`, without the real kernel's tables (they are private to
+/// `thermite-special`, and `langevin_d` lives on `RealPrimalMath`, which an inner dual
+/// need not have).
+///
+/// Below `|x| = 1`, Sra's exact identity `L' = 1 - L^2 - 2L/x` (from `L = coth x - 1/x`
+/// and `coth' = 1 - coth^2`) costs no transcendental and loses at most ~2 bits. Above,
+/// where `L -> 1` and the identity cancels to nothing, `1/x^2 - csch^2(x)` with
+/// `csch^2 = 4q/(1-q)^2`, `q = e^{-2|x|}`, the same form the real kernel uses.
+#[inline(always)]
+fn langevin_deriv<P: Policy, V: DualMathVector>(x: V, l: V) -> V {
+    let ax = x.abs();
+    let is_small = ax.cmp_le(V::ONE);
+    let rcp = ax.reciprocal_p::<P>();
+
+    // 1 - L(L + 2/x). L is odd so L/x = |L|/|x|.
+    let mut dl = l.nmul_adde(l, (l.abs() + l.abs()).nmul_adde(rcp, V::ONE));
+    // 0/0 at exactly zero, where L'(0) = 1/3.
+    dl = x
+        .is_zero()
+        .select(V::splat(<V::Element as FloatElement>::ConstRatio::<1, 3>::VALUE), dl);
+
+    if const { P::POLICY.avoid_branching } || !is_small.all() {
+        // Clamped so x = inf gives 0 rather than inf*0 (see the real kernel).
+        let ax = ax.min(V::MAX);
+        let q = (-(ax + ax)).exp_p::<P>();
+        let d = (V::ONE - q).reciprocal_p::<P>();
+        let csch2 = (q + q) * d * (d + d);
+        dl = is_small.select(dl, rcp.mul_sube(rcp, csch2));
+    }
+
+    dl
 }

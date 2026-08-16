@@ -755,6 +755,37 @@ where
     }
 
     #[inline(always)]
+    fn langevin<P: Policy>(self) -> Self {
+        // The Worst/Medium tiers take the short table (see it for its error).
+        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            generic::langevin::langevin_primal::<P, _, _, 5, false>(self, &LANGEVIN_SMALL_F32_LO).0
+        } else {
+            generic::langevin::langevin_primal::<P, _, _, 8, false>(self, &LANGEVIN_SMALL_F32).0
+        }
+    }
+
+    #[inline(always)]
+    fn langevin_1m<P: Policy>(self) -> Self {
+        // The Worst/Medium tiers take the short table (see it for its error).
+        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            generic::langevin::langevin_primal::<P, _, _, 5, true>(self, &LANGEVIN_SMALL_F32_LO).0
+        } else {
+            generic::langevin::langevin_primal::<P, _, _, 8, true>(self, &LANGEVIN_SMALL_F32).0
+        }
+    }
+
+    // f32 refines with Newton (see the kernel docs).
+    #[inline(always)]
+    fn inv_langevin<P: Policy>(self) -> Self {
+        generic::langevin::inv_langevin::<P, _, _, 8, 5, false, false>(self, &LANGEVIN_SMALL_F32, &LANGEVIN_SEED_F32)
+    }
+
+    #[inline(always)]
+    fn inv_langevin_1m<P: Policy>(self) -> Self {
+        generic::langevin::inv_langevin::<P, _, _, 8, 5, false, true>(self, &LANGEVIN_SMALL_F32, &LANGEVIN_SEED_F32)
+    }
+
+    #[inline(always)]
     fn lgamma_r<P: Policy>(self) -> (Self, Self) {
         let z = self.flush_denormals_p::<P>();
         let mut signum = Self::ONE;
@@ -838,6 +869,11 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealPrimalMath<f32> for V
 where
     V: thermite::math::PrimalProjection<Primal = V>,
 {
+    #[inline(always)]
+    fn langevin_d<P: Policy>(self) -> (Self, Self) {
+        generic::langevin::langevin_primal::<P, _, _, 8, false>(self, &LANGEVIN_SMALL_F32)
+    }
+
     #[inline(always)]
     #[allow(clippy::too_many_arguments)]
     fn spherical_harmonics_d<P: Policy, const L: usize, const N: usize, const CS: bool>(
@@ -1112,3 +1148,37 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
 
 /// Every default applies: `expint` on the real line is what they were written for.
 impl<V: FloatVectorWithBits<Element = f32>> super::ExpIntDetails<f32, V> for V {}
+
+/// Minimax fit of `L(x)/x` as a polynomial in `x^2` on `[0, 2]`, relative error
+/// `4.1e-8` after rounding to f32 (`crates/thermite-special/scripts/langevin_coeffs.py`).
+const LANGEVIN_SMALL_F32: [f32; 8] = [
+    0.3333333432674408,
+    -0.022222189232707024,
+    0.0021162214688956738,
+    -0.0002112639049300924,
+    2.098539516737219e-05,
+    -1.934508873091545e-06,
+    1.394919024733099e-07,
+    -5.404849012791146e-09,
+];
+
+/// Minimax fit of `L^-1(y) (1 - y^2) / y` as a polynomial in `y^2` on `[0, 0.85^2]`,
+/// relative error `7.6e-5`. The inverse's Newton seed below the `1/(1-y)` tail.
+const LANGEVIN_SEED_F32: [f32; 5] = [
+    2.9997715950012207,
+    -1.1931958198547363,
+    -0.12431719899177551,
+    -0.007050277199596167,
+    0.39067453145980835,
+];
+
+/// The `Worst`/`Medium` forward table: same fit as [`LANGEVIN_SMALL_F32`] at degree 4,
+/// relative error `5.1e-6` (below the Worst tier's ~3e-4 hardware reciprocal, and inside
+/// Medium's 1e4 eps), three FMAs cheaper. The inverse keeps the full table.
+const LANGEVIN_SMALL_F32_LO: [f32; 5] = [
+    0.3333316445350647,
+    -0.02220052480697632,
+    0.0020704844500869513,
+    -0.00017605189350433648,
+    8.862235517881345e-06,
+];

@@ -512,6 +512,66 @@ decl_math! {
         /// of the standard normal distribution.
         fn probit[][](self: Self) -> Self;
 
+        /// Computes the Langevin function `$L(x) = \coth x - \frac{1}{x}$`.
+        ///
+        /// Odd, strictly increasing, `L(0) = 0`, `L'(0) = 1/3`, `L(x) -> 1` as `x -> ∞`.
+        /// This is the mean resultant length `$A_3(\kappa)$` of a von Mises-Fisher
+        /// distribution on the sphere, and the freely-jointed-chain force-extension law
+        /// in polymer physics.
+        ///
+        /// Evaluated as an odd minimax polynomial for `|x| <= 2` (the direct form
+        /// `coth x - 1/x` cancels catastrophically there, losing `3u/x^2`), and as
+        /// `1 - 1/x + 2/(e^{2x} - 1)` beyond. Both branches are accurate to a few ulp
+        /// at every precision policy. The policy mainly selects the `exp`.
+        ///
+        /// To also obtain the derivative `L'(x)`, use
+        /// [`langevin_d`](crate::RealPrimalMath::langevin_d).
+        fn langevin[][](self: Self) -> Self;
+
+        /// Computes the inverse Langevin function `$L^{-1}(y)$` for `|y| < 1`.
+        ///
+        /// Odd, with a simple pole at `y = 1`: `L^-1(y) ~ 1/(1-y)`. `|y| = 1` returns
+        /// `±∞`, and `|y| > 1` returns NaN under overflow checking (an unspecified
+        /// value otherwise). Its condition number is `1/(1-y)`, so near the pole the
+        /// result cannot be more accurate than that, however exact the arithmetic. A
+        /// consumer that knows `1 - y` should form it before rounding.
+        ///
+        /// A rational seed (the same family as Cohen's Pade approximant, which the vMF
+        /// literature knows as the Banerjee et al. concentration estimator) is refined by
+        /// Newton (f32) or Halley (f64) steps whose count follows the precision policy:
+        ///
+        /// | precision | steps | relative error |
+        /// |---|---|---|
+        /// | `Worst` | 0 | ~2e-5 |
+        /// | `Medium`, `Average`, `Best` | 1 | full (a few ulp) |
+        /// | `Reference` | 2 | full |
+        fn inv_langevin[][](self: Self) -> Self;
+
+        /// Computes `1 - L(x)`, the complement of the [Langevin function](RealSpecialMath::langevin),
+        /// accurately where `L(x)` is within rounding of 1.
+        ///
+        /// `1 - L(x) ~ 1/x`, so once `x > 1/u` (sharpness ~1e7 in f32, ~1e16 in f64)
+        /// `langevin(x)` rounds to exactly 1 and its complement is gone. This returns it
+        /// to full relative precision at any `x`, from the same intermediates. Same cost
+        /// as `langevin`. Negative `x` gives `1 + L(|x|)`.
+        ///
+        /// Pairs with [`inv_langevin_1m`](RealSpecialMath::inv_langevin_1m): the vMF
+        /// convolution `kappa' = L^-1(L(k1) L(k2))` should be formed as
+        /// `inv_langevin_1m(a + b - a*b)` with `a = langevin_1m(k1)`, `b = langevin_1m(k2)`,
+        /// which is cancellation-free at every sharpness.
+        fn langevin_1m[][](self: Self) -> Self;
+
+        /// Computes `L^-1(1 - t)` from the complement `t` directly.
+        ///
+        /// The [inverse Langevin function](RealSpecialMath::inv_langevin) has a pole at
+        /// `y = 1` and a condition number of `1/(1-y)`, so a caller that knows `1 - y`
+        /// (see [`langevin_1m`](RealSpecialMath::langevin_1m)) should pass it here rather
+        /// than form `y` and lose its low digits: this entry point works in `t` throughout
+        /// and is accurate to a few ulp at any sharpness. `t = 0` returns `+∞`, `t > 1`
+        /// gives the negative branch, and `t < 0` is out of the domain (NaN under
+        /// overflow checking). Same cost as `inv_langevin`.
+        fn inv_langevin_1m[][](self: Self) -> Self;
+
         /// GELU activation function, defined as `$\tfrac{1}{2} x \left(1 + \operatorname{erf}\!\left(\frac{\alpha x}{\sqrt{2}}\right)\right)$`,
         /// where `alpha` helps control the shape of the curve. The standard GELU function
         /// is recovered when `alpha` is 1.
@@ -748,5 +808,12 @@ decl_math! {
 
         /// [`algebraic_swish`](RealSpecialMath::algebraic_swish) together with its derivative w.r.t. `x`.
         fn algebraic_swish_d[][](self: Self) -> (Self, Self);
+
+        /// [`langevin`](RealSpecialMath::langevin) together with its derivative
+        /// `$L'(x) = \frac{1}{x^2} - \operatorname{csch}^2 x$`.
+        ///
+        /// The derivative shares every intermediate with the value, so this costs a
+        /// handful of arithmetic ops over `langevin` alone.
+        fn langevin_d[][](self: Self) -> (Self, Self);
     }
 }

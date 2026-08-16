@@ -15,6 +15,10 @@ where
     V: SpecialMathWithPolicy + RealSpecialMathWithPolicy + RealMathWithPolicy,
     V: SpecializedCompensatedSpecialMath<V::Element>,
 {
+    #[inline(always)]
+    fn langevin_d<P: Policy>(self) -> (Self, Self) {
+        <V as SpecializedCompensatedSpecialMath<V::Element>>::compensated_langevin_d::<P, false>(self)
+    }
 }
 
 impl<V: CompensatedFloatVector> Compensated<V>
@@ -367,6 +371,85 @@ where
     #[inline(always)]
     fn lgamma_r<P: Policy>(self) -> (Self, Self) {
         <V as SpecializedCompensatedSpecialMath<V::Element>>::compensated_lgamma_r::<P>(self)
+    }
+
+    #[inline(always)]
+    fn langevin<P: Policy>(self) -> Self {
+        <V as SpecializedCompensatedSpecialMath<V::Element>>::compensated_langevin_d::<P, false>(self).0
+    }
+
+    #[inline(always)]
+    fn langevin_1m<P: Policy>(self) -> Self {
+        <V as SpecializedCompensatedSpecialMath<V::Element>>::compensated_langevin_d::<P, true>(self).0
+    }
+
+    #[inline(always)]
+    fn inv_langevin<P: Policy>(self) -> Self {
+        let y = self.abs();
+        // Exact in compensated arithmetic, which is why the complement entry point is
+        // only a different seed here rather than a different algorithm.
+        let t = Self::ONE - y;
+        let y_val = y.value();
+        Self::inv_langevin_refine::<P>(
+            Self::new(y_val.inv_langevin_p::<P>()),
+            self,
+            y,
+            t,
+            y_val.cmp_ge(V::ONE),
+            y_val.cmp_gt(V::ONE) | y_val.is_nan(),
+        )
+    }
+
+    #[inline(always)]
+    fn inv_langevin_1m<P: Policy>(self) -> Self {
+        let y_in = Self::ONE - self;
+        let y = y_in.abs();
+        let t = y_in.value().is_negative().select(Self::ONE - y, self);
+        // The pole and the domain edge read off `t` itself: `1 - t` is exactly 1 in the
+        // leading limb for any tiny `t`, and that is a perfectly good input here.
+        let t_val = self.value();
+        Self::inv_langevin_refine::<P>(
+            Self::new(t_val.inv_langevin_1m_p::<P>()),
+            y_in,
+            y,
+            t,
+            t_val.cmp_eq(V::ZERO) | (y_in.value().is_negative() & y.value().cmp_ge(V::ONE)),
+            t_val.cmp_lt(V::ZERO) | (y_in.value().is_negative() & y.value().cmp_gt(V::ONE)) | t_val.is_nan(),
+        )
+    }
+}
+
+impl<V: CompensatedFloatVector> Compensated<V>
+where
+    V: SpecialMathWithPolicy + RealSpecialMathWithPolicy + RealMathWithPolicy,
+    V: SpecializedCompensatedSpecialMath<V::Element>,
+{
+    /// Newton in compensated arithmetic from a seed accurate to the inner width's u.
+    /// The error squares per step, so double-double needs one and double-single two.
+    /// `y_in` carries the sign, `y = |y_in|`, `t = 1 - y`, and the two masks are the
+    /// pole (`+inf`) and the domain edge (NaN under overflow checking).
+    #[inline(always)]
+    fn inv_langevin_refine<P: Policy>(
+        mut x: Self,
+        y_in: Self,
+        y: Self,
+        t: Self,
+        at_pole: V::Mask,
+        out_of_domain: V::Mask,
+    ) -> Self {
+        let mut i = 0;
+        while i < <V as SpecializedCompensatedSpecialMath<V::Element>>::INV_LANGEVIN_STEPS {
+            x = <V as SpecializedCompensatedSpecialMath<V::Element>>::compensated_inv_langevin_newton::<P>(x, y, t);
+            i += 1;
+        }
+
+        // The pole (a Newton step there is 0/0) and the domain edge.
+        x = at_pole.select(Self::INFINITY, x);
+        if const { P::POLICY.check_overflow } {
+            x = out_of_domain.select(Self::NAN, x);
+        }
+
+        x.copysign(y_in)
     }
 }
 

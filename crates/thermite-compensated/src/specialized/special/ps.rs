@@ -15,5 +15,18 @@
 use thermite::prelude::*;
 
 use super::SpecializedCompensatedSpecialMath;
+use crate::Compensated;
 
-impl<V: FloatVector<Element = f32>> SpecializedCompensatedSpecialMath<f32> for V {}
+impl<V: FloatVector<Element = f32>> SpecializedCompensatedSpecialMath<f32> for V {
+    const INV_LANGEVIN_STEPS: usize = 2;
+
+    #[inline(always)]
+    fn dd_const(hi: f64, _lo: f64) -> Compensated<Self> {
+        // ~48 bits wanted, `hi` carries 53: `lo` is far below this width.
+        let c = Compensated::<f32>::from_f64(hi);
+        Compensated {
+            value: Self::splat(c.value),
+            error: Self::splat(c.error),
+        }
+    }
+}

@@ -398,4 +398,149 @@ pub trait SpecializedCompensatedSpecialMath<E>: Sized {
 
         ((la + lb) - lab).exp_p::<P>() * ((sa * sb) / sab)
     }
+
+    // --- Langevin ---
+
+    /// A double-double literal `(hi, lo)` splat at this width. The Langevin table
+    /// below is fitted at double-double, so this is a plain splat of both limbs for
+    /// `f64` and a re-split of `hi` for `f32`.
+    fn dd_const(hi: f64, lo: f64) -> Compensated<Self>;
+
+    /// Newton steps [`compensated_inv_langevin_newton`](Self::compensated_inv_langevin_newton)
+    /// needs from the inner vector's own `inv_langevin` (`~u` of that width) to reach
+    /// this width: one for double-double, two for double-single.
+    const INV_LANGEVIN_STEPS: usize;
+
+    /// `L(x)` (or `1 - L(x)` with `ONE_MINUS`) and `L'(x)`. Same structure as
+    /// `thermite-special`'s kernel with the crossover at `|x| = 1` (`3u/x^2` of
+    /// cancellation is 3 ulp there, and the double-double table is 22 terms already).
+    /// The complement on the large branch is `1/x - 2q/(1-q)`, which at worst (x = 1)
+    /// cancels to 0.69 of `1/x`.
+    #[inline(always)]
+    fn compensated_langevin_d<P: Policy, const ONE_MINUS: bool>(
+        x: Compensated<Self>,
+    ) -> (Compensated<Self>, Compensated<Self>)
+    where
+        Compensated<Self>: CompensatedGammaOps,
+    {
+        let one = <Compensated<Self> as NumericVector>::ONE;
+        let ax = x.abs();
+        let is_small = ax.cmp_le(one);
+
+        let p = Self::langevin_small_poly(x * x);
+        let l_small = x * p;
+        let mut dl = l_small.nmul_add(l_small, p.nmul_add(one + one, one));
+        let mut l = if const { ONE_MINUS } { one - l_small } else { l_small };
+
+        if const { P::POLICY.avoid_branching } || !is_small.all() {
+            let (rcp, w, csch2) = Self::langevin_large_parts::<P>(ax);
+            let lpos = (one - rcp) + w;
+            let big = if const { ONE_MINUS } {
+                x.select_negative(one + lpos, rcp - w)
+            } else {
+                lpos.copysign(x)
+            };
+            l = is_small.select(l, big);
+            dl = is_small.select(dl, rcp.mul_sub(rcp, csch2));
+        }
+
+        (l, dl)
+    }
+
+    /// One Newton step of `L(x) = y` from `x`, with `t = 1 - y` supplied exactly (the
+    /// residual is `((1-y) - 1/x) + 2q/(1-q)` on the large branch, which is what keeps
+    /// the step accurate where `L` sits within an ulp of 1).
+    #[inline(always)]
+    fn compensated_inv_langevin_newton<P: Policy>(
+        x: Compensated<Self>,
+        y: Compensated<Self>,
+        t: Compensated<Self>,
+    ) -> Compensated<Self>
+    where
+        Compensated<Self>: CompensatedGammaOps,
+    {
+        let one = <Compensated<Self> as NumericVector>::ONE;
+        let is_small = x.cmp_le(one);
+
+        let p = Self::langevin_small_poly(x * x);
+        let l = x * p;
+        let mut r = l - y;
+        let mut dl = l.nmul_add(l, p.nmul_add(one + one, one));
+
+        if const { P::POLICY.avoid_branching } || !is_small.all() {
+            let (rcp, w, csch2) = Self::langevin_large_parts::<P>(x);
+            r = is_small.select(r, (t - rcp) + w);
+            dl = is_small.select(dl, rcp.mul_sub(rcp, csch2));
+        }
+
+        x - r / dl
+    }
+
+    /// Minimax fit of `L(x)/x` in `x^2` on `[0, 1]` at double-double (relative error
+    /// `3e-36`, `crates/thermite-special/scripts/langevin_coeffs_dd.py`), Horner.
+    #[inline(always)]
+    fn langevin_small_poly(t: Compensated<Self>) -> Compensated<Self>
+    where
+        Compensated<Self>: CompensatedGammaOps,
+    {
+        let mut acc = <Compensated<Self> as NumericVector>::ZERO;
+
+        macro_rules! horner {
+            ($(($hi:literal, $lo:literal)),* $(,)?) => {
+                $( acc = acc.mul_add(t, Self::dd_const($hi, $lo)); )*
+            };
+        }
+
+        horner!(
+            (-9.11633225690645e-23, -2.504399575470363e-39),
+            (1.9025424779056182e-21, 5.868781095916726e-38),
+            (-2.3916673923044965e-20, 2.1419731321638627e-37),
+            (2.523435541202226e-19, -6.080654083866406e-36),
+            (-2.526330105697189e-18, -1.8885083563769902e-34),
+            (2.4991707970892547e-17, 6.097177114288303e-34),
+            (-2.467294162067776e-16, -2.537473496829264e-33),
+            (2.4351898573469184e-15, 8.529618682040395e-32),
+            (-2.40344120482019e-14, 1.4293725238332017e-30),
+            (2.3721017244813595e-13, 2.468717598005709e-29),
+            (-2.341170681396468e-12, -1.4496933593157017e-28),
+            (2.3106432598827537e-11, 5.519082276699843e-28),
+            (-2.2805151204588079e-10, 3.688676935569084e-27),
+            (2.250784651680892e-09, -1.5678904023044363e-25),
+            (-2.2214608789979678e-08, 4.0602449852842407e-26),
+            (2.1925947851873778e-07, -5.669610792596665e-25),
+            (-2.1644042808063972e-06, 1.44134557203705e-23),
+            (2.1377799155576935e-05, -1.2363216969621178e-21),
+            (-0.00021164021164021165, 8.851449492739956e-21),
+            (0.0021164021164021165, -1.427246034469328e-19),
+            (-0.022222222222222223, 8.480870326997734e-19),
+            (0.3333333333333333, 1.850371707708594e-17),
+        );
+
+        acc
+    }
+
+    /// `1/x`, `2q/(1-q)` and `csch^2(x)` for `x >= 1`, one division between them
+    /// (`r = 1/(x(1-q))`, `1/x = (1-q) r`, `1/(1-q) = x r`). At `x = inf` the products
+    /// are `inf * 0`, so those lanes are set to their limits explicitly.
+    #[inline(always)]
+    fn langevin_large_parts<P: Policy>(
+        x: Compensated<Self>,
+    ) -> (Compensated<Self>, Compensated<Self>, Compensated<Self>)
+    where
+        Compensated<Self>: CompensatedGammaOps,
+    {
+        let one = <Compensated<Self> as NumericVector>::ONE;
+        let zero = <Compensated<Self> as NumericVector>::ZERO;
+
+        let q = (-(x + x)).exp_p::<P>();
+        let omq = one - q;
+        let r = one / (x * omq);
+        let rcp = omq * r;
+        let d = x * r;
+        let w = (q + q) * d;
+        let csch2 = w * (d + d);
+
+        let inf = x.cmp_eq(<Compensated<Self> as FloatVector>::INFINITY);
+        (inf.select(zero, rcp), inf.select(zero, w), inf.select(zero, csch2))
+    }
 }

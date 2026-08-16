@@ -385,6 +385,37 @@ where
         generic::probit::probit_acklam::<P, _, _, true>(self, &A, &B, &C, &D)
     }
 
+    #[inline(always)]
+    fn langevin<P: Policy>(self) -> Self {
+        // The Worst/Medium tiers take the short table (see it for its error).
+        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            generic::langevin::langevin_primal::<P, _, _, 11, false>(self, &LANGEVIN_SMALL_F64_LO).0
+        } else {
+            generic::langevin::langevin_primal::<P, _, _, 16, false>(self, &LANGEVIN_SMALL_F64).0
+        }
+    }
+
+    #[inline(always)]
+    fn langevin_1m<P: Policy>(self) -> Self {
+        // The Worst/Medium tiers take the short table (see it for its error).
+        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+            generic::langevin::langevin_primal::<P, _, _, 11, true>(self, &LANGEVIN_SMALL_F64_LO).0
+        } else {
+            generic::langevin::langevin_primal::<P, _, _, 16, true>(self, &LANGEVIN_SMALL_F64).0
+        }
+    }
+
+    // f64 refines with Halley (see the kernel docs).
+    #[inline(always)]
+    fn inv_langevin<P: Policy>(self) -> Self {
+        generic::langevin::inv_langevin::<P, _, _, 16, 9, true, false>(self, &LANGEVIN_SMALL_F64, &LANGEVIN_SEED_F64)
+    }
+
+    #[inline(always)]
+    fn inv_langevin_1m<P: Policy>(self) -> Self {
+        generic::langevin::inv_langevin::<P, _, _, 16, 9, true, true>(self, &LANGEVIN_SMALL_F64, &LANGEVIN_SEED_F64)
+    }
+
     // same form as f32
     #[inline(always)]
     fn gelu<P: Policy>(self, alpha: Self) -> Self {
@@ -412,6 +443,11 @@ where
     V: SpecializedTranscendentalMath<f64>,
     V: thermite::math::PrimalProjection<Primal = V>,
 {
+    #[inline(always)]
+    fn langevin_d<P: Policy>(self) -> (Self, Self) {
+        generic::langevin::langevin_primal::<P, _, _, 16, false>(self, &LANGEVIN_SMALL_F64)
+    }
+
     #[inline(always)]
     #[allow(clippy::too_many_arguments)]
     fn spherical_harmonics_d<P: Policy, const L: usize, const N: usize, const CS: bool>(
@@ -521,3 +557,57 @@ fn erf_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const C: boo
 
 /// Every default applies: `expint` on the real line is what they were written for.
 impl<V: FloatVectorWithBits<Element = f64>> super::ExpIntDetails<f64, V> for V {}
+
+/// Minimax fit of `L(x)/x` as a polynomial in `x^2` on `[0, 2]`, relative error
+/// `6.5e-17` after rounding (`crates/thermite-special/scripts/langevin_coeffs.py`).
+const LANGEVIN_SMALL_F64: [f64; 16] = [
+    0.3333333333333333,
+    -0.022222222222221866,
+    0.002116402116394456,
+    -0.0002116402115749962,
+    2.1377798863187195e-05,
+    -2.1644034853512783e-06,
+    2.1925805178692086e-07,
+    -2.2212830510921946e-08,
+    2.2491902490670497e-09,
+    -2.2699964972216279e-10,
+    2.258858881319397e-11,
+    -2.149441406576282e-12,
+    1.8363701272379474e-13,
+    -1.27083611669092e-14,
+    6.073730625469803e-16,
+    -1.4527886936695518e-17,
+];
+
+/// Minimax fit of `L^-1(y) (1 - y^2) / y` as a polynomial in `y^2` on `[0, 0.85^2]`,
+/// relative error `1.1e-6`. The inverse's Halley seed below the `1/(1-y)` tail. Deg 8
+/// rather than f32's deg 4 so that one cubic step (constant < 0.07) lands under f64's u.
+const LANGEVIN_SEED_F64: [f64; 9] = [
+    3.0000033409892763,
+    -1.200575454653041,
+    -0.08655290656271598,
+    -0.11229572780500324,
+    0.9977556478992905,
+    -2.159977066903404,
+    2.891255158804264,
+    -0.7894725857798888,
+    -0.6113193395162252,
+];
+
+/// The `Worst`/`Medium` forward table: same fit as [`LANGEVIN_SMALL_F64`] at degree 10,
+/// relative error `1.9e-12` (the Medium tier's tolerance is 1e4 eps), five FMAs cheaper.
+/// The inverse keeps the full table at every tier, since its step is dominated by the
+/// exp and the division and its Medium tier is documented as full precision.
+const LANGEVIN_SMALL_F64_LO: [f64; 11] = [
+    0.3333333333327056,
+    -0.02222222218374748,
+    0.002116401724776868,
+    -0.00021163864787629512,
+    2.1374572036431745e-05,
+    -2.160476424670753e-06,
+    2.162294603438737e-07,
+    -2.0672900635769838e-08,
+    1.7227111614831327e-09,
+    -1.0503475016377067e-10,
+    3.3022089667780975e-12,
+];
