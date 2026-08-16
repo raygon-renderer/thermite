@@ -49,6 +49,7 @@ pi = +mp.pi
 e = +mp.e
 euler = +mp.euler
 phi = (1 + mp.sqrt(5)) / 2
+plastic = mp.findroot(lambda x: x**3 - x - 1, mp.mpf("1.3247"))
 
 
 def reciprocal_fibonacci():
@@ -61,6 +62,52 @@ def laplace_limit():
     """Root of x*exp(sqrt(1+x^2)) / (1 + sqrt(1+x^2)) = 1."""
     f = lambda x: x * mp.exp(mp.sqrt(1 + x**2)) / (1 + mp.sqrt(1 + x**2)) - 1
     return mp.findroot(f, mp.mpf("0.6627434193"))
+
+
+def erdos_borwein():
+    """Sum of 1/(2^k - 1), k >= 1. Geometric, so 400 terms is far past 80 digits."""
+    return mp.fsum(1 / (mp.mpf(2) ** k - 1) for k in range(1, 401))
+
+
+def niven():
+    """1 + sum of (1 - 1/zeta(k)), k >= 2. Terms fall off like 2^-k."""
+    return 1 + mp.fsum(1 - 1 / mp.zeta(k) for k in range(2, 401))
+
+
+def fransen_robinson():
+    """Integral of 1/Gamma(x) over (0, inf). Split at the peak and out along the
+    super-exponential tail; the node list is redundant enough that halving the
+    spacing does not move a single one of the 80 digits."""
+    return mp.quad(lambda x: 1 / mp.gamma(x), [0, 1, 2, 3, 5, 10, 20, 50, mp.inf])
+
+
+def golomb_dickman():
+    """lambda = integral of exp(li(t)) over (0, 1)."""
+    return mp.quad(lambda t: mp.exp(mp.li(t)), [0, mp.mpf("0.5"), 1])
+
+
+def artin(small_primes=100, terms=60):
+    """A = prod_p (1 - 1/(p(p-1))), over ALL primes.
+
+    The bare product converges like 1/p, so the tail is reached through the prime
+    zeta function instead: 1/(p(p-1)) = sum_{j>=2} p^-j, hence
+
+        log(1 - u) = -sum_{m>=1} u^m/m,   u^m = sum_{i>=0} C(m+i-1, i) p^-(2m+i)
+
+    and collecting by exponent s = 2m+i turns the p-sum into P(s), which mpmath
+    provides directly. Primes below `small_primes` are multiplied in exactly and
+    subtracted out of each P(s): expanding them would need s in the thousands,
+    because C(m+i-1, i) grows far faster than 2^-s shrinks. With the head taken
+    exactly, u <= 1e-4 and 60 terms already agree past 40 digits."""
+    small = list(mp.libmp.libintmath.list_primes(small_primes))
+    head = mp.mpf(1)
+    for p in small:
+        head *= 1 - mp.mpf(1) / (p * (p - 1))
+    log_tail = mp.mpf(0)
+    for s in range(2, terms + 1):
+        c = mp.fsum(mp.binomial(m + (s - 2 * m) - 1, s - 2 * m) / m for m in range(1, s // 2 + 1))
+        log_tail -= c * (mp.primezeta(s) - mp.fsum(mp.mpf(p) ** -s for p in small))
+    return head * mp.exp(log_tail)
 
 
 # Defined by the Feigenbaum functional equation, which mpmath does not solve.
@@ -93,6 +140,7 @@ CONSTS = [
     ("FRAC_1_PI", 1 / pi, r"`$1/\pi$`"),
     ("FRAC_1_SQRT_2", 1 / mp.sqrt(2), r"`$1/\sqrt{2}$`"),
     ("FRAC_1_SQRT_3", 1 / mp.sqrt(3), r"`$1/\sqrt{3}$`"),
+    ("FRAC_1_SQRT_5", 1 / mp.sqrt(5), r"`$1/\sqrt{5}$`"),
     ("FRAC_2_PI", 2 / pi, r"`$2/\pi$`"),
     ("FRAC_1_SQRT_PI", 1 / mp.sqrt(pi), r"`$1/\sqrt{\pi}$`"),
     ("FRAC_2_SQRT_PI", 2 / mp.sqrt(pi), r"`$2/\sqrt{\pi}$`"),
@@ -108,14 +156,22 @@ CONSTS = [
     ("LN_2", mp.log(2), r"`$\ln 2$`"),
     ("LN_10", mp.log(10), r"`$\ln 10$`"),
     ("LN_PI", mp.log(pi), r"`$\ln \pi$`"),
+    ("LN_TAU", mp.log(2 * pi), r"`$\ln 2\pi$`"),
     ("FRAC_LN_PI_2", mp.log(pi) / 2, r"`$\frac{1}{2}\ln \pi$`"),
+    (
+        "FRAC_LN_TAU_2",
+        mp.log(2 * pi) / 2,
+        r"`$\frac{1}{2}\ln 2\pi$`, the constant term of the Stirling series for `$\ln \Gamma$`",
+    ),
     ("LOG2_10", mp.log(10, 2), r"`$\log_2 10$`"),
     ("LOG2_E", mp.log(e, 2), r"`$\log_2 e$`"),
+    ("LOG2_PI", mp.log(pi, 2), r"`$\log_2 \pi$`"),
     ("LOG10_2", mp.log(2, 10), r"`$\log_{10} 2$`"),
     ("LOG10_E", mp.log(e, 10), r"`$\log_{10} e$`"),
     ("PI", pi, "Archimedes' constant (π)"),
     ("SQRT_2", mp.sqrt(2), r"`$\sqrt{2}$`"),
     ("SQRT_3", mp.sqrt(3), r"`$\sqrt{3}$`"),
+    ("SQRT_5", mp.sqrt(5), r"`$\sqrt{5}$`"),
     ("SQRT_E", mp.sqrt(e), r"`$\sqrt{e}$`"),
     ("EPSILON", None, "The machine epsilon"),
     ("SQRT_EPSILON", None, r"The square root of the machine epsilon (`$\sqrt{\varepsilon}$`)"),
@@ -124,10 +180,20 @@ CONSTS = [
     ("SQRT_FRAC_PI_2", mp.sqrt(pi / 2), r"`$\sqrt{\pi/2}$`"),
     ("SQRT_TAU", mp.sqrt(2 * pi), r"`$\sqrt{2\pi}$`"),
     ("PHI", phi, "The golden ratio (φ)"),
+    ("FRAC_1_PHI", 1 / phi, r"`$1/\varphi = \varphi - 1$`, the 1D golden-ratio low-discrepancy increment"),
+    ("FRAC_1_PHI_SQUARED", 1 / phi**2, r"`$1/\varphi^2$`"),
+    (
+        "GOLDEN_ANGLE",
+        2 * pi / phi**2,
+        r"""The golden angle `$2\pi/\varphi^2 = \pi(3 - \sqrt{5})$` in radians
+
+The rotation between successive samples in a Vogel (sunflower) disk spiral.""",
+    ),
     ("FRAC_1_3", mp.mpf(1) / 3, r"`$1/3$`"),
     ("FRAC_2_3", mp.mpf(2) / 3, r"`$2/3$`"),
     ("FRAC_1_4", mp.mpf(1) / 4, r"`$1/4$`"),
     ("FRAC_1_6", mp.mpf(1) / 6, r"`$1/6$`"),
+    ("FRAC_1_E", 1 / e, r"`$1/e$`"),
     ("FRAC_NEG_1_E", -1 / e, r"`$-1/e$`"),
     ("FRAC_1_2", mp.mpf(1) / 2, r"`$1/2$`"),
     ("FRAC_3_4", mp.mpf(3) / 4, r"`$3/4$`"),
@@ -136,28 +202,50 @@ CONSTS = [
     ("FRAC_2PI_3", 2 * pi / 3, r"`$2\pi/3$`"),
     ("FRAC_3PI_4", 3 * pi / 4, r"`$3\pi/4$`"),
     ("FRAC_4PI_3", 4 * pi / 3, r"`$4\pi/3$`, the volume of the unit sphere"),
+    ("FOUR_PI", 4 * pi, r"`$4\pi$`, the solid angle of the whole sphere in steradians"),
+    ("FRAC_1_4PI", 1 / (4 * pi), r"`$1/(4\pi)$`, the density of the uniform distribution on the sphere"),
     ("FRAC_1_TAU", 1 / (2 * pi), r"`$1/(2\pi)$`"),
     ("SQRT_PI", mp.sqrt(pi), r"`$\sqrt{\pi}$`"),
     ("PI_MINUS_3", pi - 3, r"`$\pi - 3$`"),
     ("FOUR_MINUS_PI", 4 - pi, r"`$4 - \pi$`"),
     ("PI_POW_E", pi**e, r"`$\pi^e$`"),
+    ("CBRT_2", mp.cbrt(2), r"`$\sqrt[3]{2}$`"),
+    ("CBRT_3", mp.cbrt(3), r"`$\sqrt[3]{3}$`"),
     ("CBRT_PI", mp.cbrt(pi), r"`$\sqrt[3]{\pi}$`"),
     ("FRAC_1_CBRT_PI", 1 / mp.cbrt(pi), r"`$1/\sqrt[3]{\pi}$`"),
     ("FRAC_1_SQRT_E", 1 / mp.sqrt(e), r"`$1/\sqrt{e} = e^{-1/2}$`"),
     ("E_POW_PI", e**pi, r"`$e^\pi$`, Gelfond's constant"),
+    (
+        "GELFOND_SCHNEIDER",
+        mp.mpf(2) ** mp.sqrt(2),
+        r"`$2^{\sqrt{2}}$`, the Gelfond-Schneider constant (also called Hilbert's number)",
+    ),
     ("SIN_1", mp.sin(1), r"`$\sin 1$`"),
     ("COS_1", mp.cos(1), r"`$\cos 1$`"),
+    ("TAN_1", mp.tan(1), r"`$\tan 1$`"),
     ("SINH_1", mp.sinh(1), r"`$\sinh 1$`"),
     ("COSH_1", mp.cosh(1), r"`$\cosh 1$`"),
+    ("TANH_1", mp.tanh(1), r"`$\tanh 1$`"),
     ("LN_PHI", mp.log(phi), r"`$\ln \varphi$`"),
     ("FRAC_1_LN_PHI", 1 / mp.log(phi), r"`$1/\ln \varphi$`"),
     ("FRAC_1_EULER_GAMMA", 1 / euler, r"`$1/\gamma$`"),
     ("EULER_GAMMA_SQUARED", euler**2, r"`$\gamma^2$`"),
     ("ZETA_2", mp.zeta(2), r"`$\zeta(2) = \pi^2/6$`"),
     ("ZETA_3", mp.zeta(3), r"`$\zeta(3)$`, Apery's constant"),
+    ("ZETA_4", mp.zeta(4), r"`$\zeta(4) = \pi^4/90$`"),
     ("CATALAN", +mp.catalan, r"Catalan's constant `$K$`"),
     ("GLAISHER", +mp.glaisher, r"The Glaisher-Kinkelin constant `$A$`"),
     ("KHINCHIN", +mp.khinchin, r"Khinchin's constant `$K_0$`"),
+    (
+        "LEVY",
+        mp.exp(pi**2 / (12 * mp.log(2))),
+        r"""Levy's constant `$e^{\pi^2/(12\ln 2)}$`
+
+The limit of `$q_n^{1/n}$` for the denominators of almost every real number's
+continued fraction expansion, the companion to [`KHINCHIN`].
+
+[`KHINCHIN`]: FloatConsts::KHINCHIN""",
+    ),
     (
         "EXTREME_VALUE_SKEWNESS",
         12 * mp.sqrt(6) * mp.zeta(3) / pi**3,
@@ -186,17 +274,79 @@ Boost's constants table prints this formula with the opposite sign, but lists th
     ("FEIGENBAUM_DELTA", FEIGENBAUM_DELTA, r"The first Feigenbaum constant `$\delta$`"),
     (
         "PLASTIC_RATIO",
-        mp.findroot(lambda x: x**3 - x - 1, mp.mpf("1.3247")),
+        plastic,
         r"The plastic ratio `$\rho$`, the real root of `$x^3 = x + 1$`",
     ),
+    (
+        "FRAC_1_PLASTIC_RATIO",
+        1 / plastic,
+        r"""`$1/\rho$`, the first increment of the 2D R2 low-discrepancy sequence
+
+The plastic ratio is to two dimensions what `$\varphi$` is to one: the pair
+`$(1/\rho, 1/\rho^2)$` generates the additive-recurrence R2 sequence.""",
+    ),
+    ("FRAC_1_PLASTIC_RATIO_SQUARED", 1 / plastic**2, r"`$1/\rho^2$`, the second R2 increment"),
     ("GAUSS", 1 / mp.agm(1, mp.sqrt(2)), r"Gauss's constant `$G = 1/\mathrm{agm}(1, \sqrt{2})$`"),
+    (
+        "LEMNISCATE",
+        pi / mp.agm(1, mp.sqrt(2)),
+        r"The lemniscate constant `$\varpi = \pi G = 2\int_0^1 dt/\sqrt{1-t^4}$`",
+    ),
     ("DOTTIE", mp.findroot(lambda x: mp.cos(x) - x, mp.mpf("0.739")), r"The Dottie number, the unique real solution of `$\cos x = x$`"),
+    (
+        "OMEGA",
+        mp.findroot(lambda x: x * mp.exp(x) - 1, mp.mpf("0.5671")),
+        r"The omega constant `$\Omega$`, the solution of `$\Omega e^{\Omega} = 1$`, i.e. `$W(1)$`",
+    ),
     (
         "PSI",
         reciprocal_fibonacci(),
         r"The reciprocal Fibonacci constant `$\psi = \sum_{k=1}^{\infty} 1/F_k$`",
     ),
     ("LAPLACE_LIMIT", laplace_limit(), r"The Laplace limit, the root of `$x e^{\sqrt{1+x^2}} / (1 + \sqrt{1+x^2}) = 1$`"),
+    (
+        "ERDOS_BORWEIN",
+        erdos_borwein(),
+        r"The Erdos-Borwein constant `$E = \sum_{k=1}^{\infty} 1/(2^k - 1)$`",
+    ),
+    (
+        "NIVEN",
+        niven(),
+        r"Niven's constant `$1 + \sum_{k=2}^{\infty} (1 - 1/\zeta(k))$`, the average maximum prime exponent",
+    ),
+    (
+        "SOLDNER",
+        mp.findroot(mp.li, mp.mpf("1.4513")),
+        r"The Ramanujan-Soldner constant `$\mu$`, the positive root of the logarithmic integral `$\mathrm{li}(x)$`",
+    ),
+    (
+        "FRANSEN_ROBINSON",
+        fransen_robinson(),
+        r"The Fransen-Robinson constant `$\int_0^{\infty} dx/\Gamma(x)$`",
+    ),
+    (
+        "GOLOMB_DICKMAN",
+        golomb_dickman(),
+        r"The Golomb-Dickman constant `$\lambda = \int_0^1 e^{\mathrm{li}(t)}\,dt$`",
+    ),
+    (
+        "TWIN_PRIME",
+        +mp.twinprime,
+        r"The twin prime constant `$C_2 = \prod_{p \ge 3} (1 - 1/(p-1)^2)$`",
+    ),
+    (
+        "MERTENS",
+        +mp.mertens,
+        r"The Meissel-Mertens constant `$M = \gamma + \sum_p (\ln(1 - 1/p) + 1/p)$`",
+    ),
+    (
+        "ARTIN",
+        artin(),
+        r"""Artin's constant `$A = \prod_p (1 - 1/(p(p-1)))$`
+
+The conjectured density of primes admitting a given non-square integer > 1 as a
+primitive root.""",
+    ),
 ]
 
 NAMES = [c[0] for c in CONSTS]
