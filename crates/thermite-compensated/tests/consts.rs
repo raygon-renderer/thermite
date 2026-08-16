@@ -95,16 +95,7 @@ macro_rules! const_suite {
             /// constants' limbs.
             #[test]
             fn named_consts_match_scalar() {
-                check_named_consts!(
-                    V, E;
-                    NEG_ZERO, E, EULER_GAMMA, FRAC_1_PI, FRAC_1_SQRT_2, FRAC_1_SQRT_3, FRAC_2_PI,
-                    FRAC_1_SQRT_PI, FRAC_2_SQRT_PI, FRAC_SQRT_PI_2, FRAC_1_SQRT_TAU, FRAC_PI_2,
-                    FRAC_PI_3, FRAC_PI_4, FRAC_PI_6, FRAC_PI_8, FRAC_PI_180, FRAC_180_PI, LN_2,
-                    LN_10, LN_PI, FRAC_LN_PI_2, LOG2_10, LOG2_E, LOG10_2, LOG10_E, PI, PI_SQUARED,
-                    PI_CUBED, PI_FOURTH, SQRT_2, SQRT_3, SQRT_E, TAU, SQRT_FRAC_PI_2, SQRT_TAU, PHI,
-                    FRAC_1_3, FRAC_2_3, FRAC_1_4, FRAC_1_6, FRAC_NEG_1_E, EPSILON, SQRT_EPSILON,
-                    FOURTH_ROOT_EPSILON,
-                );
+                thermite::for_each_float_const!(check_named_consts, V, E;);
             }
 
             /// Independent anchor: the carriers could be self-consistently wrong if the
@@ -143,3 +134,35 @@ const_suite!(v3_f64x4, thermite::backend::x86_v3::f64x4, f64, 1e-15);
 const_suite!(v3_f32x8, thermite::backend::x86_v3::f32x8, f32, 1e-14);
 const_suite!(v1_f64x2, thermite::backend::x86_v1::f64x2, f64, 1e-15);
 const_suite!(scalar_f64, thermite::Vector<f64>, f64, 1e-15);
+
+/// The double-double constants must agree with thermite's own `FloatConsts`
+/// values (the same mathematical constant, to f64 precision), for every name.
+///
+/// Regression guard: `SQRT_FRAC_PI_2` was `sqrt(2/pi)` (0.7978...) here while
+/// thermite defines it as `sqrt(pi/2)` (1.2533...). Found by the interval
+/// crate's cross-check, and it made `Compensated::gaussian_integral` off by a
+/// factor of pi/2. This test would have caught it: the double-double `value`
+/// limb of a correctly-split constant is exactly the correctly-rounded f64.
+#[test]
+fn split_consts_agree_with_thermite_float_consts() {
+    use thermite::math::FloatConsts;
+
+    macro_rules! check {
+        ($($name:ident),* $(,)?) => {$(
+            let dd = <f64 as SplitFloatConsts<f64>>::$name;
+            let point = <f64 as FloatConsts>::$name;
+            assert_eq!(
+                dd.value, point,
+                concat!(stringify!($name), ": double-double value limb {} != thermite's {}"),
+                dd.value, point
+            );
+            let dd32 = <f32 as SplitFloatConsts<f32>>::$name;
+            let point32 = <f32 as FloatConsts>::$name;
+            assert_eq!(dd32.value, point32, concat!(stringify!($name), " (f32)"));
+        )*};
+    }
+
+    // The EPSILON family is deliberately excluded: a double-double carries its own,
+    // much smaller epsilon (2^-105, not f64::EPSILON), so those three never match.
+    thermite::for_each_math_const!(check);
+}

@@ -213,12 +213,12 @@ mod x86 {
 fn catastrophic_cancellation() {
     // Needs exactly 8 f64 lanes. On every backend but AVX-512 that is a composite of
     // native registers, which is fine here - the scan is what is under test, not the width.
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    use thermite::backend::x86_v3::f64x8;
     #[cfg(target_arch = "aarch64")]
     use thermite::backend::neon::f64x8;
     #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
     use thermite::backend::wasm::f64x8;
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    use thermite::backend::x86_v3::f64x8;
 
     type C = Compensated<f64x8>;
 

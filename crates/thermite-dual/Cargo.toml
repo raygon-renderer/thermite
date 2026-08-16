@@ -20,11 +20,15 @@ rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
 [features]
 default = ["special"]
 special = ["dep:thermite-special"]
+# Lets a `Compensated` be the value of a `Dual`, i.e. `Dual<Compensated<V>, N>`:
+# derivatives carried through double-double arithmetic.
+compensated = ["dep:thermite-compensated"]
 std = ["thermite/std"]
 
 [dependencies]
 thermite = { workspace = true }
 thermite-special = { workspace = true, optional = true }
+thermite-compensated = { workspace = true, optional = true }
 num-traits = { version = "0.2", default-features = false }
 paste = "1"
 

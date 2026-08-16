@@ -400,6 +400,7 @@ fn lambert_w_branch_point_and_zero() {
 /// `RealValue`, so seeding a `Dual` real part differentiates it directly. Checked
 /// against a central difference of the plain complex `trigamma`, which shares no code
 /// with the dual-number path.
+#[cfg(feature = "dual")]
 #[test]
 fn trigamma_derivative_through_dual() {
     use thermite::math::policy::DefaultPolicy;
@@ -439,6 +440,7 @@ fn trigamma_derivative_through_dual() {
 }
 
 /// Lambert W differentiates too: `W'(z) = W / (z (1 + W))`.
+#[cfg(feature = "dual")]
 #[test]
 fn lambert_w_derivative_through_dual() {
     use thermite_dual::Dual;
@@ -604,6 +606,7 @@ fn digamma_matches_the_real_axis() {
 /// The tightest cross-check available: `d/dz ln Gamma(z) = psi(z)`, with the left side
 /// produced by AD through `lgamma` (Lanczos) and the right by `digamma` (recurrence
 /// plus an asymptotic series). The two share no code path.
+#[cfg(feature = "dual")]
 #[test]
 fn digamma_is_the_derivative_of_lgamma() {
     use thermite_dual::Dual;

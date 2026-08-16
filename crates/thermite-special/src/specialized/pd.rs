@@ -18,6 +18,10 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedSpecialMath<f64> for V
 where
     V: TranscendentalMathWithPolicy<Element = f64>,
     V: SpecializedTranscendentalMath<f64>,
+    // Pins the projection so `V`'s real-special methods (whose impl requires
+    // `Primal = V`) resolve. A type parameter's `Primal` will not normalize
+    // through the blanket impl on its own.
+    V: thermite::math::PrimalProjection<Primal = V>,
 {
     type ExpIntDetails = Self;
 
@@ -233,7 +237,56 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealSpecialMath<f64> for 
 where
     V: TranscendentalMathWithPolicy<Element = f64>,
     V: SpecializedTranscendentalMath<f64>,
+    // Pins the projection: a type parameter's `Primal` will not normalize through
+    // the blanket impl on its own, and the table signatures need `Primal = Self`.
+    V: thermite::math::PrimalProjection<Primal = V>,
 {
+    // --- Spherical harmonics: the compile-time-table fast paths ---
+    //
+    // A concrete `f32`/`f64` element has a `ShConsts` table, which the generic
+    // defaults cannot assume. Both overrides are guarded by `L <= MAX_SH_DEGREE`,
+    // the extent of the stamped ladder, and fall back to the generic body above it.
+    // A statically-false `if const` arm is dropped before monomorphization, so the
+    // out-of-range table is never built.
+
+    #[inline(always)]
+    fn spherical_harmonics<P: Policy, const L: usize, const N: usize, const CS: bool>(
+        x: Self,
+        y: Self,
+        z: Self,
+        out: &mut [Self; N],
+    ) {
+        // Fully unrolled, constants folded into the instruction stream: no table is
+        // materialized at all, so there is nothing to hoist out of a loop. Above
+        // MAX_SH_DEGREE the kernel routes itself to the general path.
+        sh_impl::<P, f64, Self, L, N, CS>(x, y, z, out);
+    }
+
+    #[inline(always)]
+    fn spherical_harmonics_table<P: Policy, const L: usize, const N: usize, const CS: bool>(
+        table: &mut ShTable<Self, N>,
+    ) {
+        if const { L <= MAX_SH_DEGREE } {
+            // Every coefficient is already a compile-time constant of the right
+            // phase, so building the runtime table is a splat per entry, with none of
+            // the sqrt/divide work the generic default does.
+            let src = &<f64 as ShConsts<L, N, CS>>::TABLE;
+
+            let mut i = 0;
+            while i < N {
+                table.qmm[i] = Self::splat(src.qmm[i]);
+                table.em[i] = Self::splat(src.em[i]);
+                table.a[i] = Self::splat(src.a[i]);
+                table.nb[i] = Self::splat(src.nb[i]);
+                table.f[i] = Self::splat(src.f[i]);
+                table.mf[i] = Self::splat(src.mf[i]);
+                i += 1;
+            }
+        } else {
+            sh_table_impl::<Self, L, N, CS>(table);
+        }
+    }
+
     #[inline(always)]
     fn erfinv<P: Policy>(self) -> Self {
         // Branchless erfinv: a cheap Winitzki seed refined with Halley iterations
@@ -357,7 +410,22 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealPrimalMath<f64> for V
 where
     V: TranscendentalMathWithPolicy<Element = f64>,
     V: SpecializedTranscendentalMath<f64>,
+    V: thermite::math::PrimalProjection<Primal = V>,
 {
+    #[inline(always)]
+    #[allow(clippy::too_many_arguments)]
+    fn spherical_harmonics_d<P: Policy, const L: usize, const N: usize, const CS: bool>(
+        x: Self,
+        y: Self,
+        z: Self,
+        out: &mut [Self; N],
+        ddx: &mut [Self; N],
+        ddy: &mut [Self; N],
+        ddz: &mut [Self; N],
+    ) {
+        sh_d_impl::<P, f64, Self, L, N, CS>(x, y, z, out, ddx, ddy, ddz);
+    }
+
     #[inline(always)]
     fn gelu_d<P: Policy>(self, alpha: Self) -> (Self, Self) {
         let x = self;

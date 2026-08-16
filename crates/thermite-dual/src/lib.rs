@@ -75,6 +75,28 @@ impl<R: thermite::register::FloatRegister> DualValue for thermite::prelude::Vect
     }
 }
 
+/// Lets a `Compensated` sit inside a `Dual`: derivatives carried through
+/// double-double arithmetic, e.g. `Dual<Compensated<Vector<f64>>, N>`.
+///
+/// `ScalarValue` is thermite-compensated's umbrella over both its element form
+/// (`Compensated<f64>`) and its vector form (`Compensated<Vector<R>>`), so this
+/// one impl covers both layers of a dual vector, mirroring the split between
+/// the `f32`/`f64` and `Vector<R>` impls above.
+///
+/// `val_trunc` matches `Compensated`'s own `trunc`: truncate the value half and
+/// drop the error term.
+#[cfg(feature = "compensated")]
+#[cfg_attr(docsrs, doc(cfg(feature = "compensated")))]
+impl<V: thermite_compensated::ScalarValue> DualValue for thermite_compensated::Compensated<V> {
+    const VAL_ZERO: Self = Self::new(V::SCALAR_ZERO);
+    const VAL_ONE: Self = Self::new(V::SCALAR_ONE);
+
+    #[inline(always)]
+    fn val_trunc(self) -> Self {
+        Self::new(self.value().scalar_trunc())
+    }
+}
+
 /// A multidual number: a primal value plus `N` first-order derivative parts.
 ///
 /// See the [crate docs](crate) for the high-level idea. The derivative parts are

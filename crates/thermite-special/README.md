@@ -88,6 +88,26 @@ the Lambert W and elliptic implementations do internally.
 `exp`, so on f32 it stays reasonable even at the low presets, and the cheap
 policies are genuinely cheap.
 
+## Spherical harmonics
+
+`spherical_harmonics` evaluates the whole real basis through degree `L` from a Cartesian
+direction: no trigonometry, no division, `O(L^2)` FMAs, fully unrolled at compile time
+for each `L`. `spherical_harmonics_d` adds the analytic gradients, and
+`spherical_harmonics_table` + `spherical_harmonics_with` split the direction-independent
+coefficients out for callers sweeping many directions at high degree.
+
+```rust,ignore
+let mut sh = [V::ZERO; 9];
+V::spherical_harmonics::<2, 9, NO_PHASE>(x, y, z, &mut sh);
+```
+
+The `CS` parameter picks the phase convention, `NO_PHASE` for the standard real-SH
+tables or `CONDON_SHORTLEY` to match Sloan's `SHEval` and physics. Mixing the two silently
+corrupts any projection/reconstruction round trip, so it has to be named.
+
+See `examples/sh_envmap.rs` for a full HDR environment map projected onto the basis and
+reconstructed, including the ringing artifacts and the sinc window that removes them.
+
 ## It composes
 
 The functions are written against `FloatVector`, not a concrete type, so they

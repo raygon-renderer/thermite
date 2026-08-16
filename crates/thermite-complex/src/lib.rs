@@ -22,9 +22,9 @@ pub use crate::vector::RealFloatVector;
 /// the traits are spread across [`math`] and its submodules, and that layout is an
 /// implementation detail. Import from here.
 pub mod prelude {
+    pub use crate::RealFloatVector;
     pub use crate::math::specialized::{ComplexVector, SpecializedComplexMath};
     pub use crate::math::{ComplexMath, ComplexMathWithPolicy};
-    pub use crate::RealFloatVector;
     pub use crate::{Complex, RealValue};
 
     #[cfg(feature = "special")]
@@ -490,50 +490,4 @@ macro_rules! impl_float_consts {
     };
 }
 
-impl_float_consts!(
-    NEG_ZERO,
-    E,
-    EULER_GAMMA,
-    PI_SQUARED,
-    PI_CUBED,
-    PI_FOURTH,
-    FRAC_1_PI,
-    FRAC_1_SQRT_2,
-    FRAC_1_SQRT_3,
-    FRAC_2_PI,
-    FRAC_1_SQRT_PI,
-    FRAC_2_SQRT_PI,
-    FRAC_SQRT_PI_2,
-    FRAC_1_SQRT_TAU,
-    FRAC_PI_2,
-    FRAC_PI_3,
-    FRAC_PI_4,
-    FRAC_PI_6,
-    FRAC_PI_8,
-    FRAC_PI_180,
-    FRAC_180_PI,
-    LN_2,
-    LN_10,
-    LN_PI,
-    FRAC_LN_PI_2,
-    LOG2_10,
-    LOG2_E,
-    LOG10_2,
-    LOG10_E,
-    PI,
-    SQRT_2,
-    SQRT_3,
-    SQRT_E,
-    EPSILON,
-    SQRT_EPSILON,
-    FOURTH_ROOT_EPSILON,
-    TAU,
-    SQRT_FRAC_PI_2,
-    SQRT_TAU,
-    PHI,
-    FRAC_1_3,
-    FRAC_2_3,
-    FRAC_1_4,
-    FRAC_1_6,
-    FRAC_NEG_1_E
-);
+thermite::for_each_float_const!(impl_float_consts);

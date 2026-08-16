@@ -109,7 +109,10 @@ fn check(n: usize, got: C, a: f64, b: f64, wr: f64, wi: f64, tol: f64) {
     let err = rel_err(got, Complex64::new(wr, wi));
     let (re, im) = parts(got);
 
-    assert!(err <= tol, "E_{n}({a} + {b}i): got {re} + {im}i, want {wr} + {wi}i (rel {err:e})");
+    assert!(
+        err <= tol,
+        "E_{n}({a} + {b}i): got {re} + {im}i, want {wr} + {wi}i (rel {err:e})"
+    );
 }
 
 #[test]

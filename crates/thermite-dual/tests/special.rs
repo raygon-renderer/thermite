@@ -222,7 +222,11 @@ fn expint_derivative_is_the_next_lower_order() {
         let r = D::variable(V::splat(x), 0).expint::<3>();
         let expect = -V::splat(x).expint::<2>().extract::<0>();
 
-        assert!(close(r.re.extract::<0>(), V::splat(x).expint::<3>().extract::<0>(), 1e-15));
+        assert!(close(
+            r.re.extract::<0>(),
+            V::splat(x).expint::<3>().extract::<0>(),
+            1e-15
+        ));
         assert!(close(r.dual[0].extract::<0>(), expect, 1e-15), "E_3'({x}) != -E_2({x})");
         assert!(close(r.dual[1].extract::<0>(), 0.0, 1e-15));
     }

@@ -16,12 +16,12 @@
 //! are therefore differentiated automatically.
 
 use thermite::math::FloatConsts;
-use thermite::math::RealMathWithPolicy;
 use thermite::math::algorithms::reduce_in_place;
 use thermite::math::policy::Policy;
 use thermite::math::specialized::{
     SpecializedCoreMath, SpecializedRealMath, SpecializedSpatialMath, SpecializedTranscendentalMath,
 };
+use thermite::math::{PrimalProjection, RealMathWithPolicy};
 use thermite::prelude::*;
 use thermite::vector::AsFloatVectorWithBitsKernel;
 
@@ -33,7 +33,59 @@ use crate::vector::DualFloatVector;
 pub trait DualMathVector: DualFloatVector + RealMathWithPolicy + FloatConsts {}
 impl<V> DualMathVector for V where V: DualFloatVector + RealMathWithPolicy + FloatConsts {}
 
+impl<V: DualMathVector, const N: usize> PrimalProjection for Dual<V, N> {
+    // A constant's derivative parts are identically zero, so tables and cached
+    // coefficients live in the inner vector's primal, recursively.
+    type Primal = V::Primal;
+
+    #[inline(always)]
+    fn from_primal(p: Self::Primal) -> Self {
+        Self::constant(V::from_primal(p))
+    }
+
+    #[inline(always)]
+    fn to_primal(self) -> Self::Primal {
+        self.re.to_primal()
+    }
+}
+
 impl<V: DualMathVector, const N: usize> SpecializedCoreMath<Dual<V::Element, N>> for Dual<V, N> {
+    /// The product is a genuine dual multiply (both operands vary), but the addend is
+    /// a constant, so only the value part moves. The default would lift `a` into a
+    /// `Dual` with `N` zero derivatives and add those too, and `d + 0.0` does not fold
+    /// to `d` (it is wrong for `-0.0`), so those adds would survive to run time.
+    #[inline(always)]
+    fn mul_add_primal<P: Policy>(self, m: Self, a: Self::Primal) -> Self {
+        let prod = self * m;
+
+        Dual {
+            re: prod.re + V::from_primal(a),
+            dual: prod.dual,
+        }
+    }
+
+    /// As [`mul_add_primal`](SpecializedCoreMath::mul_add_primal), negated. Spelled out
+    /// rather than left to the default so the derivative components are negated in place
+    /// instead of `self` being negated first and the product rebuilt.
+    #[inline(always)]
+    fn nmul_add_primal<P: Policy>(self, m: Self, a: Self::Primal) -> Self {
+        let prod = self * m;
+
+        // Hand-rolled: `array::map` does not inline inside target_feature code and
+        // falls back to scalar.
+        let mut dual = prod.dual;
+        let mut i = 0;
+        while i < N {
+            dual[i] = -dual[i];
+            i += 1;
+        }
+
+        Dual {
+            re: V::from_primal(a) - prod.re,
+            dual,
+        }
+    }
+
     #[inline(always)]
     fn inverse_sqrt<P: Policy>(self) -> Self {
         let r = self.re.inverse_sqrt_p::<P>();

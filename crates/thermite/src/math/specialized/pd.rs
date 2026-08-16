@@ -4,12 +4,36 @@ use core::f64::consts::{LN_10, LOG2_E, SQRT_2};
 
 use super::*;
 
-impl<V: FloatVectorWithBits<Element = f64>> SpecializedCoreMath<f64> for V {
+// The `PrimalProjection<Primal = V>` pin: the rigid `PrimalProjection` supertrait
+// of `SpecializedCoreMath` shadows the fixpoint blanket impl on a generic `V`, so
+// without it `V::Primal` would not normalize to `V` in the `poly_primal` body.
+impl<V: FloatVectorWithBits<Element = f64> + PrimalProjection<Primal = V>> SpecializedCoreMath<f64> for V {
+    /// `Primal = Self`, so the coefficients are already this vector type, which means
+    /// the ILP lowering [`poly`](SpecializedCoreMath::poly) uses applies unchanged, and
+    /// the primal-Horner default would be a straight downgrade for real vectors.
+    ///
+    /// The one difference from `poly` is that these coefficients arrive pre-splatted, so
+    /// the per-term `splat` disappears too.
+    #[inline(always)]
+    fn poly_primal<P: Policy, N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self {
+        super::generic::poly_primal_internal::<V, P, N>(self, coeffs)
+    }
+
+    /// The reverse-order twin of [`poly_primal`](SpecializedCoreMath::poly_primal), with
+    /// the same reasoning: pre-splatted coefficients over the ILP lowering of
+    /// [`poly_rev`](SpecializedCoreMath::poly_rev).
+    #[inline(always)]
+    fn poly_rev_primal<P: Policy, N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self {
+        super::generic::poly_rev_primal_internal::<V, P, N>(self, coeffs)
+    }
+
     #[inline(always)]
     fn inverse_sqrt<P: Policy>(self) -> Self {
         super::generic::inverse_sqrt_internal::<V, f64, P>(self)
     }
 }
+
+impl<V: FloatVectorWithBits<Element = f64>> SpecializedPrimalMath<f64> for V {}
 
 impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealMath<f64> for V {
     #[inline(always)]

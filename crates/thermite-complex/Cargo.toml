@@ -27,8 +27,10 @@ wasm = ["thermite/wasm"]
 dual = ["dep:thermite-dual"]
 # Special functions over the complex plane.
 special = ["dep:thermite-special"]
-# Lets a `Compensated` be the storage of a `Complex`, i.e. `Complex<Compensated<V>>`
-compensated = ["dep:thermite-compensated"]
+# Lets a `Compensated` be the storage of a `Complex`, i.e. `Complex<Compensated<V>>`.
+# If `dual` is also enabled, forwards to thermite-dual's `compensated` feature so
+# the fully-nested `Complex<Dual<Compensated<V>, N>>` tower composes too.
+compensated = ["dep:thermite-compensated", "thermite-dual?/compensated"]
 
 [dependencies]
 thermite = { workspace = true }
@@ -44,3 +46,7 @@ workspace = true
 [dev-dependencies]
 libm = "0.2.16"
 num-complex = "0.4"
+
+[[example]]
+name = "tower"
+required-features = ["dual", "compensated"]

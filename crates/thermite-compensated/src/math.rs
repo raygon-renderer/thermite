@@ -5,22 +5,38 @@ use thermite::prelude::*;
 use thermite::element::FloatElementWithBits;
 use thermite::vector::AsFloatVectorWithBitsKernel;
 
-use thermite::math::policy::{PrecisionPolicy, policies::{CheckOverflow, PreserveDenormals}};
+use thermite::math::policy::{
+    PrecisionPolicy,
+    policies::{CheckOverflow, PreserveDenormals},
+};
 use thermite::math::specialized::{
-    SpecializedCoreMath, SpecializedRealMath, SpecializedSpatialMath, SpecializedTranscendentalMath,
+    SpecializedCoreMath, SpecializedPrimalMath, SpecializedRealMath, SpecializedSpatialMath,
+    SpecializedTranscendentalMath,
 };
 use thermite::math::{RealMathWithPolicy, TranscendentalMathWithPolicy};
 
-impl<V: CompensatedFloatVector> SpecializedCoreMath<Compensated<V::Element>> for Compensated<V> {
+// Deliberately its own primal: the error half of a double-double constant
+// carries real precision, not augmentation, so tables must keep it. The
+// `PrimalProjection` fixpoint (`Primal = Self`, identity conversions) comes
+// from the blanket impl in `thermite::math`, via `SpecializedPrimalMath` below.
+impl<V: CompensatedFloatVector> SpecializedCoreMath<Compensated<V::Element>> for Compensated<V>
+where
+    V: RealMathWithPolicy,
+{
     #[inline(always)]
     fn inverse_sqrt<P: Policy>(self) -> Self {
         Self::rsqrt(self)
     }
 }
 
+impl<V: CompensatedFloatVector> SpecializedPrimalMath<Compensated<V::Element>> for Compensated<V> where
+    V: RealMathWithPolicy
+{
+}
+
 impl<V: CompensatedFloatVector> SpecializedTranscendentalMath<Compensated<V::Element>> for Compensated<V>
 where
-    V: TranscendentalMathWithPolicy,
+    V: RealMathWithPolicy,
 {
     /// `$(\sin \pi x, \cos \pi x)$`, reducing **before** multiplying by pi.
     ///
@@ -607,7 +623,7 @@ where
 }
 
 #[rustfmt::skip]
-impl<V: CompensatedFloatVector> SpecializedSpatialMath<Compensated<V::Element>> for Compensated<V> {
+impl<V: CompensatedFloatVector> SpecializedSpatialMath<Compensated<V::Element>> for Compensated<V> where V: RealMathWithPolicy {
     #[inline(always)] fn l2_norm_squared<P: Policy>(self) -> Self { self.square() }
     #[inline(always)] fn l2_norm<P: Policy>(self) -> Self { self.abs() }
     #[inline(always)] fn l1_norm<P: Policy>(self) -> Self { self.abs() }

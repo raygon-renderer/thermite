@@ -7,8 +7,8 @@
 //! `ExpIntDetails::cf_tiny`, as `Complex` already did for the same reason.
 
 use thermite::prelude::*;
-use thermite_special::SpecialMath;
 use thermite_compensated::Compensated;
+use thermite_special::SpecialMath;
 
 type V = Vector<f64>;
 type C = Compensated<V>;

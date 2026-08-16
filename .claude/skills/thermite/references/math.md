@@ -120,18 +120,33 @@ let e = 2.0_f32.scalar_exp_p::<HighPerformance>();
 For *generic* code that must accept scalars, wrap the element: `x.as_vector()`
 (or the longhand `Vector::<f64>::splat(x)`).
 
-## FloatConsts: ~45 constants
+## FloatConsts: ~85 constants
 
 Implemented for `f32`, `f64`, and every `Vector<R: FloatRegister>`. Prefer these
-over recomputing (`V::SQRT_EPSILON`, not `V::EPSILON.sqrt()`):
+over recomputing (`V::SQRT_EPSILON`, not `V::EPSILON.sqrt()`). Coverage is a
+superset of Boost.Math's constants table:
 
 ```
 PI TAU E PHI EULER_GAMMA  FRAC_PI_2 FRAC_PI_3 FRAC_PI_4 FRAC_PI_6 FRAC_PI_8
 FRAC_1_PI FRAC_2_PI  LN_2 LN_10 LN_PI  LOG2_E LOG2_10 LOG10_E LOG10_2
 SQRT_2 SQRT_3 SQRT_E  FRAC_1_SQRT_2 FRAC_1_SQRT_3 FRAC_1_SQRT_PI FRAC_2_SQRT_PI
 EPSILON SQRT_EPSILON FOURTH_ROOT_EPSILON  PI_SQUARED PI_CUBED PI_FOURTH
-FRAC_1_3 FRAC_2_3 FRAC_1_4 FRAC_1_6  FRAC_PI_180 FRAC_180_PI  NEG_ZERO ...
+FRAC_1_3 FRAC_2_3 FRAC_1_4 FRAC_1_6  FRAC_PI_180 FRAC_180_PI  NEG_ZERO
+SQRT_PI CBRT_PI FRAC_1_CBRT_PI  FRAC_2PI_3 FRAC_3PI_4 FRAC_4PI_3 FRAC_1_TAU
+PI_MINUS_3 FOUR_MINUS_PI PI_POW_E E_POW_PI  SIN_1 COS_1 SINH_1 COSH_1
+LN_PHI FRAC_1_LN_PHI  ZETA_2 ZETA_3 CATALAN GLAISHER KHINCHIN
+FEIGENBAUM_DELTA PLASTIC_RATIO GAUSS DOTTIE PSI LAPLACE_LIMIT ...
 ```
+
+**Constants are generated, never typed by hand.** `gen_consts.py` at the
+workspace root is the single source of truth: its `CONSTS` list produces
+thermite's `math/consts/mod.rs`, thermite-compensated's double-double splits,
+and thermite-interval's enclosure pairs. Adding one is a single edit there plus
+`python gen_consts.py` (`--check` fails if the tree is stale). No other crate
+lists constant names - `thermite::for_each_float_const!(my_macro)` expands with
+all of them, `for_each_math_const!` with all but the format-specific epsilons.
+Verify with `cargo nextest run --release -p thermite-interval --test consts`,
+which audits every constant for correct rounding by exact rational comparison.
 
 ## Algorithms module (`math/algorithms/`)
 

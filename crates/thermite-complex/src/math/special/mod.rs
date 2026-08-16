@@ -70,7 +70,8 @@ use crate::Complex;
 use crate::math::ComplexMathWithPolicy as _;
 use crate::math::specialized::ComplexVector;
 use crate::vector::RealFloatVector;
-use thermite_special::tables::Lanczos;
+use thermite::math::PrimalProjection;
+use thermite_special::primal_tables::GammaPrimalTables;
 
 pub mod faddeeva;
 
@@ -454,29 +455,6 @@ pub trait SpecializedComplexSpecialMath<E>: ComplexVector<Element = E> {
 // Shared bodies
 // ---------------------------------------------------------------------------
 
-/// Lift a real coefficient table to complex constants, so the tuned
-/// [`poly`](thermite::math::CoreMathWithPolicy::poly_p) /
-/// [`poly_rev`](thermite::math::CoreMathWithPolicy::poly_rev_p) can be used directly
-/// rather than hand-rolling a Horner loop - those pick up Estrin-style ILP under
-/// policies that allow unrolling, which a sequential Horner cannot.
-///
-/// The table is `const` and everything here is `#[inline(always)]`, so the lift folds
-/// away; what remains at runtime is the zero imaginary part in each coefficient add,
-/// which IEEE forbids folding (`-0.0 + 0.0` is `+0.0`).
-#[inline(always)]
-fn complex_consts<V: RealFloatVector, const N: usize>(c: &[V::Element; N]) -> [Complex<V::Element>; N] {
-    let zero = <V::Element as crate::RealValue>::VAL_ZERO;
-    let mut out = [Complex::new(c[0], zero); N];
-
-    let mut i = 1;
-    while i < N {
-        out[i] = Complex::new(c[i], zero);
-        i += 1;
-    }
-
-    out
-}
-
 /// Shared complex `tgamma`, by the Lanczos approximation.
 ///
 /// Lanczos is an analytic approximation, not a minimax fit, so it carries over from
@@ -488,15 +466,19 @@ fn complex_consts<V: RealFloatVector, const N: usize>(c: &[V::Element; N]) -> [C
 /// range. It also has no integer fast path: over C that test would only fire on a
 /// measure-zero set.
 #[inline(always)]
-fn tgamma_impl<P: Policy, V: RealFloatVector, const N: usize>(z: Complex<V>, l: &Lanczos<V::Element, N>) -> Complex<V> {
+fn tgamma_impl<P: Policy, V: RealFloatVector>(z: Complex<V>) -> Complex<V>
+where
+    V::Primal: GammaPrimalTables<<V::Primal as GenericVector>::Element>,
+{
+    let l = <V::Primal as GammaPrimalTables<_>>::lanczos_primal();
+
     let reflect = z.re.cmp_lt(V::HALF);
     let w = reflect.select(Complex::ONE - z, z);
 
-    let gh = V::splat(l.g) - V::HALF;
+    let gh = V::from_primal(l.g) - V::HALF;
     let zgh = Complex::new(w.re + gh, w.im);
 
-    let lanczos = w.poly_rev_p::<P, N>(&complex_consts::<V, N>(&l.p_rev))
-        / w.poly_rev_p::<P, N>(&complex_consts::<V, N>(&l.q_rev));
+    let lanczos = w.poly_rev_primal_p::<P, _>(&l.p_rev) / w.poly_rev_primal_p::<P, _>(&l.q_rev);
 
     // zgh^(w - 1/2) * e^(-zgh) * lanczos_sum(w), with the two exponentials folded into
     // one: exp((w - 1/2) ln(zgh) - zgh).
@@ -529,15 +511,19 @@ fn tgamma_impl<P: Policy, V: RealFloatVector, const N: usize>(z: Complex<V>, l: 
 /// The reflected half-plane is another matter - `ln(sin(pi z))` is principal there, so
 /// the result can differ from the continuous branch by a multiple of `2 pi i`.
 #[inline(always)]
-fn lgamma_impl<P: Policy, V: RealFloatVector, const N: usize>(z: Complex<V>, l: &Lanczos<V::Element, N>) -> Complex<V> {
+fn lgamma_impl<P: Policy, V: RealFloatVector>(z: Complex<V>) -> Complex<V>
+where
+    V::Primal: GammaPrimalTables<<V::Primal as GenericVector>::Element>,
+{
+    let l = <V::Primal as GammaPrimalTables<_>>::lanczos_primal();
+
     let reflect = z.re.cmp_lt(V::HALF);
     let w = reflect.select(Complex::ONE - z, z);
 
     let b = Complex::new(w.re - V::HALF, w.im);
-    let a = Complex::new(b.re + V::splat(l.g), b.im).ln_p::<P>() - Complex::ONE;
+    let a = Complex::new(b.re + V::from_primal(l.g), b.im).ln_p::<P>() - Complex::ONE;
 
-    let s =
-        w.poly_p::<P, N>(&complex_consts::<V, N>(&l.p_expg_scaled)) / w.poly_p::<P, N>(&complex_consts::<V, N>(&l.q));
+    let s = w.poly_primal_p::<P, _>(&l.p_expg_scaled) / w.poly_primal_p::<P, _>(&l.q);
 
     let res = a * b + s.ln_p::<P>();
 
@@ -554,11 +540,12 @@ fn lgamma_impl<P: Policy, V: RealFloatVector, const N: usize>(z: Complex<V>, l: 
 /// `p_large` is a genuine asymptotic series. So the recurrence does the work the
 /// rational does in the real version, walking `Re z` up to `shift` before expanding.
 #[inline(always)]
-fn digamma_impl<P: Policy, V: RealFloatVector, const NL: usize>(
-    z: Complex<V>,
-    p_large: &[V::Element; NL],
-    shift: V::Element,
-) -> Complex<V> {
+fn digamma_impl<P: Policy, V: RealFloatVector>(z: Complex<V>) -> Complex<V>
+where
+    V::Primal: GammaPrimalTables<<V::Primal as GenericVector>::Element>,
+{
+    let p_large = <V::Primal as GammaPrimalTables<_>>::digamma_p_large();
+
     let reflect = z.re.cmp_lt(V::HALF);
 
     let mut w = reflect.select(Complex::ONE - z, z);
@@ -571,7 +558,7 @@ fn digamma_impl<P: Policy, V: RealFloatVector, const NL: usize>(
     }
 
     // psi(w) = psi(w + 1) - 1/w, walked until the series below applies.
-    let shift = V::splat(shift);
+    let shift = V::from_primal(<V::Primal as GammaPrimalTables<_>>::digamma_shift());
     let mut acc = Complex::<V>::ZERO;
     let mut active = w.re.cmp_lt(shift);
 
@@ -585,7 +572,7 @@ fn digamma_impl<P: Policy, V: RealFloatVector, const NL: usize>(
     let xm1 = w - Complex::ONE;
     let u = (xm1 * xm1).finv_p::<P>();
 
-    let psi = xm1.ln_p::<P>() + (xm1 + xm1).finv_p::<P>() - u * u.poly_p::<P, NL>(&complex_consts::<V, NL>(p_large));
+    let psi = xm1.ln_p::<P>() + (xm1 + xm1).finv_p::<P>() - u * u.poly_primal_p::<P, _>(&p_large);
 
     let total = acc + psi;
 
@@ -786,20 +773,26 @@ macro_rules! bernoulli_b2n {
     };
 }
 
-impl<V: RealFloatVector<Element = f32>> SpecializedComplexSpecialMath<Complex<f32>> for Complex<V> {
+// The `Primal = V` pin: a real vector is its own primal, but the rigid
+// `PrimalProjection` supertrait shadows the fixpoint blanket impl on a generic `V`, so
+// without it `Complex<V>::Primal` will not normalize to `V` and the table lookup cannot
+// resolve. Same pin thermite's `ps.rs`/`pd.rs` carry, for the same reason.
+impl<V: RealFloatVector<Element = f32> + PrimalProjection<Primal = V> + FloatVectorWithBits>
+    SpecializedComplexSpecialMath<Complex<f32>> for Complex<V>
+{
     #[inline(always)]
     fn complex_tgamma<P: Policy>(self) -> Self {
-        tgamma_impl::<P, V, _>(self, &thermite_special::tables::LANCZOS_F32)
+        tgamma_impl::<P, V>(self)
     }
 
     #[inline(always)]
     fn complex_lgamma<P: Policy>(self) -> Self {
-        lgamma_impl::<P, V, _>(self, &thermite_special::tables::LANCZOS_F32)
+        lgamma_impl::<P, V>(self)
     }
 
     #[inline(always)]
     fn complex_digamma<P: Policy>(self) -> Self {
-        digamma_impl::<P, V, _>(self, &thermite_special::tables::DIGAMMA_F32.p_large, 10.0)
+        digamma_impl::<P, V>(self)
     }
 
     #[inline(always)]
@@ -818,24 +811,27 @@ impl<V: RealFloatVector<Element = f32>> SpecializedComplexSpecialMath<Complex<f3
 
     #[inline(always)]
     fn faddeeva_w<P: Policy>(self) -> Self {
-        self::faddeeva::faddeeva_w::<P, f32, V>(self)
+        self::faddeeva::faddeeva_w::<P, f32, f32, V>(self)
     }
 }
 
-impl<V: RealFloatVector<Element = f64>> SpecializedComplexSpecialMath<Complex<f64>> for Complex<V> {
+// See the `Primal = V` pin note on the f32 impl above.
+impl<V: RealFloatVector<Element = f64> + PrimalProjection<Primal = V> + FloatVectorWithBits>
+    SpecializedComplexSpecialMath<Complex<f64>> for Complex<V>
+{
     #[inline(always)]
     fn complex_tgamma<P: Policy>(self) -> Self {
-        tgamma_impl::<P, V, _>(self, &thermite_special::tables::LANCZOS_F64)
+        tgamma_impl::<P, V>(self)
     }
 
     #[inline(always)]
     fn complex_lgamma<P: Policy>(self) -> Self {
-        lgamma_impl::<P, V, _>(self, &thermite_special::tables::LANCZOS_F64)
+        lgamma_impl::<P, V>(self)
     }
 
     #[inline(always)]
     fn complex_digamma<P: Policy>(self) -> Self {
-        digamma_impl::<P, V, _>(self, &thermite_special::tables::DIGAMMA_F64.p_large, 10.0)
+        digamma_impl::<P, V>(self)
     }
 
     #[inline(always)]
@@ -852,48 +848,7 @@ impl<V: RealFloatVector<Element = f64>> SpecializedComplexSpecialMath<Complex<f6
 
     #[inline(always)]
     fn faddeeva_w<P: Policy>(self) -> Self {
-        self::faddeeva::faddeeva_w::<P, f64, V>(self)
-    }
-}
-
-/// Rebuild a real coefficient array as `Dual` constants - same values, zero
-/// derivative parts, which is exactly what a constant of the expansion is.
-///
-/// Always sourced from the f64 tables. `E` is generic in the `Dual` impl below, so
-/// the f32/f64 table choice cannot be made there, and the array lengths differ; using
-/// the longer table costs an f32 inner a few extra terms rather than correctness.
-#[cfg(feature = "dual")]
-#[inline(always)]
-fn dual_consts<E, const N: usize, const M: usize>(src: &[f64; N]) -> [thermite_dual::Dual<E, M>; N]
-where
-    E: thermite::element::FloatElementWithBits + thermite_dual::DualValue,
-{
-    let mut out = [thermite_dual::Dual::<E, M>::constant(E::from_f64(src[0])); N];
-
-    let mut i = 1;
-    while i < N {
-        out[i] = thermite_dual::Dual::constant(E::from_f64(src[i]));
-        i += 1;
-    }
-
-    out
-}
-
-/// The Lanczos parameters as `Dual` constants; see [`dual_consts`].
-#[cfg(feature = "dual")]
-#[inline(always)]
-fn dual_lanczos<E, const M: usize>() -> Lanczos<thermite_dual::Dual<E, M>, 13>
-where
-    E: thermite::element::FloatElementWithBits + thermite_dual::DualValue,
-{
-    let l = &thermite_special::tables::LANCZOS_F64;
-
-    Lanczos {
-        g: thermite_dual::Dual::constant(E::from_f64(l.g)),
-        p_rev: dual_consts(&l.p_rev),
-        q_rev: dual_consts(&l.q_rev),
-        p_expg_scaled: dual_consts(&l.p_expg_scaled),
-        q: dual_consts(&l.q),
+        self::faddeeva::faddeeva_w::<P, f64, f64, V>(self)
     }
 }
 
@@ -910,26 +865,33 @@ where
 impl<E, V: FloatVector<Element = E>, const N: usize> SpecializedComplexSpecialMath<Complex<thermite_dual::Dual<E, N>>>
     for Complex<thermite_dual::Dual<V, N>>
 where
-    E: thermite::element::FloatElementWithBits + thermite_dual::DualValue,
-    thermite_dual::Dual<V, N>: RealFloatVector<Element = thermite_dual::Dual<E, N>>,
+    E: thermite::element::FloatElementWithBits + thermite_dual::DualValue + self::faddeeva::WeidemanTables,
+    // `Dual<V, N>::Primal` is `V::Primal`, recursively, so a `Dual` over a real vector
+    // reaches that vector's own table. Stated as an equality rather than left to
+    // normalize: selecting thermite-dual's `PrimalProjection` impl would need
+    // `V: DualMathVector`, which is more than this impl otherwise requires.
+    //
+    // This is also where the f32 inner stops paying for the f64 table: the provider is
+    // selected on `V`, where the element is concrete, so an f32 inner supplies its own
+    // 6-term Lanczos instead of the narrowed 13-term one the old adapter hardcoded.
+    thermite_dual::Dual<V, N>: RealFloatVector<Element = thermite_dual::Dual<E, N>>
+        + PrimalProjection<Primal = V>
+        + thermite::math::specialized::SpecializedCoreMath<thermite_dual::Dual<E, N>>,
+    V: GammaPrimalTables<E>,
 {
     #[inline(always)]
     fn complex_tgamma<P: Policy>(self) -> Self {
-        tgamma_impl::<P, thermite_dual::Dual<V, N>, 13>(self, &dual_lanczos::<E, N>())
+        tgamma_impl::<P, thermite_dual::Dual<V, N>>(self)
     }
 
     #[inline(always)]
     fn complex_lgamma<P: Policy>(self) -> Self {
-        lgamma_impl::<P, thermite_dual::Dual<V, N>, 13>(self, &dual_lanczos::<E, N>())
+        lgamma_impl::<P, thermite_dual::Dual<V, N>>(self)
     }
 
     #[inline(always)]
     fn complex_digamma<P: Policy>(self) -> Self {
-        digamma_impl::<P, thermite_dual::Dual<V, N>, 8>(
-            self,
-            &dual_consts(&thermite_special::tables::DIGAMMA_F64.p_large),
-            thermite_dual::Dual::constant(E::from_f64(10.0)),
-        )
+        digamma_impl::<P, thermite_dual::Dual<V, N>>(self)
     }
 
     /// The shared body is already generic over `RealValue`, so it differentiates
@@ -973,25 +935,27 @@ where
     fn faddeeva_w<P: Policy>(self) -> Self {
         use self::faddeeva::{Weideman, WeidemanTables, faddeeva_w_with, weideman_n};
 
-        // Sourced from the f64 tables for the same reason as [`dual_consts`]: `E` is
-        // generic here, so the f32/f64 choice cannot be made. The tier still follows the
-        // policy, but is capped by f64's ladder rather than the inner element's.
+        // The coefficient table and its matched `L` come from `E`, the *primal*
+        // element, so an f32 inner gets f32's own Weideman constants and ladder rather
+        // than f64's narrowed - the same fix the Gamma family got from
+        // `GammaPrimalTables`. They also stay real: `horner_real` adds them through
+        // `nmul_add_primal`, which touches the value component only.
         macro_rules! tier {
             ($n:literal) => {
-                faddeeva_w_with::<P, thermite_dual::Dual<E, N>, thermite_dual::Dual<V, N>, $n>(
+                faddeeva_w_with::<P, thermite_dual::Dual<E, N>, E, thermite_dual::Dual<V, N>, $n>(
                     self,
-                    thermite_dual::Dual::constant(E::from_f64(<f64 as Weideman<$n>>::L)),
-                    &dual_consts::<E, $n, N>(&<f64 as Weideman<$n>>::A),
-                    thermite_dual::Dual::constant(E::from_f64(<f64 as WeidemanTables>::HUGE)),
-                    thermite_dual::Dual::constant(E::from_f64(<f64 as WeidemanTables>::REAL_AXIS_Y)),
-                    thermite_dual::Dual::constant(E::from_f64(<f64 as WeidemanTables>::REAL_AXIS_X)),
+                    <E as Weideman<$n>>::L,
+                    &<E as Weideman<$n>>::A,
+                    thermite_dual::Dual::constant(<E as WeidemanTables>::HUGE),
+                    thermite_dual::Dual::constant(<E as WeidemanTables>::REAL_AXIS_Y),
+                    thermite_dual::Dual::constant(<E as WeidemanTables>::REAL_AXIS_X),
                 )
             };
         }
 
         macro_rules! is {
             ($n:literal) => {
-                const { weideman_n(P::POLICY.precision, <f64 as WeidemanTables>::MAX_N) <= $n }
+                const { weideman_n(P::POLICY.precision, <E as WeidemanTables>::MAX_N) <= $n }
             };
         }
 

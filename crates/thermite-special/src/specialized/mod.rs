@@ -3,7 +3,7 @@
 use thermite::{
     mask::GenericMask,
     math::{
-        CoreMathWithPolicy as _, FloatConsts, TranscendentalMathWithPolicy as _,
+        CoreMathWithPolicy as _, FloatConsts, PrimalProjection, TranscendentalMathWithPolicy as _,
         policy::{
             Policy, PrecisionPolicy,
             policies::{CheckOverflow, ExtraPrecision, LessPrecision},
@@ -754,6 +754,14 @@ pub use generic::elliptic::{
     EllintF, EllintK, EllintPi, EllintPiInc, EllipticConsts, EllipticKind, WrapTo,
 };
 
+// The spherical-harmonic kernels, ahead of their `RealSpecialMath` wiring. Re-exported
+// the same way as the elliptic internals: the tables trait must be nameable by generic
+// callers, and the tests drive the kernels through this path.
+pub use generic::sh::{
+    CONDON_SHORTLEY, MAX_DEGREE as MAX_SH_DEGREE, NO_PHASE, ShConsts, ShTable, sh_d_impl, sh_eval_d_impl, sh_eval_impl,
+    sh_eval_lifted_impl, sh_eval_mixed_impl, sh_impl, sh_table_impl,
+};
+
 /// Specialized implementation trait for real-only special math functions.
 ///
 /// Extends [`SpecializedSpecialMath`] with functions that have no meaningful
@@ -907,6 +915,66 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
 
         common * (a1.erf_p::<P>() - a0.erf_p::<P>())
     }
+
+    /// Fills a runtime coefficient table for degree `L` and phase `CS`. See
+    /// [`sh_impl`] for the conventions, layout, and algorithm.
+    ///
+    /// The direction-independent half of the work, split out so a caller sweeping many
+    /// directions pays it once: pair it with [`spherical_harmonics_with`](Self::spherical_harmonics_with).
+    /// The table records its own phase, which is why the evaluators take no `CS`.
+    ///
+    /// The default computes every coefficient from its closed form in `l` and `m`
+    /// (two `sqrt` and two divisions apiece) using nothing but `FloatVector`
+    /// arithmetic, so it works at any degree and on any element type. Real `f32`/`f64`
+    /// vectors override it to splat the compile-time table instead whenever
+    /// `L <= MAX_DEGREE`, which removes the arithmetic entirely.
+    #[inline(always)]
+    fn spherical_harmonics_table<P: Policy, const L: usize, const N: usize, const CS: bool>(
+        table: &mut ShTable<Self::Primal, N>,
+    ) {
+        generic::sh::sh_table_impl::<Self::Primal, L, N, CS>(table);
+    }
+
+    /// Evaluates all harmonics through degree `L` from a table built by
+    /// [`spherical_harmonics_table`](Self::spherical_harmonics_table).
+    ///
+    /// The default lifts each `Self::Primal` coefficient through `from_primal` as it
+    /// is read. That is the identity for types that are their own primal, so they
+    /// keep the fused single-type kernel. Composites with a cheaper mixed multiply
+    /// (`Dual`) override this.
+    #[inline(always)]
+    fn spherical_harmonics_with<P: Policy, const L: usize, const N: usize>(
+        table: &ShTable<Self::Primal, N>,
+        x: Self,
+        y: Self,
+        z: Self,
+        out: &mut [Self; N],
+    ) {
+        generic::sh::sh_eval_lifted_impl::<Self, L, N>(table, x, y, z, out);
+    }
+
+    /// The one-shot form: build a table and evaluate it.
+    ///
+    /// This default composes [`spherical_harmonics_table`](Self::spherical_harmonics_table)
+    /// with [`spherical_harmonics_with`](Self::spherical_harmonics_with), so it needs no
+    /// compile-time table and works on every element type and at any degree. Real
+    /// `f32`/`f64` vectors override it with the fully-unrolled kernel for
+    /// `L <= MAX_DEGREE`.
+    ///
+    /// A caller in a loop over directions should build the table once and call
+    /// `spherical_harmonics_with` instead. This rebuilds it on every invocation, and
+    /// the table is the expensive part.
+    #[inline(always)]
+    fn spherical_harmonics<P: Policy, const L: usize, const N: usize, const CS: bool>(
+        x: Self,
+        y: Self,
+        z: Self,
+        out: &mut [Self; N],
+    ) {
+        let mut table = ShTable::<Self::Primal, N>::zeroed();
+        Self::spherical_harmonics_table::<P, L, N, CS>(&mut table);
+        Self::spherical_harmonics_with::<P, L, N>(&table, x, y, z, out);
+    }
 }
 
 /// Value-and-derivative (`_d`) forms of the activation functions, for single-value real numbers.
@@ -915,7 +983,42 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
 /// like-named value-only function in [`SpecializedSpecialMath`] / [`SpecializedRealSpecialMath`].
 /// Implemented (as an empty impl) only for primal types -- *not* for derivative-carrying numbers
 /// like `Dual`, which obtain the derivative from the value form via automatic differentiation.
-pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> {
+pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> + PrimalProjection<Primal = Self> {
+    /// [`spherical_harmonics_with`](SpecializedRealSpecialMath::spherical_harmonics_with)
+    /// plus the ambient Cartesian gradients, from a prebuilt table.
+    #[inline(always)]
+    #[allow(clippy::too_many_arguments)]
+    fn spherical_harmonics_d_with<P: Policy, const L: usize, const N: usize>(
+        table: &ShTable<Self, N>,
+        x: Self,
+        y: Self,
+        z: Self,
+        out: &mut [Self; N],
+        ddx: &mut [Self; N],
+        ddy: &mut [Self; N],
+        ddz: &mut [Self; N],
+    ) {
+        generic::sh::sh_eval_d_impl::<Self, L, N>(table, x, y, z, out, ddx, ddy, ddz);
+    }
+
+    /// [`spherical_harmonics`](Self::spherical_harmonics) plus the ambient Cartesian
+    /// gradient of every harmonic. See [`sh_d_impl`] for the gradient semantics.
+    #[inline(always)]
+    #[allow(clippy::too_many_arguments)]
+    fn spherical_harmonics_d<P: Policy, const L: usize, const N: usize, const CS: bool>(
+        x: Self,
+        y: Self,
+        z: Self,
+        out: &mut [Self; N],
+        ddx: &mut [Self; N],
+        ddy: &mut [Self; N],
+        ddz: &mut [Self; N],
+    ) {
+        let mut table = ShTable::<Self, N>::zeroed();
+        Self::spherical_harmonics_table::<P, L, N, CS>(&mut table);
+        Self::spherical_harmonics_d_with::<P, L, N>(&table, x, y, z, out, ddx, ddy, ddz);
+    }
+
     #[inline(always)]
     fn softplus_d<P: Policy>(self, k: Self, rcp_k: Self) -> (Self, Self) {
         if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {

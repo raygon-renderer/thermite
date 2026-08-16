@@ -34,3 +34,14 @@ paste = "1"
 [dev-dependencies]
 libm = "0.2.15"
 lambert_w = "2.0.0"
+image = { version = "0.25", default-features = false, features = ["png", "hdr"] }
+# `special` is what carries their `SpecializedRealSpecialMath` impls, and the workspace
+# entries are `default-features = false`, so it has to be asked for explicitly.
+thermite-dual = { workspace = true, features = ["special"] }
+thermite-compensated = { workspace = true, features = ["special"] }
+thermite-complex = { workspace = true, features = ["special"] }
+criterion = { version = "0.8", features = ["html_reports"] }
+
+[[bench]]
+name = "spherical_harmonics"
+harness = false

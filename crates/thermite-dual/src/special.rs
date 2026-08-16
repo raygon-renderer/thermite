@@ -27,8 +27,11 @@
 //!
 //! Both panic if called; everything that does not depend on them works.
 
+use thermite::math::PrimalProjection;
 use thermite::math::policy::Policy;
-use thermite_special::specialized::{SpecializedRealSpecialMath, SpecializedSpecialMath};
+use thermite_special::specialized::{
+    ShTable, SpecializedRealSpecialMath, SpecializedSpecialMath, sh_eval_d_impl, sh_eval_mixed_impl,
+};
 use thermite_special::{RealSpecialMathWithPolicy, SpecialMathWithPolicy};
 
 use thermite::prelude::*;
@@ -147,11 +150,209 @@ where
     //}
 }
 
+// --- Spherical harmonics: seeding-aware fast paths ---
+//
+// The generic default would build a coefficient table IN DUAL ARITHMETIC (taking
+// square roots of dual numbers whose derivatives are identically zero) and then run
+// the whole recurrence with a derivative riding along every operation. Both are
+// avoidable whenever the inputs are seeded the way callers actually seed them, and the
+// two cases worth catching are cheap to recognise at runtime because a seeded dual part
+// is a splat of exactly 0 or exactly 1.
+//
+// Nothing here narrows the impl's bounds. The gradients come from the free function
+// `sh_eval_d_impl`, which needs only `FloatVector`, rather than from the `_d` trait
+// method, which lives on `RealPrimalMath` and is deliberately absent on `Dual`. So
+// nested `Dual<Dual<..>>` keeps working and simply recurses into its own fast paths.
+
+/// What [`classify`] found in one input's dual part.
+///
+/// Three counters rather than an enum, so the scan that fills them is straight-line
+/// arithmetic: no early exit, no `Option` state machine, nothing that stops LLVM from
+/// unrolling a loop whose trip count is a const generic.
+#[derive(Clone, Copy)]
+struct Seeding {
+    /// Components that are neither exactly zero nor exactly one, across all lanes.
+    other: u32,
+    /// Components that are exactly one across all lanes.
+    ones: u32,
+    /// Sum of the indices of those components, i.e. the slot itself once `ones == 1`.
+    slot: u32,
+}
+
+impl Seeding {
+    /// The input does not vary: every component is zero.
+    #[inline(always)]
+    fn is_constant(self) -> bool {
+        (self.other | self.ones) == 0
+    }
+
+    /// The input is a basis vector: one component is one and the rest are zero.
+    #[inline(always)]
+    fn is_unit(self) -> bool {
+        // `&`, not `&&`. Both halves are already computed, and short-circuiting one
+        // integer comparison buys a branch rather than saving work.
+        (self.other == 0) & (self.ones == 1)
+    }
+}
+
+/// Classifies a dual part, branchlessly.
+///
+/// Each comparison is over all lanes, so a partially seeded register (some lanes a
+/// variable, some not) correctly lands in `other` and takes the general path.
+#[inline(always)]
+fn classify<V: FloatVector, const N: usize>(dual: &[V; N]) -> Seeding {
+    let mut other = 0;
+    let mut ones = 0;
+    let mut slot = 0;
+
+    let mut i = 0;
+    while i < N {
+        let is_zero = dual[i].cmp_eq(V::ZERO).all() as u32;
+        let is_one = dual[i].cmp_eq(V::ONE).all() as u32;
+
+        // A component cannot be both, so the two flags are disjoint and `1 - (a | b)`
+        // is exactly "neither".
+        other += 1 - (is_zero | is_one);
+        ones += is_one;
+        slot += is_one * i as u32;
+
+        i += 1;
+    }
+
+    Seeding { other, ones, slot }
+}
+
 // Same bound as the `SpecializedSpecialMath` impl above, which this one requires.
 impl<V, E, const N: usize> SpecializedRealSpecialMath<Dual<E, N>> for Dual<V, N>
 where
     V: DualSpecialVector + FloatVector<Element = E> + SpecializedSpecialMath<E>,
 {
+    /// Delegates to the inner vector: the table is primal-typed at every layer, so
+    /// `V` fills the exact table this layer needs, and a real inner vector splats
+    /// its _compile-time_ constants instead of computing closed forms. A nested dual
+    /// recurses into this same shortcut.
+    #[inline(always)]
+    fn spherical_harmonics_table<P: Policy, const L: usize, const M: usize, const CS: bool>(
+        table: &mut ShTable<<V as PrimalProjection>::Primal, M>,
+    ) {
+        V::spherical_harmonics_table_p::<P, L, M, CS>(table);
+    }
+
+    /// Evaluates from a prebuilt primal table, with the same seeding shortcuts as
+    /// [`spherical_harmonics`](Self::spherical_harmonics), but reusing the caller's
+    /// cached table instead of rebuilding one.
+    #[inline(always)]
+    fn spherical_harmonics_with<P: Policy, const L: usize, const M: usize>(
+        table: &ShTable<<V as PrimalProjection>::Primal, M>,
+        x: Self,
+        y: Self,
+        z: Self,
+        out: &mut [Self; M],
+    ) {
+        let (sx, sy, sz) = (classify(&x.dual), classify(&y.dual), classify(&z.dual));
+
+        let constant = sx.is_constant() & sy.is_constant() & sz.is_constant();
+        let identity = sx.is_unit()
+            & sy.is_unit()
+            & sz.is_unit()
+            & (sx.slot != sy.slot)
+            & (sy.slot != sz.slot)
+            & (sx.slot != sz.slot);
+
+        if constant {
+            // The harmonics do not vary either: run the inner vector's kernel on the
+            // caller's table and wrap the results as constants.
+            let mut values = [V::ZERO; M];
+            V::spherical_harmonics_with_p::<P, L, M>(table, x.re, y.re, z.re, &mut values);
+
+            let mut i = 0;
+            while i < M {
+                out[i] = Dual::constant(values[i]);
+                i += 1;
+            }
+        } else if identity {
+            // The duals are exactly d/d(x,y,z): one shared recurrence via the analytic
+            // gradient form. That kernel runs in `V` (a nested dual keeps its inner
+            // derivatives), so lift the primal table first (the identity copy for a
+            // plain real `V`).
+            let (sx, sy, sz) = (sx.slot as usize, sy.slot as usize, sz.slot as usize);
+            let lifted = table.lift::<V>();
+
+            let mut values = [V::ZERO; M];
+            let mut ddx = [V::ZERO; M];
+            let mut ddy = [V::ZERO; M];
+            let mut ddz = [V::ZERO; M];
+            sh_eval_d_impl::<V, L, M>(&lifted, x.re, y.re, z.re, &mut values, &mut ddx, &mut ddy, &mut ddz);
+
+            let mut i = 0;
+            while i < M {
+                let mut dual = [V::ZERO; N];
+                dual[sx] = ddx[i];
+                dual[sy] = ddy[i];
+                dual[sz] = ddz[i];
+                out[i] = Dual::new(values[i], dual);
+                i += 1;
+            }
+        } else {
+            // A genuine Jacobian: the recurrence runs in dual arithmetic, but the
+            // coefficients stay primal-typed, so each coefficient multiply is
+            // `Dual * real` rather than `Dual * Dual`.
+            sh_eval_mixed_impl::<Self, V, L, M>(table, x, y, z, out);
+        }
+    }
+
+    /// Evaluates the basis, taking a shortcut when the direction is seeded the way
+    /// callers usually seed it.
+    ///
+    /// * **All three inputs constant**: the harmonics do not vary either, so this runs
+    ///   the inner vector's value kernel (the fully unrolled one, for a real `V`) and
+    ///   wraps the results. Dual arithmetic disappears entirely.
+    /// * **Identity seeding**, `x`, `y` and `z` each varying in their own slot: the
+    ///   duals are then exactly `$\partial Y/\partial(x,y,z)$`, which the analytic
+    ///   gradient form produces from one shared recurrence rather than by carrying three
+    ///   derivatives through every operation.
+    /// * **Anything else**: a genuine Jacobian, and the generic dual path is what it is
+    ///   for.
+    ///
+    /// The classification costs `3 * N` all-lane comparisons against splat constants,
+    /// against a kernel that is `O(L^2)` dual operations, so it is noise even when it
+    /// declines.
+    ///
+    /// Note this is the _value_ form. If you want `$\partial/\partial(x,y,z)$` and
+    /// nothing more, call
+    /// [`spherical_harmonics_d`](thermite_special::RealPrimalMath::spherical_harmonics_d)
+    /// on the real vector directly. Identity-seeding a dual to recover it works, and
+    /// takes this path, but asks for a wrapper the answer never needed.
+    #[inline(always)]
+    fn spherical_harmonics<P: Policy, const L: usize, const M: usize, const CS: bool>(
+        x: Self,
+        y: Self,
+        z: Self,
+        out: &mut [Self; M],
+    ) {
+        let (sx, sy, sz) = (classify(&x.dual), classify(&y.dual), classify(&z.dual));
+
+        // Only the constant case is handled here, because it can skip the table
+        // entirely: a real `V`'s one-shot kernel is the fully-unrolled compile-time
+        // form. Everything else builds the primal table once and goes through
+        // `spherical_harmonics_with`, which re-classifies for the identity and
+        // general-Jacobian paths (the classification is noise next to the kernels).
+        if sx.is_constant() & sy.is_constant() & sz.is_constant() {
+            let mut values = [V::ZERO; M];
+            V::spherical_harmonics_p::<P, L, M, CS>(x.re, y.re, z.re, &mut values);
+
+            let mut i = 0;
+            while i < M {
+                out[i] = Dual::constant(values[i]);
+                i += 1;
+            }
+        } else {
+            let mut table = ShTable::<<V as PrimalProjection>::Primal, M>::zeroed();
+            V::spherical_harmonics_table_p::<P, L, M, CS>(&mut table);
+            <Self as SpecializedRealSpecialMath<Dual<E, N>>>::spherical_harmonics_with::<P, L, M>(&table, x, y, z, out);
+        }
+    }
+
     #[inline(always)]
     fn erfinv<P: Policy>(self) -> Self {
         let v = self.re.erfinv_p::<P>();
@@ -180,9 +381,7 @@ where
 /// `Dual` overrides `expint` outright and delegates to the inner vector, so these are
 /// never consulted on the hot path - but the real-line defaults are the right answer
 /// anyway, since a dual number orders and compares by its real part.
-impl<V, E: 'static, const N: usize> thermite_special::specialized::ExpIntDetails<Dual<E, N>, Dual<V, N>>
-    for Dual<V, N>
-where
-    Dual<V, N>: thermite::vector::FloatVector<Element = Dual<E, N>>,
+impl<V, E: 'static, const N: usize> thermite_special::specialized::ExpIntDetails<Dual<E, N>, Dual<V, N>> for Dual<V, N> where
+    Dual<V, N>: thermite::vector::FloatVector<Element = Dual<E, N>>
 {
 }

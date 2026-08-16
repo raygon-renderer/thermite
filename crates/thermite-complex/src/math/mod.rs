@@ -21,12 +21,13 @@
 //! [`RealMath`](thermite::math::RealMath) is not implemented; see the note at the
 //! bottom of this file.
 
+use thermite::math::PrimalProjection;
 use thermite::math::policy::{DefaultPolicy, Policy, PrecisionPolicy};
 use thermite::math::specialized::{SpecializedCoreMath, SpecializedSpatialMath, SpecializedTranscendentalMath};
 use thermite::prelude::*;
 
-use crate::Complex;
 use self::specialized::{ComplexVector, SpecializedComplexMath};
+use crate::Complex;
 use crate::vector::RealFloatVector;
 
 // A copy of thermite::math's (private) decl_math!, dropping the ScalarMath
@@ -222,7 +223,41 @@ impl<V: RealFloatVector> SpecializedComplexMath<Complex<V::Element>> for Complex
 
 // --- SpecializedCoreMath ---
 
+impl<V: RealFloatVector> PrimalProjection for Complex<V> {
+    // A real coefficient's imaginary part is identically zero, so tables and
+    // cached coefficients live in the real vector's primal, recursively.
+    type Primal = V::Primal;
+
+    #[inline(always)]
+    fn from_primal(p: Self::Primal) -> Self {
+        Self::new(V::from_primal(p), V::ZERO)
+    }
+
+    #[inline(always)]
+    fn to_primal(self) -> Self::Primal {
+        self.re.to_primal()
+    }
+}
+
 impl<V: RealFloatVector> SpecializedCoreMath<Complex<V::Element>> for Complex<V> {
+    /// Same shape as the `Dual` override: the multiply is a full complex one, but a
+    /// real addend touches only the real part, where the default would add an
+    /// explicit zero to the imaginary part on every Horner step.
+    ///
+    /// The addend is _fused_ into the real part's inner FMA rather than added after a
+    /// complete complex multiply. Both spell `re*m.re - im*m.im + a`, but
+    /// `mul_adde(re, m.re, nmul_adde(im, m.im, a))` is two FMAs where multiply-then-add
+    /// is an FMA, a multiply and an add. That saves one instruction per Horner step,
+    /// measured at 48 vs 60 vector ops over a 13-term complex polynomial
+    /// (`bin/poly_primal_probe`). It also rounds once less.
+    #[inline(always)]
+    fn mul_add_primal<P: Policy>(self, m: Self, a: Self::Primal) -> Self {
+        let re = self.re.mul_adde(m.re, self.im.nmul_adde(m.im, V::from_primal(a)));
+        let im = self.re.mul_adde(m.im, self.im * m.re);
+
+        Complex::new(re, im)
+    }
+
     /// `P(z)/Q(z)`, evaluated directly or through `1/z` depending on which is better
     /// conditioned.
     ///
@@ -701,7 +736,6 @@ impl<V: RealFloatVector> SpecializedTranscendentalMath<Complex<V::Element>> for 
                 modulus = lost.select(e.im.nmul_adde(theta, e.re * ln_r_mod).exp_p::<P>(), modulus);
             }
         }
-
 
         Self::from_polar_p::<P>(modulus, angle)
     }

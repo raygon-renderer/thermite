@@ -6,7 +6,7 @@
 use thermite::{
     element::{Element, ElementExt, FloatElementWithBits},
     math::{
-        TranscendentalMathWithPolicy,
+        PrimalMathWithPolicy, PrimalProjection, TranscendentalMathWithPolicy,
         policy::{DefaultPolicy, Policy},
         scalar::Unwrap,
     },
@@ -25,7 +25,16 @@ pub mod specialized;
 #[doc(hidden)]
 pub mod tables;
 
+/// The same coefficients, splatted into a primal vector type and selected by that type.
+/// Sibling crates building composite kernels are the audience. See the module docs.
+#[doc(hidden)]
+pub mod primal_tables;
+
 use crate::specialized::{CarlsonKind, EllipticKind, WrapTo};
+
+// The spherical-harmonic support items: generic callers of `spherical_harmonics`
+// must name `ShConsts` in a where-clause, so it has to be reachable from the root.
+pub use crate::specialized::{CONDON_SHORTLEY, MAX_SH_DEGREE, NO_PHASE, ShConsts, ShTable};
 
 /// Elliptic integral request structs and the traits they implement:
 ///
@@ -65,6 +74,16 @@ macro_rules! decl_math {
             $(#[$kmeta:meta])*
             fn $kname:ident : $ktrait:path;
         )*})?
+        // Optional block of methods whose scalar-layer signature differs from the
+        // vector one. A `Self::Primal`-typed table parameter has no spelling on a bare
+        // scalar (`f32` implements no vector trait), but the scalar IS its own primal,
+        // so the scalar form takes plain `Self` and the impl Unwrap-wraps it into the
+        // width-1 vector table as usual. Each fn declares that form after `= scalar`.
+        $(@scalar_sig {$(
+            $(#[$vmeta:meta])*
+            fn $vname:ident [ $($vgenerics:tt)* ][$($vgeneric_names:ident),*]( $($varg_name:ident :$varg_ty:ty),* $(,)?) -> $vret:ty
+                = scalar( $($vsarg_name:ident : $vsarg_ty:ty),* $(,)?) -> $vsret:ty;
+        )*})?
         }
     )*) => {paste::paste! {$(
         #[doc = "" $trait " Math functions for floating-point vectors with customizable policies.\n\n"]
@@ -79,6 +98,9 @@ macro_rules! decl_math {
         )*
         $($(
             $(#[$kmeta])* fn [<$kname _p>]<P: Policy, K: $ktrait<Output = Self>>(kind: K) -> Self;
+        )*)?
+        $($(
+            $(#[$vmeta])* fn [<$vname _p>]<P: Policy, $($vgenerics)*>($($varg_name: $varg_ty),*) -> $vret;
         )*)?
         }
 
@@ -96,6 +118,12 @@ macro_rules! decl_math {
         $($(
             $(#[$kmeta])* #[inline(always)] fn $kname<K: $ktrait<Output = Self>>(kind: K) -> Self
             { [<$trait MathWithPolicy>]::[<$kname _p>]::<DefaultPolicy, K>(kind) }
+        )*)?
+        $($(
+            // `<Self as ...>` explicitly: a `Self::Primal`-typed argument cannot drive
+            // `Self` inference (`Primal` is not injective).
+            $(#[$vmeta])* #[inline(always)] fn $vname<$($vgenerics)*>($($varg_name: $varg_ty),*) -> $vret
+            { <Self as [<$trait MathWithPolicy>]>::[<$vname _p>]::<DefaultPolicy, $($vgeneric_names),*>($($varg_name),*) }
         )*)?
         }
 
@@ -126,6 +154,15 @@ macro_rules! decl_math {
             #[cfg(feature = "disable_dispatch")]
             $(#[$kmeta])* #[skip_dispatch] #[inline(always)] fn [<$kname _p>]<P: Policy, K: $ktrait<Output = Self>>(kind: K) -> Self
             { kind.eval::<P>() }
+        )*)?
+        $($(
+            #[cfg(not(feature = "disable_dispatch"))]
+            $(#[$vmeta])* #[inline(always)] fn [<$vname _p>]<P: Policy, $($vgenerics)*>($($varg_name: $varg_ty),*) -> $vret
+            { <V as specialized::[<Specialized $trait Math>]<E>>::$vname::<P, $($vgeneric_names),*>($($varg_name),*) }
+
+            #[cfg(feature = "disable_dispatch")]
+            $(#[$vmeta])* #[skip_dispatch] #[inline(always)] fn [<$vname _p>]<P: Policy, $($vgenerics)*>($($varg_name: $varg_ty),*) -> $vret
+            { <V as specialized::[<Specialized $trait Math>]<E>>::$vname::<P, $($vgeneric_names),*>($($varg_name),*) }
         )*)?
         })*
 
@@ -161,6 +198,9 @@ macro_rules! decl_math {
         $($(
             $(#[$kmeta])* fn [<scalar_ $kname _p>]<P: Policy, K: WrapTo>(kind: K) -> Self
             where K::Wrapped: $ktrait, <K::Wrapped as $ktrait>::Output: Unwrap<Unwrapped = Self>;
+        )*)?
+        $($(
+            $(#[$vmeta])* fn [<scalar_ $vname _p>]<P: Policy, $($vgenerics)*>($($vsarg_name: $vsarg_ty),*) -> $vsret;
         )*)?
         )*}
 
@@ -199,6 +239,12 @@ macro_rules! decl_math {
             where K::Wrapped: $ktrait, <K::Wrapped as $ktrait>::Output: Unwrap<Unwrapped = Self>
             { ScalarSpecialMathWithPolicy::[<scalar_ $kname _p>]::<DefaultPolicy, K>(kind) }
         )*)?
+        $($(
+            // `<Self as ...>` explicitly, as in the vector layer: a table argument
+            // cannot drive `Self` inference.
+            $(#[$vmeta])* #[inline(always)] fn [<scalar_ $vname>]<$($vgenerics)*>($($vsarg_name: $vsarg_ty),*) -> $vsret
+            { <Self as ScalarSpecialMathWithPolicy>::[<scalar_ $vname _p>]::<DefaultPolicy, $($vgeneric_names),*>($($vsarg_name),*) }
+        )*)?
         )*}
 
         impl<M> ScalarSpecialMath for M where M: ScalarSpecialMathWithPolicy {}
@@ -213,6 +259,9 @@ macro_rules! decl_math {
                     SignedBits: Unwrap<Unwrapped = <E as FloatElementWithBits>::SignedBits>,
                     Bits: Unwrap<Unwrapped = <E as FloatElementWithBits>::Bits>
                 >
+                // Pins `Primal = Self` on the width-1 vector so the primal-typed table
+                // parameters normalize to what `Unwrap` produces.
+                + PrimalProjection<Primal = thermite::Vector<E>>
                 $(+ specialized::[<Specialized $trait Math>]<E>)*,
             E: thermite::register::FloatRegister<Storage = E>,
         {$($(
@@ -233,6 +282,19 @@ macro_rules! decl_math {
             where K::Wrapped: $ktrait, <K::Wrapped as $ktrait>::Output: Unwrap<Unwrapped = Self>
             { Unwrap::unwrap(<K::Wrapped as Unwrap>::wrap(kind).eval::<P>()) }
         )*)?
+        $($(
+            // Scalar-signature methods: same wrap/call/unwrap as the plain fns, with the
+            // scalar spelling of the arguments (a scalar is its own primal, so the table
+            // wraps into the width-1 vector's primal table directly).
+            $(#[$vmeta])* #[skip_dispatch] #[inline(always)] fn [<scalar_ $vname _p>]<P: Policy, $($vgenerics)*>($($vsarg_name: $vsarg_ty),*) -> $vsret
+            {
+                let ($(decl_math!(@SELF $vsarg_name this),)*) = Unwrap::wrap(($($vsarg_name,)*));
+
+                let res = <thermite::Vector<E> as specialized::[<Specialized $trait Math>]<E>>::$vname::<P, $($vgeneric_names),*>($(decl_math!(@SELF $vsarg_name this)),*);
+
+                Unwrap::unwrap(res)
+            }
+        )*)?
         )*}
     }};
 
@@ -245,7 +307,7 @@ decl_math! {
     /// Special math functions that are valid for both real and complex floating-point vectors.
     #[diagnostic::on_unimplemented(
         message = "`{Self}` does not provide special math (`erf`, `gamma`, activations, ...)",
-        note = "The special-math traits are auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types. A bare `f32`/`f64` does not qualify - wrap it in `Vector::<f32>::splat(x)`, or use `ScalarSpecialMath`'s `scalar_`-prefixed methods.",
+        note = "The special-math traits are auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types. A bare `f32`/`f64` does not qualify. Wrap it in `Vector::<f32>::splat(x)`, or use `ScalarSpecialMath`'s `scalar_`-prefixed methods.",
         note = "If `{Self}` already is a `FloatVector` and only the method call fails to resolve, bring the trait into scope: `use thermite_special::SpecialMath;` (or the relevant `RealSpecialMath` / `RealPrimalMath`)."
     )]
     trait Special: TranscendentalMathWithPolicy {
@@ -440,7 +502,7 @@ decl_math! {
     /// makes them non-holomorphic (e.g. `algebraic_sigmoid`).
     #[diagnostic::on_unimplemented(
         message = "`{Self}` does not provide real-valued special math (`erfinv`, `probit`, `lgamma_r`, ...)",
-        note = "`RealSpecialMath` is only meaningful for real-valued float vectors - complex number types deliberately do not implement it. A bare `f32`/`f64` does not qualify - wrap it in `Vector::<f32>::splat(x)`, or use `ScalarSpecialMath`."
+        note = "`RealSpecialMath` is only meaningful for real-valued float vectors. Complex number types deliberately do not implement it. A bare `f32`/`f64` does not qualify either. Wrap it in `Vector::<f32>::splat(x)`, or use `ScalarSpecialMath`."
     )]
     trait RealSpecial: SpecialMathWithPolicy {
         /// Computes the inverse error function.
@@ -517,6 +579,97 @@ decl_math! {
         ///
         /// The position `b` is assumed to be zero, so offset the limits accordingly for a non-zero position.
         fn gaussian_integral[][](x0: Self, x1: Self, a: Self, c: Self) -> Self;
+
+        /// Evaluates **all** real spherical harmonics through degree `L` at the unit
+        /// direction `(x, y, z)`, into `out[l * (l + 1) + m]` for `m` in `-l..=l`.
+        ///
+        /// Orthonormal real harmonics. Evaluation is pure polynomial arithmetic:
+        /// no trigonometry, no division, `O(L^2)` FMAs total, exact zeros for every
+        /// `m != 0` harmonic at the poles, fully unrolled at compile time for each
+        /// `L` up to [`MAX_SH_DEGREE`] (above that it takes the rolled general path,
+        /// which is correct at any degree but roughly 10x slower).
+        ///
+        /// `CS` picks the phase convention: [`NO_PHASE`] gives the standard real-SH
+        /// tables (`$Y_{11} = \sqrt{3/4\pi}\,x$`), [`CONDON_SHORTLEY`] negates every
+        /// odd-`|m|` harmonic to match Sloan's `SHEval` and the physics convention
+        /// (`$Y_{11} = -\sqrt{3/4\pi}\,x$`). The choice is baked into a constant
+        /// table, so neither costs an instruction, but mixing the two silently
+        /// corrupts any projection/reconstruction round-trip, which is why it must
+        /// be named.
+        ///
+        /// `N` must equal `(L + 1)^2` (compile-time checked). The direction is
+        /// assumed unit-length, and nothing renormalizes. See
+        /// [`sh_impl`](specialized::sh_impl) for the full convention, algorithm,
+        /// and domain notes.
+        ///
+        /// ```
+        /// use thermite::prelude::*;
+        /// use thermite_special::{CONDON_SHORTLEY, NO_PHASE, RealSpecialMath};
+        ///
+        /// type V = Vector<f64>;
+        /// let (x, y, z) = (V::splat(0.6), V::splat(0.0), V::splat(0.8));
+        ///
+        /// let mut sh = [V::ZERO; 9];
+        /// V::spherical_harmonics::<2, 9, NO_PHASE>(x, y, z, &mut sh);
+        /// // Y(1,1) = sqrt(3/4pi) * x
+        /// assert!((sh[3].extract::<0>() - 0.48860251190292 * 0.6).abs() < 1e-14);
+        ///
+        /// // The other convention negates odd |m|, and agrees on even |m|.
+        /// let mut cs = [V::ZERO; 9];
+        /// V::spherical_harmonics::<2, 9, CONDON_SHORTLEY>(x, y, z, &mut cs);
+        /// assert_eq!(cs[3].extract::<0>(), -sh[3].extract::<0>());
+        /// assert_eq!(cs[8].extract::<0>(), sh[8].extract::<0>());
+        /// ```
+        #[skip_dispatch] fn spherical_harmonics[const L: usize, const N: usize, const CS: bool][L, N, CS](x: Self, y: Self, z: Self, out: &mut [Self; N]) -> ();
+
+        @scalar_sig {
+        /// Builds the runtime coefficient table that [`spherical_harmonics_with`](RealSpecialMath::spherical_harmonics_with)
+        /// and [`spherical_harmonics_d_with`](RealSpecialMath::spherical_harmonics_d_with) evaluate.
+        ///
+        /// The table depends only on `L` and `CS`, never on the direction, so a caller
+        /// sweeping many directions should build it once rather than calling the
+        /// one-shot [`spherical_harmonics`](RealSpecialMath::spherical_harmonics)
+        /// per direction. The phase is baked in here, which is why the evaluators take
+        /// no `CS`.
+        ///
+        /// The table is typed by `Self::Primal`, the unaugmented value type: the
+        /// recurrence coefficients are constants, so a `Dual`'s derivative parts and a
+        /// `Complex`'s imaginary part would only store zeros. For plain vectors and
+        /// `Compensated` the primal is `Self` and nothing changes. For `Dual` the table
+        /// is a fraction of the size and its entries multiply as reals.
+        ///
+        /// ```
+        /// use thermite::prelude::*;
+        /// use thermite_special::{NO_PHASE, RealSpecialMath, ShTable};
+        ///
+        /// type V = Vector<f64>;
+        /// const L: usize = 3;
+        /// const N: usize = (L + 1) * (L + 1);
+        ///
+        /// let mut table = ShTable::<V, N>::zeroed();
+        /// V::spherical_harmonics_table::<L, N, NO_PHASE>(&mut table);
+        ///
+        /// let mut sh = [V::ZERO; N];
+        /// for &(x, y, z) in &[(1.0, 0.0, 0.0), (0.0, 1.0, 0.0)] {
+        ///     V::spherical_harmonics_with::<L, N>(
+        ///         &table, V::splat(x), V::splat(y), V::splat(z), &mut sh,
+        ///     );
+        /// }
+        /// assert!((sh[1].extract::<0>() - 0.48860251190292).abs() < 1e-14);
+        /// ```
+        #[skip_dispatch] fn spherical_harmonics_table[const L: usize, const N: usize, const CS: bool][L, N, CS](table: &mut ShTable<<Self as PrimalProjection>::Primal, N>) -> ()
+            = scalar(table: &mut ShTable<Self, N>) -> ();
+
+        /// Evaluates all harmonics through degree `L` from a prebuilt table.
+        ///
+        /// The table holds `Self::Primal` coefficients. See
+        /// [`spherical_harmonics_table`](RealSpecialMath::spherical_harmonics_table)
+        /// for how to build it and why, and
+        /// [`spherical_harmonics`](RealSpecialMath::spherical_harmonics) for the
+        /// conventions and layout.
+        #[skip_dispatch] fn spherical_harmonics_with[const L: usize, const N: usize][L, N](table: &ShTable<<Self as PrimalProjection>::Primal, N>, x: Self, y: Self, z: Self, out: &mut [Self; N]) -> ()
+            = scalar(table: &ShTable<Self, N>, x: Self, y: Self, z: Self, out: &mut [Self; N]) -> ();
+        }
     }
 
     /// "Primal" special functions: the value-and-derivative (`_d`) forms of the activation
@@ -531,10 +684,55 @@ decl_math! {
     /// Each `*_d` method mirrors the like-named value-only function in [`SpecialMath`] /
     /// [`RealSpecialMath`], returning that same value as the first tuple element.
     #[diagnostic::on_unimplemented(
-        message = "`{Self}` does not provide value-and-derivative special math (`softplus_d`, `gelu_d`, ...)",
-        note = "`RealPrimalMath` builds on `RealSpecialMath` and is only meaningful for real-valued float vectors. A bare `f32`/`f64` does not qualify - wrap it in `Vector::<f32>::splat(x)`, or use `ScalarSpecialMath`."
+        message = "`{Self}` does not provide value-and-derivative special math (`softplus_d`, `gelu_d`, `spherical_harmonics_d`, ...)",
+        note = "`RealPrimalMath` builds on `RealSpecialMath` and is implemented only for primal real vectors (plain float vectors and `Compensated`), never for `Dual` or `Complex`, which get their derivatives from the value form instead. A bare `f32`/`f64` does not qualify either. Wrap it in `Vector::<f32>::splat(x)`, or use `ScalarSpecialMath`."
     )]
-    trait RealPrimal: RealSpecialMathWithPolicy {
+    trait RealPrimal: RealSpecialMathWithPolicy & PrimalMathWithPolicy {
+        /// [`spherical_harmonics`](RealSpecialMath::spherical_harmonics) plus the
+        /// ambient Cartesian gradient of every harmonic, into `ddx`/`ddy`/`ddz`.
+        ///
+        /// Lives on [`RealPrimalMath`] rather than [`RealSpecialMath`], so `Dual` does
+        /// not get it, and should not want it. If you need `$\partial/\partial(x,y,z)$`,
+        /// call this directly rather than evaluating
+        /// [`spherical_harmonics`](RealSpecialMath::spherical_harmonics) on a
+        /// `Dual<V, 3>` seeded with an identity Jacobian: this shares the recurrence
+        /// between the value and all three gradients, whereas dual arithmetic carries a
+        /// derivative through every operation and costs roughly twice as much.
+        ///
+        /// `Dual` earns its keep on the _value_ form instead, where `(x, y, z)` are
+        /// themselves functions of upstream parameters and the chain rule has real work
+        /// to do. Even there, going the other way (contracting these three gradients
+        /// against an upstream Jacobian) loses: spherical harmonics cost about two
+        /// operations per harmonic to evaluate but three per harmonic per parameter to
+        /// contract, because one recurrence produces the whole basis.
+        ///
+        /// The derivatives are those of the polynomial form at the given (unit)
+        /// input. Project out the radial component (`g - (g . n) n`) for the
+        /// tangential gradient. Shares all recurrence work with the value pass, since
+        /// the gradients come from tabulated norm ratios, not new recurrences.
+        #[skip_dispatch] fn spherical_harmonics_d[const L: usize, const N: usize, const CS: bool][L, N, CS](
+            x: Self,
+            y: Self,
+            z: Self,
+            out: &mut [Self; N],
+            ddx: &mut [Self; N],
+            ddy: &mut [Self; N],
+            ddz: &mut [Self; N],
+        ) -> ();
+
+        /// [`spherical_harmonics_with`](RealSpecialMath::spherical_harmonics_with) plus
+        /// the ambient Cartesian gradients, from a prebuilt table.
+        #[skip_dispatch] fn spherical_harmonics_d_with[const L: usize, const N: usize][L, N](
+            table: &ShTable<Self, N>,
+            x: Self,
+            y: Self,
+            z: Self,
+            out: &mut [Self; N],
+            ddx: &mut [Self; N],
+            ddy: &mut [Self; N],
+            ddz: &mut [Self; N],
+        ) -> ();
+
         /// [`softplus`](SpecialMath::softplus) together with its derivative w.r.t. `x`
         /// (the logistic sigmoid `$\sigma(kx)$`).
         fn softplus_d[][](self: Self, k: Self, rcp_k: Self) -> (Self, Self);

@@ -36,7 +36,7 @@ use crate::{
     element::{FloatElement, FloatElementWithBits},
     mask::*,
     math::{
-        CoreMathWithPolicy, FloatConsts, RealMathWithPolicy, TranscendentalMathWithPolicy, algorithms,
+        CoreMathWithPolicy, FloatConsts, PrimalProjection, RealMathWithPolicy, TranscendentalMathWithPolicy, algorithms,
         policy::policies::{ExtraPrecision, LessPrecision},
     },
     register::NativeCapability,
@@ -45,6 +45,8 @@ use crate::{
 
 // use super::MathWithPolicy;
 use super::policy::{DenormalBehavior, Policy, PrecisionPolicy};
+
+use generic_array::{ArrayLength, GenericArray, typenum::Unsigned};
 
 mod generic;
 
@@ -402,7 +404,77 @@ impl<P: Policy, const N: usize, V: FloatVector> AsFloatVectorWithBitsKernel<V, N
     }
 }
 
-pub trait SpecializedCoreMath<E>: FloatVector<Element = E> {
+pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
+    /// Backing definition of [`CoreMathWithPolicy::poly_primal`].
+    ///
+    /// Horner over primal coefficients. The multiply stays in `Self` (both operands
+    /// genuinely vary), but the addend is a constant with no augmentation, so the
+    /// step is `mul_add_primal` rather than a full `mul_adde` against a lifted zero.
+    /// A type that is its own primal inherits `mul_add_primal = mul_adde`, so this
+    /// compiles to exactly [`poly`](Self::poly) there.
+    #[inline(always)]
+    fn poly_primal<P: Policy, N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self {
+        let x = self;
+
+        let n = const { N::USIZE };
+
+        let mut res = Self::from_primal(coeffs[n - 1]);
+        let mut i = n - 1;
+        while i > 0 {
+            i -= 1;
+            unsafe { core::hint::assert_unchecked(i < n) };
+            res = res.mul_add_primal::<P>(x, coeffs[i]);
+        }
+        res
+    }
+
+    /// Backing definition of [`CoreMathWithPolicy::poly_rev_primal`].
+    ///
+    /// [`poly_primal`](Self::poly_primal) with the coefficients in descending order.
+    /// The same primal-Horner step, walked forwards.
+    #[inline(always)]
+    fn poly_rev_primal<P: Policy, N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self {
+        let x = self;
+
+        let n = const { N::USIZE };
+
+        let mut res = Self::from_primal(coeffs[0]);
+        let mut i = 1usize;
+        while i < n {
+            unsafe { core::hint::assert_unchecked(i < n) };
+            res = res.mul_add_primal::<P>(x, coeffs[i]);
+            i += 1;
+        }
+        res
+    }
+
+    /// One Horner step against a primal addend: `self * m + a`.
+    ///
+    /// The single point where a composite says how to add an unaugmented constant, so
+    /// [`poly_primal`](Self::poly_primal) and anything else built on it inherit the
+    /// saving from one override rather than reimplementing the evaluator. The default
+    /// is correct for every type. It just lifts, which is free only when `Self` is its
+    /// own primal.
+    #[inline(always)]
+    fn mul_add_primal<P: Policy>(self, m: Self, a: Self::Primal) -> Self {
+        self.mul_adde(m, Self::from_primal(a))
+    }
+
+    /// `-(self * m) + a`, the negated twin of [`mul_add_primal`](Self::mul_add_primal).
+    ///
+    /// Exists because the fused complex Horner step spends one of its two FMAs negated
+    /// (`re*zr - im*zi + c`), so a composite that overrides only the positive form still
+    /// pays the augmented add on every other term.
+    ///
+    /// The default negates a multiplicand and defers, which is correct for every type
+    /// and free wherever the negation folds into the multiply. Override it alongside
+    /// `mul_add_primal` when the fused form is worth spelling out. There are no `_sub`
+    /// twins: nothing needs them yet.
+    #[inline(always)]
+    fn nmul_add_primal<P: Policy>(self, m: Self, a: Self::Primal) -> Self {
+        (-self).mul_add_primal::<P>(m, a)
+    }
+
     #[inline(always)]
     fn poly<P: Policy, const N: usize>(self, coeffs: &[E; N]) -> Self {
         let x = self;
@@ -1109,6 +1181,15 @@ pub trait SpecializedSpatialMath<E>: SpecializedCoreMath<E> {
 
     fn l2_norm_squared<P: Policy>(self) -> Self;
 }
+
+/// Backing trait of [`PrimalMathWithPolicy`](crate::math::PrimalMathWithPolicy):
+/// a marker for _single-value_ real numbers (plain float vectors, `Compensated`),
+/// never derivative- or component-carrying composites like `Dual` or `Complex`.
+///
+/// Implementing this is also what _provides_ the [`PrimalProjection`] fixpoint:
+/// the blanket impl in [`crate::math`] gives every `SpecializedPrimalMath` type
+/// `Primal = Self` with identity conversions.
+pub trait SpecializedPrimalMath<E>: SpecializedRealMath<E> + SpecializedCoreMath<E> + PrimalProjection<Primal = Self> {}
 
 pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + SpecializedSpatialMath<E> {
     #[inline(always)]

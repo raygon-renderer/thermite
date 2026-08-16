@@ -7,6 +7,7 @@ default-members = [
     "crates/thermite-complex",
     "crates/thermite-dual",
     "crates/thermite-geometry",
+    "crates/thermite-interval",
     "crates/thermite-macros",
     "crates/thermite-sdf",
     "crates/thermite-sort",
@@ -66,6 +67,7 @@ thermite-special = { path = "crates/thermite-special", version = "0.2.1", defaul
 thermite-geometry = { path = "crates/thermite-geometry", version = "0.2.1", default-features = false }
 thermite-dual = { path = "crates/thermite-dual", version = "0.2.1", default-features = false }
 thermite-compensated = { path = "crates/thermite-compensated", version = "0.2.1", default-features = false }
+thermite-interval = { path = "crates/thermite-interval", version = "0.2.1", default-features = false }
 thermite-complex = { path = "crates/thermite-complex", version = "0.2.1", default-features = false }
 thermite-sort = { path = "crates/thermite-sort", version = "0.2.1", default-features = false }
 

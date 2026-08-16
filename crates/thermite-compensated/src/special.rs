@@ -1,10 +1,10 @@
 use super::{Compensated, CompensatedFloatVector};
 
-use thermite::math::TranscendentalMathWithPolicy;
+use thermite::math::{RealMathWithPolicy, TranscendentalMathWithPolicy};
 use thermite::prelude::*;
 
-use thermite_special::{RealSpecialMathWithPolicy, SpecialMathWithPolicy};
 use thermite_special::specialized::{SpecializedRealPrimalMath, SpecializedRealSpecialMath, SpecializedSpecialMath};
+use thermite_special::{RealSpecialMathWithPolicy, SpecialMathWithPolicy};
 
 use crate::specialized::special::SpecializedCompensatedSpecialMath;
 
@@ -12,14 +12,14 @@ use crate::specialized::special::SpecializedCompensatedSpecialMath;
 // value-and-derivative (`_d`) activation forms (via the trait defaults).
 impl<V: CompensatedFloatVector> SpecializedRealPrimalMath<Compensated<V::Element>> for Compensated<V>
 where
-    V: SpecialMathWithPolicy + RealSpecialMathWithPolicy,
+    V: SpecialMathWithPolicy + RealSpecialMathWithPolicy + RealMathWithPolicy,
     V: SpecializedCompensatedSpecialMath<V::Element>,
 {
 }
 
 impl<V: CompensatedFloatVector> Compensated<V>
 where
-    V: TranscendentalMathWithPolicy,
+    V: RealMathWithPolicy,
 {
     #[inline(always)]
     fn erf_internal_p<P: Policy>(self) -> (Self, Self) {
@@ -221,7 +221,7 @@ where
 
 impl<V: CompensatedFloatVector> SpecializedRealSpecialMath<Compensated<V::Element>> for Compensated<V>
 where
-    V: SpecialMathWithPolicy + RealSpecialMathWithPolicy,
+    V: SpecialMathWithPolicy + RealSpecialMathWithPolicy + RealMathWithPolicy,
     V: SpecializedCompensatedSpecialMath<V::Element>,
 {
     #[inline(always)]
@@ -376,7 +376,7 @@ where
 // to exist at all (the two Compensated widths need different coefficients).
 impl<V: CompensatedFloatVector> SpecializedSpecialMath<Compensated<V::Element>> for Compensated<V>
 where
-    V: SpecialMathWithPolicy + RealSpecialMathWithPolicy,
+    V: SpecialMathWithPolicy + RealSpecialMathWithPolicy + RealMathWithPolicy,
     V: SpecializedCompensatedSpecialMath<V::Element>,
 {
     type ExpIntDetails = Self;
@@ -420,7 +420,7 @@ where
         #[inline(always)]
         fn halley_refine<P: Policy, W>(w: Compensated<W>, x: Compensated<W>) -> Compensated<W>
         where
-            W: CompensatedFloatVector + TranscendentalMathWithPolicy,
+            W: CompensatedFloatVector + RealMathWithPolicy,
         {
             let ew = w.exp_p::<P>();
             let f = w.mul_sube(ew, x);

@@ -58,6 +58,7 @@
 //! is already in hand and only `$\operatorname{Re} w = e^{-x^2}$` has to be restored.
 
 use thermite::math::policy::{Policy, PrecisionPolicy};
+use thermite::math::specialized::SpecializedCoreMath;
 use thermite::math::{CoreMathWithPolicy as _, TranscendentalMathWithPolicy as _};
 use thermite::prelude::*;
 use thermite::register::FloatElement;
@@ -129,34 +130,41 @@ pub const fn weideman_n(precision: PrecisionPolicy, max_n: usize) -> usize {
 
 /// Horner over **real** coefficients at a complex argument, leading-term-first.
 ///
-/// [`poly_rev`](thermite::math::specialized::SpecializedCoreMath::poly_rev) cannot serve
-/// here: its coefficients are `Self::Element`, which for `Complex<V>` is `Complex<E>`,
-/// so it would carry `N` known-zero imaginary parts through the whole chain - a wasted
-/// add per term and twice the table. The iteration order matches `poly_rev`'s.
+/// [`poly_rev_primal`](thermite::math::specialized::SpecializedCoreMath::poly_rev_primal)
+/// does the same job generically and emits the same arithmetic, but its coefficients are
+/// pre-splatted *vectors*: at `N = 40` this loop does not unroll, so the table would have
+/// to be materialized at 32 bytes per term instead of broadcast from 8. Hence the
+/// hand-written form with element coefficients. See `bin/poly_primal_probe`. The
+/// iteration order matches `poly_rev`'s.
 ///
 /// `N` is a literal at every call site (the ladder in [`faddeeva_w`] instantiates it as
 /// one of 8/16/24/32/40), which is what lets the trip count and the coefficient loads
 /// fold.
 #[inline(always)]
-fn horner_real<E, V, const N: usize>(z: Complex<V>, a: &[E; N]) -> Complex<V>
+fn horner_real<P: Policy, E, PE, V, const N: usize>(z: Complex<V>, a: &[PE; N]) -> Complex<V>
 where
     E: FloatElement,
-    V: RealFloatVector<Element = E>,
+    PE: FloatElement,
+    V: RealFloatVector<Element = E> + SpecializedCoreMath<E>,
+    V::Primal: GenericVector<Element = PE>,
 {
     let (zr, zi) = (z.re, z.im);
 
     // p = p*z + c, with c real:
     //   re = p.re*zr - p.im*zi + c
     //   im = p.re*zi + p.im*zr
-    let mut re = V::splat(a[0]);
+    let mut re = V::from_primal(<V::Primal as GenericVector>::splat(a[0]));
     let mut im = V::ZERO;
 
     let mut i = 1usize;
     while i < N {
         unsafe { core::hint::assert_unchecked(i < N) };
 
-        let c = V::splat(a[i]);
-        let next_re = re.mul_adde(zr, im.nmul_adde(zi, c));
+        // `c` stays in the PRIMAL, so a composite adds it to its value component only.
+        // The coefficient rides inside the negated FMA rather than being added after,
+        // which is one instruction and one rounding per term - see `mul_add_primal`.
+        let c = <V::Primal as GenericVector>::splat(a[i]);
+        let next_re = re.mul_adde(zr, im.nmul_add_primal::<P>(zi, c));
         let next_im = re.mul_adde(zi, im * zr);
 
         re = next_re;
@@ -181,30 +189,36 @@ where
 /// coefficients stay byte-identical to `cef.m`'s output for review. Doubling is exact,
 /// and a complex add costs the same as a complex scale.
 #[inline(always)]
-pub fn weideman_with<P: Policy, E, V, const N: usize>(z: Complex<V>, l: E, a: &[E; N]) -> Complex<V>
+pub fn weideman_with<P: Policy, E, PE, V, const N: usize>(z: Complex<V>, l: PE, a: &[PE; N]) -> Complex<V>
 where
     E: FloatElement,
-    V: RealFloatVector<Element = E>,
+    PE: FloatElement,
+    V: RealFloatVector<Element = E> + SpecializedCoreMath<E>,
+    V::Primal: GenericVector<Element = PE>,
 {
-    let l = V::splat(l);
+    // `l` and `a` are a matched pair from one `Weideman<N>` impl and must come from the
+    // same element; both are therefore in the primal.
+    let l = V::from_primal(<V::Primal as GenericVector>::splat(l));
 
     // L - iz = (L + y) - ix  and  L + iz = (L - y) + ix
     let r = Complex::new(l + z.im, -z.re).reciprocal_p::<P>();
     let zz = Complex::new(l - z.im, z.re) * r;
 
-    let pr = horner_real::<E, V, N>(zz, a) * r;
+    let pr = horner_real::<P, E, PE, V, N>(zz, a) * r;
 
     (pr + pr + V::FRAC_1_SQRT_PI) * r
 }
 
 /// [`weideman_with`], taking the table from the element's own [`Weideman`] impl.
 #[inline(always)]
-pub fn weideman<P: Policy, E, V, const N: usize>(z: Complex<V>) -> Complex<V>
+pub fn weideman<P: Policy, E, PE, V, const N: usize>(z: Complex<V>) -> Complex<V>
 where
-    E: FloatElement + Weideman<N>,
-    V: RealFloatVector<Element = E>,
+    E: FloatElement,
+    PE: FloatElement + Weideman<N>,
+    V: RealFloatVector<Element = E> + SpecializedCoreMath<E>,
+    V::Primal: GenericVector<Element = PE>,
 {
-    weideman_with::<P, E, V, N>(z, <E as Weideman<N>>::L, &<E as Weideman<N>>::A)
+    weideman_with::<P, E, PE, V, N>(z, <PE as Weideman<N>>::L, &<PE as Weideman<N>>::A)
 }
 
 /// `w(z)` near the real axis, where the direct evaluation loses the real part.
@@ -248,12 +262,14 @@ where
 /// `$(x, y)$` evaluation already in hand drifts by about `$0.02y$` relative, which is fine
 /// at `$y = 10^{-8}$` and useless by `$y = 10^{-2}$`.
 #[inline(always)]
-fn real_axis_w<P: Policy, E, V, const N: usize>(x: V, y: V, l: E, a: &[E; N]) -> Complex<V>
+fn real_axis_w<P: Policy, E, PE, V, const N: usize>(x: V, y: V, l: PE, a: &[PE; N]) -> Complex<V>
 where
     E: FloatElement,
-    V: RealFloatVector<Element = E>,
+    PE: FloatElement,
+    V: RealFloatVector<Element = E> + SpecializedCoreMath<E>,
+    V::Primal: GenericVector<Element = PE>,
 {
-    let on_axis = weideman_with::<P, E, V, N>(Complex::new(x, V::ZERO), l, a);
+    let on_axis = weideman_with::<P, E, PE, V, N>(Complex::new(x, V::ZERO), l, a);
 
     // b_0 = w(x, 0), with the real part replaced by the value it provably has
     let b0 = Complex::new((-(x * x)).exp_p::<P>(), on_axis.im);
@@ -293,17 +309,19 @@ where
 ///   the argument is not. Accuracy in the lower half-plane at large `$|xy|$` is bounded
 ///   by the underlying `sincos` reduction, not by `N`.
 #[inline(always)]
-pub fn faddeeva_w_with<P: Policy, E, V, const N: usize>(
+pub fn faddeeva_w_with<P: Policy, E, PE, V, const N: usize>(
     z: Complex<V>,
-    l: E,
-    a: &[E; N],
+    l: PE,
+    a: &[PE; N],
     huge: E,
     real_axis_y: E,
     real_axis_x: E,
 ) -> Complex<V>
 where
     E: FloatElement,
-    V: RealFloatVector<Element = E>,
+    PE: FloatElement,
+    V: RealFloatVector<Element = E> + SpecializedCoreMath<E>,
+    V::Primal: GenericVector<Element = PE>,
 {
     // Signed zero deliberately reads as the upper half-plane: the reflection agrees
     // there anyway, and this way the real axis never pays for an exp.
@@ -312,7 +330,7 @@ where
     // A conditional negation, not a blend: `neg_c` is a masked sign-bit flip, where
     // `select(-z, z)` also pays for two `blendv`s.
     let zu = Complex::new(z.re.neg_c(lower), z.im.neg_c(lower));
-    let mut w = weideman_with::<P, E, V, N>(zu, l, a);
+    let mut w = weideman_with::<P, E, PE, V, N>(zu, l, a);
 
     // The real-axis correction applies to the reflected point, before the reflection
     // undoes it: a lane just below the axis is just as close to it as one just above.
@@ -320,7 +338,7 @@ where
         let near = zu.im.cmp_lt(V::splat(real_axis_y)) & zu.re.abs().cmp_lt(V::splat(real_axis_x));
 
         if thermite::unlikely(near.any()) {
-            w = near.select(real_axis_w::<P, E, V, N>(zu.re, zu.im, l, a), w);
+            w = near.select(real_axis_w::<P, E, PE, V, N>(zu.re, zu.im, l, a), w);
         }
     }
 
@@ -348,17 +366,19 @@ where
 
 /// [`faddeeva_w_with`], with `N` and the table chosen by the precision policy.
 #[inline(always)]
-pub fn faddeeva_w<P: Policy, E, V>(z: Complex<V>) -> Complex<V>
+pub fn faddeeva_w<P: Policy, E, PE, V>(z: Complex<V>) -> Complex<V>
 where
     E: FloatElement + WeidemanTables,
-    V: RealFloatVector<Element = E>,
+    PE: FloatElement + WeidemanTables,
+    V: RealFloatVector<Element = E> + SpecializedCoreMath<E>,
+    V::Primal: GenericVector<Element = PE>,
 {
     macro_rules! tier {
         ($n:literal) => {
-            faddeeva_w_with::<P, E, V, $n>(
+            faddeeva_w_with::<P, E, PE, V, $n>(
                 z,
-                <E as Weideman<$n>>::L,
-                &<E as Weideman<$n>>::A,
+                <PE as Weideman<$n>>::L,
+                &<PE as Weideman<$n>>::A,
                 E::HUGE,
                 E::REAL_AXIS_Y,
                 E::REAL_AXIS_X,
@@ -370,7 +390,7 @@ where
     // capture a local, even one whose initializer is itself constant.
     macro_rules! is {
         ($n:literal) => {
-            const { weideman_n(P::POLICY.precision, E::MAX_N) <= $n }
+            const { weideman_n(P::POLICY.precision, PE::MAX_N) <= $n }
         };
     }
 

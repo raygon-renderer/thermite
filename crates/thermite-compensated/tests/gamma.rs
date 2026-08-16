@@ -17,8 +17,8 @@
 //! neither. See the `LN_2_EXTENDED` comments in `consts.rs`.
 
 use thermite::prelude::*;
-use thermite_special::{RealSpecialMath, SpecialMath};
 use thermite_compensated::Compensated;
+use thermite_special::{RealSpecialMath, SpecialMath};
 
 type V = Vector<f64>;
 type C = Compensated<V>;
@@ -131,7 +131,11 @@ fn beta_rides_on_lgamma() {
         let want = 1.0 / b;
         let err = ((got.value.extract::<0>() - want) / want).abs();
 
-        assert!(err <= TOL, "beta(1, {b}): got {}, want {want}", got.value.extract::<0>());
+        assert!(
+            err <= TOL,
+            "beta(1, {b}): got {}, want {want}",
+            got.value.extract::<0>()
+        );
     }
 
     // Symmetry, which the log form does not enforce structurally.
@@ -202,7 +206,11 @@ fn tgamma_matches_factorials_exactly() {
     for n in 1..=20u32 {
         fact *= n as f64;
         let g = c(n as f64 + 1.0).tgamma().value.extract::<0>();
-        assert!(((g - fact) / fact).abs() <= 1e-27, "Gamma({}) vs {n}!: {g} vs {fact}", n + 1);
+        assert!(
+            ((g - fact) / fact).abs() <= 1e-27,
+            "Gamma({}) vs {n}!: {g} vs {fact}",
+            n + 1
+        );
     }
 }
 

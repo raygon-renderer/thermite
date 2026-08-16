@@ -17,6 +17,8 @@ pub use consts::FloatConsts;
 use crate::element::{Element, ElementExt, FloatElement, FloatElementWithBits};
 use crate::vector::{FloatVector, FloatVectorWithBits};
 
+use generic_array::{ArrayLength, GenericArray};
+
 pub mod algorithms;
 pub mod specialized;
 
@@ -26,9 +28,10 @@ pub mod prelude {
     pub use crate::vector::FloatVector;
 
     pub use super::FloatConsts;
+    pub use super::PrimalProjection;
     pub use super::{
-        CoreMath, CoreMathWithPolicy, RealMath, RealMathWithPolicy, ScalarMath, ScalarMathWithPolicy, SpatialMath,
-        SpatialMathWithPolicy, TranscendentalMath, TranscendentalMathWithPolicy,
+        CoreMath, CoreMathWithPolicy, PrimalMath, PrimalMathWithPolicy, RealMath, RealMathWithPolicy, ScalarMath,
+        ScalarMathWithPolicy, SpatialMath, SpatialMathWithPolicy, TranscendentalMath, TranscendentalMathWithPolicy,
     };
 }
 
@@ -54,10 +57,27 @@ pub trait Coefficients<T, const N: usize> {
 macro_rules! decl_math {
     ($(
         $(#[$trait_meta:meta])*
-        trait $trait:ident<$element:ident> $(: $($bound:ident)&+ )? { $(
-            $(#[$meta:meta])*
-            fn $name:ident [ $($generics:tt)* ][$($generic_names:ident),*]( $($arg_name:ident :$arg_ty:ty),* $(,)?) -> $ret:ty
-                $(where [ $($where_clause:tt)* ])?;
+        // Each supertrait bound may carry associated-type bindings, parsed
+        // structurally (`Bound<Name = Ty, ...>`) because a tt-repetition cannot
+        // terminate at a closing angle bracket. This is how `PrimalMath` states
+        // `PrimalProjection<Primal = Self>` directly in supertrait position.
+        trait $trait:ident<$element:ident> $(: $( $bound:ident $(< $($bound_assoc:ident = $bound_ty:ty),+ >)? )&+ )? {
+            // Optional policy-driven methods that exist on vectors only. Same `_p` and
+            // default-policy treatment as the ordinary items below, but no `scalar_`
+            // form: their signatures mention associated types (`Self::Primal` from the
+            // `PrimalProjection` supertrait) that a bare `f32` does not have. (Nor
+            // would one be useful, since a scalar is its own primal, so the scalar
+            // form would duplicate the plain method exactly.)
+            $(vector_fns {
+                $(
+                    $(#[$vfn_meta:meta])*
+                    fn $vfn_name:ident [ $($vfn_generics:tt)* ][$($vfn_generic_names:ident),*]( $($vfn_arg:ident : $vfn_ty:ty),* $(,)?) -> $vfn_ret:ty;
+                )*
+            })?
+            $(
+                $(#[$meta:meta])*
+                fn $name:ident [ $($generics:tt)* ][$($generic_names:ident),*]( $($arg_name:ident :$arg_ty:ty),* $(,)?) -> $ret:ty
+                    $(where [ $($where_clause:tt)* ])?;
             )*
         }
     )*) => {paste::paste! {$(
@@ -73,10 +93,15 @@ macro_rules! decl_math {
         #[doc = "the necessary internal math operations will automatically implement this trait, and"]
         #[doc = "the [`" $trait "Math`] trait as well for all types that implement this one."]
         #[thermite_macros::dispatch(Self, thermite = "crate")]
-        pub trait [<$trait MathWithPolicy>] $(: $($bound +)+)? {$(
-            $(#[$meta])* fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
-                $(where $($where_clause)*)?;
-        )*}
+        pub trait [<$trait MathWithPolicy>] $(: $($bound $(< $($bound_assoc = $bound_ty),+ >)? +)+)? {
+            $($(
+                $(#[$vfn_meta])* fn [<$vfn_name _p>]<P: Policy, $($vfn_generics)*>($($vfn_arg: $vfn_ty),*) -> $vfn_ret;
+            )*)?
+            $(
+                $(#[$meta])* fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
+                    $(where $($where_clause)*)?;
+            )*
+        }
 
         #[doc = "" $trait " Math functions for floating-point vectors using the default policy."]
         $(#[$trait_meta])*
@@ -92,29 +117,45 @@ macro_rules! decl_math {
         #[doc = "All methods here have an associated method in [`" $trait "MathWithPolicy`] with a `_p` suffix"]
         #[doc = "that accepts a policy parameter as the first generic argument."]
         #[thermite_macros::dispatch(Self, thermite = "crate")]
-        pub trait [<$trait Math>]: [<$trait MathWithPolicy>] {$(
-            $(#[$meta])* #[inline(always)] fn $name<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
-                $(where $($where_clause)*)?
-            { [<$trait MathWithPolicy>]::[<$name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*) }
-        )*}
+        pub trait [<$trait Math>]: [<$trait MathWithPolicy>] {
+            $($(
+                // `<Self as ...>` explicitly: an argument typed through an associated
+                // type cannot drive `Self` inference, since the projection is not
+                // injective.
+                $(#[$vfn_meta])* #[inline(always)] fn $vfn_name<$($vfn_generics)*>($($vfn_arg: $vfn_ty),*) -> $vfn_ret
+                { <Self as [<$trait MathWithPolicy>]>::[<$vfn_name _p>]::<DefaultPolicy, $($vfn_generic_names),*>($($vfn_arg),*) }
+            )*)?
+            $(
+                $(#[$meta])* #[inline(always)] fn $name<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
+                    $(where $($where_clause)*)?
+                { [<$trait MathWithPolicy>]::[<$name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*) }
+            )*
+        }
 
         impl<M> [<$trait Math>] for M where M: [<$trait MathWithPolicy>] {}
 
         // Note: The FloatVector<Element = E> bound is necessary to ensure E is bounded.
         #[thermite_macros::dispatch(Self, thermite = "crate")]
-        impl<E: $element, V: FloatVector<Element = E> + $($($bound +)+)?> [<$trait MathWithPolicy>] for V
+        impl<E: $element, V: FloatVector<Element = E> + $($($bound $(< $($bound_assoc = $bound_ty),+ >)? +)+)?> [<$trait MathWithPolicy>] for V
             where V: specialized::[<Specialized $trait Math>]<E>
-        {$(
-            #[cfg(not(feature = "disable_dispatch"))]
-            $(#[$meta])* #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
-                $(where $($where_clause)*)?
-            { <V as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*) }
+        {
+            $($(
+                $(#[$vfn_meta])* #[skip_dispatch] #[inline(always)]
+                fn [<$vfn_name _p>]<P: Policy, $($vfn_generics)*>($($vfn_arg: $vfn_ty),*) -> $vfn_ret
+                { <V as specialized::[<Specialized $trait Math>]<E>>::$vfn_name::<P, $($vfn_generic_names),*>($($vfn_arg),*) }
+            )*)?
+            $(
+                #[cfg(not(feature = "disable_dispatch"))]
+                $(#[$meta])* #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
+                    $(where $($where_clause)*)?
+                { <V as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*) }
 
-            #[cfg(feature = "disable_dispatch")]
-            $(#[$meta])* #[skip_dispatch] #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
-                $(where $($where_clause)*)?
-            { <V as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*) }
-        )*})*
+                #[cfg(feature = "disable_dispatch")]
+                $(#[$meta])* #[skip_dispatch] #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
+                    $(where $($where_clause)*)?
+                { <V as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*) }
+            )*
+        })*
 
         #[doc = "Aggregate of all scalar math traits with customizable policies."]
         #[doc = ""]
@@ -144,7 +185,7 @@ macro_rules! decl_math {
             note = "`ScalarMathWithPolicy` is implemented only for the bare scalar types `f32` and `f64`. For SIMD vectors, bound on `FloatVector` plus the vector math traits (`CoreMath`, `TranscendentalMath`, ...) instead."
         )]
         pub trait ScalarMathWithPolicy: ElementExt<Element = Self> + FloatElementWithBits {$($(
-             $(#[$meta])* fn [<scalar_ $name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
+            $(#[$meta])* fn [<scalar_ $name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
                 $(where $($where_clause)*)?;
         )*)*
 
@@ -247,11 +288,77 @@ mod tests {
     }
 }
 
+/// Projection from a float vector down to its unaugmented "primal" value type.
+///
+/// [`Primal`](Self::Primal) is `Self` for plain vectors, and the (recursive)
+/// primal of the inner value vector for composites like `Dual` or `Complex`.
+/// It is the natural type for precomputed constants and coefficient tables: a
+/// constant's derivative and imaginary parts are identically zero, so storing
+/// them wastes lanes. Generate and cache tables in `Self::Primal`, and let the
+/// composite's kernels lift entries as needed.
+///
+/// `Compensated` is deliberately its own primal: the error half of a
+/// double-double constant carries real precision, not augmentation.
+///
+/// This trait is the _single_ owner of the `Primal` projection. Both the
+/// public math traits ([`CoreMathWithPolicy`]) and the specialized backing
+/// traits ([`specialized::SpecializedCoreMath`]) inherit it, so `Self::Primal`
+/// means the same thing on either side by construction.
+///
+/// The target of the projection must itself be a primal type with the full
+/// real math suite ([`PrimalMath`]); `PrimalMath` in turn states the fixpoint
+/// (`PrimalProjection<Primal = Self>`), so a primal type is always its own
+/// primal and the projection collapses in one step.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` does not declare a primal (unaugmented) value type",
+    label = "needs an `impl PrimalProjection for {Self}`",
+    note = "Every type carrying the math traits has to answer this, because coefficient tables are stored in `Self::Primal`. There are two answers. A wide composite, one that adds fields which are zero or degenerate for a constant (`Dual`'s derivatives, `Complex`'s imaginary part, `Interval`'s width), projects to its inner vector's primal: `type Primal = V::Primal`, recursively, so towers collapse in one step. A deep composite, one that carries the same value to more precision (`Compensated`), is its own primal: `type Primal = Self`, since dropping the extra digits would throw away the thing the type exists for.",
+    note = "If `{Self}` is a type parameter that is always its own primal, this is probably the projection-shadowing trap rather than a missing impl. The rigid `PrimalProjection` supertrait shadows the fixpoint blanket impl, so `{Self}::Primal` will not normalize to `{Self}` until you add an explicit `PrimalProjection<Primal = {Self}>` bound."
+)]
+pub trait PrimalProjection: Sized {
+    /// The unaugmented value type of `Self`. See the trait docs.
+    type Primal: PrimalMath;
+
+    /// Embeds a primal value as a constant of `Self`: every non-primal field
+    /// (derivative parts, imaginary part) is initialized to zero. The identity
+    /// for primal types.
+    ///
+    /// This is the load path for tables stored in [`Primal`](Self::Primal) form.
+    fn from_primal(p: Self::Primal) -> Self;
+
+    /// Projects `self` down to its primal value, discarding every non-primal
+    /// field. The identity for primal types.
+    ///
+    /// Lossy by design: for `Dual` this drops the derivatives, for `Complex`
+    /// the imaginary part.
+    fn to_primal(self) -> Self::Primal;
+}
+
+// Anything declared primal is its own primal projection: keying the blanket on
+// `SpecializedPrimalMath` (the "is primal" marker, implemented for real
+// `f32`/`f64` vectors and `Compensated`) covers every fixpoint type in one impl
+// and is exactly the assumption needed to prove `Self: PrimalMath` for the
+// associated-type bound. Wide composites (`Dual`, `Complex`) deliberately do
+// not implement `SpecializedPrimalMath` and provide their own projections.
+impl<E: FloatElement, V: FloatVector<Element = E> + specialized::SpecializedPrimalMath<E>> PrimalProjection for V {
+    type Primal = Self;
+
+    #[inline(always)]
+    fn from_primal(p: Self::Primal) -> Self {
+        p
+    }
+
+    #[inline(always)]
+    fn to_primal(self) -> Self::Primal {
+        self
+    }
+}
+
 decl_math! {
     /// Float-specific mathematical functions like `ldexp` and `frexp`.
     #[diagnostic::on_unimplemented(
         message = "`{Self}` does not provide float bit-level math (`ldexp`, `frexp`, `flush_denormals`)",
-        note = "This trait is auto-implemented for every `FloatVectorWithBits` (concrete float vectors such as `Vector<f32>` / `f32xN`). A bare `f32`/`f64` must be wrapped in `Vector::<f32>::splat(x)`; for scalar math use `ScalarMath` instead."
+        note = "This trait is auto-implemented for every `FloatVectorWithBits` (concrete float vectors such as `Vector<f32>` / `f32xN`). A bare `f32`/`f64` has to be wrapped in `Vector::<f32>::splat(x)`. For scalar math use `ScalarMath` instead."
     )]
     trait Float<FloatElementWithBits>: FloatVectorWithBits {
         /// Computes `self * 2^exp` efficiently.
@@ -297,9 +404,42 @@ decl_math! {
     /// This is the core set of mathematical operations that form the basis for more advanced functions.
     #[diagnostic::on_unimplemented(
         message = "`{Self}` does not provide core polynomial math (`poly`, `poly_rev`, ...)",
-        note = "The math traits are auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types. A bare `f32`/`f64` does not qualify - wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`'s `scalar_`-prefixed methods."
+        note = "The math traits are auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types. A bare `f32`/`f64` does not qualify. Wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`'s `scalar_`-prefixed methods."
     )]
-    trait Core<FloatElement>: FloatVector {
+    trait Core<FloatElement>: FloatVector & PrimalProjection {
+        vector_fns {
+            /// [`poly`](Self::poly) with the coefficients held in [`Primal`](Self::Primal) form.
+            ///
+            /// The augmented fields of a constant (a `Dual`'s derivatives, a `Complex`'s
+            /// imaginary part) are identically zero, so carrying coefficients in `Self`
+            /// stores those zeros and then adds them at every Horner step. Neither the
+            /// storage nor the addition can be optimized away: `x + 0.0` is not `x` when
+            /// `x` is `-0.0`, so the adds survive to run time.
+            ///
+            /// Taking them as `Self::Primal` removes both. The coefficient array shrinks by
+            /// the augmentation factor (4x for `Dual<V, 3>`, 2x for `Complex`), and each
+            /// Horner step adds to the primal component alone.
+            ///
+            /// For a type that is its own primal this is exactly [`poly`](Self::poly) with
+            /// pre-splatted coefficients, and the default impl reduces to it.
+            ///
+            /// Coefficients are _vectors_, not elements: a caller with a constant table has
+            /// usually splatted it once already, and the composites that benefit most are
+            /// the ones for which splatting per call would be the expensive part.
+            ///
+            /// The length is a [`typenum`](generic_array::typenum) length rather than a
+            /// `const N: usize` so that a coefficient table can be supplied by a type that
+            /// knows its own length only as an associated type. Literal call sites spell it
+            /// [`GenericArray::from_array`].
+            fn poly_primal[N: ArrayLength][N](self: Self, coeffs: &GenericArray<Self::Primal, N>) -> Self;
+
+            /// [`poly_rev`](Self::poly_rev) with the coefficients held in [`Primal`](Self::Primal) form.
+            ///
+            /// Same trade as [`poly_primal`](Self::poly_primal) (the constants carry no
+            /// augmented fields to store or add), with the coefficients in reverse order.
+            fn poly_rev_primal[N: ArrayLength][N](self: Self, coeffs: &GenericArray<Self::Primal, N>) -> Self;
+        }
+
         /// Computes the polynomial with the given coefficients at `self`.
         ///
         /// This will use fused multiply-add instructions where available for improved performance and accuracy, but
@@ -353,7 +493,7 @@ decl_math! {
     #[diagnostic::on_unimplemented(
         message = "`{Self}` does not provide transcendental math (`sin`, `cos`, `exp`, `ln`, `powf`, ...)",
         label = "no transcendental math",
-        note = "This trait is auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types (`Dual`, `Complex`, `Compensated`). A bare `f32`/`f64` does not qualify - wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`'s `scalar_`-prefixed methods (`x.scalar_exp()`, ...).",
+        note = "This trait is auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types (`Dual`, `Complex`, `Compensated`). A bare `f32`/`f64` does not qualify. Wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`'s `scalar_`-prefixed methods (`x.scalar_exp()`, ...).",
         note = "If `{Self}` already is a `FloatVector` and only the method call fails to resolve, bring the trait into scope: `use thermite::math::TranscendentalMath;`."
     )]
     trait Transcendental<FloatElement>: CoreMathWithPolicy {
@@ -520,7 +660,7 @@ decl_math! {
     /// These functions are primarily useful in dimensions higher than one.
     #[diagnostic::on_unimplemented(
         message = "`{Self}` does not provide spatial math (`hypot`, `atan2`, ...)",
-        note = "This trait is auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types. A bare `f32`/`f64` does not qualify - wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`'s `scalar_`-prefixed methods."
+        note = "This trait is auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types. A bare `f32`/`f64` does not qualify. Wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`'s `scalar_`-prefixed methods."
     )]
     trait Spatial<FloatElement>: CoreMathWithPolicy {
         /// Computes the Euclidean norm (hypotenuse) of `self` and `other`, i.e., `sqrt(self^2 + other^2)`.
@@ -564,7 +704,7 @@ decl_math! {
     /// Real-value mathematical functions that cannot be applied to some number types. (e.g., complex numbers)
     #[diagnostic::on_unimplemented(
         message = "`{Self}` does not provide real-valued math (`to_degrees`, `to_radians`, `tolerance`, ...)",
-        note = "`RealMath` builds on both `TranscendentalMath` and `SpatialMath`, and is only meaningful for real-valued float vectors - number types like `Complex` deliberately do not implement it. A bare `f32`/`f64` does not qualify - wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`."
+        note = "`RealMath` builds on both `TranscendentalMath` and `SpatialMath`, and is only meaningful for real-valued float vectors. Number types like `Complex` deliberately do not implement it. A bare `f32`/`f64` does not qualify either. Wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`."
     )]
     trait Real<FloatElement>: TranscendentalMathWithPolicy & SpatialMathWithPolicy {
         /// Returns the precision tolerance based on the selected policy. This is a good
@@ -739,5 +879,20 @@ decl_math! {
 
         /// Returns 1 if `self` is greater than or equal to `edge`, otherwise returns 0.
         fn step[][](self: Self, edge: Self) -> Self;
+    }
+
+    /// "Primal" math for _single-value_ real numbers: plain float vectors and
+    /// `Compensated`, but never derivative- or component-carrying composites like
+    /// `Dual` or `Complex`. Effectively a stricter form of real-valued math.
+    ///
+    /// A primal type is its own [`Primal`](PrimalProjection::Primal), which makes
+    /// it the storage type for precomputed constants and coefficient tables shared
+    /// with the composites built over it.
+    #[diagnostic::on_unimplemented(
+        message = "`{Self}` is not a primal (single-value real) float vector",
+        note = "`PrimalMath` is implemented for plain real float vectors and `Compensated`, never for derivative- or component-carrying composites such as `Dual` or `Complex`.",
+        note = "For a composite type, use its associated `Primal` type (`Self::Primal` via `PrimalProjection`) instead of the composite itself."
+    )]
+    trait Primal<FloatElement>: RealMathWithPolicy & PrimalProjection<Primal = Self> {
     }
 }

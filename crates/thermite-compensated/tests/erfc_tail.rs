@@ -9,8 +9,8 @@
 //! References are mpmath 1.3.0 at 45 digits, as `(hi, lo)` pairs.
 
 use thermite::prelude::*;
-use thermite_special::SpecialMath;
 use thermite_compensated::Compensated;
+use thermite_special::SpecialMath;
 
 type V = Vector<f64>;
 type C = Compensated<V>;
