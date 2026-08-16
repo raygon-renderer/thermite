@@ -1,4 +1,4 @@
-//! THE law (INTERVAL_PLAN.md ground rule 4): for every operation `F` lifting
+//! THE law: for every operation `F` lifting
 //! a real function `f`, and every input interval `X` with sample points
 //! `x in X`, assert `F(X).contains(f(x))`, with `f` referenced exactly (the
 //! double-double result of thermite-compensated's error-free transforms).

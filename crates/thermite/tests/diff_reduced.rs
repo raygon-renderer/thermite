@@ -264,7 +264,7 @@ macro_rules! reduced_suite {
             #[test]
             fn pow2() {
                 // UnsignedIntegerRegister::is_power_of_two (nonzero inputs; 0 is a
-                // documented divergence - see CLAUDE.md known issues).
+                // documented divergence).
                 pow2t!(<$backend as Simd3A>::u32x3A, u32, concat!($bl, " u32x3A"));
                 pow2t!(<$backend as Simd3A>::u64x3A, u64, concat!($bl, " u64x3A"));
             }

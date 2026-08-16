@@ -14,8 +14,8 @@
 //! discipline with no `DefaultPolicy` guesswork, and makes accidentally
 //! mixing tiers a type error.
 //!
-//! The three tiers are the measured rows of the plan's policy matrix
-//! (INTERVAL_PLAN.md, with llvm-mca + width numbers in `bin/interval_probe`):
+//! The three tiers are the measured rows of the policy matrix
+//! (llvm-mca + width numbers in `bin/interval_probe`):
 //!
 //! | tier       | add / sub | mul / fma            | character |
 //! |------------|-----------|----------------------|-----------|

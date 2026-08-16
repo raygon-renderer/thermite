@@ -211,7 +211,7 @@ macro_rules! linalg_ext_suite {
 
                     // mat3_transpose: out[i] = [c0[i], c1[i], c2[i]], i in 0..3 (bit-exact
                     // lane routing). NOTE: lane 3 is documented as zeroed but the impl leaves
-                    // it unspecified (see TESTING.md), so only the first 3 lanes are checked.
+                    // it unspecified, so only the first 3 lanes are checked.
                     let t = V::mat3_transpose(&cols);
                     for i in 0..3 {
                         let want = [cf[0][i], cf[1][i], cf[2][i]];

@@ -1,6 +1,6 @@
 //! Outward rounding without touching the hardware rounding mode.
 //!
-//! Three strategies (measured in `INTERVAL_PLAN.md` / `bin/interval_probe`):
+//! Three strategies (measured in `bin/interval_probe`):
 //!
 //! - `bump`: unconditional `next_down`/`next_up` after a nearest-rounded op.
 //!   Valid because every primitive is faithfully rounded. IEEE `next_down`

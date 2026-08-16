@@ -200,7 +200,7 @@ macro_rules! math_suite {
                 };
                 // f32 tanh/exp lose to overflow well before libm does; the
                 // gate stays in the principal region (large-x saturation bugs
-                // are flagged separately in TESTING.md).
+                // are flagged separately).
                 let small = |x: f32| if x.is_finite() { x % 20.0 } else { 1.0 };
                 let ang = |x: f32| if x.is_finite() { x % 1000.0 } else { 1.0 };
                 let ge1 = |x: f32| if x.is_finite() { x.abs() + 1.0 } else { 2.0 };

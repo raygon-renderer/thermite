@@ -8,8 +8,8 @@
 //! polyfill and hide a shared bug).
 //!
 //! `mod fixed` contains regression tests for the four defects this file's
-//! audit found and that have been fixed (P1–P4); see TESTING.md for the
-//! root-cause analysis. All tests here run in the default suite.
+//! audit found and that have been fixed (P1-P4). All tests here run in the
+//! default suite.
 //!
 //! `X86V2` and `X86V3` share these polyfills, so a defect in one is a defect
 //! in both; the regression tests cover both backends.
@@ -813,7 +813,6 @@ mod x86 {
     //   P2 signed saturating add/sub: byte-granularity blendv mask in _mm_adds*_v2
     //   P3 u64 lz/tz: 32-bit constant + count_ones copy-paste in U64x2 lz/tz
     //   P4 u64 mullo: was todo!() - now reuses the sign-agnostic mul emulation
-    // See TESTING.md for root-cause analysis.
     // ===========================================================================
     mod fixed {
         use super::*;

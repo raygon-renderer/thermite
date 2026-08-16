@@ -30,8 +30,8 @@
 //!
 //! Measured, not proven: a sweep can miss the worst input, so these are
 //! defensible engineering bounds rather than certificates. A rigorous crate
-//! wants per-function proven bounds (the Gappa direction in IDEAS.md) or
-//! correctly-rounded kernels with directed rounding (IDEAS.md item 1, which is
+//! wants per-function proven bounds (a Gappa-style proof pass) or
+//! correctly-rounded kernels with directed rounding (which is
 //! how IntervalArithmetic.jl gets zero-slack enclosures out of CRlibm). Until
 //! one of those lands, treat transcendental enclosures as "high-confidence"
 //! and the arithmetic/`sqrt` ones (correctly-rounded primitives plus

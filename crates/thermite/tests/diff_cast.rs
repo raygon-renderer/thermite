@@ -876,7 +876,7 @@ mod neon {
 
     // Out-of-range / NaN float→int: scalar saturates (Rust `as`), the wasm hardware
     // path returns the "indefinite" integer (i64::MIN / i32::MIN). Documented
-    // divergence, not auto-failed - see TESTING.md.
+    // divergence, not auto-failed.
     // (inherited from the wasm section; revisit for NEON)
     mod divergence {
         use super::*;

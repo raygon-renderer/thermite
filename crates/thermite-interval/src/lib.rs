@@ -20,8 +20,7 @@
 //!   error bound while the endpoint arithmetic stays tight.
 //!
 //! Containment is never negotiable: neither policy may produce an interval
-//! that fails to contain the true result. See `INTERVAL_PLAN.md` at the repo
-//! root for the measurements behind the tier design.
+//! that fails to contain the true result.
 //!
 //! Outward rounding never touches the hardware rounding mode. It widens by
 //! ulp-stepping or eps-scaling after nearest-rounded ops, or steps only where
@@ -42,8 +41,8 @@
 //!   by a conservative per-policy algorithm-error margin
 //!   (`math::algo_widen`). Those margins are engineering estimates over the
 //!   kernels' documented accuracies, not proofs (see the PROVISIONAL note
-//!   in [`math`]). Certified per-function bounds are the Gappa direction in
-//!   `IDEAS.md`.
+//!   in [`math`]). Certified per-function bounds would need a Gappa-style
+//!   proof pass.
 //!
 //! # Known limitations (early crate)
 //!

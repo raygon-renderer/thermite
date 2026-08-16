@@ -40,7 +40,7 @@ pub enum Tol {
     Rel(f64),
     /// Bit-exact, but any lane where *either* side is `NaN` is ignored. Used
     /// for `min`/`max`, whose `NaN` propagation is explicitly *not* IEEE and is
-    /// known to diverge between the scalar and x86 backends (see TESTING.md).
+    /// known to diverge between the scalar and x86 backends.
     ExactOrNan,
     /// Bit-exact, except that `+0.0` and `-0.0` compare equal.
     ///
@@ -51,7 +51,7 @@ pub enum Tol {
     /// additive identity under round-to-nearest (`-0.0 + 0.0 == +0.0`), so a
     /// masked-off `-0.0` lane comes back as `+0.0`. The scalar oracle has no
     /// equal-size mask and keeps the `blendv` form, so it preserves the sign.
-    /// That divergence is accepted; the magnitude is not (see TESTING.md).
+    /// That divergence is accepted; the magnitude is not.
     ExactOrZeroSign,
 }
 

@@ -115,7 +115,7 @@ macro_rules! float_reg_tests {
             diff_unary!($label, UT, RF, trunc, Tol::Exact);
             // NOTE: `round` is intentionally excluded - its half-way rounding
             // direction diverges between backends (scalar = half-away-from-zero,
-            // x86 = half-to-even). Flagged in TESTING.md.
+            // x86 = half-to-even).
 
             // NOTE: `rcp`/`rsqrt` are hardware approximations and flush
             // denormals; they are accuracy-tested as a property (rcp(x)*x ≈ 1)
@@ -134,7 +134,7 @@ macro_rules! float_reg_tests {
 // ---------------------------------------------------------------------------
 // Integer register suite. Every op below is correct on every integer
 // width/backend - the two defects the harness originally found here
-// (32-bit reductions, 64-bit `mul`) have been fixed; see TESTING.md.
+// (32-bit reductions, 64-bit `mul`) have been fixed.
 // ---------------------------------------------------------------------------
 macro_rules! int_reg_tests {
     ($modname:ident, $ut_backend:ty, $reg:ident, $label:expr, signed) => {

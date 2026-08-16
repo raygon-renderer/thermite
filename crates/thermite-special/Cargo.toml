@@ -40,6 +40,8 @@ image = { version = "0.25", default-features = false, features = ["png", "hdr"] 
 thermite-dual = { workspace = true, features = ["special"] }
 thermite-compensated = { workspace = true, features = ["special"] }
 thermite-complex = { workspace = true, features = ["special"] }
+
+[target.'cfg(any(target_arch = "x86", target_arch = "x86_64", all(target_arch = "aarch64", target_env = "gnu")))'.dev-dependencies]
 criterion = { version = "0.8", features = ["html_reports"] }
 
 [[bench]]
