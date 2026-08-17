@@ -830,39 +830,76 @@ where
 
         let reflect = z.is_negative();
 
-        if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
+        // `Average` and above take the Lanczos path below. This arm is the cheap tier: two
+        // approximations of lgamma(x+1), split at the point where their error curves cross.
+        if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
             let x = reflect.select(Self::ONE - z, z);
+            let w = Self::ONE / x; // try to get this dispatched early since division is so slow
 
-            // PadeApproximate[Ln[Gamma[x+1]], {x,5.000000001,7,9}]
-            let mut y = x.poly_rational_p::<P, _, _>(
-                &[
-                    -6.740081381906293e-8,
-                    -0.0063027,
-                    -0.00313365,
-                    0.00484209,
-                    0.00371249,
-                    0.000817098,
-                    0.0000633298,
-                    1.4020715520842525e-6,
-                ],
-                &[
-                    0.0109199,
-                    0.0209862,
-                    0.0139389,
-                    0.00397223,
-                    0.000494748,
-                    0.0000243068,
-                    3.254907996961247e-7,
-                    -6.766728779753463e-10,
-                    4.8904339460457185e-12,
-                    -2.5067334240332045e-14,
-                ],
-            );
+            // Below the crossover, a degree-12 minimax polynomial (mpmath `chebyfit` of
+            // lgamma(x+1) over [0, 4]).
+            //
+            // Plain polynomial rather than a rational: on a bounded interval with no poles,
+            // lgamma(x+1) is analytic and a rational buys nothing, while the divide sits on the
+            // critical path and does not pipeline. This is 13 coefficients against the previous
+            // [7/9] rational's 18 plus that divide.
+            //
+            // Evaluated in t = 2x/C - 1 rather than in x directly. The monomial basis over a wide
+            // interval is badly conditioned, and it fails silently: fitting in x gives perfectly
+            // reasonable-looking coefficients whose exact-arithmetic error is fine, but rounding
+            // them to f32 cost four orders of magnitude (1.9e-8 -> 2.0e-4 at degree 16) because
+            // x^k amplifies each rounding error - x^16 reaches 4.3e9 over this interval. Mapping
+            // to [-1, 1] bounds every power by one and the loss disappears.
+            //
+            // C = 4 puts the scale at exactly 0.5, so the mapping is a single exact FMA. The
+            // error-balanced crossover is nearer 3.83, but the difference is one f32 ulp against
+            // this tier's 10000-ulp budget and not worth an inexact constant.
+            let t = x.mul_adde(Self::HALF, Self::NEG_ONE);
 
-            // since the above approximation is of lgamma(x+1), we need to offset by 1x,
-            // or if reflected then by sin(pi * x) / x, which since we're in log-space
-            // we take the log of below. Doing it deferred like this allows us to
-            // avoid computing multiple logarithms for both cases.
+            let mut y = t.poly_p::<P, _>(&[
+                6.931471825e-01,
+                1.845574498e+00,
+                7.898645401e-01,
+                -2.056447715e-01,
+                7.939288765e-02,
+                -3.510471061e-02,
+                1.755452715e-02,
+                -1.377308462e-02,
+                7.950476371e-03,
+                2.705342602e-03,
+                -1.809931011e-03,
+                -4.729579668e-03,
+                2.926796675e-03,
+            ]);
+
+            // Above the crossover, Stirling's series, written for lgamma(x+1) so it drops into
+            // the same slot:
+            //
+            //   lgamma(x+1) = (x + 1/2) ln(x) - x + ln(2pi)/2 + 1/(12x) - 1/(360x^3) + ...
+            //
+            // Its coefficients are the Bernoulli terms B_2n/(2n(2n-1)), exact rationals rather
+            // than a fit. No polynomial can take its place out here - lgamma(x) ~ x ln(x) is not
+            // rational, which is why the old Pade decayed and eventually changed sign (it
+            // returned -17690 at x = 300, where the answer is 1409).
+            //
+            // Nor can Stirling take over the small end. Its series is asymptotic, not convergent:
+            // at x = 0.5 it is 1.6% off, at x = 0.1 it returns the wrong sign, and adding terms
+            // there makes it worse rather than better. Reaching small arguments would need the
+            // recurrence shift lgamma(x) = lgamma(x+N) - ln(x(x+1)...(x+N-1)), whose second
+            // logarithm on the common path is the cost this whole arm exists to avoid.
+            //
+            // Cost here is one reciprocal and three FMAs: the ln(x) is the one this path already
+            // computes below for the lgamma(x+1) -> lgamma(x) offset.
+            // The crossover sits near where the two error curves meet, located by bisection
+            // against an mpmath reference: the polynomial holds 1.22e-6 over [0, 4] and Stirling
+            // 7.4e-7 from there up, so neither arm is stretched. That is 5 and 3 f32 ulp
+            // respectively, against this tier's 10000-ulp budget.
+            let big = x.cmp_ge(thermite::const_splat!(f32: 4.0));
+
+            // Both arms approximate lgamma(x+1), so the result carries an offset of ln(x); when
+            // reflected the offset is ln(|sin(pi z)| / x) instead. Folding that division into the
+            // logarithm's argument rather than taking two logarithms and subtracting is what
+            // keeps this path to a single `ln` in every ordinary case.
             let mut e = x;
 
             // reflection for negative values
@@ -872,10 +909,39 @@ where
                 signum |= reflect.select(pix.signed_zero(), signum);
 
                 e = reflect.select(pix.abs() / x, x);
-                y = reflect.select(Self::LN_PI - y, y);
             }
 
-            y -= e.ln_p::<P>();
+            let ln_e = e.ln_p::<P>();
+
+            // Stirling wants ln(x) on its own. Away from the reflection that *is* `ln_e`, so it
+            // costs nothing; only a lane that is both reflected and above the crossover needs a
+            // second logarithm, because there the two arguments genuinely differ and no
+            // rearrangement merges them - the reflection needs ln|sin(pi z)| and Stirling needs
+            // ln(x), which are independent transcendentals. Those lanes are large negative
+            // arguments, so the extra `ln` sits behind a doubly-unlikely guard.
+            let mut lnx = ln_e;
+
+            if const { P::POLICY.avoid_branching } || thermite::unlikely((reflect & big).any()) {
+                lnx = reflect.select(x.ln_p::<P>(), ln_e);
+            }
+
+            let c = (w * w).mul_adde(
+                thermite::const_splat!(f32: -1.0 / 360.0),
+                thermite::const_splat!(f32: 1.0 / 12.0),
+            );
+            let stirling = (x + Self::HALF).mul_adde(lnx, w.mul_adde(c, Self::FRAC_LN_TAU_2 - x));
+
+            y = big.select(stirling, y);
+            y = reflect.select(Self::LN_PI - y, y);
+            y -= ln_e;
+
+            if const { P::POLICY.check_overflow } {
+                // Stirling's `(x + 1/2) ln(x) - x` is inf - inf at an infinite argument, and
+                // the arm is selected there since inf >= the crossover. lgamma diverges at
+                // both ends - the negative side reaches this through the reflection, whose
+                // `x = 1 - z` is likewise infinite - so both map to +inf.
+                y = z.is_infinite().select(Self::INFINITY, y);
+            }
 
             return (y, signum);
         }
