@@ -1,6 +1,6 @@
-//! Gamma-family coefficient tables lifted into a *primal* vector type.
+//! Gamma-family coefficient tables lifted into a _primal_ vector type.
 //!
-//! [`tables`](crate::tables) holds the coefficients as bare elements. This module hands
+//! [`gamma`](crate::tables::gamma) holds the coefficients as bare elements. This module hands
 //! them over already splatted into a vector type, selected by that type rather than by
 //! the caller. The point is composites: `Complex<Dual<V, N>>` has
 //! `Primal = V`, so it reaches the same real table `Complex<V>` does, instead of needing
@@ -9,10 +9,10 @@
 //!
 //! # Why this is keyed on the primal, and what that excludes
 //!
-//! The trait says "this type can supply the Lanczos/asymptotic coefficients *at its own
-//! precision*". That is a claim about the algorithm, not just about storage. A primal
-//! whose precision the f64 coefficients cannot feed - `Compensated`, where a
-//! double-double built from a 53-bit literal carries a fake tail - deliberately does
+//! The trait says "this type can supply the Lanczos/asymptotic coefficients _at its own
+//! precision_". That is a claim about the algorithm, not just about storage. A primal
+//! whose precision the f64 coefficients cannot feed (`Compensated`, where a
+//! double-double built from a 53-bit literal carries a fake tail) deliberately does
 //! **not** implement it, and so cannot reach the shared Lanczos bodies at all. The
 //! missing impl is the design: that precision tier needs a different approximation
 //! (a reduced Stirling series, Spouge, or Lanczos re-derived at higher precision),
@@ -33,14 +33,14 @@ use thermite::generic_array::{ArrayLength, GenericArray};
 use thermite::math::PrimalProjection;
 use thermite::prelude::*;
 
-use crate::tables::{DIGAMMA_F32, DIGAMMA_F64, LANCZOS_F32, LANCZOS_F64};
+use crate::tables::gamma::{DIGAMMA_F32, DIGAMMA_F64, LANCZOS_F32, LANCZOS_F64};
 
 /// The Lanczos parameters splatted into `V`, with a type-level length.
 ///
-/// Mirrors [`Lanczos`](crate::tables::Lanczos) field for field; see its docs for the
+/// Mirrors [`Lanczos`](crate::tables::gamma::Lanczos) field for field. See its docs for the
 /// two coefficient orders and which consumer wants which. The length is a
 /// [`typenum`](thermite::generic_array::typenum) length so an implementor can state it
-/// as an associated type - a `const N: usize` cannot be returned from a trait method
+/// as an associated type, since a `const N: usize` cannot be returned from a trait method
 /// without `generic_const_exprs`.
 pub struct LanczosPrimal<V, N: ArrayLength> {
     pub g: V,
@@ -66,7 +66,7 @@ pub trait GammaPrimalTables<E>: Sized {
     /// `Digamma::p_large`, the asymptotic series valid off the real axis, splatted.
     fn digamma_p_large() -> GenericArray<Self, Self::NDigammaLarge>;
 
-    /// `Re z` past which digamma's asymptotic series is used; the recurrence walks up
+    /// `Re z` past which digamma's asymptotic series is used. The recurrence walks up
     /// to this first.
     fn digamma_shift() -> Self;
 }

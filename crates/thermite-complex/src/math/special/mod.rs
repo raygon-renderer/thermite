@@ -31,7 +31,7 @@
 //! Faddeeva function, whose own module is [`faddeeva`].
 //!
 //! The whole Gamma family is implemented, on the tables `thermite-special` exports
-//! from [`thermite_special::tables`]. Only part of each table survives the crossing:
+//! from [`thermite_special::tables::gamma`]. Only part of each table survives the crossing:
 //! the Lanczos sums and the digamma `p_large` are analytic approximations that hold
 //! off the real axis, while the digamma `[1, 2]` rational and the trigamma regions
 //! are minimax fits to real intervals and are unusable here - so `digamma` and
@@ -71,7 +71,7 @@ use crate::math::ComplexMathWithPolicy as _;
 use crate::math::specialized::ComplexVector;
 use crate::vector::RealFloatVector;
 use thermite::math::PrimalProjection;
-use thermite_special::primal_tables::GammaPrimalTables;
+use thermite_special::tables::primal::GammaPrimalTables;
 
 pub mod faddeeva;
 

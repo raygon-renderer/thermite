@@ -6,7 +6,7 @@ use thermite::{
 };
 
 use crate::specialized::SpecializedSpecialMath;
-use crate::tables::Digamma;
+use crate::tables::gamma::Digamma;
 
 /// Shared digamma (`psi`) implementation for all real element types.
 ///

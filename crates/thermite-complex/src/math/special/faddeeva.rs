@@ -66,67 +66,14 @@ use thermite::register::FloatElement;
 use crate::Complex;
 use crate::vector::RealFloatVector;
 
-mod tables;
-
-/// Weideman's coefficients for an `N`-term approximation.
-///
-/// `A` is stored **leading-term-first**, matching both MATLAB's `polyval` order (which
-/// is what the reference `cef.m` produces after its `flipud`) and
-/// [`poly_rev`](thermite::math::specialized::SpecializedCoreMath::poly_rev). Feeding it
-/// to a constant-term-first evaluator silently produces a different polynomial that
-/// happens to agree at `Z = 1`; that exact confusion has already caused one shipped bug
-/// in this workspace's Lanczos denominator.
-///
-/// The values come from the recipe in `reference/cef.m` - sample `$e^{-t^2}(L^2 + t^2)$`
-/// on the tangent grid `$t = L\tan(\theta/2)$` at `$4N$` points, take the real FFT, keep
-/// and reverse entries `$1..N$`. They are tabulated rather than computed because the FFT
-/// is not available at const-eval time.
-pub trait Weideman<const N: usize>: Sized {
-    /// The scaling parameter `$L = 2^{-1/4}\sqrt{N}$`.
-    const L: Self;
-
-    /// Polynomial coefficients, leading-term-first.
-    const A: [Self; N];
-}
-
-/// The tiers of [`Weideman`] an element type provides, and where its ladder stops.
-pub trait WeidemanTables: Weideman<8> + Weideman<16> + Weideman<24> + Weideman<32> + Weideman<40> {
-    /// The largest `N` worth using: past it the element's own roundoff dominates and
-    /// more terms measure no better.
-    const MAX_N: usize;
-
-    /// `$|z|$` past which `$(L + y)^2 + x^2$` would overflow the element even though
-    /// `$w(z)$` itself is perfectly representable. Roughly `$\sqrt{\text{MAX}}$`.
-    const HUGE: Self;
-
-    /// `$\operatorname{Im} z$` below which the near-real-axis path takes over the real
-    /// part. See the [module docs](self); the correction is gated at `Best` and above.
-    const REAL_AXIS_Y: Self;
-
-    /// `$|\operatorname{Re} z|$` above which it does not, the correction's own error
-    /// growing like `$x^2$` until the direct evaluation is the better of the two.
-    const REAL_AXIS_X: Self;
-}
-
-/// The term count for a precision tier, clamped to what `max_n` can deliver.
-///
-/// Each tier is the smallest `N` whose measured error (see the [module docs](self))
-/// clears the next format-relevant threshold.
-pub const fn weideman_n(precision: PrecisionPolicy, max_n: usize) -> usize {
-    let n = if precision.le(PrecisionPolicy::Worst) {
-        8 // 3.1e-4
-    } else if precision.le(PrecisionPolicy::Medium) {
-        16 // 4.3e-7, the f32 floor
-    } else if precision.le(PrecisionPolicy::Average) {
-        24 // 4.2e-10
-    } else if precision.le(PrecisionPolicy::Best) {
-        32 // 3.1e-13
-    } else {
-        40 // 8.7e-16, the f64 floor
-    };
-
-    if n > max_n { max_n } else { n }
-}
+// The coefficients, their generator (`weideman.py`) and the precision ladder live in
+// `thermite-special`, which evaluates this same approximation on the imaginary axis
+// (where it degenerates to real arithmetic) for `erfcx`. This crate depends on that one
+// rather than the reverse, so the shared half sits on that side of the edge.
+//
+// Re-exported rather than merely imported: they appear in this module's public
+// signatures, and callers within this crate reach them through here.
+pub use thermite_special::tables::weideman::{Weideman, WeidemanTables, weideman_n};
 
 /// Horner over **real** coefficients at a complex argument, leading-term-first.
 ///

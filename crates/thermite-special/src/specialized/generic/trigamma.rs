@@ -6,7 +6,7 @@ use thermite::{
 };
 
 use crate::specialized::SpecializedSpecialMath;
-use crate::tables::Trigamma;
+use crate::tables::gamma::Trigamma;
 
 /// Shared trigamma (`psi_1`) implementation for all real element types.
 ///

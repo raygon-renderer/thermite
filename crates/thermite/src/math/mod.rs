@@ -531,6 +531,22 @@ decl_math! {
         /// Computes `sin(x) / x` with improved precision when the policy allows.
         fn sinc[][](self: Self) -> Self;
 
+        /// Returns `$\frac{1 - \cos(x)}{x^2}$`, finite at `x = 0` where it takes the value `1/2`.
+        ///
+        /// The `$x^2$` denominator is the one worth naming: `$\frac{1-\cos x}{x}$` is simply zero at the
+        /// origin and carries no removable singularity, while this ratio tends to `1/2` and is what
+        /// actually appears in practice.
+        ///
+        /// Written directly, `$1 - \cos x$` has already lost half the mantissa by `x` of order `1e-4`.
+        /// Evaluated here as `$\tfrac{1}{2}\,\mathrm{sinc}^2(x/2)$`, an exact identity that needs no series
+        /// and no cutoff, and inherits [`sinc`](TranscendentalMath::sinc)'s behaviour at the origin.
+        ///
+        /// This is the second Rodrigues coefficient of the `SO(3)` exponential map, alongside
+        /// [`sinc`](TranscendentalMath::sinc) as the first. Rigid-body and Lie-group integrators, IMU
+        /// preintegration, and skinning all evaluate it once per timestep. The prevailing practice is a
+        /// hand-rolled Taylor cutoff with an arbitrary epsilon.
+        fn versinc[][](self: Self) -> Self;
+
         /// Computes `$\frac{\sin(\pi x)}{\pi x}$` with improved precision when the policy allows.
         fn sinc_pi[][](self: Self) -> Self;
 
@@ -573,6 +589,16 @@ decl_math! {
         ///
         /// Evaluated as `$\frac{x}{\sqrt{1 + x} + 1}$`, which has no cancellation near `x = 0`.
         fn sqrt1pm1[][](self: Self) -> Self;
+
+        /// Returns `$\sqrt{1 - e^{-x}}$` for `x >= 0`, without the cancellation of the direct form.
+        ///
+        /// `$1 - e^{-x}$` annihilates for small `x`, so this is evaluated as
+        /// `$\sqrt{-\mathrm{expm1}(-x)}$`, which is accurate all the way down. Negative `x` is
+        /// outside the domain and gives NaN.
+        ///
+        /// This is the noise scaling of an exactly-integrated Ornstein-Uhlenbeck step: Langevin and
+        /// Bussi-Parrinello thermostats, and the variance-preserving schedules used by diffusion models.
+        fn sqrt1mexp[][](self: Self) -> Self;
         /// Returns `self` raised to the power of `e`.
         fn powf[][](self: Self, e: Self) -> Self;
         /// Returns `$x^e - 1$` where `x = self`, computed accurately as `$e^{e \ln(x)}$`-style `expm1`.
@@ -750,6 +776,19 @@ decl_math! {
         /// and `b` are large. This is the workhorse of stable log-domain probability arithmetic
         /// (e.g. the two-argument log-sum-exp).
         fn logaddexp[][](self: Self, other: Self) -> Self;
+
+        /// The logarithmic mean `$L(x, y) = \frac{x - y}{\ln x - \ln y}$`, for positive `x` and `y`.
+        ///
+        /// Sits between the geometric and arithmetic means, and is the mean that arises whenever a
+        /// quantity varies exponentially across an interval, the log-mean temperature difference of a
+        /// heat exchanger being the standard example.
+        ///
+        /// The defining form cancels in _both_ the numerator and the denominator as `x` approaches `y`,
+        /// which is the common case rather than a corner. Evaluated here as
+        /// `$\frac{x - y}{2\,\mathrm{atanh}\!\left(\frac{x-y}{x+y}\right)}$`, which is stable
+        /// throughout. For nearby arguments the subtraction is exact by Sterbenz's lemma and `atanh`
+        /// is accurate near zero. Equal arguments return `x`, the limiting value.
+        fn logmean[][](self: Self, other: Self) -> Self;
 
         /// Returns `$\ln\left(\sum_{i} e^{x_i}\right)$` over `N` values, computed in a
         /// numerically stable way that avoids overflow.

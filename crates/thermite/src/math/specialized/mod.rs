@@ -868,6 +868,14 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     }
 
     #[inline(always)]
+    fn sqrt1mexp<P: Policy>(self) -> Self {
+        // sqrt(1 - e^-x) = sqrt(-expm1(-x)), since the direct form annihilates for small x.
+        // No singularity to patch: x = 0 gives 0, x = +inf gives 1, and x < 0 is out of
+        // domain and correctly yields NaN from the square root of a negative.
+        Self::exp_m1::<P>(-self).neg().sqrt()
+    }
+
+    #[inline(always)]
     fn compound<P: Policy>(self, n: Self) -> Self {
         // (1 + x)^n = exp(n * ln(1 + x)); routing through ln_1p keeps it accurate for small x.
         let l = Self::ln_1p::<P>(self);
@@ -931,6 +939,16 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
         // 1 - cos(x) = 2 sin^2(x/2)
         let h = Self::haversin::<P>(self);
         h + h
+    }
+
+    #[inline(always)]
+    fn versinc<P: Policy>(self) -> Self {
+        // (1 - cos x)/x^2 = 2 sin^2(x/2) / x^2 = (1/2) * (sin(x/2)/(x/2))^2, an exact
+        // identity rather than an approximation, so there is no series and no cutoff.
+        // Every singularity is `sinc`'s: it already returns 1 at the origin (giving 1/2
+        // here, the true limit) and 0 at infinity (giving 0, likewise correct).
+        let s = Self::sinc::<P>(self * Self::HALF);
+        (s * s) * Self::HALF
     }
 
     #[inline(always)]
@@ -1265,6 +1283,26 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         if const { P::POLICY.check_overflow } {
             // a == b == +-inf makes a - b NaN; the answer is that infinity (= m).
             r = d.is_nan().select(m, r);
+        }
+
+        r
+    }
+
+    #[inline(always)]
+    fn logmean<P: Policy>(self, other: Self) -> Self {
+        // (x - y)/(ln x - ln y) = (x - y) / (2 atanh((x - y)/(x + y))).
+        //
+        // Both halves of the defining form cancel as x approaches y. This one does not:
+        // for nearby arguments the subtraction is exact by Sterbenz's lemma, and atanh
+        // is at its most accurate near zero, which is exactly where the ratio lands.
+        let d = self - other;
+        let t = Self::approx_div::<P>(d, self + other);
+        let a = Self::atanh::<P>(t);
+        let mut r = Self::approx_div::<P>(d, a + a);
+
+        if const { P::POLICY.check_overflow } {
+            // x == y is 0/0, and the limit there is x itself.
+            r = d.is_zero().select(self, r);
         }
 
         r

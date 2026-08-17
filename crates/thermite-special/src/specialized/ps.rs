@@ -227,6 +227,13 @@ where
     }
 
     #[inline(always)]
+    fn erfcx<P: Policy>(self) -> Self {
+        // No libm counterpart at any tier. `erfcx` is not in the C library, and
+        // `exp(x*x) * erfcf(x)` is exactly the overflowing form this replaces.
+        super::generic::erfcx::erfcx_internal::<Self, f32, P>(self)
+    }
+
+    #[inline(always)]
     fn logistic_sigmoid<P: Policy>(self) -> Self {
         if const { is_reference::<P>() } {
             return map1(self, |x| (1.0 / (1.0 + libm::exp(-(x as f64)))) as f32);
@@ -297,17 +304,17 @@ where
         }
 
         // 36 is the largest integer whose factorial is finite in f32.
-        generic::gamma::tgamma_impl::<P, _, _, _>(z, &crate::tables::LANCZOS_F32, 36.0, crate::tables::LN_MAX_F32)
+        generic::gamma::tgamma_impl::<P, _, _, _>(z, &crate::tables::gamma::LANCZOS_F32, 36.0, crate::tables::gamma::LN_MAX_F32)
     }
 
     #[inline(always)]
     fn trigamma<P: Policy>(self) -> Self {
-        generic::trigamma::trigamma_impl::<P, _, _>(self, &crate::tables::TRIGAMMA_F32)
+        generic::trigamma::trigamma_impl::<P, _, _>(self, &crate::tables::gamma::TRIGAMMA_F32)
     }
 
     #[inline(always)]
     fn digamma<P: Policy>(self) -> Self {
-        generic::digamma::digamma_impl::<P, _, _, _, _, _, _>(self, &crate::tables::DIGAMMA_F32)
+        generic::digamma::digamma_impl::<P, _, _, _, _, _, _>(self, &crate::tables::gamma::DIGAMMA_F32)
     }
 
     #[inline(always)]
@@ -322,7 +329,7 @@ where
             });
         }
 
-        generic::gamma::beta_impl::<P, _, _, _>(a, b, &crate::tables::LANCZOS_F32)
+        generic::gamma::beta_impl::<P, _, _, _>(a, b, &crate::tables::gamma::LANCZOS_F32)
     }
 
     #[inline(always)]
@@ -333,6 +340,20 @@ where
     #[inline(always)]
     fn expint_primal<P: Policy, const N: usize>(self) -> (Self, Self) {
         generic::expint::expint_double_primal::<P, f32, Self, N>(self)
+    }
+
+    #[inline(always)]
+    fn phi<P: Policy, const N: usize>(self) -> Self {
+        // Fixed series length for f32: truncation gets at most 1/32 of the tier's ulp
+        // budget, which at `Best` and above is under one ulp.
+        let terms = const {
+            let needed = super::generic::phi::phi_series_terms(
+                N,
+                f32::EPSILON as f64 * P::POLICY.precision.tolerance() as f64 / 32.0,
+            );
+            if needed < P::POLICY.max_iterations { needed } else { P::POLICY.max_iterations }
+        };
+        super::generic::phi::phi_internal::<Self, f32, P, N, false>(self, terms)
     }
 }
 
@@ -946,7 +967,7 @@ where
             return (y, signum);
         }
 
-        generic::gamma::lgamma_r_impl::<P, _, _, _>(z, &crate::tables::LANCZOS_F32)
+        generic::gamma::lgamma_r_impl::<P, _, _, _>(z, &crate::tables::gamma::LANCZOS_F32)
     }
 
     #[inline(always)]

@@ -78,6 +78,19 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         Self::ONE - self.erf_p::<P>()
     }
 
+    /// `$e^{x^2}\operatorname{erfc}(x)$`, which does not underflow where `erfc` does.
+    ///
+    /// This default is the direct form, and it is the direct form's failure that the
+    /// function exists to fix: `$e^{x^2}$` overflows just where `erfc` underflows, so it
+    /// is useful only for `$|x|$` under about 26.6 (binary64) or 9.3 (binary32). The
+    /// real backends override it with the imaginary-axis Weideman evaluation, which has
+    /// no such limit (see `generic::erfcx`). Element types without a Weideman table
+    /// (`Compensated`) take this and inherit its range.
+    #[inline(always)]
+    fn erfcx<P: Policy>(self) -> Self {
+        (self * self).exp_p::<P>() * self.erfc_p::<P>()
+    }
+
     /// Computes the exponential integral `E_N(x)` for integer order `N`.
     #[inline(always)]
     fn expint<P: Policy, const N: usize>(self) -> Self {
@@ -625,6 +638,35 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
     fn beta<P: Policy>(a: Self, b: Self) -> Self;
 
+    #[inline(always)]
+    fn lbeta<P: Policy>(a: Self, b: Self) -> Self {
+        // ln|B(a,b)| = ln|G(a)| + ln|G(b)| - ln|G(a+b)|. The log form is the only one with
+        // the range to cover f32 arguments: the Gamma product overflows f64 past ~171
+        // while B itself stays perfectly ordinary.
+        Self::lgamma::<P>(a) + Self::lgamma::<P>(b) - Self::lgamma::<P>(a + b)
+    }
+
+    #[inline(always)]
+    fn logit<P: Policy>(self) -> Self {
+        // ln(p) - ln(1 - p), with ln_1p carrying the second term so small p stays accurate.
+        // Nothing can be done for p near 1 from this argument alone. See `logit_1m`.
+        Self::ln::<P>(self) - Self::ln_1p::<P>(-self)
+    }
+
+    #[inline(always)]
+    fn logit_1m<P: Policy>(self) -> Self {
+        // logit(1 - q) = ln(1 - q) - ln(q), in terms of the complement throughout. Here q is
+        // the small quantity, so ln_1p is at its most accurate exactly where `logit` is worst.
+        Self::ln_1p::<P>(-self) - Self::ln::<P>(self)
+    }
+
+    #[inline(always)]
+    fn planck<P: Policy>(self) -> Self {
+        // x^3/(e^x - 1) = x^2 / phi_1(x). phi_1 is 1 at the origin, so the 0/0 of the direct
+        // quotient never forms and the x^2 limit falls out on its own.
+        (self * self).approx_div_p::<P>(Self::phi_p::<P, 1>(self))
+    }
+
     #[rustfmt::skip]
     #[inline(always)]
     fn legendre0<P: Policy, const N: u32>(x: Self, n: u32) -> Self {
@@ -741,6 +783,14 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
     // TEMP(bessel_j): disabled until orders beyond J_0 exist - see the note in lib.rs.
     //fn bessel_j<P: Policy, const N: usize>(self) -> Self;
+
+    #[inline(always)]
+    fn phi<P: Policy, const N: usize>(self) -> Self {
+        // Element-agnostic form: the series arm runs until it converges to
+        // `Self::EPSILON`, capped by the policy's iteration budget. The f32/f64
+        // backends override this with a compile-time term count.
+        generic::phi::phi_internal::<Self, E, P, N, true>(self, P::POLICY.max_iterations)
+    }
 }
 
 // The Carlson / Legendre entry points are kind-dispatched (`SpecialMath::carlson` / `::ellint`),

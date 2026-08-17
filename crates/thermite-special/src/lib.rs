@@ -15,20 +15,12 @@ use thermite::{
 
 pub mod specialized;
 
-/// Raw approximation coefficients behind the Gamma family.
-///
-/// Public because the sibling crates build their own kernels on the same
-/// constants (`thermite-complex` needs them for the complex Gamma family), and
-/// `#[doc(hidden)]` because that is the only audience it is meant for. Contents,
-/// layout and names track whatever the current approximation needs and change
-/// without notice - depend on the functions, not on these.
+// Raw approximation coefficients, shared with the sibling crates. Documented on the
+// module itself rather than here: an outer doc at this declaration site is merged with
+// the module's own and then resolved in THIS scope, which breaks every link it makes
+// to its own submodules.
 #[doc(hidden)]
 pub mod tables;
-
-/// The same coefficients, splatted into a primal vector type and selected by that type.
-/// Sibling crates building composite kernels are the audience. See the module docs.
-#[doc(hidden)]
-pub mod primal_tables;
 
 use crate::specialized::{CarlsonKind, EllipticKind, WrapTo};
 
@@ -322,6 +314,31 @@ decl_math! {
         /// Computes the complementary error function.
         fn erfc[][](self: Self) -> Self;
 
+        /// Computes the scaled complementary error function,
+        /// `$\operatorname{erfcx}(x) = e^{x^2}\operatorname{erfc}(x)$`.
+        ///
+        /// `erfc` underflows to zero at `x ~ 27` in `f64` and `x ~ 9` in `f32`,
+        /// where the true value is `$e^{-x^2}/(x\sqrt{\pi})$`, nonzero and merely too small to
+        /// represent. Anything reading a Gaussian tail past that point silently gets zero:
+        /// importance weights, log-likelihoods, censored-data models, the Voigt profile.
+        /// `erfcx` removes the exponential and decays only as `$1/(x\sqrt{\pi})$`, so it is
+        /// representable for every finite argument and keeps full relative accuracy.
+        ///
+        /// Computed on the real backends as the Faddeeva function restricted to the imaginary
+        /// axis, `$w(ix) = \operatorname{erfcx}(x)$`, where Weideman's rational approximation
+        /// degenerates to real arithmetic: one reciprocal and one Horner, no transcendental at
+        /// all for `x >= 0`. That makes it cheaper than the `erfc` it complements, and it
+        /// measures 1.22 ulp worst over `$x \in [0, 10^{15}]$` at the `Best` tier and above.
+        ///
+        /// Negative arguments use `$\operatorname{erfcx}(-x) = 2e^{x^2} - \operatorname{erfcx}(x)$`
+        /// and legitimately overflow below about `-26.6` (`f64`), the function itself growing
+        /// like `$e^{x^2}$` in that direction.
+        ///
+        /// The two are related by `$\operatorname{erfc}(x) = e^{-x^2}\operatorname{erfcx}(x)$`,
+        /// which is the numerically sound way to recover a tail value that `erfc` alone cannot
+        /// hold. Keep the `$-x^2$` in the log domain rather than exponentiating it.
+        fn erfcx[][](self: Self) -> Self;
+
         /// Computes the Logistic sigmoid function, defined as `$\sigma(x) = \frac{1}{1 + e^{-x}}$`.
         ///
         /// It's worth mentioning that the derivative of the logistic sigmoid can be computed very cheaply
@@ -336,6 +353,31 @@ decl_math! {
         /// precision policy, and for the `Best` precision policies handles very large positive and negative
         /// inputs without overflow or underflow issues.
         fn logistic_sigmoid[][](self: Self) -> Self;
+
+        /// Computes the logit `$\ln\!\frac{p}{1-p}$`, the inverse of
+        /// [`logistic_sigmoid`](SpecialMath::logistic_sigmoid).
+        ///
+        /// Evaluated as `$\ln(p) - \ln_{1p}(-p)$`, which is accurate for small `p` where the direct
+        /// quotient is not. For `p` approaching 1 no evaluation order helps. `$1 - p$` has already
+        /// lost its low digits inside the input itself, and the information is not recoverable from
+        /// `p`. A caller who knows `$q = 1 - p$` should pass it to
+        /// [`logit_1m`](SpecialMath::logit_1m) instead, which is exact at the far end of the range.
+        ///
+        /// `p = 0` gives `-∞`, `p = 1` gives `+∞`, and `p` outside `[0, 1]` is out of domain.
+        fn logit[][](self: Self) -> Self;
+
+        /// Computes `$\mathrm{logit}(1 - q) = \ln\!\frac{1-q}{q}$` from the complement `q` directly.
+        ///
+        /// The companion entry point to [`logit`](SpecialMath::logit), in the same relationship as
+        /// [`langevin_1m`](RealSpecialMath::langevin_1m) has to
+        /// [`langevin`](RealSpecialMath::langevin). The logit diverges as its argument approaches 1,
+        /// and near that end `$1 - p$` cannot be formed from `p` without losing every digit that
+        /// matters. Working in `q` throughout sidesteps that: evaluated as
+        /// `$\ln_{1p}(-q) - \ln(q)$`, accurate to a few ulp however small `q` is.
+        ///
+        /// Note the sign convention follows the substitution, so `logit_1m(q) == -logit(q)` as
+        /// functions of the same number. The two differ in _which_ probability the argument names.
+        fn logit_1m[][](self: Self) -> Self;
 
         /// Computes the softplus function, defined as `$\frac{1}{k}\ln(1 + e^{kx})$`.
         ///
@@ -385,6 +427,26 @@ decl_math! {
 
         /// Computes the Beta function `$\mathrm{B}(x, y)$`
         fn beta[][](self: Self, y: Self) -> Self;
+
+        /// Computes `$\ln\left|\mathrm{B}(x, y)\right|$`, the log of the absolute Beta function.
+        ///
+        /// [`beta`](SpecialMath::beta) itself underflows to zero for quite ordinary arguments
+        /// (`$\mathrm{B}(200, 200)$` is about `1e-121`, already gone in f32) and overflows for
+        /// arguments straddling the poles. The log form has range to spare in both directions and is
+        /// what the surrounding computation usually wants anyway, since Beta almost always appears
+        /// inside a product of Gammas that is about to be logged.
+        ///
+        /// Evaluated as `$\ln\Gamma(x) + \ln\Gamma(y) - \ln\Gamma(x+y)$`. The absolute value follows
+        /// [`lgamma`](SpecialMath::lgamma), so recover the sign from
+        /// [`lgamma_r`](RealSpecialMath::lgamma_r) if the arguments can be negative.
+        ///
+        /// This buys range at some cost in relative accuracy. The three `lgamma` terms cancel
+        /// against each other, shedding roughly `$\log_{10}\frac{\ln\Gamma(x+y)}{|\ln \mathrm{B}|}$`
+        /// digits. That is under one digit at `$x = y = 200$`, and a little over two at
+        /// `$x = 200,\ y = 1$` where the terms are near 860 and the answer is near -5.3. It remains
+        /// far better conditioned than [`beta`](SpecialMath::beta), which simply has no value to
+        /// return across most of that domain.
+        fn lbeta[][](self: Self, y: Self) -> Self;
 
         /// Computes the m-th derivative of the n-th degree Jacobi polynomial
         ///
@@ -445,6 +507,20 @@ decl_math! {
         /// The position `b` is assumed to be zero. For a non-zero position, use `self - b` as the input.
         fn gaussian[][](self: Self, a: Self, c: Self) -> Self;
 
+        /// Computes the Planck shape factor `$\frac{x^3}{e^x - 1}$`, finite at `x = 0` where it
+        /// vanishes like `$x^2$`.
+        ///
+        /// The dimensionless kernel of Planck's law: substituting `$x = h\nu/kT$` recovers the
+        /// spectral radiance up to a scale factor, so this is the part worth computing carefully and
+        /// the constants are left to the caller. Radiative transfer, climate radiation budgets, and
+        /// stellar atmospheres.
+        ///
+        /// The denominator cancels for small `x` and the quotient is `$0/0$` at the origin.
+        /// Evaluated here as `$x^2/\varphi_1(x)$` using
+        /// `phi::<1>`, which is finite and equal to 1 there,
+        /// so the singularity never forms rather than being patched after the fact.
+        fn planck[][](self: Self) -> Self;
+
         /// Computes the m-th associated n-th degree Legendre polynomial,
         /// where m=0 signifies the regular n-th degree Legendre polynomial.
         ///
@@ -469,6 +545,48 @@ decl_math! {
 
         /// Computes the generalized exponential integral `E_n(x)` for integer order `n`.
         fn expint[const N: usize][N](self: Self) -> Self;
+
+        /// Returns `$\varphi_N(x)$`, the `N`-th phi-function of exponential integrators.
+        ///
+        /// ```math
+        /// \varphi_0(x) = e^x, \qquad
+        /// \varphi_{k+1}(x) = \frac{\varphi_k(x) - 1/k!}{x}, \qquad
+        /// \varphi_k(x) = \sum_{n \ge 0} \frac{x^n}{(n + k)!}, \qquad
+        /// \varphi_k(0) = \frac{1}{k!}
+        /// ```
+        ///
+        /// `phi::<0>` is `exp`. `phi::<1>` is `$(e^x - 1)/x$`, which written out
+        /// directly is `$0/0$` at the origin and loses most of the mantissa near it, so it is
+        /// evaluated as `$\mathrm{expm1}(x)/x$` with the removable singularity filled in (the
+        /// value is 1), which is accurate across the whole line. Beyond that the recurrence is
+        /// the wrong way to compute them: each step subtracts `1/k!` from a value that is barely
+        /// larger while `|x|` is small, so `$\varphi_2 = (\mathrm{expm1}(x) - x)/x^2$` loses twice the bits
+        /// `phi::<1>` would have, and it gets worse with `N`. Below `|x| = N` this sums the series
+        /// instead (its terms are monotone there, so nothing cancels), and above it runs the
+        /// recurrence upward from `expm1`, where the amplification per step is bounded. Measured
+        /// against mpmath, both arms sit within a few ulp for `N <= 8`.
+        ///
+        /// The series arm's length is bounded by the policy's `max_iterations`. The primitive
+        /// float types know their precision statically and use a fixed count instead. Nothing
+        /// caps `N`, though nothing needs it large: ETDRK4 wants `phi_1..phi_3`, and exponential
+        /// Rosenbrock methods rarely go past `phi_4`.
+        ///
+        /// `phi::<1>` alone is the coefficient that keeps appearing wherever an exponential is
+        /// integrated over a finite step:
+        ///
+        /// * The in-scattering integral through a homogeneous medium,
+        ///   `$\int_0^t e^{-\sigma s}\,ds = t\,\varphi_1(-\sigma t)$`. The singular case is the empty
+        ///   medium, which is not an edge case in practice.
+        /// * Exact stepping of an Ornstein-Uhlenbeck process, and the Langevin thermostat's
+        ///   mean-reversion factor.
+        /// * Frame-rate-independent exponential smoothing, usually written `1 - exp(-k * dt)` and then
+        ///   divided by `k`.
+        ///
+        /// The higher orders are the coefficients of exponential time differencing: integrating
+        /// `y' = Ly + N(y)` exactly over a step gives `$y(h) = e^{hL} y_0 + h\,\varphi_1(hL)\,N$`, and
+        /// expanding `N` in time along the step brings in `$\varphi_2, \varphi_3, \ldots$` as the
+        /// weights of the higher-order terms.
+        fn phi[const N: usize][N](self: Self) -> Self;
 
         @kinds {
             /// Carlson symmetric elliptic integral, selected by a [`CarlsonKind`] request struct

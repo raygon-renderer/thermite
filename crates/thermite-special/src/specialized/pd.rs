@@ -195,6 +195,13 @@ where
     }
 
     #[inline(always)]
+    fn erfcx<P: Policy>(self) -> Self {
+        // No libm counterpart at any tier. `erfcx` is not in the C library, and
+        // `exp(x*x) * erfc(x)` is exactly the overflowing form this replaces.
+        super::generic::erfcx::erfcx_internal::<Self, f64, P>(self)
+    }
+
+    #[inline(always)]
     fn lgamma<P: Policy>(self) -> Self {
         if const { is_reference::<P>() } {
             return map1(self, libm::lgamma);
@@ -221,22 +228,22 @@ where
         }
 
         // 172 is the largest integer whose factorial is finite in f64.
-        generic::gamma::tgamma_impl::<P, _, _, _>(z, &crate::tables::LANCZOS_F64, 172.0, crate::tables::LN_MAX_F64)
+        generic::gamma::tgamma_impl::<P, _, _, _>(z, &crate::tables::gamma::LANCZOS_F64, 172.0, crate::tables::gamma::LN_MAX_F64)
     }
 
     #[inline(always)]
     fn trigamma<P: Policy>(self) -> Self {
-        generic::trigamma::trigamma_impl::<P, _, _>(self, &crate::tables::TRIGAMMA_F64)
+        generic::trigamma::trigamma_impl::<P, _, _>(self, &crate::tables::gamma::TRIGAMMA_F64)
     }
 
     #[inline(always)]
     fn digamma<P: Policy>(self) -> Self {
-        generic::digamma::digamma_impl::<P, _, _, _, _, _, _>(self, &crate::tables::DIGAMMA_F64)
+        generic::digamma::digamma_impl::<P, _, _, _, _, _, _>(self, &crate::tables::gamma::DIGAMMA_F64)
     }
 
     #[inline(always)]
     fn beta<P: Policy>(a: Self, b: Self) -> Self {
-        generic::gamma::beta_impl::<P, _, _, _>(a, b, &crate::tables::LANCZOS_F64)
+        generic::gamma::beta_impl::<P, _, _, _>(a, b, &crate::tables::gamma::LANCZOS_F64)
     }
 
     #[inline(always)]
@@ -247,6 +254,17 @@ where
     #[inline(always)]
     fn expint_primal<P: Policy, const N: usize>(self) -> (Self, Self) {
         generic::expint::expint_double_primal::<P, f64, Self, N>(self)
+    }
+
+    #[inline(always)]
+    fn phi<P: Policy, const N: usize>(self) -> Self {
+        // Fixed series length for f64. See the f32 twin for the budget split.
+        let terms = const {
+            let needed =
+                super::generic::phi::phi_series_terms(N, f64::EPSILON * P::POLICY.precision.tolerance() as f64 / 32.0);
+            if needed < P::POLICY.max_iterations { needed } else { P::POLICY.max_iterations }
+        };
+        super::generic::phi::phi_internal::<Self, f64, P, N, false>(self, terms)
     }
 }
 
@@ -367,7 +385,7 @@ where
             });
         }
 
-        generic::gamma::lgamma_r_impl::<P, _, _, _>(self, &crate::tables::LANCZOS_F64)
+        generic::gamma::lgamma_r_impl::<P, _, _, _>(self, &crate::tables::gamma::LANCZOS_F64)
     }
 
     /// Uses the algorithm from Peter John Acklam, sourced from here:

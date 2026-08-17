@@ -9,7 +9,7 @@ use thermite::{
 };
 
 use crate::specialized::SpecializedSpecialMath;
-use crate::tables::Lanczos;
+use crate::tables::gamma::Lanczos;
 
 /// Shared `tgamma` implementation for all real element types.
 ///
