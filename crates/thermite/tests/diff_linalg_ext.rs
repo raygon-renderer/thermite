@@ -13,7 +13,7 @@
 //!
 //! All oracles are computed in `f64` by *mirroring the implementation's own
 //! definition* (e.g. row-major == transpose-then-column-major,
-//! `quat4_vec3` == `v + w·t + q×t` with `t = 2·(q×v)`), so the test pins the
+//! `quat4_vec3` == `v + w*t + cross(q,t)` with `t = 2*cross(q,v)`), so the test pins the
 //! documented behaviour rather than an independent textbook convention.
 //! Tested at the `Vector` layer on Scalar + V2 + V3, `Vector<f32x4>` /
 //! `Vector<f64x4>`.
@@ -41,7 +41,7 @@ fn transpose4(m: [[f64; 4]; 4]) -> [[f64; 4]; 4] {
     core::array::from_fn(|i| core::array::from_fn(|j| m[j][i]))
 }
 
-/// column-major M·v: r[j] = sum_i cols[i][j] * v[i] over `i in 0..N`.
+/// column-major M*v: r[j] = sum_i cols[i][j] * v[i] over `i in 0..N`.
 fn matvecN_col<const N: usize>(cols: [[f64; 4]; 4], v: [f64; 4]) -> [f64; 4] {
     let mut r = [0.0; 4];
     for j in 0..4 {
@@ -52,7 +52,7 @@ fn matvecN_col<const N: usize>(cols: [[f64; 4]; 4], v: [f64; 4]) -> [f64; 4] {
     r
 }
 
-/// column-major matmul: C[k] = M·B[k]; C[k][j] = sum_i a[i][j] * b[k][i].
+/// column-major matmul: C[k] = M*B[k]; C[k][j] = sum_i a[i][j] * b[k][i].
 fn matmul4_col(a: [[f64; 4]; 4], b: [[f64; 4]; 4]) -> [[f64; 4]; 4] {
     core::array::from_fn(|k| matvecN_col::<4>(a, b[k]))
 }
@@ -62,7 +62,7 @@ fn det3(m: [[f64; 3]; 3]) -> f64 {
         + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
 }
 
-/// determinant of a 4x4 (layout-independent: det(M) == det(Mᵀ)).
+/// determinant of a 4x4 (layout-independent: det(M) == det(M^T)).
 fn det4(m: [[f64; 4]; 4]) -> f64 {
     let mut total = 0.0;
     for c in 0..4 {
@@ -93,7 +93,7 @@ fn cross3(a: [f64; 4], b: [f64; 4]) -> [f64; 3] {
     ]
 }
 
-/// quat·vec3 rotation, mirroring the impl: t = 2·(q×v); res = v + w·t + q×t.
+/// quat-vec3 rotation, mirroring the impl: t = 2*cross(q,v), res = v + w*t + cross(q,t).
 fn quat_vec3(q: [f64; 4], v: [f64; 4]) -> [f64; 3] {
     let w = q[3];
     let c = cross3(q, v);
@@ -169,8 +169,8 @@ macro_rules! linalg_ext_suite {
                     let g = rd(vq.quat4_vec3_product::<true>(va));
                     harness::assert_lanes_eq(concat!($bl, " [quat4_vec3<true>]"), &[], &g[..3], &want, Tol::Rel($tol));
 
-                    // refract — GLSL/GLM; unit incident & normal, random eta covers
-                    // both real refraction and total internal reflection (k < 0 → 0).
+                    // refract, per GLSL/GLM: unit incident & normal, random eta covers
+                    // both real refraction and total internal reflection (k < 0 -> 0).
                     let nrm3 = |v: [$e; 4]| -> [f64; 4] {
                         let f = f4(v);
                         let m = (f[0] * f[0] + f[1] * f[1] + f[2] * f[2]).sqrt();
@@ -196,9 +196,9 @@ macro_rules! linalg_ext_suite {
                 let mut rng = harness::rng();
                 for _ in 0..TRIALS {
                     // 3x3 stored as 3 columns; 4th lane 0 to keep semantics unambiguous.
-                    // Bias the diagonal so the matrix stays well-conditioned - a fully
+                    // Bias the diagonal so the matrix stays well-conditioned, since a fully
                     // random f32 3x3 is occasionally ill-conditioned enough to blow the
-                    // inverse's relative tolerance in `M·M⁻¹ ≈ I`.
+                    // inverse's relative tolerance in `M * M^-1 ≈ I`.
                     let cols: [V; 3] = core::array::from_fn(|i| {
                         let mut a = [rs(&mut rng), rs(&mut rng), rs(&mut rng), 0.0 as $e];
                         a[i] += 10.0 as $e;
@@ -234,7 +234,7 @@ macro_rules! linalg_ext_suite {
                     });
                     let cf2: [[f64; 4]; 4] = core::array::from_fn(|i| if i < 3 { rd(cols2[i]) } else { [0.0; 4] });
 
-                    // mat3_product column-major: C[k] = M·B[k]; row-major swaps to B·A.
+                    // mat3_product column-major: C[k] = M*B[k]; row-major swaps to B*A.
                     let got_c = V::mat3_product::<true>(&cols, &cols2);
                     let got_r = V::mat3_product::<false>(&cols, &cols2);
                     for k in 0..3 {
@@ -248,12 +248,12 @@ macro_rules! linalg_ext_suite {
                     let m3: [[f64; 3]; 3] = core::array::from_fn(|i| core::array::from_fn(|j| cf[i][j]));
                     harness::assert_lanes_eq(concat!($bl, " [mat3_det]"), &[], &[V::mat3_det(&cols) as f64], &[det3(m3)], Tol::Rel($tol));
 
-                    // mat3_inverse: M · M⁻¹ ≈ I (first 3 lanes).
+                    // mat3_inverse: M * M^-1 ≈ I (first 3 lanes).
                     let inv = V::mat3_inverse(&cols).expect(concat!($bl, " [mat3_inverse] returned None"));
                     let prod = V::mat3_product::<true>(&cols, &inv);
                     for k in 0..3 {
                         let want_id: [f64; 3] = core::array::from_fn(|j| if j == k { 1.0 } else { 0.0 });
-                        harness::assert_lanes_eq(concat!($bl, " [M·M⁻¹ == I (3x3)]"), &[], &rd(prod[k])[..3], &want_id, Tol::Rel($tol));
+                        harness::assert_lanes_eq(concat!($bl, " [M*M^-1 == I (3x3)]"), &[], &rd(prod[k])[..3], &want_id, Tol::Rel($tol));
                     }
 
                     // mat3_normal::<true> == transpose(inverse): the inverse-transpose.
@@ -293,13 +293,13 @@ macro_rules! linalg_ext_suite {
             fn quat_to_mat() {
                 let mut rng = harness::rng();
                 for _ in 0..TRIALS {
-                    // The conversion assumes a unit quaternion - normalize the random one.
+                    // The conversion assumes a unit quaternion, so normalize the random one.
                     let qf = f4(rv(&mut rng).0);
                     let nrm = (qf[0] * qf[0] + qf[1] * qf[1] + qf[2] * qf[2] + qf[3] * qf[3]).sqrt();
                     let qf = [qf[0] / nrm, qf[1] / nrm, qf[2] / nrm, qf[3] / nrm];
                     let vq = V::from_slice(&[qf[0] as $e, qf[1] as $e, qf[2] as $e, qf[3] as $e]);
 
-                    // Columns of R(q) are the rotated basis vectors: col_j = R·e_j.
+                    // Columns of R(q) are the rotated basis vectors: col_j = R*e_j.
                     // `quat_vec3` is an independent f64 cross-product oracle, so this
                     // cross-checks the products-based `quat_to_mat3` construction.
                     let m3 = vq.quat_to_mat3::<true>();
@@ -327,7 +327,7 @@ macro_rules! linalg_ext_suite {
                     let gvr = rd(vv.mat3_vec3_product::<false>(&m3r));
                     harness::assert_lanes_eq(concat!($bl, " [quat_to_mat3<row> then mat3_vec3<row>]"), &[], &gvr[..3], &want_rot, Tol::Rel($tol));
 
-                    // mat4: rotation columns match m3 with lane 3 zeroed; translation col = e3.
+                    // mat4: rotation columns match m3 with lane 3 zeroed, and translation col = e3.
                     let m4 = vq.quat_to_mat4::<true>();
                     for j in 0..3 {
                         let cj = rd(m4[j]);
@@ -347,14 +347,14 @@ macro_rules! linalg_ext_suite {
                     let af: [[f64; 4]; 4] = core::array::from_fn(|i| rd(la[i]));
                     let bf: [[f64; 4]; 4] = core::array::from_fn(|i| rd(lb[i]));
 
-                    // column-major: C = A·B.
+                    // column-major: C = A*B.
                     let want_c = matmul4_col(af, bf);
                     let got_c = V::mat4_product::<true>(&la, &lb);
                     for k in 0..4 {
                         harness::assert_lanes_eq(concat!($bl, " [mat4_product<col>]"), &[], &rd(got_c[k]), &want_c[k], Tol::Rel($tol));
                     }
 
-                    // row-major: operands swapped => B·A.
+                    // row-major: operands swapped => B*A.
                     let want_r = matmul4_col(bf, af);
                     let got_r = V::mat4_product::<false>(&la, &lb);
                     for k in 0..4 {
@@ -373,12 +373,12 @@ macro_rules! linalg_ext_suite {
                     // mat4_det
                     harness::assert_lanes_eq(concat!($bl, " [mat4_det]"), &[], &[V::mat4_det(&cols) as f64], &[want_det], Tol::Rel($tol));
 
-                    // full inverse: M · M⁻¹ ≈ I.
+                    // full inverse: M * M^-1 ≈ I.
                     let inv = V::mat4_inverse(&cols).expect(concat!($bl, " [mat4_inverse] returned None"));
                     let prod = V::mat4_product::<true>(&cols, &inv);
                     for k in 0..4 {
                         let want_id: [f64; 4] = core::array::from_fn(|j| if j == k { 1.0 } else { 0.0 });
-                        harness::assert_lanes_eq(concat!($bl, " [M·M⁻¹ == I]"), &[], &rd(prod[k]), &want_id, Tol::Rel($tol));
+                        harness::assert_lanes_eq(concat!($bl, " [M*M^-1 == I]"), &[], &rd(prod[k]), &want_id, Tol::Rel($tol));
                     }
                 }
             }

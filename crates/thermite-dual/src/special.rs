@@ -16,16 +16,16 @@
 //! ## Not implemented (`todo!()`)
 //!
 //! `trigamma`, because the Γ-derivative family is not closed under
-//! differentiation: ψ₁' is ψ₂, whose derivative is ψ₃, and so on. Adding an
-//! order to the trait moves the hole one step out instead of filling it, so the
-//! ladder is cut here - one order past what the rest of the family needs.
+//! differentiation: psi_1' is psi_2, whose derivative is psi_3, and so on. Adding
+//! an order to the trait moves the hole one step out instead of filling it, so the
+//! ladder is cut here, one order past what the rest of the family needs.
 //! Closing it properly means a general `polygamma(n)`, which *is* closed, since
 //! its derivative is `polygamma(n + 1)`.
 //!
 //! `bessel_j`, because only order 0 exists upstream, so `J_n' = (J_{n-1} -
 //! J_{n+1})/2` cannot be formed.
 //!
-//! Both panic if called; everything that does not depend on them works.
+//! Both panic if called. Everything that does not depend on them works.
 
 use thermite::math::PrimalProjection;
 use thermite::math::policy::Policy;
@@ -47,13 +47,14 @@ impl<V> DualSpecialVector for V where V: DualMathVector + SpecialMathWithPolicy 
 // only on the specialized trait (see its docs) and is what `digamma`'s derivative
 // needs. The element type is spelled as a separate `E` rather than `V::Element`
 // because a bound that mentions `V`'s own associated type while computing `V`'s
-// bounds is a cycle - the same reason the generic kernels upstream are written
+// bounds is a cycle, the same reason the generic kernels upstream are written
 // `V: FloatVector<Element = E> + SpecializedSpecialMath<E>`.
 impl<V, E, const N: usize> SpecializedSpecialMath<Dual<E, N>> for Dual<V, N>
 where
     V: DualSpecialVector + FloatVector<Element = E> + SpecializedSpecialMath<E>,
 {
     type ExpIntDetails = Self;
+    const LAGUERRE_PRODUCT_SEED_CAP: i32 = V::LAGUERRE_PRODUCT_SEED_CAP;
 
     #[inline(always)]
     fn erf<P: Policy>(self) -> Self {
@@ -75,7 +76,7 @@ where
         // out of one call because the order recurrence passes through E_{M-1} on its way
         // to E_M. Worth doing beyond the obvious cost saving: the real path guards that
         // recurrence with RECURRENCE_THRESHOLD and swaps in an asymptotic series above
-        // it, which the generic dual-arithmetic default this used to inherit does not.
+        // it, which the generic dual-arithmetic default does not.
         let (v, prev) = <V as SpecializedSpecialMath<E>>::expint_primal::<P, M>(self.re);
 
         self.chain(v, -prev)
@@ -142,7 +143,7 @@ where
         todo!("Dual trigamma requires the tetragamma function psi_2; see polygamma")
     }
 
-    // TEMP(bessel_j): disabled until orders beyond J_0 exist - see thermite-special/src/lib.rs.
+    // TEMP(bessel_j): disabled until orders beyond J_0 exist. See thermite-special/src/lib.rs.
     // Would need adjacent orders J_(n-1), J_(n+1) for J_n' anyway.
     //#[inline(always)]
     //fn bessel_j<P: Policy, const M: usize>(self) -> Self {
@@ -415,7 +416,7 @@ where
 }
 
 /// `Dual` overrides `expint` outright and delegates to the inner vector, so these are
-/// never consulted on the hot path - but the real-line defaults are the right answer
+/// never consulted on the hot path, but the real-line defaults are the right answer
 /// anyway, since a dual number orders and compares by its real part.
 impl<V, E: 'static, const N: usize> thermite_special::specialized::ExpIntDetails<Dual<E, N>, Dual<V, N>> for Dual<V, N> where
     Dual<V, N>: thermite::vector::FloatVector<Element = Dual<E, N>>

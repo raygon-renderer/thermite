@@ -412,7 +412,7 @@ fn compensated_double_double() {
 
 #[test]
 fn langevin_1m_matches_oracle_into_the_tail() {
-    // Where 1 - L is O(1) it agrees with 1 - langevin to a few ulp; where L -> 1 only
+    // Where 1 - L is O(1) it agrees with 1 - langevin to a few ulp. Where L -> 1 only
     // the oracle is a valid reference, and langevin_1m must stay at a few ulp there
     // while 1 - langevin has already lost everything (x = 1e18: 1 - L rounds to 0).
     let (e, at) = sweep!(

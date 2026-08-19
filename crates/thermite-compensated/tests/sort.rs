@@ -1,5 +1,5 @@
 //! Lane sorts on `Compensated<V>`: keyed on the lexicographic (value, error)
-//! order - the same order `cmp_lt`/`min`/`max` already use.
+//! order, the same one `cmp_lt`/`min`/`max` already use.
 //!
 //! Values deliberately contain duplicates with distinct error terms, so the
 //! lexicographic tie-break is observable in the output (the oracle is exact),

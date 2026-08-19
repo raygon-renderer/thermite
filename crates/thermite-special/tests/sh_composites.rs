@@ -15,8 +15,8 @@ use thermite::math::policy::DefaultPolicy;
 use thermite::prelude::*;
 use thermite_compensated::Compensated;
 use thermite_dual::Dual;
-use thermite_special::specialized::sh_impl;
 use thermite_special::RealSpecialMath;
+use thermite_special::specialized::sh_impl;
 
 type V64 = Vector<f64>;
 

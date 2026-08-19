@@ -40,7 +40,7 @@ fn sel<E: Copy>(mb: &[bool], t: &[E], f: &[E]) -> Vec<E> {
     (0..mb.len()).map(|i| if mb[i] { t[i] } else { f[i] }).collect()
 }
 
-/// Binary op: plain `$plain` precomputed; checks the 7 masked/assign variants.
+/// Binary op: plain `$plain` precomputed, checking the 7 masked/assign variants.
 macro_rules! bin {
     ($a:expr, $b:expr, $src:expr, $zero:expr, $mask:expr, $mb:expr, $plain:expr,
      $c:ident, $m:ident, $z:ident, $as:ident, $ac:ident, $am:ident, $az:ident) => {{
@@ -539,7 +539,7 @@ macro_rules! ops_suite {
                     bitandnot_assign_z
                 );
 
-                // shifts — scalar (u32) rhs
+                // shifts, scalar (u32) rhs
                 bin!(
                     ia,
                     2u32,
@@ -573,7 +573,7 @@ macro_rules! ops_suite {
                     shr_assign_z
                 );
 
-                // shifts — per-lane vector rhs
+                // shifts, per-lane vector rhs
                 let sv = IU::splat(2);
                 bin!(
                     ia,

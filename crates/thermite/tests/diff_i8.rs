@@ -165,7 +165,7 @@ macro_rules! cast_suite {
             cast8!(u8_u32_x8, u8x8, u32x8, u8, u32);
             cast8!(u8_u32_x16, u8x16, u32x16, u8, u32);
 
-            // 8<->16 (cast8! is generic over the wider width/elem; reuse it for the 16-bit side)
+            // 8<->16 (cast8! is generic over the wider width/elem, so reuse it for the 16-bit side)
             cast8!(i8_i16_x2, i8x2, i16x2, i8, i16);
             cast8!(i8_i16_x4, i8x4, i16x4, i8, i16);
             cast8!(i8_i16_x8, i8x8, i16x8, i8, i16);

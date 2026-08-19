@@ -7,7 +7,7 @@
 //!
 //! That unrolling is exactly what this file guards. A wrong index literal, a swapped
 //! `value`/`error` limb, or a short index list would still compile and still produce
-//! plausible-looking constants - it would just silently return the wrong number. So
+//! plausible-looking constants, just silently returning the wrong number. So
 //! check each entry against the scalar `R::Element` constant it is supposed to splat.
 
 #![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -100,7 +100,7 @@ macro_rules! const_suite {
 
             /// Independent anchor: the carriers could be self-consistently wrong if the
             /// scalar table itself were misread. Pin a few double-double constants against
-            /// their true values - `value + error` must round-trip to the exact quantity.
+            /// their true values: `value + error` must round-trip to the exact quantity.
             ///
             /// `$tol` is element-dependent: a double-f64 carries ~106 bits, but a double-f32
             /// only ~48, so its `hi + lo` sits a few times 1e-15 from the true value.

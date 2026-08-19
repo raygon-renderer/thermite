@@ -75,7 +75,7 @@ macro_rules! check_sort {
 /// Both directions of `sort_by` against direction-matched oracles.
 ///
 /// Descending is not merely "ascending reversed" as far as the *code* is
-/// concerned - it is a different monomorph with the comparators flipped - so it
+/// concerned (it is a different monomorph with the comparators flipped), so it
 /// needs its own oracle rather than a reverse of the ascending result.
 macro_rules! check_sort_both {
     ($label:expr, $r:ty, $n:expr) => {{
@@ -134,7 +134,7 @@ mod x86 {
     }
 
     /// The 16-lane registers, which have **no** `sort_via_network!` override and
-    /// therefore exercise the trait default - the one-chunk tail chain.
+    /// therefore exercise the trait default, the one-chunk tail chain.
     ///
     /// These took the quadratic `sort_any` until that default changed, so this
     /// is the only test that covers the new path at the width where it is the
@@ -152,11 +152,11 @@ mod x86 {
     }
 
     /// `bitonic_clean` at 16 lanes, on genuinely bitonic input at every split
-    /// point - an ascending run of length `k` followed by a descending one.
+    /// point: an ascending run of length `k` followed by a descending one.
     ///
     /// The default's halving strides are only correct for bitonic input, so a
     /// full-sort oracle would not distinguish a correct clean from a broken one
-    /// on arbitrary data; the input has to actually be bitonic.
+    /// on arbitrary data. The input has to actually be bitonic.
     #[test]
     fn bitonic_clean_16_default() {
         use thermite::backend::x86_v3::registers::I16x16V3;
@@ -186,7 +186,7 @@ mod x86 {
     /// `bitonic_clean` on genuinely bitonic input: an ascending run followed by
     /// a descending one, at every split point. A register that kept the scalar
     /// default still passes (a full sort sorts a bitonic sequence too), so this
-    /// pins correctness, not the lowering - `sort_via_network_is_wired` does that.
+    /// pins correctness, not the lowering. `sort_via_network_is_wired` does that.
     #[test]
     fn bitonic_clean_method() {
         fn bitonic(n: usize, split: usize) -> Vec<Val> {
@@ -212,17 +212,16 @@ mod x86 {
         check_clean!("F32x8V3", F32x8V3, 8);
     }
 
-    /// The networks are a *performance* choice - both paths sort correctly, so
+    /// The networks are a *performance* choice, since both paths sort correctly, so
     /// nothing above notices a register that silently kept the scalar default.
-    /// `sort_any` spills to `as_mut_slice`, so it cannot be const-folded; the
+    /// `sort_any` spills to `as_mut_slice`, so it cannot be const-folded, while the
     /// network can. Sorting an all-equal register is the identity either way,
     /// but only the network form lets the optimizer see that.
     #[test]
     fn sort_via_network_is_wired() {
-        // Historically this caught a register falling through to the scalar
-        // insertion-sort fallback. That is no longer what it proves, because the
-        // trait default IS a network now (`sort_lanes`) and agrees with
-        // `sort_8` on every input - as it must, both being correct sorts.
+        // This does not prove a register avoided the scalar insertion-sort
+        // fallback: the trait default IS a network (`sort_lanes`) and agrees
+        // with `sort_8` on every input, as it must, both being correct sorts.
         //
         // What it still pins is that `F32x8V3::sort_by` is a *fixed-shape*
         // network in agreement with the reference one, which is worth keeping:
@@ -248,9 +247,9 @@ mod x86 {
     }
 }
 
-/// `ArrayRegister<R, N>::sort` - one ascending run across all `N * LANES`
+/// `ArrayRegister<R, N>::sort`: one ascending run across all `N * LANES`
 /// elements, via per-chunk networks plus a columnar bitonic merge tree.
-/// Power-of-two `N` takes the network ladder; anything else (`N = 3` exists)
+/// Power-of-two `N` takes the network ladder, while anything else (`N = 3` exists)
 /// keeps the scalar fallback, which these tests also pin as *correct*.
 mod array {
     use super::*;
@@ -300,7 +299,7 @@ mod array {
         }
 
         /// Both directions through the merge tree, including the `N = 3`
-        /// fallback arm - which reaches descending by reversing rather than by
+        /// fallback arm, which reaches descending by reversing rather than by
         /// flipped comparators, so it is a genuinely different path.
         #[test]
         fn sort_by_both_directions() {
@@ -343,7 +342,7 @@ mod array {
         }
 
         /// A sorted input is a fixed point of `sort`, and `bitonic_clean` of a
-        /// sorted input is the identity - cheap structural sanity on the wiring.
+        /// sorted input is the identity, a cheap structural check on the wiring.
         #[test]
         fn sorted_is_fixed_point() {
             for p in patterns(16) {
@@ -366,7 +365,7 @@ fn scalar_sort_is_identity() {
 
 /// The macro-stamped backends. `sort_via_network!` is invoked from inside
 /// NEON's and wasm's register macros rather than per file, so these confirm the
-/// stamp reached every width - a lane count that fell through to the no-op arm
+/// stamp reached every width. A lane count that fell through to the no-op arm
 /// is still *correct*, just quietly scalar, which nothing else here would catch.
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
 mod wasm {

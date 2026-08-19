@@ -1,7 +1,7 @@
 //! Microarchitectural quirks: instructions that **exist** but are microcoded.
 //!
 //! This is the one module here that breaks the rule stated in the [parent
-//! module docs](super) -- every value below comes from a vendor/family/model
+//! module docs](super): every value below comes from a vendor/family/model
 //! table, not from the hardware. That is not an oversight. There is no
 //! enumeration bit for "this instruction is a microcode sequence", there never
 //! has been one, and the gap between the fast and slow implementations of the
@@ -21,14 +21,14 @@
 //!   doc comments is from <https://uops.info>, which measures the shipped
 //!   silicon. Where a claim could not be measured, the flag stays `false`.
 //!
-//! # Why the flags are named for instructions, not for ISAs
+//! # Naming: instructions, not ISAs
 //!
 //! The intuition "AVX-512 masking is fast, AVX2 masking is slow" is a real
 //! observation with the wrong cause attached. The split is the **encoding**:
 //! EVEX masking is native to the load/store pipe on every part that has it,
 //! while the VEX `vmaskmov` *store* is a microcode sequence on Zen 1 through
 //! Zen 4. The same CPU therefore has a fast masked store and a slow masked
-//! store at the same time, and Zen 5 -- which changed no ISA level -- collapses
+//! store at the same time, and Zen 5, which changed no ISA level, collapses
 //! the difference by making the VEX form 2 uops. A flag named after AVX-512
 //! would be wrong on both ends of that.
 //!
@@ -71,7 +71,7 @@ pub struct Quirks {
     /// code wants.
     ///
     /// Also `false` on Haswell (34/11.0) and Broadwell (13/6.0), and on
-    /// anything the Gather Data Sampling microcode touched -- see
+    /// anything the Gather Data Sampling microcode touched. See
     /// [`Quirks::detect`] for why that case cannot be answered honestly off
     /// Linux.
     pub fast_gather: bool,
@@ -96,7 +96,7 @@ pub struct Quirks {
     /// * the masked **load** is 1 uop / 0.5 from Zen 2 on (only Zen+ was bad,
     ///   at 36/10.0) and 2 uops / 0.5 on Intel;
     /// * the **EVEX** masked store (`vmovups m512 {k}`) is 2 uops everywhere it
-    ///   exists -- rtp 2.0 on Zen 4, 1.0 on Zen 5, Skylake-X and Ice Lake.
+    ///   exists, at rtp 2.0 on Zen 4 and 1.0 on Zen 5, Skylake-X and Ice Lake.
     ///
     /// One caveat this flag cannot express: on Zen 4 an EVEX masked access
     /// whose *masked-out* lane would have faulted costs roughly 256 cycles on a
@@ -124,7 +124,7 @@ pub struct Quirks {
     ///
     /// Gates [`count_conflicts`](crate::vector::IntegerVector::count_conflicts)
     /// and [`group_by_value`](crate::vector::PartialOrdVector::group_by_value). Only
-    /// meaningful when `avx512cd` is also present; on a part without it the
+    /// meaningful when `avx512cd` is also present, since on a part without it the
     /// polyfill runs regardless of what this says.
     pub fast_conflict_detect: bool,
 
@@ -144,7 +144,7 @@ impl Quirks {
     /// every non-x86 target, reports.
     ///
     /// All-`false` is the safe direction. Each flag selects the portable path,
-    /// which is never wrong -- only, on hardware that did not need it, slower.
+    /// which is never wrong, only slower on hardware that did not need it.
     pub const CONSERVATIVE: Self = Self {
         fast_gather: false,
         fast_scatter: false,
@@ -184,7 +184,7 @@ impl Quirks {
     /// microcode revision*, which no model table encodes. The status lives in
     /// `IA32_ARCH_CAPABILITIES[GDS_CTRL]`/`[GDS_NO]`, an MSR, and is
     /// unreachable from user space. Linux re-exports it through sysfs and this
-    /// reads it when `std` is available; every other OS gets the pessimistic
+    /// reads it when `std` is available. Every other OS gets the pessimistic
     /// answer, because reporting a fast gather that the microcode quietly made
     /// 4x slower is the more expensive mistake.
     pub fn detect() -> Quirks {
@@ -219,12 +219,12 @@ fn detect_x86() -> Quirks {
     Quirks::CONSERVATIVE
 }
 
-/// AMD and Hygon, keyed on family alone -- every quirk here moved on a family
+/// AMD and Hygon, keyed on family alone, since every quirk here moved on a family
 /// boundary, so no model list is needed.
 ///
-/// * `0x17` -- Zen 1, Zen+, Zen 2. Also Hygon Dhyana (`0x18`), a Zen 1 clone.
-/// * `0x19` -- Zen 3, Zen 4.
-/// * `0x1A` -- Zen 5.
+/// * `0x17`: Zen 1, Zen+, Zen 2. Also Hygon Dhyana (`0x18`), a Zen 1 clone.
+/// * `0x19`: Zen 3, Zen 4.
+/// * `0x1A`: Zen 5.
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn amd_quirks(family: u32) -> Quirks {
     // No AMD part has ever had a fast gather or scatter, so future families
@@ -343,7 +343,7 @@ mod tests {
         assert_eq!(a, Quirks::detect(), "uncached detect disagrees with the cache");
     }
 
-    /// The conservative answer must actually be conservative -- every flag
+    /// The conservative answer must actually be conservative: every flag
     /// `false`, so every caller takes the portable path.
     #[test]
     fn conservative_is_all_false() {
@@ -364,7 +364,7 @@ mod tests {
         assert_eq!(zen2, Quirks::CONSERVATIVE);
         assert_eq!(amd_quirks(0x18), Quirks::CONSERVATIVE, "Hygon Dhyana tracks Zen 1");
 
-        // Zen 3 fixed pdep/pext and brought hardware vpconflict; it did NOT
+        // Zen 3 fixed pdep/pext and brought hardware vpconflict, but did NOT
         // fix the masked store or compress-store.
         let zen4 = amd_quirks(0x19);
         assert!(zen4.fast_pdep_pext && zen4.fast_conflict_detect);
@@ -394,7 +394,7 @@ mod tests {
         let spr = intel_quirks(0x8F);
         assert!(spr.fast_gather && spr.fast_scatter);
 
-        // Skylake-X: GDS-affected, so pessimistic off Linux; and its scatter
+        // Skylake-X: GDS-affected, so pessimistic off Linux, and its scatter
         // (16.0) never qualified regardless.
         assert!(!intel_quirks(0x55).fast_scatter, "Skylake-X scatter is 35 uops / 16.0");
 

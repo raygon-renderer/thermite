@@ -1,12 +1,12 @@
 //! fp8 (`Fp8E4M3` / `Fp8E5M2`) pack/unpack on the native `u8` registers (the generic branchless
-//! defaults - no hardware transcodes fp8), diffed against the scalar `FloatSpec` oracle. The
+//! defaults, since no hardware transcodes fp8), diffed against the scalar `FloatSpec` oracle. The
 //! emulated `ArrayRegister<u8,16>` path is already covered by `packed_float.rs`; this exercises the
 //! real backend `u8 <-> u32` casts the generic kernels call through, plus the `Vector` wrapper.
 //!
 //! - **unpack**: exhaustive over all 256 fp8 code points.
 //! - **pack**: a structured + random f32 sweep.
 //!
-//! NaN: f32 side NaN-insensitive; packed side treats two NaN code points as equal (E4M3 has one
+//! NaN: the f32 side is NaN-insensitive, and the packed side treats two NaN code points as equal (E4M3 has one
 //! NaN, E5M2 is IEEE).
 #![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 

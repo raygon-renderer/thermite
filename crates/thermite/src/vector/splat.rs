@@ -59,7 +59,7 @@ macro_rules! const_splat {
     // Requires E: FloatElement (provides E::ConstInt<N> implementing SplatConst<E>).
     //
     // NOTE: this arm and the `ratio` arm below must come before the generic
-    // `($ty:ty: $value:expr)` arm — `int <E>` is syntactically a valid type
+    // `($ty:ty: $value:expr)` arm, because `int <E>` is syntactically a valid type
     // (`int<E>`), so the `$ty:ty` matcher would otherwise swallow it.
     (int <$E:ty>: $n:expr) => {
         const { $crate::vector::const_splat::<_, <$E as $crate::register::FloatElement>::ConstInt<{$n}>>() }

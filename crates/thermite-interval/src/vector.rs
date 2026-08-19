@@ -49,7 +49,10 @@ impl<V: IntervalFloatVector, W: WideningPolicy> Swizzle<V::Lanes> for Interval<V
 
     #[inline(always)]
     fn swizzle_const<I: SwizzleIndices<V::Lanes>>(self, other: Self) -> Self {
-        Self::from_bounds_unchecked(self.lo.swizzle_const::<I>(other.lo), self.hi.swizzle_const::<I>(other.hi))
+        Self::from_bounds_unchecked(
+            self.lo.swizzle_const::<I>(other.lo),
+            self.hi.swizzle_const::<I>(other.hi),
+        )
     }
 
     #[inline(always)]
@@ -767,11 +770,31 @@ impl<V: IntervalFloatVector, W: WideningPolicy> NumericVector for Interval<V, W>
         Self::degenerate(V::from_unsigned_integer(v))
     }
 
-    const ZERO: Self = Interval { lo: V::ZERO, hi: V::ZERO, _widen: PhantomData };
-    const ONE: Self = Interval { lo: V::ONE, hi: V::ONE, _widen: PhantomData };
-    const TWO: Self = Interval { lo: V::TWO, hi: V::TWO, _widen: PhantomData };
-    const MIN: Self = Interval { lo: V::MIN, hi: V::MIN, _widen: PhantomData };
-    const MAX: Self = Interval { lo: V::MAX, hi: V::MAX, _widen: PhantomData };
+    const ZERO: Self = Interval {
+        lo: V::ZERO,
+        hi: V::ZERO,
+        _widen: PhantomData,
+    };
+    const ONE: Self = Interval {
+        lo: V::ONE,
+        hi: V::ONE,
+        _widen: PhantomData,
+    };
+    const TWO: Self = Interval {
+        lo: V::TWO,
+        hi: V::TWO,
+        _widen: PhantomData,
+    };
+    const MIN: Self = Interval {
+        lo: V::MIN,
+        hi: V::MIN,
+        _widen: PhantomData,
+    };
+    const MAX: Self = Interval {
+        lo: V::MAX,
+        hi: V::MAX,
+        _widen: PhantomData,
+    };
 
     fn sort_by<O: thermite::sort::SortOrder>(self) -> Self {
         todo!("lane sort keyed on interval order is deferred with the SortKey story")
@@ -947,8 +970,16 @@ impl<V: IntervalFloatVector, W: WideningPolicy> thermite::vector::ops::NegMasked
 }
 
 impl<V: IntervalFloatVector, W: WideningPolicy> SignedVector for Interval<V, W> {
-    const NEG_ONE: Self = Interval { lo: V::NEG_ONE, hi: V::NEG_ONE, _widen: PhantomData };
-    const MIN_POSITIVE: Self = Interval { lo: V::MIN_POSITIVE, hi: V::MIN_POSITIVE, _widen: PhantomData };
+    const NEG_ONE: Self = Interval {
+        lo: V::NEG_ONE,
+        hi: V::NEG_ONE,
+        _widen: PhantomData,
+    };
+    const MIN_POSITIVE: Self = Interval {
+        lo: V::MIN_POSITIVE,
+        hi: V::MIN_POSITIVE,
+        _widen: PhantomData,
+    };
 
     #[inline(always)]
     fn abs(self) -> Self {
@@ -1031,10 +1062,7 @@ where
 
         if from_size > to_size {
             // Narrowing rounds each bound to nearest: widen outward after.
-            Interval::from_bounds_unchecked(
-                TO::cast_from(from.lo).next_down(),
-                TO::cast_from(from.hi).next_up(),
-            )
+            Interval::from_bounds_unchecked(TO::cast_from(from.lo).next_down(), TO::cast_from(from.hi).next_up())
         } else {
             // Widening (or same-width) casts are exact.
             Interval::from_bounds_unchecked(TO::cast_from(from.lo), TO::cast_from(from.hi))

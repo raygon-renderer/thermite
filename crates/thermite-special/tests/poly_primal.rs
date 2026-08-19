@@ -63,7 +63,11 @@ fn poly_primal_matches_poly_on_dual() {
         let a = d.poly_rev(&lifted);
         let b = d.poly_rev_primal(&splat_primal::<D>(COEFFS));
 
-        assert_eq!(a.value().extract::<0>(), b.value().extract::<0>(), "dual rev value at {x}");
+        assert_eq!(
+            a.value().extract::<0>(),
+            b.value().extract::<0>(),
+            "dual rev value at {x}"
+        );
         for j in 0..2 {
             assert_eq!(
                 a.gradient()[j].extract::<0>(),
@@ -91,8 +95,16 @@ fn poly_primal_matches_poly_on_complex() {
         let a = z.poly_rev(&lifted);
         let b = z.poly_rev_primal(&splat_primal::<C>(COEFFS));
 
-        assert_eq!(a.re.extract::<0>(), b.re.extract::<0>(), "complex rev re at ({re},{im})");
-        assert_eq!(a.im.extract::<0>(), b.im.extract::<0>(), "complex rev im at ({re},{im})");
+        assert_eq!(
+            a.re.extract::<0>(),
+            b.re.extract::<0>(),
+            "complex rev re at ({re},{im})"
+        );
+        assert_eq!(
+            a.im.extract::<0>(),
+            b.im.extract::<0>(),
+            "complex rev im at ({re},{im})"
+        );
     }
 }
 

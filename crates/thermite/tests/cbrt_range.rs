@@ -3,7 +3,7 @@
 //! Two guard bugs lived here: the f64 kernel compared its HIGH word against
 //! `0x7F800000` (f32's infinity pattern) instead of `0x7FF00000`, so every
 //! finite value with exponent >= 1017 was treated as non-finite and returned
-//! unchanged; and both kernels used `>` rather than `>=`, so infinity itself
+//! unchanged. A `>` rather than `>=` in either kernel lets infinity itself
 //! fell through to the algorithm and came back NaN.
 #![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 
@@ -103,8 +103,8 @@ suite!(x86_v1, thermite::backend::x86_v1::X86V1);
 suite!(x86_v2, thermite::backend::x86_v2::X86V2);
 suite!(x86_v3, thermite::backend::x86_v3::X86V3);
 
-/// Medium and below keep the raw ratio, which gives up the top binade - a
-/// deliberate tier trade, pinned here so it stays deliberate rather than
+/// Medium and below keep the raw ratio, which gives up the top binade, a
+/// deliberate tier trade pinned here so it stays deliberate rather than
 /// drifting. Only observable where the fast branch is actually reachable:
 /// without true FMA the kernel is forced onto the exact form regardless of
 /// precision, so this is an x86_v3-only property.

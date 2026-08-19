@@ -1,7 +1,7 @@
 //! Correctness gate for `thermite-special` (which had **zero** tests).
 //!
 //! Each special function is swept over its valid domain and compared against
-//! `libm` with a loose relative tolerance - same philosophy as the core
+//! `libm` with a loose relative tolerance, the same philosophy as the core
 //! `diff_math` gate: catch structural bugs (wrong sign, wrong identity, NaN
 //! for a finite result, backend divergence), not audit ULPs. The default
 //! `Performance` policy is in effect, so the bound is deliberately generous.
@@ -597,7 +597,7 @@ fn erfinv_f64() {
     }
 }
 
-// Default (Performance) policy uses a single Halley step; verify it is still solid.
+// Default (Performance) policy uses a single Halley step, so verify it is still solid.
 #[test]
 fn erfinv_f64_default() {
     let n = 4000usize;

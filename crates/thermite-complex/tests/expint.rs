@@ -3,7 +3,7 @@
 //! `E_N` is holomorphic on the cut plane `|Arg z| < pi`, and the implementation is the
 //! shared `thermite-special` series/continued-fraction body with three hooks overridden
 //! (`expint_use_series`, `expint_invalid`, `expint_cf_tiny`). So what is checked here is
-//! mostly that those hooks route correctly - the regime split, the absence of a
+//! mostly that those hooks route correctly: the regime split, the absence of a
 //! negative-argument hole, and the branch cut carried by the principal `ln`.
 //!
 //! Reference values are mpmath 1.3.0 at 30 digits; `expint_reference.py` regenerates the
@@ -14,7 +14,7 @@
 //! `E_{n+1} = (e^-z - z E_n) / n`, which amplifies error by `|z|/n` - so the loss grows
 //! like `|z|^(N-1)/(N-1)!`. That is the same contract the real path holds itself to
 //! (see `RECURRENCE_THRESHOLD` in `thermite-special`), and these points sit well inside
-//! it; the asymptotic series that path swaps in beyond the threshold has no complex
+//! it. The asymptotic series that path swaps in beyond the threshold has no complex
 //! counterpart yet, so very large `|z|` at high `N` is still out of scope.
 
 #![cfg(feature = "special")]

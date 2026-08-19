@@ -339,7 +339,7 @@ macro_rules! numred_basic {
 
 /// Integer reductions on EVEN-width registers: pairwise-sum total invariant,
 /// `sort`, plus the basics. `pairwise_sum`/`sort` are not meaningful on the odd
-/// 3-lane reduced registers (pairwise halves the lane count; the trait default
+/// 3-lane reduced registers (pairwise halves the lane count, and the trait default
 /// itself drops lanes for odd counts), so those are wide-only.
 macro_rules! numred_int {
     ($label:expr, $ut:ty, $rf:ty) => {{

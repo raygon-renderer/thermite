@@ -153,7 +153,13 @@ pub struct Certification<E> {
 /// Round-number roots on round-number search intervals hit the midpoint
 /// constantly. Multiple (tangent) roots still land in `unresolved`: Krawczyk
 /// cannot certify uniqueness at a tangency, which is the honest answer.
-pub fn certify_roots<V, W, F>(f: F, a: V::Element, b: V::Element, tol: V::Element, max_boxes: usize) -> Certification<V::Element>
+pub fn certify_roots<V, W, F>(
+    f: F,
+    a: V::Element,
+    b: V::Element,
+    tol: V::Element,
+    max_boxes: usize,
+) -> Certification<V::Element>
 where
     V: IntervalMathVector,
     V::Element: PartialOrd + Copy,
@@ -208,7 +214,11 @@ where
             }
             // Uncertain: bisect the contracted box (the original if the
             // contraction did not narrow it).
-            let (l, h) = if cl <= ch && (ch - cl) < (xh - xl) { (cl, ch) } else { (xl, xh) };
+            let (l, h) = if cl <= ch && (ch - cl) < (xh - xl) {
+                (cl, ch)
+            } else {
+                (xl, xh)
+            };
             let width = h - l;
             if width < tol {
                 out.unresolved.push(CertifiedRoot { lo: l, hi: h });
@@ -242,7 +252,10 @@ where
             }
         }
         for i in 0..n {
-            out.roots.push(CertifiedRoot { lo: x.lo().extractv(i), hi: x.hi().extractv(i) });
+            out.roots.push(CertifiedRoot {
+                lo: x.lo().extractv(i),
+                hi: x.hi().extractv(i),
+            });
         }
     }
 

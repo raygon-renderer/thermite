@@ -20,7 +20,7 @@ use thermite::vector::ops::{AddSubExt, AddSubExtMasked, MulAddAssignExt, MulAddE
 // the compiler evaluating the expression exactly as written. Thermite's
 // `algebraic-scalar` feature makes scalar-backend arithmetic reassociable, at
 // which point LLVM is entitled to fold `(a - (s - v)) + (b - v)` to zero and
-// every error term silently vanishes - the results stay plausible and lose all
+// every error term silently vanishes. The results stay plausible and lose all
 // the extra precision this crate exists to provide. Refuse the combination.
 const _: () = assert!(
     !thermite::features::ALGEBRAIC_SCALAR,
@@ -30,6 +30,7 @@ const _: () = assert!(
 
 pub mod consts;
 pub mod math;
+
 
 #[cfg(feature = "special")]
 pub mod special;
@@ -43,8 +44,7 @@ pub mod specialized;
 /// splitting constant can be provided. It just doesn't make much sense
 /// on anything but scalar-like floating point types.
 ///
-/// However, it's worth noting that if the type has true FMA support,
-/// as indicated by `MulAddExt::HAS_TRUE_FMA`, then
+/// If the type has true FMA support, as indicated by `MulAddExt::HAS_TRUE_FMA`,
 /// the splitting constant is never used, so it can be a dummy value in that case.
 pub trait ScalarValue:
     Copy + NumOps + NumAssignOps + MulAddExt<Output = Self> + Neg<Output = Self> + consts::SplitFloatConsts<Self>
@@ -187,7 +187,7 @@ impl ScalarValue for f64 {
 /// `SplatConst` carrier for [`ScalarValue::SPLITTER`] at a generic element type.
 ///
 /// The `const_splat!` macro cannot generate this one: its carrier takes a single path
-/// bound per generic parameter, and this needs `E: ScalarValue` on the *element*, not
+/// bound per generic parameter, while this needs `E: ScalarValue` on the *element*, not
 /// on the vector. Hand-rolling the carrier is what keeps the vector impl below off the
 /// deprecated `Vector::splat_const`. Same pattern as the table carriers in `consts.rs`.
 struct SplitterValue<E>(core::marker::PhantomData<E>);
@@ -289,7 +289,7 @@ impl<V: CompensatedFloatVector> Swizzle<V::Lanes> for Compensated<V> {
         }
     }
 
-    // Forward the `_const` forms per component - the trait defaults route
+    // Forward the `_const` forms per component, since the trait defaults route
     // through the runtime-index methods and lose the immediate-encoded
     // shuffles.
     #[inline(always)]
@@ -1177,7 +1177,7 @@ impl_masked!(Rem::rem);
 
 // =====================================================================================
 // Lane-alternating add/sub (`AddSubExt`). Double-double add/sub mix `value`/`error`
-// via two_sum/two_diff, so `addsub` can NOT be done component-wise - but a *sign
+// via two_sum/two_diff, so `addsub` can NOT be done component-wise. But a *sign
 // flip* is component-wise-exact, so `neg_even` (flip even-lane signs of both
 // components) is, and then a single real double-double add finishes the job:
 //   addsub(a, b)      = a + neg_even(b)
@@ -1253,7 +1253,7 @@ impl<V: CompensatedFloatVector> AddSubExtMasked<V::Mask> for Compensated<V> {
 }
 
 // `_c`/`_m`/`_z` masked variants of the inherent unary (`fn m(self) -> Self`) and
-// binary (`fn m(self, Self) -> Self`) vector ops, as plain select blends -- the
+// binary (`fn m(self, Self) -> Self`) vector ops, as plain select blends, the
 // same pattern `impl_masked!` uses for the `core::ops` methods above. Invoked
 // inside the relevant trait impls below.
 macro_rules! compensated_masked {
@@ -1537,10 +1537,10 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
 
     /// A `Compensated` element is `#[repr(C)]` over two floats (value, error),
     /// so `M` interleaved `Compensated` streams are exactly `2 * M`
-    /// interleaved float streams - precisely a grouped problem with `TAIL = 1`
+    /// interleaved float streams, precisely a grouped problem with `TAIL = 1`
     /// (see [`StreamGroup`]). This hands `M` straight to the inner vector's
     /// [`GenericVector::load_deinterleaved_grouped`] (a NEON `LD2`/`LD3`/`LD4`,
-    /// or a shuffle network on x86), for any `M` - no dispatch ladder, no
+    /// or a shuffle network on x86), for any `M`: no dispatch ladder, no
     /// scalar fallback.
     #[inline(always)]
     unsafe fn load_deinterleaved<const M: usize>(ptr: *const Self::Element) -> [Self; M] {
@@ -2015,7 +2015,7 @@ impl<V: CompensatedFloatVector> NumericVector for Compensated<V> {
         error: V::MAX,
     };
 
-    /// Lane sorts are keyed on the lexicographic (value, error) order - which
+    /// Lane sorts are keyed on the lexicographic (value, error) order, which
     /// is exactly `cmp_lt` here, so the key IS the comparison and ties are
     /// deterministic. Each compare-exchange derives one routing mask from it
     /// and moves both components through the same permutation and select
@@ -2123,7 +2123,7 @@ impl<V: CompensatedFloatVector> NumericVector for Compensated<V> {
     // None of these are componentwise. Scanning `value` and `error` with the inner
     // vector's own scan would add the value lanes without ever renormalising the
     // carried error into them, which is exactly the compensation this type exists to
-    // do -- so the ladder runs on `Self`'s double-double `+`, like `sum_elements`
+    // do, so the ladder runs on `Self`'s double-double `+`, like `sum_elements`
     // reduces through `+` rather than through the components.
     //
     // The ladder associates the additions as a tree where a sequential scan would
@@ -2286,7 +2286,7 @@ impl<V: CompensatedFloatVector> SignedVector for Compensated<V> {
     }
 
     // `abs` is a negation of the negative lanes, so the conditional form just
-    // restricts that negation to the masked lanes -- one blend instead of
+    // restricts that negation to the masked lanes: one blend instead of
     // computing a full `abs` and re-blending it. Same for `copysign`.
     #[inline(always)]
     fn abs_c(self, mask: Self::Mask) -> Self {

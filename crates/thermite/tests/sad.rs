@@ -35,7 +35,7 @@ fn cases() -> Vec<([u8; 16], [u8; 16])> {
         ([128u8; 16], [127u8; 16]), // adjacent values, |diff| == 1
     ];
 
-    // A few scrambled patterns; a simple LCG keeps this reproducible without a dep.
+    // A few scrambled patterns, with a simple LCG to keep this reproducible without a dep.
     let mut state = 0x2545_f491_4f6c_dd1du64;
     for _ in 0..32 {
         let mut a = [0u8; 16];
@@ -91,7 +91,7 @@ fn sad16_matches_reference() {
     }
 }
 
-/// Each grouping must total the same across the whole register -- they only differ in how
+/// Each grouping must total the same across the whole register. They only differ in how
 /// finely the sum is partitioned.
 #[test]
 fn groupings_agree_on_total() {

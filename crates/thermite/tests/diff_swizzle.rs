@@ -8,7 +8,7 @@
 //!    include the exact index patterns `impl_mat4_inverse!` relies on.
 //!  - **Runtime** paths (`R::permutev` / `R::swizzle` with variable
 //!    `GenericArray` indices), with exhaustive O(N^2) single-lane routing and
-//!    random fuzzing - the coverage formerly in `array_swizzle.rs`, broadened
+//!    random fuzzing, the coverage formerly in `array_swizzle.rs`, broadened
 //!    here from V3-emulated-only to native registers across v1/v2/v3.
 #![cfg(any(
     target_arch = "x86",
@@ -134,7 +134,7 @@ mod x86_const {
     reg4!(v3_i32x4, X86V3, i32x4);
 
     // v1 (SSE2): no pshufb, so variable permutes/swizzles take the scalar
-    // Register default - a distinct code path from v2/v3.
+    // Register default, a distinct code path from v2/v3.
     reg4!(v1_f32x4, X86V1, f32x4);
     reg4!(v1_i32x4, X86V1, i32x4);
     reg4!(v1_u32x4, X86V1, u32x4);
@@ -394,13 +394,13 @@ mod neon_rt {
     rt!(rt_neon_f32x16, <Neon as Simd>::f32x16); // ArrayRegister-emulated
     rt!(rt_neon_arr_f32x4x4, ArrayRegister<<Neon as Simd>::f32x4, 4>);
     // 16-bit: native i16x8 (byte-doubled relaxed_swizzle), reduced i16x4, array i16x16.
-    // (inherited from the wasm section; revisit for NEON)
+    // (inherited from the wasm section, revisit for NEON)
     rt!(rt_neon_i16x8, <Neon as Simd>::i16x8);
     rt!(rt_neon_u16x8, <Neon as Simd>::u16x8);
     rt!(rt_neon_i16x4, <Neon as Simd>::i16x4);
     rt!(rt_neon_i16x16, <Neon as Simd>::i16x16);
     // 8-bit: native i8x16 relaxed_swizzle (byte index is the control directly).
-    // (inherited from the wasm section; revisit for NEON)
+    // (inherited from the wasm section, revisit for NEON)
     rt!(rt_neon_i8x16, <Neon as NativeSimd>::i8xN);
     rt!(rt_neon_u8x16, <Neon as NativeSimd>::u8xN);
 }

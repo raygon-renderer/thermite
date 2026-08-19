@@ -1,12 +1,12 @@
 //! Correctness gate for the elliptic integrals, driven entirely through the public
-//! entry points - `V::carlson_p` / `V::ellint_p` and their request structs. That is
+//! entry points, `V::carlson_p` / `V::ellint_p` and their request structs. That is
 //! also the dispatched path, so what runs here is what ships: the kernels underneath
 //! (the AGM behind the complete first/second kinds, the five Carlson duplications, the
 //! phi-range reduction) are reached the way a caller reaches them.
 //!
 //! Reference values come from A&S / Mathematica (the same tables as
-//! `reference/elliptic.c`); where no table exists - phi outside `[0, pi/2]`, the `D`
-//! kind, and `R_J` with a negative parameter - the test builds its own oracle from an
+//! `reference/elliptic.c`). Where no table exists (phi outside `[0, pi/2]`, the `D`
+//! kind, and `R_J` with a negative parameter) the test builds its own oracle from an
 //! identity or a numerical Cauchy principal value, so nothing here depends on the
 //! implementation being right in two places at once.
 //!
@@ -75,12 +75,12 @@ const INC: &[(f64, f64, f64, f64)] = &[
 
 // Complete third kind Pi(n, k) from `elliptic_pim_values` (param m = k^2, so k = sqrt(m)).
 // Includes n < 0 cases: Boost shifts those via A&S 17.7.17 to dodge cancellation, whereas we
-// feed p = 1 - n (> 1, positive) straight into R_J - this checks that the direct path is still
-// accurate. (n, m, Pi(n,k)); the n = 0 row must equal K(sqrt(m)).
+// feed p = 1 - n (> 1, positive) straight into R_J, so this checks that the direct path is still
+// accurate. (n, m, Pi(n,k)), and the n = 0 row must equal K(sqrt(m)).
 //
 // The (0.5, 0.50) row is n == m == k^2, which makes the R_J parameter p = 1 - n coincide with
-// the argument y = 1 - k^2 - the degenerate point that used to lose ~7 digits before
-// carlson_rc grew its small-|t| series. It now holds full precision; kept here as a guard.
+// the argument y = 1 - k^2, the degenerate point where a `carlson_rc` without its
+// small-|t| series loses ~7 digits. Kept here as a guard on full precision.
 const PIC: &[(f64, f64, f64)] = &[
     (-10.0, 0.25, 0.4892245275965397),
     (-3.0, 0.50, 0.8760028274011437),
@@ -138,8 +138,8 @@ const NEAR_BOUNDARY: &[(f64, f64, f64, f64, f64)] = &[
     ),
     (0.5, 1.5707963267948966, 1.685750354812596, 1.4674622093394271, 1.0e-12),
     (0.5, 1.5692255304681018, 1.6839365556969933, 1.4661018596297779, 1.0e-12),
-    // |k| > 1 keeps a genuine cancellation - both addends have magnitude k^2 and opposite
-    // signs - so these carry a pole-adjacent tolerance rather than a full-precision one.
+    // |k| > 1 keeps a genuine cancellation (both addends have magnitude k^2 and opposite
+    // signs), so these carry a pole-adjacent tolerance rather than a full-precision one.
     (1.5, 0.7297276562269663, 1.206444990100978, 0.55909966061115069, 1.0e-7),
     (1.5, 0.7297269264993101, 1.2053024662251757, 0.55909965998972036, 1.0e-7),
     (
@@ -217,7 +217,7 @@ macro_rules! elliptic_tests {
             type F32 = Vector<<$backend as Simd>::$f32reg>;
             type F64 = Vector<<$backend as Simd>::$f64reg>;
 
-            /// Splat a scalar to every lane. All the checks read lane 0 back; the rest
+            /// Splat a scalar to every lane. All the checks read lane 0 back, and the rest
             /// of the vector is along for the ride, which is what makes a splat enough.
             fn v(x: f64) -> F64 {
                 F64::splat(x)
@@ -261,7 +261,7 @@ macro_rules! elliptic_tests {
 
             // Every Carlson kind at its degenerate point, where the value is exact in closed form:
             // R_F(x,x,x) = x^-1/2, R_D(x,x,x) = R_J(x,x,x,x) = x^-3/2, R_G(x,x,x) = x^1/2,
-            // R_C(x,x) = x^-1/2. Also pins the request-struct arities - each kind takes exactly its
+            // R_C(x,x) = x^-1/2. Also pins the request-struct arities: each kind takes exactly its
             // own arguments, so the wrong shape would not compile.
             #[test]
             fn carlson_spot_values() {
@@ -296,9 +296,9 @@ macro_rules! elliptic_tests {
 
             // f32 R_C exercises whichever closed-form lowering this backend picks: the
             // hardware-rsqrt one where `HAS_APPROX_RSQRT` is set (x86), the sqrt+div one
-            // otherwise - the f64 cases only ever reach the latter. Covers both closed
-            // forms - t > 0 (atan) via R_C(1,2) = atan(1) = pi/4, and t < 0 (ln/atanh) via
-            // R_C(2,1) = ln(1 + sqrt 2) - plus the small-|t| series via R_C(4,4) = 1/2.
+            // otherwise, with the f64 cases only ever reaching the latter. Covers both closed
+            // forms, t > 0 (atan) via R_C(1,2) = atan(1) = pi/4, and t < 0 (ln/atanh) via
+            // R_C(2,1) = ln(1 + sqrt 2), plus the small-|t| series via R_C(4,4) = 1/2.
             #[test]
             fn carlson_rc_f32_closed_forms() {
                 let rc = |x: f32, y: f32| {
@@ -377,9 +377,9 @@ macro_rules! elliptic_tests {
                 }
             }
 
-            // The D kind has no reference table; it is defined as D = (F - E) / k^2, so the
+            // The D kind has no reference table. It is defined as D = (F - E) / k^2, so the
             // validated F/E rows are the oracle. The tolerance carries the subtraction's
-            // cancellation - the k = 0.128 row loses ~2 digits in the *oracle*, not in D.
+            // cancellation, and the k = 0.128 row loses ~2 digits in the *oracle*, not in D.
             // (k = 0 is 0/0 and is excluded by definition, not by convenience.)
             #[test]
             fn ellint_d_matches_f_minus_e() {
@@ -404,7 +404,7 @@ macro_rules! elliptic_tests {
             #[test]
             fn ellint_phi_range_reduction() {
                 for &(phi, k, want_f, want_e) in INC {
-                    // |k| > 1 rows constrain phi < pi/2 and have NaN complete values; skip - the
+                    // |k| > 1 rows constrain phi < pi/2 and have NaN complete values, so skip: the
                     // identity does not apply there (and m = 0 keeps them correct anyway).
                     if k.abs() > 1.0 {
                         continue;
@@ -430,7 +430,7 @@ macro_rules! elliptic_tests {
             }
 
             /// The same identity at *large* `|phi|`, where the reduced angle has lost most of
-            /// its digits to `m*PI` rounding - the point being that the result does not care.
+            /// its digits to `m*PI` rounding, the point being that the result does not care.
             /// The periodic term grows with `m` at the same rate the reduction error does, so
             /// the identity keeps holding to near f64 relative accuracy regardless.
             #[test]
@@ -512,8 +512,9 @@ macro_rules! elliptic_tests {
             // (the duplication loop's iteration limit leaking out as the answer), a 0/0 NaN,
             // or an inf*0 NaN. The infinities are genuine divergences, and a large finite
             // number is the worse answer there because it survives an `is_finite` check;
-            // E(1) = 1 and D(0) = pi/4 are the opposite case - ordinary finite values that
-            // the general formula only reaches as a limit, previously 21% low and NaN.
+            // E(1) = 1 and D(0) = pi/4 are the opposite case, ordinary finite values that
+            // the general formula only reaches as a limit, landing 21% low and NaN without
+            // the pin.
             #[test]
             fn domain_edges() {
                 let inf = f64::INFINITY;
@@ -616,7 +617,7 @@ macro_rules! elliptic_tests {
                         }),
                         0.0,
                     ),
-                    // Out of domain stays NaN - the fixes must not turn these into values.
+                    // Out of domain stays NaN: the edge pins must not turn these into values.
                     ("K(1.5)", ell(EllintK { k: v(1.5) }), f64::NAN),
                     (
                         "F(1.4,1.5)",
@@ -653,7 +654,7 @@ macro_rules! elliptic_tests {
             }
 
             // The `check_overflow: false` arms of every edge fix are otherwise never compiled
-            // by the suite. Ordinary inputs must be unaffected by the flag - it only decides
+            // by the suite. Ordinary inputs must be unaffected by the flag, which only decides
             // whether the singular points get pinned.
             #[test]
             fn unchecked_policy_matches_on_ordinary_inputs() {

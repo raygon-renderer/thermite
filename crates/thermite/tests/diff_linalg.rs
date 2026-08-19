@@ -4,7 +4,7 @@
 //!
 //! Oracles are computed in `f64` and compared with a relative tolerance (the
 //! SIMD paths use FMA / different summation orders). Inputs are moderate finite
-//! floats - linalg over the full edge-case corpus (Inf/NaN/denormals/huge) would
+//! floats, since linalg over the full edge-case corpus (Inf/NaN/denormals/huge) would
 //! make the relative error meaningless. Pure lane-routing ops (transpose,
 //! zero4/one4) are bit-exact. 3D ops only check the first three lanes (the 4th
 //! is documented as unused / unspecified).

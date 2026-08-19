@@ -4,8 +4,8 @@
 //! This also records *why* that crate is not the reference implementation for a function
 //! libm has no entry point for. It documents 50 bits of accuracy and f64 carries 53, so
 //! it is ~8 ulp by construction, and worse than that in the small-argument regime.
-//! Thermite refines a piecewise seed with Halley against `exp` - which at this tier is
-//! libm's - and Halley converges to the true root regardless of the seed, so the tier's
+//! Thermite refines a piecewise seed with Halley against `exp` (libm's at this tier),
+//! and Halley converges to the true root regardless of the seed, so the tier's
 //! accuracy is inherited from the primitive rather than from any table.
 //!
 //! Keep the assertion: it fails if the crate ever becomes the better choice.

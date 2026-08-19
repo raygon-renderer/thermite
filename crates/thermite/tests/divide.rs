@@ -120,10 +120,10 @@ fn check_divisor(d: i64) {
     }
 }
 
-/// The divisor sweep is ~17M exhaustive checks - by far the longest test in the
+/// The divisor sweep is ~17M exhaustive checks, by far the longest test in the
 /// suite, and long enough that it alone set the wall clock of a fully parallel
 /// run. Splitting it into interleaved shards (divisor `k`, `k + SHARDS`, ...)
-/// lets the harness run them concurrently; the coverage is identical, and the
+/// lets the harness run them concurrently. The coverage is identical, and the
 /// stride keeps each shard's mix of easy/hard divisors even.
 const SHARDS: usize = 16;
 

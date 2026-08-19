@@ -20,7 +20,11 @@ type F = Vector<f32>;
 
 #[track_caller]
 fn close(name: &str, got: f64, want: f64, tol: f64) {
-    let rel = if want == 0.0 { got.abs() } else { ((got - want) / want).abs() };
+    let rel = if want == 0.0 {
+        got.abs()
+    } else {
+        ((got - want) / want).abs()
+    };
     assert!(rel <= tol, "{name}: got {got:?}, want {want:?} (rel {rel:e})");
 }
 
@@ -142,7 +146,10 @@ fn planck_peaks_at_wien() {
     // The Wien displacement root of 3(1 - e^-x) = x, near 2.8214394.
     let peak = 2.821_439_372_1_f64;
     let f = planck(peak);
-    assert!(planck(peak - 1e-3) < f && planck(peak + 1e-3) < f, "not a maximum at {peak}");
+    assert!(
+        planck(peak - 1e-3) < f && planck(peak + 1e-3) < f,
+        "not a maximum at {peak}"
+    );
 }
 
 // --- composites get these for free from the default bodies ---
@@ -154,10 +161,20 @@ fn composites_inherit_the_new_forms() {
     type C = Compensated<D>;
 
     let p = C::new(D::splat(0.25));
-    close("compensated logit", p.logit().value().extract::<0>(), logit(0.25), 1e-14);
+    close(
+        "compensated logit",
+        p.logit().value().extract::<0>(),
+        logit(0.25),
+        1e-14,
+    );
 
     let x = C::new(D::splat(1.0));
-    close("compensated planck", x.planck().value().extract::<0>(), planck(1.0), 1e-13);
+    close(
+        "compensated planck",
+        x.planck().value().extract::<0>(),
+        planck(1.0),
+        1e-13,
+    );
 }
 
 /// `phi::<N>` on a composite takes the element-agnostic default, whose series arm

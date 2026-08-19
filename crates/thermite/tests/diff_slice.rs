@@ -37,7 +37,7 @@ macro_rules! slice_suite {
             }
             /// Aligned-middle bounds `[hl, end)` of `data`, as found by `align_slice`
             /// (the region with no leading/trailing scalar remainder). Must be computed
-            /// from the *same* allocation it will index - a different `Vec` of equal
+            /// from the *same* allocation it will index, since a different `Vec` of equal
             /// length can have different pointer alignment.
             fn mid_bounds(data: &[$elem]) -> (usize, usize) {
                 let (head, _chunks, tail) = data.try_aligned_simd_iter::<V>();

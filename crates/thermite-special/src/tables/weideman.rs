@@ -13,7 +13,7 @@
 //! where `$P$` has degree `$N-1$` and **real** coefficients, and `$|Z| \le 1$` over the
 //! whole closed upper half-plane.
 //!
-//! # Why this lives here
+//! # Shared between two crates
 //!
 //! Two crates evaluate this, at different arguments, and only the tables are shared:
 //!

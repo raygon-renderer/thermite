@@ -1,4 +1,4 @@
-//! Portable N-way interleave / de-interleave of a register array - the register
+//! Portable N-way interleave / de-interleave of a register array, the register
 //! half of [`crate::register::Register::load_deinterleaved`]
 //! and [`store_interleaved`](crate::register::Register::store_interleaved).
 //!
@@ -12,7 +12,7 @@
 //!
 //! `N` is decomposed stage by stage like an FFT. Each stage of radix `p` splits
 //! every block of `size` registers (an AoS of `size` streams) into `p`
-//! sub-blocks by residue class mod `p` - groups of `p` consecutive registers
+//! sub-blocks by residue class mod `p`. Groups of `p` consecutive registers
 //! start at a flat position divisible by `p`, so one `p`-way split per group
 //! sorts each element into its class. De-interleaving runs the stages top-down:
 //!
@@ -25,7 +25,7 @@
 //!   primitive, so a backend can give it a native sequence (NEON: three
 //!   `TBL3`s).
 //! - **radix-2 butterfly stages** over [`InterleaveRegister`]'s native 2-way
-//!   ops - the same "treat the pair as one contiguous `2 * LANES` span" trick
+//!   ops, the same "treat the pair as one contiguous `2 * LANES` span" trick
 //!   [`ArrayRegister`](crate::register::array::ArrayRegister) uses to chain
 //!   chunks, lifted to any register count. `interleave`/`deinterleave` are
 //!   single instructions nearly everywhere (`unpck` / `zip`+`uzp` /
@@ -43,13 +43,13 @@
 //!
 //! The stages leave the streams in mixed-radix *digit-reversed* register order
 //! (the classic transpose artifact; pure bit-reversal when `N = 2^k`). The
-//! final un-permutation costs nothing - it only decides which slot each
+//! final un-permutation costs nothing, since it only decides which slot each
 //! already-computed register lands in. Interleaving is the exact mirror:
 //! digit-reversed scatter first, then the same stages bottom-up with the
 //! inverse primitives.
 //!
-//! Stage order (3s, then 2s) is taste, not necessity - each radix's op count is
-//! order-independent - but the digit-reversal permutation must be derived from
+//! Stage order (3s, then 2s) is taste, not necessity, as each radix's op count is
+//! order-independent. But the digit-reversal permutation must be derived from
 //! the same factor sequence the stages use, so both come from `choose_radix`.
 //!
 //! ## Grouped streams: spelling a const-generic product on stable
@@ -57,7 +57,7 @@
 //! Composite element types are AoS records over a scalar: a dual number is
 //! `1 + N` floats, a compensated float is `2`. De-interleaving `M` such streams
 //! is *exactly* a radix-`M * C` de-interleave of the scalar (`C` components per
-//! record) - but `V::load_deinterleaved::<{M * C}>` is not expressible on
+//! record), but `V::load_deinterleaved::<{M * C}>` is not expressible on
 //! stable, because a const-generic **argument** computed from other generic
 //! parameters needs `generic_const_exprs`.
 //!
@@ -75,16 +75,16 @@
 //!
 //! so [`deinterleave_grouped`] / [`interleave_grouped`] take group arrays,
 //! flat-view them, and run the same engine with the count as a value. Stream
-//! `j * C + c` of the flat problem lands at group `j`, component `c` - which is
+//! `j * C + c` of the flat problem lands at group `j`, component `c`, which is
 //! the grouped output's own layout, so the re-typing is free.
 //!
 //! **Everything here is written to const-fold.** Each radix gets its own loop
 //! (a single loop with a `match` over the radices is too large a body for LLVM
 //! to unroll, and then nothing folds), and every count and radix is a
-//! compile-time constant - a const generic or a product of them, threaded
-//! through `#[inline(always)]` value parameters - never a runtime slice length.
+//! compile-time constant: a const generic or a product of them, threaded
+//! through `#[inline(always)]` value parameters, never a runtime slice length.
 //! The digit-reversal is a const table rather than a call to `stream_pos`
-//! (recursive, `/`-and-`%`-heavy - with a runtime argument it does not fold and
+//! (recursive and `/`-and-`%`-heavy, so with a runtime argument it does not fold and
 //! alone cost ~200 instructions). Skipping any of those turns a branch-free
 //! straight-line sequence into a spilling loop nest: an `f32x8`
 //! `load_deinterleaved::<4>` measured 668 instructions before, and 31 after.
@@ -99,7 +99,7 @@ use generic_array::{GenericArray, sequence::GenericSequence, typenum::Unsigned};
 use crate::register::{CoreRegister, MaskRegister, Register, Storage};
 
 /// One de-interleaved stream group: a `head` component plus `TAIL` trailing
-/// components - `1 + TAIL` components in all.
+/// components, `1 + TAIL` components in all.
 ///
 /// `#[repr(C)]` with no padding possible (the array's alignment is `T`'s, and
 /// `T`'s alignment divides its size), so `[StreamGroup<T, TAIL>; M]` is

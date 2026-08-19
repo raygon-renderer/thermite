@@ -66,7 +66,9 @@ where
     }
 
     // See `poly_primal_internal` for why this is `poly_f` and not `poly_f_n`.
-    let res = fast_polynomial::poly_f(NumVector(x), n, |i| unsafe { NumVector(*coeffs.get_unchecked(n - 1 - i)) });
+    let res = fast_polynomial::poly_f(NumVector(x), n, |i| unsafe {
+        NumVector(*coeffs.get_unchecked(n - 1 - i))
+    });
 
     res.0
 }
@@ -137,6 +139,72 @@ where
 
     if const { P::POLICY.check_overflow } {
         y = x.is_infinite().select(V::ZERO, y);
+    }
+
+    y
+}
+
+/// `$\sinh(x)/x$`, the shared body behind [`SpecializedTranscendentalMath::sinhc`].
+///
+/// Structurally identical to [`sinc_internal`] above, with three differences worth naming.
+/// The series is `$1 + x^2/6 + x^4/120$` rather than alternating, so the `1/6` term is added
+/// where `sinc` subtracts it. The large-argument limit is `$+\infty$`, not `0`, and is
+/// reached from both sides: `sinh` overflows to a signed infinity past `x ~ 710` and the
+/// division by `x` restores the sign, so only an exactly infinite input needs the patch
+/// (`inf/inf` is NaN). And there is no zero of `sinh` to worry about away from the origin,
+/// so the tiny window is the only special case in the domain.
+///
+/// The window is the fourth root of epsilon, which is what Boost's `sinhc_pi` uses
+/// (`taylor_n_bound`) and what this crate's `sinc` already uses. Below it the series is
+/// accurate to well under an ulp and, more to the point, costs no `sinh` at all.
+#[inline(always)]
+pub fn sinhc_internal<V, E: FloatElement, P>(x: V) -> V
+where
+    V: FloatVectorWithBits<Element = E> + SpecializedTranscendentalMath<E>,
+    P: Policy,
+{
+    if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+        let mut y = V::sinh::<P>(x).approx_div_p::<P>(x);
+
+        if const { P::POLICY.check_overflow } {
+            y = x.is_zero().select(V::ONE, y);
+            y = x.is_infinite().select(V::INFINITY, y);
+        }
+
+        return y;
+    }
+
+    let is_tiny = x.abs().cmp_le(V::FOURTH_ROOT_EPSILON);
+
+    let x2 = x.square();
+
+    // if branching, use the Taylor series for tiny x without calling sinh.
+    if const { !P::POLICY.avoid_branching } && crate::unlikely(is_tiny.all()) {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
+            // one FMA instead of a divide then an add, at the cost of a little accuracy
+            // in the 120 denominator
+            return x2.mul_adde(
+                x2.mul_adde(V::splat(FloatElement::from_ratio(1, 120)), V::FRAC_1_6),
+                V::ONE,
+            );
+        }
+
+        let res = x2 / V::splat(const { E::ConstInt::<{ 120 }>::VALUE });
+        return x2.mul_adde(res + V::FRAC_1_6, V::ONE);
+    }
+
+    // For very small x, sinhc(x) ~ 1 + x^2/6 + x^4/120
+    let num = is_tiny.select(x2, V::sinh::<P>(x));
+    let den = is_tiny.select(V::splat(const { E::ConstInt::<{ 120 }>::VALUE }), x);
+
+    // combined division, since division is expensive
+    let mut y = num.approx_div_p::<P>(den);
+
+    y = is_tiny.select(x2.mul_adde(y + V::FRAC_1_6, V::ONE), y);
+
+    if const { P::POLICY.check_overflow } {
+        // sinh(inf)/inf is inf/inf = NaN; the limit is +inf from both sides.
+        y = x.is_infinite().select(V::INFINITY, y);
     }
 
     y
@@ -343,4 +411,218 @@ where
             },
         ),
     }
+}
+
+/// Terms of the odd series in [`log1pmx_internal`], for a format's full precision.
+///
+/// The window is `|r| <= 1/3`, so `y = r^2 <= 1/9` and term `k` is `3 y^k / (2k+3)`
+/// relative to the leading `1/3`: `1e-3` at k=3, `4e-5` at k=4, `4e-6` at k=5, `4e-8` at
+/// k=7, and `1e-17` at k=16. That gives 17 terms in binary64 and 8 in binary32 - all FMAs,
+/// and cheaper than the `ln` the window exists to avoid.
+///
+/// There is no per-tier trimming: `Medium` and below skip the series outright (see
+/// [`log1pmx_internal`]), so every tier that reaches it wants the full count. Trimming the
+/// count would be the wrong knob anyway, as the dropped term is `O(y^k)` and vanishes toward
+/// `x = 0`, so it buys nothing exactly where the series is doing the work.
+#[inline(always)]
+pub const fn log1pmx_terms(mantissa_bits: u32) -> usize {
+    if mantissa_bits > 24 { 17 } else { 8 }
+}
+
+/// `$\ln(1+x) - x$`, the shared body behind [`SpecializedTranscendentalMath::log1pmx`] for
+/// real f32 and f64 vectors.
+///
+/// Both terms are `$O(x)$` and the answer is `$O(x^2)$`, so the direct spelling loses
+/// `$2\varepsilon/|x|$`, which is everything by `$|x| \approx \varepsilon$`. Substituting
+/// `$\ln(1+x) = 2\,\mathrm{atanh}(r)$` with `$r = x/(2+x)$` and subtracting the `x` *inside*
+/// the series removes the cancellation entirely:
+///
+/// ```text
+/// 2 atanh(r) - x = 2r sum_{k>=0} y^k/(2k+1) - x,   y = r^2
+///                = (2r - x) + 2 r y sum_{k>=0} y^k/(2k+3)
+///                = r (2 y S(y) - x)                since 2r - x = -x r
+/// ```
+///
+/// so nothing large is ever subtracted from anything large, and `x = 0` gives exactly `0`
+/// through `r = 0`. The window is `-1/2 <= x <= 1`, which is precisely where `|r| <= 1/3`
+/// at *both* ends. Outside it the direct form's loss is only `2 eps / |x| <= 4 eps` and
+/// that is what runs.
+///
+/// R evaluates the same series as a continued fraction because scalar iteration is cheap
+/// for it. Here a fixed [`log1pmx_terms`]-long Horner chain is ~17 FMAs, which beats both
+/// the continued fraction and the `ln_1p` it replaces, so the window is taken as wide as
+/// the series allows rather than as narrow as possible.
+///
+/// # Precision policy
+///
+/// `Medium` and below drop the series entirely and return the direct `ln_1p(x) - x`, which
+/// costs one compare, one blend and the whole Horner chain less. Understand what that
+/// buys and what it gives up: the direct form is accurate to a few ulp for `$|x|$` down to
+/// about `$10^{-3}$`, so for a caller sampling ordinary arguments the low tiers are simply
+/// cheaper. Near zero it does not degrade gracefully. It degenerates. Once `$1 + x$`
+/// rounds to `1` the result is `$-x$`, which is not a less precise `$-x^2/2$` but a
+/// different quantity, wrong by every digit and by an unbounded factor. A caller whose
+/// arguments approach zero (the case this function exists for at all) must ask for
+/// `Average` or better, where the series makes `x = 0` exact.
+#[inline(always)]
+pub fn log1pmx_internal<V, E, P>(x: V) -> V
+where
+    E: FloatElementWithBits,
+    V: FloatVectorWithBits<Element = E> + SpecializedTranscendentalMath<E>,
+    P: Policy,
+{
+    // See the policy note above: below Average this is the whole function.
+    if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+        return V::ln_1p::<P>(x) - x;
+    }
+
+    let near = x.cmp_le(V::ONE) & x.cmp_ge(V::splat(const { E::ConstRatio::<{ -1 }, 2>::VALUE }));
+
+    // NaN compares false, so it lands on the direct arm and propagates from there.
+    let far = if const { !P::POLICY.avoid_branching } && crate::likely(near.all()) {
+        V::ZERO
+    } else {
+        let d = V::ln_1p::<P>(x) - x;
+
+        if const { !P::POLICY.avoid_branching } && crate::unlikely(near.none()) {
+            return d;
+        }
+
+        d
+    };
+
+    // r = x / (2 + x). Outside the window this can be non-finite (x = -2 divides by zero),
+    // which is why the tail is a blend and not arithmetic: the bad lanes are discarded.
+    let r = x / (x + V::TWO);
+    let y = r * r;
+
+    let terms = const { log1pmx_terms(E::MANTISSA_BITS) };
+
+    // S(y) = sum_{k=0..terms-1} y^k / (2k+3), Horner.
+    let mut s = V::splat(E::from_ratio(1, 2 * terms as crate::LargeInt + 1));
+    let mut k = terms - 1;
+    while k > 0 {
+        k -= 1;
+        s = y.mul_adde(s, V::splat(E::from_ratio(1, 2 * k as crate::LargeInt + 3)));
+    }
+
+    let series = (y + y).mul_adde(s, -x) * r;
+
+    if const { !P::POLICY.avoid_branching } && crate::likely(near.all()) {
+        return series;
+    }
+
+    near.select(series, far)
+}
+
+/// `numer / sum(1/x_i)` with every reciprocal scaled by the smallest input, the real-vector
+/// override behind [`SpecializedCoreMath::harmonic_mean`] and
+/// [`SpecializedCoreMath::inv_sum_inv`].
+///
+/// Written directly, `sum(1/x_i)` overflows the moment any input is denormal: the reciprocal
+/// saturates to infinity, the sum with it, and the answer collapses to zero when the true
+/// value is merely small. Scaling by `m = min(x_i)` makes every term `m/x_i <= 1` by
+/// construction, so the sum lands in `[1, N]` and cannot overflow whatever the spread of the
+/// inputs. Recovering the answer is exact, since `sum(1/x_i) = s/m`.
+///
+/// It has to be the *smallest* element. The largest reciprocal is the one that overflows, so
+/// it is the one that must normalize to 1; scaling by the largest input, which is what
+/// `hypot_n` does for the opposite reason, would leave the failure exactly where it was.
+/// Measured against a 60-digit oracle, this is exact across the full representable spread
+/// (`5e-324` against `1e300`) where the direct form returns zero.
+///
+/// The scaling is what costs the two guards the direct form does not need: at `m = 0` every
+/// term is `0/x_i` and the sum is `0`, giving `0/0` where the limit is `0`, and at an
+/// all-infinite input every term is `inf/inf = NaN` where the limit is infinite.
+///
+/// This is confined to real vectors on purpose. `Complex::min` is lexicographic by
+/// `(re, im)`, so it can return a large-magnitude element and the scaling would protect
+/// nothing, so composites take the direct form instead.
+#[inline(always)]
+pub fn inv_sum_inv_internal<V, E: FloatElement, P, const N: usize>(mut values: [V; N], numer: V) -> V
+where
+    V: FloatVectorWithBits<Element = E> + SpecializedCoreMath<E>,
+    P: Policy,
+{
+    if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
+        return V::inv_sum_inv_direct::<P, N>(values, numer);
+    }
+
+    // `reduce_array` copies, so `values` is still intact after this.
+    let m = crate::math::algorithms::reduce_array(values, |a, b| a.min(b));
+
+    let mut i = 0;
+    while i < N {
+        values[i] = m / values[i];
+        i += 1;
+    }
+
+    crate::math::algorithms::reduce_in_place(&mut values, |a, b| a + b);
+
+    let r = (numer * m) / values[0];
+
+    if const { !P::POLICY.check_overflow } {
+        return r;
+    }
+
+    m.cmp_eq(V::INFINITY)
+        .select(V::INFINITY, m.cmp_eq(V::ZERO).select(V::ZERO, r))
+}
+
+/// `$\operatorname{atanh}(x)/x$`, the shared body behind
+/// [`SpecializedTranscendentalMath::atanhc`].
+///
+/// Same shape as [`sinc_internal`] and [`sinhc_internal`], with the even series
+/// `$1 + x^2/3 + x^4/5$` in place of theirs. As with those two, the window is not about
+/// cancellation (`atanh(x)` is already `x` to full relative precision near zero, so the
+/// quotient is accurate wherever it is defined), it is about the `0/0` at the origin, and
+/// about not paying for an `atanh` to learn that the answer is 1.
+///
+/// The domain is `[-1, 1]`: `atanh(+-1)` is a signed infinity and the division by `x`
+/// restores the sign, so both ends come out `+inf` with no patch, and `|x| > 1` is NaN from
+/// `atanh` itself. Unlike `sinc` there is no infinite argument to guard, since anything past
+/// 1 is out of domain already.
+#[inline(always)]
+pub fn atanhc_internal<V, E: FloatElement, P>(x: V) -> V
+where
+    V: FloatVectorWithBits<Element = E> + SpecializedTranscendentalMath<E>,
+    P: Policy,
+{
+    if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+        let mut y = V::atanh::<P>(x).approx_div_p::<P>(x);
+
+        if const { P::POLICY.check_overflow } {
+            y = x.is_zero().select(V::ONE, y);
+        }
+
+        return y;
+    }
+
+    let is_tiny = x.abs().cmp_le(V::FOURTH_ROOT_EPSILON);
+
+    let x2 = x.square();
+
+    // if branching, use the Taylor series for tiny x without calling atanh.
+    if const { !P::POLICY.avoid_branching } && crate::unlikely(is_tiny.all()) {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
+            return x2.mul_adde(
+                x2.mul_adde(V::splat(FloatElement::from_ratio(1, 5)), V::FRAC_1_3),
+                V::ONE,
+            );
+        }
+
+        let res = x2 / V::splat(const { E::ConstInt::<{ 5 }>::VALUE });
+        return x2.mul_adde(res + V::FRAC_1_3, V::ONE);
+    }
+
+    // For very small x, atanhc(x) ~ 1 + x^2/3 + x^4/5
+    let num = is_tiny.select(x2, V::atanh::<P>(x));
+    let den = is_tiny.select(V::splat(const { E::ConstInt::<{ 5 }>::VALUE }), x);
+
+    // combined division, since division is expensive
+    let mut y = num.approx_div_p::<P>(den);
+
+    y = is_tiny.select(x2.mul_adde(y + V::FRAC_1_3, V::ONE), y);
+
+    y
 }

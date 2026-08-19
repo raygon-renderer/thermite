@@ -1,10 +1,10 @@
 //! Coverage for two previously-0% modules:
-//!   * `isa/mod.rs` — `InstructionSet` detection + the `num_registers`/`has_fma`
-//!     classifiers (const fns; covered only when called at *runtime*).
-//!   * `backend/generic/polyfills/sort.rs` — the sorting networks (`sort_2`/`_4`/
+//!   * `isa/mod.rs`: `InstructionSet` detection plus the `num_registers`/`has_fma`
+//!     classifiers (const fns, covered only when called at *runtime*).
+//!   * `backend/generic/polyfills/sort.rs`: the sorting networks (`sort_2`/`_4`/
 //!     `_8`/`sort_any`) reached through `NumericRegister::sort`.
 //!
-//! Sorting is checked by the identity `sort([n-1, …, 1, 0]) == [0, 1, …, n-1]`:
+//! Sorting is checked by the identity `sort([n-1, ..., 1, 0]) == [0, 1, ..., n-1]`:
 //! `indexed()` is a known distinct ascending ramp, so its reverse must sort back
 //! to it exactly.
 #![cfg(any(
@@ -70,7 +70,7 @@ where
     Vector<R>: NumericVector<Element = R::Element>,
     R::Element: PartialEq + core::fmt::Debug,
 {
-    // [n-1, …, 1, 0] must sort to [0, 1, …, n-1] == indexed()
+    // [n-1, ..., 1, 0] must sort to [0, 1, ..., n-1] == indexed()
     let asc = Vector::<R>::indexed();
     let desc = asc.reverse();
     let sorted = Vector::<R>(<R as NumericRegister>::sort(desc.0));

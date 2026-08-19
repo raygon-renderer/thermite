@@ -267,7 +267,7 @@ mod neon {
 
 #[test]
 fn d_zero_constructs() {
-    // d == 0 hits the degenerate `_internal` branch; must not panic to construct.
+    // d == 0 hits the degenerate `_internal` branch, and must not panic to construct.
     let _ = 0u32.to_divider();
     let _ = 0i32.to_divider();
 }

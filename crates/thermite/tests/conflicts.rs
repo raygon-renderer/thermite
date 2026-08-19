@@ -1,7 +1,7 @@
 //! `IntegerVector::count_conflicts` and `PartialOrdVector::group_by_value`.
 //!
 //! Both are about duplicate values across lanes, so both are tested by
-//! enumerating *every* value pattern over a small alphabet - that makes
+//! enumerating *every* value pattern over a small alphabet, which makes
 //! duplicates dense, which is exactly the interesting case and is what a random
 //! sweep would mostly miss. Oracles are plain scalar loops over the input array.
 //!
@@ -159,7 +159,7 @@ macro_rules! suite {
             check!(i16x16, thermite::simd::i16x16<$backend>, i16, 16, 2);
             check!(u8x16, thermite::simd::u8x16<$backend>, u8, 16, 2);
 
-            /// A uniform packet is one group; a fully-distinct packet is `LANES`
+            /// A uniform packet is one group, and a fully-distinct packet is `LANES`
             /// groups of one lane each. The two ends of the divergence range.
             #[test]
             fn degenerate() {

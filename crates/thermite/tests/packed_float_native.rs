@@ -7,7 +7,7 @@
 //! - unpack exhaustively over all 65536 code points,
 //! - pack over a structured + random f32 sweep.
 //!
-//! NaN comparisons: f32 side is NaN-insensitive; packed side treats two NaN code points as equal.
+//! NaN comparisons: the f32 side is NaN-insensitive, and the packed side treats two NaN code points as equal.
 #![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 
 use thermite::element::float::spec::{Bf16, FloatSpec, Fp16, Fp16Fast};
@@ -142,8 +142,8 @@ macro_rules! bf16_tests {
 }
 
 /// The binary16 (Fp16 / Fp16Fast) unpack+pack tests against the generic-default impls. Only valid
-/// where the generic default is what's actually wired (v1/v2 always; v3 only when `avx2-f16c` is
-/// off - with F16C the hardware path is tested separately in `packed_float_f16c.rs`, and its fast
+/// where the generic default is what's actually wired (v1/v2 always, v3 only when `avx2-f16c` is
+/// off, since with F16C the hardware path is tested separately in `packed_float_f16c.rs`, and its fast
 /// unpack intentionally diverges from the `Fp16Fast` oracle on the assumed-absent specials).
 macro_rules! fp16_tests {
     ($u16:ty, $f32:ty) => {
@@ -177,7 +177,7 @@ macro_rules! native_suite {
     };
 }
 
-/// v3 native suite: bf16 always; binary16 generic-default tests only when F16C is unavailable.
+/// v3 native suite: bf16 always, and binary16 generic-default tests only when F16C is unavailable.
 macro_rules! native_suite_v3 {
     ($mod:ident, $u16:ty, $f32:ty) => {
         mod $mod {
@@ -218,7 +218,7 @@ mod v3 {
     use thermite::backend::x86_v3::registers::{F32x4V3, F32x8V3, U16x8V3, U16x16V3};
     use thermite::register::array::ArrayRegister;
 
-    // v3 has native 8- and 16-lane 16-bit registers; f32x8 is native (F32x8V3).
+    // v3 has native 8- and 16-lane 16-bit registers, and f32x8 is native (F32x8V3).
     native_suite_v3!(x4, U16x4V3, F32x4V3);
     native_suite_v3!(x8, U16x8V3, F32x8V3);
     native_suite_v3!(x16, U16x16V3, ArrayRegister<F32x8V3, 2>);

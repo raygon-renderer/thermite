@@ -2,17 +2,17 @@
 //! in `thermite_compensated::specialized::special`.
 //!
 //! Reference values are mpmath 1.3.0 at 45 digits, as `(hi, lo)` pairs so both words are
-//! checked - collapsing to one `f64` would only ever verify the half this type is not
+//! checked, since collapsing to one `f64` would only ever verify the half this type is not
 //! about. Inputs are all exactly representable, so the references describe the argument
 //! actually passed rather than a decimal near it.
 //!
 //! # A note on the tolerance
 //!
-//! These assert at full double-double. They could not until `exp`'s range reduction was
-//! fixed: Stirling calls `ln` twice - once on the shifted argument, once on the
-//! divided-out product - `ln` refines through `exp`, and `exp` was capped near 50 bits by
-//! rounded `k * LN_2_EXTENDED[i]` products. Every value here then landed ~1e-14 *absolute*
-//! from its reference regardless of magnitude, which is what identified the cause: a
+//! These assert at full double-double, which needs `exp`'s range reduction to be exact.
+//! Stirling calls `ln` twice (once on the shifted argument, once on the divided-out
+//! product), `ln` refines through `exp`, and rounded `k * LN_2_EXTENDED[i]` products cap
+//! `exp` near 50 bits. Every value here then lands ~1e-14 *absolute* from its reference
+//! regardless of magnitude, which is what identifies the cause: a
 //! fault in the gamma code would scale with shift count or reflection, and it did
 //! neither. See the `LN_2_EXTENDED` comments in `consts.rs`.
 
@@ -27,8 +27,8 @@ fn c(x: f64) -> C {
     C::new(V::splat(x))
 }
 
-/// `trigamma` lives only on the specialized trait - it is deliberately not part of the
-/// public `SpecialMath` surface - so it is reached through a local helper rather than by
+/// `trigamma` lives only on the specialized trait, deliberately not on the
+/// public `SpecialMath` surface, so it is reached through a local helper rather than by
 /// importing that trait, which would make every other call in this file ambiguous.
 fn trigamma(x: C) -> C {
     use thermite_special::specialized::SpecializedSpecialMath;
@@ -37,7 +37,7 @@ fn trigamma(x: C) -> C {
 }
 
 /// Full double-double. Reachable only because the `LN_2_EXTENDED` Cody-Waite split in
-/// `consts.rs` makes `exp`'s range reduction exact - before that this had to sit at
+/// `consts.rs` makes `exp`'s range reduction exact. Without it this sits at
 /// 1e-14, since Stirling calls `ln` twice and `ln` refines through `exp`.
 const TOL: f64 = 1e-29;
 
@@ -192,7 +192,7 @@ const TRIGAMMA: &[(f64, f64, f64)] = &[
 #[test]
 fn tgamma_matches_mpmath() {
     // Exponentiating lgamma costs log2|lnGamma| bits, so this is looser than the rest by
-    // design - see `compensated_tgamma`.
+    // design. See `compensated_tgamma`.
     for &(x, hi, lo) in TGAMMA {
         let err = dd_err(c(x).tgamma(), hi, lo);
         assert!(err <= 1e-27, "tgamma({x}): rel err {err:e}");

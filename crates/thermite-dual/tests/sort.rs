@@ -2,7 +2,7 @@
 //!
 //! The key correctness hazard is a *tie by key*: a compare-exchange that
 //! derives one routing mask and negates it for the other side sends the same
-//! dual to both lanes of a tied pair - one composite duplicated, its partner
+//! dual to both lanes of a tied pair, one composite duplicated and its partner
 //! dropped. The primal pattern deliberately contains duplicates, and the
 //! derivatives are distinct per lane, so that failure shows as a multiset
 //! mismatch of whole duals even though the primal sequence still looks
@@ -12,7 +12,7 @@ use thermite::prelude::*;
 use thermite::sort::{Ascending, Descending};
 use thermite_dual::Dual;
 
-/// Duplicates on purpose - ties are the hazard.
+/// Duplicates on purpose, since ties are the hazard.
 fn primal(lane: usize) -> f32 {
     const PATTERN: [f32; 16] = [
         5.0, 2.0, 9.0, 2.0, 7.0, 1.0, 8.0, 3.0, 6.0, 4.0, 0.0, 9.0, 1.0, 7.0, 3.0, 8.0,
@@ -63,8 +63,8 @@ macro_rules! check {
             assert_eq!(got_re, want_re, "{label}: primals not sorted");
 
             // 2. Every whole dual survived: multiset equality on full encodings,
-            //    so a derivative paired with the wrong primal - or a tied pair
-            //    duplicated/dropped - fails here.
+            //    so a derivative paired with the wrong primal, or a tied pair
+            //    duplicated/dropped, fails here.
             let mut a: Vec<_> = input.iter().map(encode).collect();
             let mut b: Vec<_> = out.iter().map(encode).collect();
             a.sort();

@@ -1,7 +1,7 @@
 //! Coverage for the `ScalarMath` / `ScalarMathWithPolicy` shortcut traits (the
 //! `scalar_*` methods on bare `f32`/`f64`) and the `Unwrap` plumbing they use
 //! (`math/scalar.rs`). The tuple-returning ones (`scalar_sin_cos`, `scalar_frexp`,
-//! …) exercise the tuple `Unwrap` impls.
+//! ...) exercise the tuple `Unwrap` impls.
 //!
 //! Spot-checked against `libm` (loose `Performance`-policy tolerance); the rest
 //! just need to execute. `ScalarMath` is implemented directly on the scalar types.

@@ -675,7 +675,7 @@ fn tgamma_reaches_the_top_of_the_range() {
 
 /// The wedge: large `|Im z|` with `|z| > 8`.
 ///
-/// This is the region the old continued fraction never covered - it was selected on
+/// This is the region a continued fraction selected on
 /// `Re(z^2)`, which is very negative here, so these points fell through to a Taylor
 /// series that truncates long before converging. `erfc(0.1 + 10i)` was wrong by 36
 /// orders of magnitude. It is now `exp(-z^2) w(iz)` from [`thermite_complex::faddeeva`].
@@ -701,7 +701,7 @@ fn erfc_in_the_large_imaginary_wedge() {
         let got = parts(SpecialMathWithPolicy::erfc_p::<Precision>(c(x, y)));
 
         // Normwise: `Re erfc(iy)` is exactly 1 against a norm of 1e61, so no method can
-        // hold it relatively - and the `(0, 12i)` row is here to check it is not NaN or
+        // hold it relatively, and the `(0, 12i)` row is here to check it is not NaN or
         // wildly wrong, not that it is exact.
         let n = (wr * wr + wi * wi).sqrt();
         let d = ((got.0 - wr).powi(2) + (got.1 - wi).powi(2)).sqrt();
@@ -720,7 +720,7 @@ fn erfc_in_the_large_imaginary_wedge() {
 /// radius it holds for free: every term of the odd-power series is purely imaginary, so
 /// the real part is untouched. Outside it, it holds only because `w`'s near-real-axis
 /// correction makes `Re w(-y)` exactly `exp(-y^2)`, which the `exp(y^2)` prefactor then
-/// cancels - and that correction is gated at `Best`, so this is a `Precision`-and-above
+/// cancels, and that correction is gated at `Best`, so this is a `Precision`-and-above
 /// guarantee.
 #[test]
 fn erfc_on_the_imaginary_axis_has_real_part_one() {
@@ -815,11 +815,11 @@ fn erf_regime_gating_is_transparent() {
 }
 
 /// A vector straddling both regimes must give each lane the same answer it would get
-/// alone - the early `break` now keys on `converged | use_w`, so a non-converging
+/// alone. The early `break` keys on `converged | use_w`, so a non-converging
 /// large-|z| lane must not change what its neighbours receive.
 #[test]
 fn erf_lanes_straddling_the_regimes_are_independent() {
-    // Lane 0 sits far out in the `w` regime and never converges in the series; the rest
+    // Lane 0 sits far out in the `w` regime and never converges in the series, while the rest
     // are ordinary series lanes.
     let elems: Vec<num_complex::Complex<f64>> = (0..C::LANES)
         .map(|i| {

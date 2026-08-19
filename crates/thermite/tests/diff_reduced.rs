@@ -2,7 +2,7 @@
 //! <f32x4, U1>`, etc.) on X86V2/X86V3. `register/reduced.rs` had 0% coverage.
 //!
 //! Tested at the **`Vector` layer** against per-lane Rust oracles (the reduced
-//! register emulates a 3-lane vector inside a 4-lane register; only the first
+//! register emulates a 3-lane vector inside a 4-lane register, and only the first
 //! three lanes are meaningful, so only those are checked). Pure arithmetic /
 //! bitwise / rounding ops are bit-exact (NaN-aware via the harness).
 #![cfg(any(
@@ -868,7 +868,7 @@ macro_rules! rdiv_const {
 /// IntegerRegister per-lane `VectorDivider` + masked `div_c`/`div_m`/`div_z`.
 ///
 /// Exercises the per-lane variable-shift path (`shlv`/`srav`/`shrv`), which on
-/// SSE has no native 64-bit form and is polyfilled - a lane-swap bug there used
+/// SSE has no native 64-bit form and is polyfilled, where a lane-swap bug corrupts
 /// to corrupt 64-bit results on x86_v1/v2 (fixed in `_mm_s{ll,rl}v_epi64x_v1`).
 macro_rules! rdiv_vec {
     ($reg:ty, $e:ty, $signed:literal, $l:expr) => {{

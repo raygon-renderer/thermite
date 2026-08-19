@@ -10,7 +10,7 @@
 //!   store_interleaved:   ptr[lane * M + j] == values[j].extract(lane)
 //!
 //! Value and error carry distinct tags, because a de-interleave that swapped a
-//! pair's two halves - or crossed two streams - would still produce
+//! pair's two halves (or crossed two streams) would still produce
 //! plausible-looking floats. Only exact routing checks catch that.
 
 use thermite::prelude::*;
@@ -59,9 +59,9 @@ macro_rules! check {
     }};
 }
 
-/// The grouped register engine covers every `M` directly - no dispatch
-/// ladder, no scalar fallback - so this just spans a range of stream counts,
-/// including `M = 9` (18 element streams) well past the old ladder's reach.
+/// The grouped register engine covers every `M` directly, with no dispatch
+/// ladder and no scalar fallback, so this just spans a range of stream counts,
+/// including `M = 9` (18 element streams) well past a ladder's reach.
 macro_rules! check_all_m {
     ($label:expr, $v:ty) => {{
         check!($label, $v, 1);

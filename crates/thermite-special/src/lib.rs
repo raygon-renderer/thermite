@@ -22,6 +22,15 @@ pub mod specialized;
 #[doc(hidden)]
 pub mod tables;
 
+pub use tables::bernoulli::BernoulliNumbers;
+
+pub mod bernoulli;
+pub mod zernike;
+
+// The two normalization flags appear in the `zernike` signature below as a const
+// generic, so a caller has to be able to name them without reaching into the module.
+pub use crate::zernike::{ZERNIKE_ORTHONORMAL, ZERNIKE_UNIT_PEAK};
+
 use crate::specialized::{CarlsonKind, EllipticKind, WrapTo};
 
 // Spherical-harmonic support: `ShTable` appears in the public signatures below, and
@@ -37,7 +46,7 @@ pub use crate::specialized::{MAX_SH_DEGREE, ShTable};
 ///   [`EllintE`](elliptic::EllintE)/[`EllintEInc`](elliptic::EllintEInc),
 ///   [`EllintD`](elliptic::EllintD)/[`EllintDInc`](elliptic::EllintDInc),
 ///   [`EllintPi`](elliptic::EllintPi)/[`EllintPiInc`](elliptic::EllintPiInc), implementing
-///   [`EllipticKind`]. Completeness is encoded by the struct - a complete integral has no `phi` field.
+///   [`EllipticKind`]. Completeness is encoded by the struct: a complete integral has no `phi` field.
 pub mod elliptic {
     pub use crate::specialized::EllipticConsts;
 
@@ -58,10 +67,10 @@ macro_rules! decl_math {
         )*
         // Optional block of "kind-dispatched" methods: a single request-struct argument carrying
         // the operation's data (e.g. `CarlsonRf { x, y, z }`). The struct's `eval` (a CarlsonKind /
-        // EllipticKind impl) does the work; this generates the full trait family (policy + default +
+        // EllipticKind impl) does the work. This generates the full trait family (policy + default +
         // dispatched vector impl + scalar) around it. Because the struct's element backend
         // (EllipticEval) covers both `Vector<R>` and scalar floats, the same bound works at the
-        // scalar layer - no Unwrap wrapping needed here.
+        // scalar layer, no Unwrap wrapping needed here.
         $(@kinds {$(
             $(#[$kmeta:meta])*
             fn $kname:ident : $ktrait:path;
@@ -327,7 +336,7 @@ decl_math! {
         /// Computed on the real backends as the Faddeeva function restricted to the imaginary
         /// axis, `$w(ix) = \operatorname{erfcx}(x)$`, where Weideman's rational approximation
         /// degenerates to real arithmetic: one reciprocal and one Horner, no transcendental at
-        /// all for `x >= 0`. That makes it cheaper than the `erfc` it complements, and it
+        /// all for `x >= 0`. That makes it cheaper than the `erfc` it complements, and
         /// measures 1.22 ulp worst over `$x \in [0, 10^{15}]$` at the `Best` tier and above.
         ///
         /// Negative arguments use `$\operatorname{erfcx}(-x) = 2e^{x^2} - \operatorname{erfcx}(x)$`
@@ -410,6 +419,37 @@ decl_math! {
         /// Computes the natural log of the Gamma function (`$\ln|\Gamma(x)|$`) for any real input, for each value in a vector.
         fn lgamma[][](self: Self) -> Self;
 
+        /// The Poisson probability mass `$P(k; \lambda) = e^{-\lambda}\lambda^k / k!$` at `k = self`,
+        /// for real `$k \ge 0$` and mean `$\lambda \ge 0$`.
+        ///
+        /// Not `exp(k ln lambda - lambda - lgamma(k+1))`: that forms an `$O(1)$` answer as the
+        /// exponential of a difference of large numbers, and half an ulp of
+        /// `$\ln\Gamma(k+1) = O(k \ln k)$` becomes that many ulp of the mass. For `$k \ge 9$` this
+        /// uses Loader's saddle-point form (the one R's `dpois` uses),
+        ///
+        /// ```math
+        /// P(k; \lambda) = \frac{e^{-\mathrm{stirlerr}(k) - \mathrm{bd0}(k, \lambda)}}{\sqrt{2\pi k}}
+        /// ```
+        ///
+        /// with `stirlerr` the Stirling remainder (a short `$1/k^2$` series) and `bd0` the
+        /// deviance `$k \ln(k/\lambda) + \lambda - k$` (a series in `$(k-\lambda)/(k+\lambda)$` near
+        /// the peak, where the direct form cancels): both are small where the mass is not
+        /// negligible, so the exponential amplifies nothing, and there is no `lgamma` and no
+        /// `ln` at all near the peak. Below `$k = 9$` the same machinery is used after shifting
+        /// `k` up by an integer, with the exact product `$(k+1)\cdots(k+m)$` taken back out, so
+        /// there is no `lgamma` anywhere, and mixed vectors share one `ln`, one `stirlerr` and
+        /// one `exp`. Real `k` is allowed because
+        /// the Gamma density is the same function: `$f(x; a) = P(a-1; x)$` for shape `$a \ge 1$`
+        /// (unit scale).
+        ///
+        /// Edges: `$\lambda = 0$` gives `1` at `$k = 0$` and `0` above; `$k = 0$` is `$e^{-\lambda}$`.
+        fn poisson_pmf[][](self: Self, lambda: Self) -> Self;
+
+        /// `$\ln P(k; \lambda)$`, the log of [`poisson_pmf`](SpecialMath::poisson_pmf), formed
+        /// directly (no `exp` then `ln`) so it stays finite far in the tails where the mass
+        /// itself underflows.
+        fn poisson_log_pmf[][](self: Self, lambda: Self) -> Self;
+
         /// Computes the digamma function `$\psi(x) = \frac{\mathrm{d}}{\mathrm{d}x}\ln\Gamma(x) = \frac{\Gamma'(x)}{\Gamma(x)}$`
         /// for any real input, for each value in a vector.
         ///
@@ -421,7 +461,7 @@ decl_math! {
         ///   (`$x_0$` is the positive root of `$\psi$`).
         /// * For `x <= -1`, the reflection formula `$\psi(1-x) = \psi(x) + \pi\cot(\pi x)$` is applied.
         ///
-        /// **NOTE**: The digamma function is not defined at zero or the negative integers; those inputs
+        /// **NOTE**: The digamma function is not defined at zero or the negative integers. Those inputs
         /// yield NaN when overflow checking is enabled.
         fn digamma[][](self: Self) -> Self;
 
@@ -457,9 +497,30 @@ decl_math! {
         fn jacobi[][](self: Self, alpha: Self, beta: Self, n: u32, m: u32) -> Self;
 
         /// Computes the N-th degree physicists' [Hermite polynomial](https://en.wikipedia.org/wiki/Hermite_polynomials)
-        /// `H_n(x)` where `x` is `self` and `N` is the polynomial degree.
+        /// `$H_N(x)$` where `x` is `self` and `N` is the polynomial degree.
         ///
-        /// This uses the recurrence relation to compute the polynomial iteratively.
+        /// Evaluated by the three-term recurrence
+        ///
+        /// ```math
+        /// H_{n+1}(x) = 2x\,H_n(x) - 2n\,H_{n-1}(x)
+        /// ```
+        ///
+        /// seeded with `$H_0 = 1$` and `$H_1(x) = 2x$`. The trip count is `N`, with no data
+        /// dependence, so LLVM unrolls the whole thing into straight-line FMA.
+        ///
+        /// The derivative is another member of the same family, `$H_n'(x) = 2n\,H_{n-1}(x)$`, so a
+        /// value-and-slope pair costs one extra call rather than a separate kernel. The
+        /// probabilists' polynomials are a rescaling, `$He_n(x) = 2^{-n/2} H_n(x/\sqrt{2})$`.
+        ///
+        /// **NOTE**: this is the raw polynomial, which grows fast: `$H_n(0) = (-2)^{n/2} (n-1)!!$` for
+        /// even `n`, and `$H_n(x) \sim (2x)^n$` in the tails. It leaves binary32 range at the origin
+        /// around degree 48 and binary64 around 300, and much earlier for `|x|` of a few units. If
+        /// what you actually want is the *normalized* Hermite function (the quantum harmonic
+        /// oscillator eigenstate, a Hermite-Gauss beam mode, or the basis of a Hermite spectral
+        /// method), use [`hermite_function`](SpecialMath::hermite_function), which folds the
+        /// Gaussian weight and the normalization into the recurrence and stays `$O(1)$` at every
+        /// degree. The raw polynomial is the right primitive for Gauss-Hermite quadrature
+        /// node-finding at modest `n` and for anything that genuinely wants `$H_n$` itself.
         fn hermite[const N: usize][N](self: Self) -> Self;
 
         /// Computes the n-th degree physicists' [Hermite polynomial](https://en.wikipedia.org/wiki/Hermite_polynomials)
@@ -470,6 +531,186 @@ decl_math! {
         /// This uses the recurrence relation to compute the polynomial iteratively.
         fn hermitev[][](self: Self, n: Self::Unsigned) -> Self;
 
+        /// Computes the orthonormal [Hermite function](https://en.wikipedia.org/wiki/Hermite_polynomials#Hermite_functions)
+        ///
+        /// ```math
+        /// \psi_N(x) = \frac{1}{\sqrt{2^N N! \sqrt{\pi}}}\, e^{-x^2/2}\, H_N(x)
+        /// ```
+        ///
+        /// where `x` is `self`. These are the eigenfunctions of the quantum harmonic oscillator
+        /// and of the Fourier transform, the Hermite-Gauss modes of a paraxial beam, and the
+        /// basis of Hermite spectral methods. They are orthonormal on the whole line,
+        /// `$\int \psi_m \psi_n\, dx = \delta_{mn}$`.
+        ///
+        /// Evaluated by the recurrence on the functions themselves,
+        ///
+        /// ```math
+        /// \psi_{n+1}(x) = \sqrt{\tfrac{2}{n+1}}\, x\, \psi_n(x) - \sqrt{\tfrac{n}{n+1}}\, \psi_{n-1}(x)
+        /// ```
+        ///
+        /// which keeps every intermediate `$O(1)$` (the polynomial's growth and the Gaussian's
+        /// decay cancel inside each step), so unlike [`hermite`](SpecialMath::hermite) it does not
+        /// overflow at high degree. Both square roots are literals under the unrolled loop. The
+        /// per-step cost is one FMA on the critical path.
+        ///
+        /// # Range
+        ///
+        /// The only quantity that can leave the exponent range is the Gaussian seed, which is
+        /// carried as `$e^{-x^2/4}$` in two halves to double the reach. Full accuracy at every
+        /// degree holds for `$|x|$` under about 18.7 (binary32) or 53 (binary64), which covers
+        /// every degree up to about 175 / 1400 everywhere on the line, since past the turning
+        /// point `$\sqrt{2n+1}$` the true value decays faster than the seed. Beyond that the result
+        /// is still correct wherever `$e^{-x^2/4}$` is representable, and zero past it.
+        ///
+        /// Under a `Best`-or-better precision policy on true-FMA hardware, the rounding of `$x^2$`
+        /// (which is the entire error budget of a Gaussian at large `x`) is recovered exactly and
+        /// corrected to first order.
+        fn hermite_function[const N: usize][N](self: Self) -> Self;
+
+        /// Evaluates a finite series of Hermite functions at `x = self`:
+        ///
+        /// ```math
+        /// \sum_{k=0}^{N-1} \mathrm{coeffs}[k] \cdot \psi_k(x)
+        /// ```
+        ///
+        /// with `$\psi_k$` as in [`hermite_function`](SpecialMath::hermite_function). Evaluated by
+        /// Clenshaw's backward recurrence, which is more stable than summing the functions one at
+        /// a time and never forms them individually. `N` is the *length* of the coefficient array,
+        /// so the highest function is `$\psi_{N-1}$`; `N = 0` is rejected.
+        ///
+        /// Same range as [`hermite_function`](SpecialMath::hermite_function): the coefficients are
+        /// pre-scaled by half of the Gaussian and the outer factor carries the other half, so the
+        /// running Clenshaw values grow no faster than `$e^{x^2/4}$`.
+        #[skip_dispatch] fn hermite_function_series[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+
+        /// Computes the generalized (associated) [Laguerre polynomial](https://en.wikipedia.org/wiki/Laguerre_polynomials)
+        /// `$L_N^{(\alpha)}(x)$`, where `x` is `self` and `N` is the polynomial degree.
+        ///
+        /// Passing `alpha = Self::ZERO` gives the ordinary Laguerre polynomial `$L_N(x)$`; because
+        /// `alpha` is an ordinary argument rather than a const generic, that case folds away
+        /// completely when the zero is visible at the call site.
+        ///
+        /// Evaluated by the three-term recurrence
+        ///
+        /// ```math
+        /// (n+1)\,L_{n+1}^{(\alpha)}(x) = (2n + \alpha + 1 - x)\,L_n^{(\alpha)}(x) - (n + \alpha)\,L_{n-1}^{(\alpha)}(x)
+        /// ```
+        ///
+        /// seeded with `$L_0^{(\alpha)} = 1$` and `$L_1^{(\alpha)}(x) = 1 + \alpha - x$`. The trip count
+        /// is `N`, with no data dependence, so LLVM unrolls the whole thing into straight-line FMA.
+        ///
+        /// The derivative is another member of the same family,
+        /// `$\frac{\mathrm{d}}{\mathrm{d}x} L_n^{(\alpha)}(x) = -L_{n-1}^{(\alpha+1)}(x)$`, so a
+        /// value-and-slope pair costs one extra call rather than a separate kernel.
+        ///
+        /// **NOTE**: the forward recurrence is the standard evaluation route (Boost and GSL both use
+        /// it) and is well behaved across the oscillatory region `$0 \le x \lesssim 4n$`. Past that
+        /// `$L_n^{(\alpha)}$` itself grows like `$(-x)^n/n!$` and will overflow for large `N` and `x`
+        /// on its own account.
+        ///
+        /// Laguerre-Gaussian beam modes, the radial part of the hydrogen wavefunction, the quantum
+        /// harmonic oscillator and coherent-state expansions, and Gauss-Laguerre quadrature.
+        fn laguerre[const N: usize][N](self: Self, alpha: Self) -> Self;
+
+        /// Computes the generalized (associated) [Laguerre polynomial](https://en.wikipedia.org/wiki/Laguerre_polynomials)
+        /// `$L_n^{(\alpha)}(x)$` where `n` is a vector of unsigned integers giving the degree per lane.
+        ///
+        /// The per-lane counterpart of [`laguerre`](SpecialMath::laguerre), in the same relation to it
+        /// as [`hermitev`](SpecialMath::hermitev) is to [`hermite`](SpecialMath::hermite). The
+        /// recurrence runs to the largest `n` in the vector and lanes freeze at their own degree, so
+        /// the cost is set by `max(n)` rather than by any one lane.
+        fn laguerrev[][](self: Self, alpha: Self, n: Self::Unsigned) -> Self;
+
+        /// Computes the orthonormal generalized [Laguerre function](https://en.wikipedia.org/wiki/Laguerre_polynomials#Generalized_Laguerre_polynomials)
+        ///
+        /// ```math
+        /// l_N^{(\alpha)}(x) = \sqrt{\frac{N!}{\Gamma(N+\alpha+1)}}\; x^{\alpha/2} e^{-x/2}\, L_N^{(\alpha)}(x)
+        /// ```
+        ///
+        /// where `x` is `self`. Orthonormal on the half-line, `$\int_0^\infty l_m l_n\, dx = \delta_{mn}$`.
+        /// This is the radial factor of Laguerre-Gauss beam modes and (up to a power of `x` from the
+        /// spherical measure) of the hydrogen wavefunctions. Defined for `$x \ge 0$` and
+        /// `$\alpha > -1$`, and nothing is checked outside that.
+        ///
+        /// Evaluated by the recurrence on the functions themselves, with
+        /// `$s_k = \sqrt{(k+1)(k+\alpha+1)}$`:
+        ///
+        /// ```math
+        /// l_{k+1} = \frac{(2k + \alpha + 1 - x)\, l_k - s_{k-1}\, l_{k-1}}{s_k}
+        /// ```
+        ///
+        /// which keeps every intermediate `$O(1)$`, so unlike [`laguerre`](SpecialMath::laguerre)
+        /// it does not overflow at high degree or large `x`. `alpha` is a runtime vector, so each
+        /// step also carries a `sqrt` and a reciprocal, beside the recurrence rather than on its
+        /// critical path, and folded to literals when `alpha` is a visible constant. The seed
+        /// is skipped outright by a uniform branch when every lane has `alpha = 0`, which is the
+        /// ordinary Laguerre function and by far the common case.
+        ///
+        /// # Range
+        ///
+        /// The Gaussian-like seed `$x^{\alpha/2} e^{-x/2}$` is carried as `$e^{-x/4}$` in two
+        /// halves, as in [`hermite_function`](SpecialMath::hermite_function). Full accuracy at
+        /// every degree for `x` under about 350 (binary32) or 2800 (binary64), covering every
+        /// degree up to roughly 87 / 700 everywhere on the half-line (the turning point of
+        /// `$l_n^{(\alpha)}$` is near `4n`).
+        ///
+        /// `alpha` is unrestricted over the same `x` range. The seed's whole parameter
+        /// dependence, `$x^{\alpha/2}/\sqrt{\Gamma(\alpha+1)}$`, is the square root of the Poisson
+        /// mass `$P(\alpha; x)$` and is evaluated as [`poisson_pmf`](SpecialMath::poisson_pmf)
+        /// is (Loader's saddle-point form, one exponential of a small exponent), so neither
+        /// factor materializes (separately `$x^{\alpha/2}$` overflows binary64 near
+        /// `$\alpha = 250$` and `$1/\sqrt{\Gamma(\alpha+1)}$` underflows near `$\alpha = 320$`,
+        /// and their overlap would be `inf * 0`) and nothing large is exponentiated: 0-3 ulp
+        /// at the peak `x ~ alpha` out to `$\alpha = 1400$`, against a 50-digit oracle.
+        fn laguerre_function[const N: usize][N](self: Self, alpha: Self) -> Self;
+
+        /// [`laguerre_function`](SpecialMath::laguerre_function) at an integer weight, taken as a
+        /// **scalar** `i32` rather than a vector.
+        ///
+        /// Same function and same range. What changes is what the compiler can see. Every
+        /// quantity the recurrence derives from the weight (the `$s_k = \sqrt{(k+1)(k+\alpha+1)}$`
+        /// and their reciprocals, and the `$2k+\alpha+1$` offsets) becomes a scalar constant
+        /// instead of a vector `sqrt` and reciprocal per step, and folds to a literal outright
+        /// when `alpha` is compile-time known.
+        ///
+        /// The seed changes too. Up to `$\alpha = 170$` (binary64) / `29` (binary32) the
+        /// normalization `$x^{\alpha/2}/\sqrt{\alpha!}$` is a scalar factorial, a `powi` and at
+        /// most one `sqrt`, with no `ln`, `lgamma` or second `exp` at all, and a few ulp *more*
+        /// accurate than the log form, whose `lgamma` error is amplified by the exponential.
+        /// `$\alpha = 0$` is a scalar test that skips even that. Beyond the cap it takes
+        /// the vector form's saddle-point seed. Measured on AVX2 f64x4 at degree 4:
+        /// about 5x faster than the vector form at a literal small weight, 2x at a runtime one.
+        ///
+        /// Prefer this whenever the weight is a non-negative integer, which every classical
+        /// application has: the hydrogen radial functions use `$\alpha = 2\ell+1$` and the
+        /// Laguerre-Gauss beam modes use `$\alpha = |\ell|$`. Negative values are out of domain,
+        /// as `$\alpha \le -1$` is for the general form.
+        ///
+        /// Like the series forms this is inlined into the caller rather than given its own
+        /// dispatch trampoline: the weight is a plain `i32` argument, and a shared
+        /// out-of-line copy would take it at runtime, which both defeats the folding above
+        /// and (measured) stops LLVM overlapping consecutive evaluations, at 7x the cost.
+        /// Call it from inside a `#[thermite::dispatch]` body.
+        #[skip_dispatch] fn laguerre_function_i[const N: usize][N](self: Self, alpha: i32) -> Self;
+
+        /// Evaluates a finite series of generalized Laguerre functions at `x = self`:
+        ///
+        /// ```math
+        /// \sum_{k=0}^{N-1} \mathrm{coeffs}[k] \cdot l_k^{(\alpha)}(x)
+        /// ```
+        ///
+        /// with `$l_k^{(\alpha)}$` as in [`laguerre_function`](SpecialMath::laguerre_function).
+        /// Clenshaw's backward recurrence, same range as the single function; `N` is the
+        /// coefficient count and `N = 0` is rejected.
+        #[skip_dispatch] fn laguerre_function_series[const N: usize][N](self: Self, alpha: Self, coeffs: &[Self::Element; N]) -> Self;
+
+        /// [`laguerre_function_series`](SpecialMath::laguerre_function_series) at a scalar integer
+        /// weight, in the same relation to it as
+        /// [`laguerre_function_i`](SpecialMath::laguerre_function_i) is to
+        /// [`laguerre_function`](SpecialMath::laguerre_function). See there for what the integer
+        /// form buys.
+        #[skip_dispatch] fn laguerre_function_series_i[const N: usize][N](self: Self, alpha: i32, coeffs: &[Self::Element; N]) -> Self;
+
         /// Evaluates a finite series of [Chebyshev polynomials](https://en.wikipedia.org/wiki/Chebyshev_polynomials)
         /// of the `K`-th kind at `x = self`:
         ///
@@ -478,17 +719,26 @@ decl_math! {
         /// ```
         ///
         /// where `P_k` is `T_k`, `U_k`, `V_k`, or `W_k` depending on `K`. All four kinds share the
-        /// recurrence `$P_{k+1}(x) = 2x \cdot P_k(x) - P_{k-1}(x)$` with `P_0(x) = 1`; they differ only in
+        /// recurrence `$P_{k+1}(x) = 2x \cdot P_k(x) - P_{k-1}(x)$` with `P_0(x) = 1`, and differ only in
         /// `P_1(x)`:
         ///
         /// | `K` | Kind   | `P_1(x)`   | Notes |
         /// |-----|--------|------------|-------|
-        /// | `1` | First  (`T_k`) | `x`        | Most common; minimax/approximation basis on `[-1, 1]`. |
+        /// | `1` | First  (`T_k`) | `x`        | Most common, the minimax/approximation basis on `[-1, 1]`. |
         /// | `2` | Second (`U_k`) | `2x`       | Related to `$\sin((k+1)\theta)/\sin(\theta)$` under `$x = \cos\theta$`. |
         /// | `3` | Third  (`V_k`) | `2x - 1`   | "Airfoil" polynomials; `$\cos((k+\tfrac12)\theta)/\cos(\theta/2)$`. |
         /// | `4` | Fourth (`W_k`) | `2x + 1`   | `$\sin((k+\tfrac12)\theta)/\sin(\theta/2)$`. |
         ///
         /// Any other value of `K` is a compile-time error.
+        ///
+        /// There is deliberately no single-polynomial `T_n(x)` entry point beside this, unlike
+        /// [`legendre`](SpecialMath::legendre) or [`hermite`](SpecialMath::hermite). Chebyshev
+        /// polynomials are used almost exclusively as an approximation basis, i.e. as a series;
+        /// their quadrature nodes and weights are closed-form, so nothing needs to iterate on a
+        /// lone `$T_n$`; and the one genuine single-`$T_n$` application (Chebyshev filter response,
+        /// Dolph-Chebyshev windows) needs `$|x| > 1$`, where the right evaluation is
+        /// `$\cosh(n \cosh^{-1} x)$` and not this recurrence at all. A unit coefficient array
+        /// recovers `$T_n$` if it is ever wanted.
         ///
         /// Evaluation is done via Clenshaw's backward recurrence with FMA, which is
         /// more numerically stable than a forward sum when the partial sums of
@@ -500,6 +750,35 @@ decl_math! {
         /// `coeffs[0]` multiplies `P_0 = 1`, `coeffs[1]` multiplies `P_1(x)` (which depends on `K`),
         /// and so on. Because LLVM sees both `K` and `N` as constants, the recurrence loop and the
         /// `P_1` selection are fully unrolled and specialized at monomorphization time.
+        ///
+        /// # Accuracy near `$x = \pm 1$`
+        ///
+        /// The plain recurrence forms `$2x b_{k+1} - b_{k+2}$` with consecutive `$b_k$` of nearly
+        /// equal magnitude as `x` approaches either endpoint, and cancels. This is a property of
+        /// the *recurrence*, not of the series: measured against a 60-digit oracle at `N = 24`,
+        /// it costs up to 37 ulp on sums whose own condition number is about 1, and up to 230 ulp
+        /// on unstructured coefficients.
+        ///
+        /// Under a `Best`-or-better precision policy, real vectors instead take Reinsch's
+        /// modification, which recurs on the differences (near `+1`) or sums (near `-1`) so the
+        /// small quantity is never formed by subtraction. On the same grid that bounds the error
+        /// envelope 2.5x to 17x tighter across all four kinds. It is an envelope improvement
+        /// rather than a pointwise one (individual arguments can land worse), and costs
+        /// roughly 2x on the recurrence's dependency chain, which is why it is gated.
+        ///
+        /// binary32 gains the same way, 2.6x to 13.5x on its own grid. Measuring it needs an
+        /// f32-native one: `1 - 2^-j` rounds to exactly `1.0` for every `j >= 24`, so an f64
+        /// grid piles two thirds of its points onto the endpoint itself, where the endpoint
+        /// form degenerates into a plain running sum and the two policies agree, and never
+        /// samples the f32 neighbourhood where the cancellation actually bites.
+        ///
+        /// Coefficients from a minimax or least-squares *fit* decay geometrically and barely
+        /// notice either way (about 3 ulp to 1). The gap opens on slowly-decaying or
+        /// non-decaying spectra: truncated expansions, near-singular functions, or coefficients
+        /// that came from somewhere other than a fit.
+        ///
+        /// `Complex` and the composite arithmetics keep the plain recurrence at every policy,
+        /// since Reinsch needs a real `copysign` and a meaningful nearest endpoint.
         #[skip_dispatch] fn chebyshev[const K: usize, const N: usize][K, N](self: Self, coeffs: &[Self::Element; N]) -> Self;
 
         /// Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `$a\, e^{-\frac{1}{2}(x/c)^2}$`.
@@ -531,6 +810,138 @@ decl_math! {
         /// Internally, this is computed with [`jacobi`](SpecialMath::jacobi) when m > 0.
         fn legendre[][](self: Self, n: u32, m: u32) -> Self;
 
+        /// Evaluates a finite [Legendre series](https://en.wikipedia.org/wiki/Legendre_polynomials)
+        /// at `x = self`:
+        ///
+        /// ```math
+        /// \sum_{k=0}^{N-1} \mathrm{coeffs}[k] \cdot P_k(x)
+        /// ```
+        ///
+        /// The form a Legendre-moment expansion takes: Mie and Henyey-Greenstein scattering
+        /// phase functions tabulated by their moments, multipole expansions in `$\cos\theta$`, and
+        /// the polar factor of a spherical-harmonic expansion at fixed order.
+        ///
+        /// Evaluated by Clenshaw's backward recurrence on the Legendre three-term relation, which
+        /// is more stable than building each `$P_k$` with [`legendre`](SpecialMath::legendre) and
+        /// summing, and does `$O(N)$` work rather than `$O(N^2)$`. The recurrence ratios
+        /// `$(2k+1)/(k+1)$` and `$k/(k+1)$` are literals under the unrolled loop, so the per-step
+        /// cost matches [`chebyshev`](SpecialMath::chebyshev): one FMA on the critical path. `N`
+        /// is the coefficient count; `N = 0` is rejected, `N = 1` evaluates to `coeffs[0]`.
+        ///
+        /// Plain Clenshaw at every policy: the endpoint cancellation that `chebyshev` treats
+        /// under `Best` precision exists here too (`$P_n(1) = 1$` for every `n`), but its
+        /// Reinsch-style rewrite for the Legendre ratios has not been derived or measured.
+        #[skip_dispatch] fn legendre_series[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+
+        /// Computes the [Zernike](https://en.wikipedia.org/wiki/Zernike_polynomials) radial
+        /// polynomial `$R_n^m(\rho)$`, where `rho` is `self`.
+        ///
+        /// Returns zero unless `$m \le n$` with `$n - m$` even, the condition for the mode to
+        /// exist. `m` is the *absolute* azimuthal frequency here. The sign only affects the
+        /// angular factor, which lives in [`zernike`](SpecialMath::zernike).
+        ///
+        /// Evaluated through the shifted Jacobi identity
+        ///
+        /// ```math
+        /// R_n^m(\rho) = \rho^m\, P_{(n-m)/2}^{(0,\,m)}\!\left(2\rho^2 - 1\right)
+        /// ```
+        ///
+        /// rather than the textbook sum
+        /// `$\sum_k (-1)^k \frac{(n-k)!}{k!\,((n+m)/2 - k)!\,((n-m)/2 - k)!} \rho^{n-2k}$`, which
+        /// alternates factorials of size `$(n-k)!$` against an answer bounded by 1 and loses all
+        /// precision somewhere around `n = 10-15`. That is well inside the range adaptive optics,
+        /// ophthalmology and surface metrology actually use.
+        ///
+        /// The `$(-1)^{(n-m)/2}$` prefactor usually seen with this identity is absent because the
+        /// argument is written `$2\rho^2 - 1$` rather than `$1 - 2\rho^2$`: reflecting a Jacobi
+        /// polynomial swaps its two parameters and absorbs exactly that sign.
+        ///
+        /// The polynomial is only orthogonal on `$\rho \in [0, 1]$` and grows quickly outside it.
+        /// Nothing clamps the argument, so an unnormalized pupil coordinate stays the caller's
+        /// problem.
+        fn zernike_r[][](self: Self, n: u32, m: u32) -> Self;
+
+        /// Computes the Zernike polynomial `$Z_n^m(\rho, \theta)$` on the unit disc, with `rho`
+        /// as `self`:
+        ///
+        /// ```math
+        /// Z_n^m(\rho, \theta) = N_n^m\, R_n^{|m|}(\rho) \times
+        ///   \begin{cases} \cos(m\theta) & m \ge 0 \\ \sin(|m|\theta) & m < 0 \end{cases}
+        /// ```
+        ///
+        /// Returns zero unless `$|m| \le n$` with `$n - |m|$` even.
+        ///
+        /// `NORM` selects the normalization `$N_n^m$` and must be either
+        /// [`ZERNIKE_UNIT_PEAK`] (`$N = 1$`, so `$R_n^m(1) = 1$` and coefficients read as peak
+        /// amplitude) or [`ZERNIKE_ORTHONORMAL`]
+        /// (`$N_n^m = \sqrt{2(n+1)/(1 + \delta_{m,0})}$`, the ANSI Z80.28 and Noll convention,
+        /// under which coefficients read as RMS contributions). Any other value is a compile-time
+        /// error. There is deliberately no default: the two differ by a factor of up to
+        /// `$\sqrt{2(n+1)}$` per mode, and picking one silently is how coefficient sets get
+        /// misinterpreted.
+        ///
+        /// `(n, m)` is a runtime pair rather than a const generic on purpose. The workload is a
+        /// basis, not a function. A wavefront fit evaluates tens to hundreds of modes over
+        /// thousands of pupil samples, with the mode list coming from a config or a sensor
+        /// geometry, so the degree is loop-invariant across the vector axis and const-generic
+        /// specialization would buy a jump table rather than an unrolled loop.
+        ///
+        /// The single-index conventions (ANSI Z80.28 / OSA, Noll, Fringe) and the conversions
+        /// between them are in [`crate::zernike`]. They disagree from the second term
+        /// onward, so convert at the boundary rather than assuming.
+        fn zernike[const NORM: u8][NORM](self: Self, theta: Self, n: u32, m: i32) -> Self;
+
+        /// Evaluates **all** Zernike modes through degree `L` at the Cartesian pupil point
+        /// `(x, y)`, into `out[j]` for the ANSI Z80.28 / OSA index `$j = (n(n+2) + m)/2$`.
+        ///
+        /// `N` must equal `(L+1)(L+2)/2` (compile-time checked), and `NORM` is
+        /// [`ZERNIKE_UNIT_PEAK`] or [`ZERNIKE_ORTHONORMAL`] as on
+        /// [`zernike`](SpecialMath::zernike).
+        ///
+        /// This is the entry point a wavefront fit or reconstruction wants. It is not merely
+        /// a loop over [`zernike`](SpecialMath::zernike). Substituting `$s = x^2+y^2$`
+        /// splits every mode into a polynomial in `s` times `$\operatorname{Re}$` or
+        /// `$\operatorname{Im}$` of `$(x+iy)^{|m|}$`, which is where the `$\rho^{|m|}$` and the
+        /// `$\cos m\theta$` both come from at once. Evaluation is then **pure polynomial
+        /// arithmetic**: no `atan2`, no `sqrt`, no trigonometry, no division, `$O(L^2)$` FMAs
+        /// for the entire basis, and no singularity at the pupil centre. Calling the
+        /// single-mode form per mode instead costs a `sin_cos` and a `powi` each and restarts
+        /// the radial recurrence every time, for `$O(L^3)$` work.
+        ///
+        /// Cartesian input is part of that, not a convenience: pupil samples arrive as
+        /// `(x, y)`, and a polar entry point would charge an `atan2` per sample for an angle
+        /// this kernel immediately dissolves.
+        ///
+        /// Fully unrolled at compile time for each `L` up to
+        /// [`MAX_ZERNIKE_DEGREE`](specialized::MAX_ZERNIKE_DEGREE); above that it takes a
+        /// rolled path that is correct at any degree and substantially slower.
+        ///
+        /// Nothing normalizes `(x, y)` onto the unit disc. Outside it the polynomials still
+        /// evaluate correctly and simply are not orthogonal.
+        ///
+        /// The layout is ANSI because it is the scheme whose index has a closed form *and*
+        /// whose degree truncation is contiguous. Noll and Fringe callers gather through
+        /// [`noll_to_ansi`](crate::zernike::noll_to_ansi) /
+        /// [`fringe_to_ansi`](crate::zernike::fringe_to_ansi).
+        ///
+        /// ```
+        /// use thermite::prelude::*;
+        /// use thermite_special::{SpecialMath, ZERNIKE_ORTHONORMAL};
+        /// use thermite_special::zernike::noll_to_ansi;
+        ///
+        /// type V = Vector<f64>;
+        /// const L: usize = 4;
+        /// const N: usize = 15; // (L+1)(L+2)/2
+        ///
+        /// let mut basis = [V::ZERO; N];
+        /// V::zernike_basis::<L, ZERNIKE_ORTHONORMAL, N>(V::splat(0.3), V::splat(0.4), &mut basis);
+        ///
+        /// // Noll 4 is defocus, Z_2^0 = sqrt(3) (2 rho^2 - 1) orthonormal.
+        /// let defocus = basis[noll_to_ansi(4) as usize].extract::<0>();
+        /// assert!((defocus - 3f64.sqrt() * (2.0 * 0.25 - 1.0)).abs() < 1e-14);
+        /// ```
+        #[skip_dispatch] fn zernike_basis[const L: usize, const NORM: u8, const N: usize][L, NORM, N](x: Self, y: Self, out: &mut [Self; N]) -> ();
+
         /// Computes both branches of the Lambert W function simultaneously: (`$W_0(x)$`, `$W_{-1}(x)$`).
         ///
         /// The `$W_0$` result is valid for `x >= -1/e`; the `$W_{-1}$` result is valid for `-1/e <= x < 0`.
@@ -561,7 +972,7 @@ decl_math! {
         /// value is 1), which is accurate across the whole line. Beyond that the recurrence is
         /// the wrong way to compute them: each step subtracts `1/k!` from a value that is barely
         /// larger while `|x|` is small, so `$\varphi_2 = (\mathrm{expm1}(x) - x)/x^2$` loses twice the bits
-        /// `phi::<1>` would have, and it gets worse with `N`. Below `|x| = N` this sums the series
+        /// `phi::<1>` would have, and gets worse with `N`. Below `|x| = N` this sums the series
         /// instead (its terms are monotone there, so nothing cancels), and above it runs the
         /// recurrence upward from `expm1`, where the amplification per step is bounded. Measured
         /// against mpmath, both arms sit within a few ulp for `N <= 8`.
@@ -590,7 +1001,7 @@ decl_math! {
 
         @kinds {
             /// Carlson symmetric elliptic integral, selected by a [`CarlsonKind`] request struct
-            /// with named fields - the arity (and which argument is the parameter / repeated one)
+            /// with named fields. The arity (and which argument is the parameter / repeated one)
             /// is fixed per kind, so the wrong shape is a compile error.
             ///
             /// ```rust,ignore
@@ -603,7 +1014,7 @@ decl_math! {
             /// form ([`EllintK`](elliptic::EllintK)/[`EllintF`](elliptic::EllintF)/[`EllintE`](elliptic::EllintE)/
             /// [`EllintEInc`](elliptic::EllintEInc)/[`EllintD`](elliptic::EllintD)/[`EllintDInc`](elliptic::EllintDInc)/
             /// [`EllintPi`](elliptic::EllintPi)/[`EllintPiInc`](elliptic::EllintPiInc)) carries exactly
-            /// its own arguments; completeness is encoded by whether the struct has a `phi` field.
+            /// its own arguments, and completeness is encoded by whether the struct has a `phi` field.
             ///
             /// ```rust,ignore
             /// let k_int = V::ellint(EllintK { k });                       // K(k)
@@ -716,8 +1127,8 @@ decl_math! {
         /// This also has the unique behavior where for `N=0`, the function is just the identity function,
         /// and for `N=1` it is the [softsign function](https://en.wikipedia.org/wiki/Activation_function#Softsign).
         ///
-        /// **Note**: This function uses `$|x|^N$` (the real absolute value), making it non-holomorphic
-        /// and therefore only meaningful for real-valued inputs.
+        /// **Note**: This function uses `$|x|^N$` (the real absolute value), so it is non-holomorphic
+        /// and only meaningful for real-valued inputs.
         ///
         /// To also obtain the derivative with respect to `x`, use
         /// [`algebraic_sigmoid_d`](crate::RealPrimalMath::algebraic_sigmoid_d).
@@ -727,10 +1138,10 @@ decl_math! {
         /// defined as `$x\left(\frac{1}{2} + \frac{x}{2\sqrt{1 + x^2}}\right)$`. Equivalent to gating `x` by
         /// `(1 + algebraic_sigmoid::<2>(x)) / 2`, the `[0, 1]`-rescaled `N=2` algebraic sigmoid.
         ///
-        /// Like standard Swish/SiLU, this is smooth and non-monotonic - it dips slightly below zero
-        /// for moderately negative `x` before rising - and shares the same asymptotes (`f(x) -> x` as
-        /// `x -> ∞`, `f(x) -> 0` as `x -> -∞`). Unlike Swish, it requires no `exp` or `log`, making
-        /// it substantially cheaper on hardware without fast transcendentals.
+        /// Like standard Swish/SiLU, this is smooth and non-monotonic (it dips slightly below zero
+        /// for moderately negative `x` before rising) and shares the same asymptotes (`f(x) -> x` as
+        /// `x -> ∞`, `f(x) -> 0` as `x -> -∞`). Unlike Swish, it requires no `exp` or `log`, which
+        /// is substantially cheaper on hardware without fast transcendentals.
         ///
         /// To also obtain the derivative with respect to `x` (which shares most of the underlying
         /// computation, notably `$1/\sqrt{1 + x^2}$`), use
@@ -740,7 +1151,7 @@ decl_math! {
         ///
         /// Algebraic gating functions of this form are effectively unknown in modern deep learning,
         /// which standardized on `exp`-based activations (sigmoid, Swish/SiLU, GELU) once GPUs made
-        /// `exp` essentially free - a single-cycle special-function-unit op on most modern hardware.
+        /// `exp` essentially free, a single-cycle special-function-unit op on most modern hardware.
         /// On CPUs the calculus is different: a vectorized `exp` still costs ~20+ cycles even with
         /// good polynomial approximations, while `sqrt`/`rsqrt` are cheap hardware ops (often
         /// approximated in 4-7 cycles). For CPU-side inference, training on CPU, or embedded targets
@@ -757,6 +1168,156 @@ decl_math! {
         ///
         /// The position `b` is assumed to be zero, so offset the limits accordingly for a non-zero position.
         fn gaussian_integral[][](x0: Self, x1: Self, a: Self, c: Self) -> Self;
+
+        /// The [Box-Cox transform](https://en.wikipedia.org/wiki/Power_transform) of `x = self`
+        /// with parameter `lambda`.
+        ///
+        /// ```math
+        /// \mathrm{boxcox}(x, \lambda) = \begin{cases} \dfrac{x^\lambda - 1}{\lambda} & \lambda \ne 0 \\[6pt] \ln x & \lambda = 0\end{cases}
+        /// ```
+        ///
+        /// The variance-stabilizing power transform of applied statistics: `$\lambda$` is fitted
+        /// to make skewed data as close to normal as possible before a model sees it, and the
+        /// family interpolates the transforms people otherwise pick by hand: `$\lambda = 1$`
+        /// leaves the data alone up to a shift, `$1/2$` is a square root, `$0$` a logarithm,
+        /// `$-1$` a reciprocal. A fixture of statistical software since Box and Cox introduced
+        /// it in 1964.
+        ///
+        /// The two cases are one function: `$\ln x$` is the limit as `$\lambda \to 0$`, not a
+        /// separate rule. Written out, `$(x^\lambda - 1)/\lambda$` is `$0/0$` there, and the
+        /// trouble is not confined to the point. Computing `$x^\lambda$` and subtracting one
+        /// cancels, so the naive form is already wrong in the fifth digit at
+        /// `$\lambda = 10^{-12}$` and returns a flat zero by `$10^{-300}$`. That matters because
+        /// a fitting routine searches `$\lambda$` near zero, which is the usual answer for
+        /// right-skewed data.
+        ///
+        /// Evaluated as [`powf_m1`](thermite::math::TranscendentalMath::powf_m1)`(x, lambda)/lambda`,
+        /// which forms `$x^\lambda - 1$` without ever forming `$x^\lambda$`, so there is nothing to
+        /// cancel and **no series or crossover is needed**. Measured against a 60-digit oracle,
+        /// it holds a few ulp from `$\lambda = 10^{-300}$` to `$\lambda = \pm 8$`. Only the exact
+        /// `$\lambda = 0$` is selected apart.
+        ///
+        /// Domain is `$x > 0$`, and a negative `x` gives NaN. At `$x = 0$` the limits are taken:
+        /// `$-1/\lambda$` for `$\lambda > 0$` and `$-\infty$` otherwise, which is the
+        /// conventional choice. That needs no special case: `powf_m1(0, lambda)` is `$-1$`
+        /// above zero and `$+\infty$` below, and the division does the rest.
+        fn boxcox[][](self: Self, lambda: Self) -> Self;
+
+        /// The Box-Cox transform of `$1 + x$`, where `x = self`.
+        ///
+        /// ```math
+        /// \mathrm{boxcox1p}(x, \lambda) = \begin{cases} \dfrac{(1 + x)^\lambda - 1}{\lambda} & \lambda \ne 0 \\[6pt] \ln (1 + x) & \lambda = 0\end{cases}
+        /// ```
+        ///
+        /// The shifted form exists for the same reason [`ln_1p`](thermite::math::TranscendentalMath::ln_1p)
+        /// does: when `x` is small, `$1 + x$` rounds it away, and every digit of the answer
+        /// with it. Calling [`boxcox`](crate::RealSpecialMath::boxcox)`(1 + x, lambda)` loses `x` entirely once
+        /// `$|x| < \varepsilon$`, where this returns `$\lambda x$` to full precision. Built on
+        /// [`compound_m1`](thermite::math::TranscendentalMath::compound_m1), which forms
+        /// `$(1 + x)^\lambda - 1$` without forming either `$1 + x$` or `$(1+x)^\lambda$`.
+        ///
+        /// This is also the kernel underneath [`yeo_johnson`](crate::RealSpecialMath::yeo_johnson), whose
+        /// argument is data centered near zero by construction.
+        ///
+        /// Domain is `$x > -1$`; below that the result is NaN. At `$x = -1$` the limits are
+        /// `$-1/\lambda$` for `$\lambda > 0$` and `$-\infty$` otherwise.
+        fn boxcox_1p[][](self: Self, lambda: Self) -> Self;
+
+        /// The inverse [Box-Cox transform](https://en.wikipedia.org/wiki/Power_transform) of
+        /// `y = self` with parameter `lambda`, undoing [`boxcox`](crate::RealSpecialMath::boxcox).
+        ///
+        /// ```math
+        /// \mathrm{boxcox}^{-1}(y, \lambda) = \begin{cases} (\lambda y + 1)^{1/\lambda} & \lambda \ne 0 \\[6pt] e^y & \lambda = 0\end{cases}
+        /// ```
+        ///
+        /// Wanted by anyone who uses the forward transform: a model fitted on transformed
+        /// data predicts in transformed units, and the prediction has to come back.
+        ///
+        /// Evaluated as `$\exp\!\left(\ln(1 + \lambda y)/\lambda\right)$` rather than as a
+        /// literal power, which is not merely a rearrangement. The whole
+        /// point of [`boxcox`](crate::RealSpecialMath::boxcox) is that it stays accurate as `$\lambda \to 0$`,
+        /// and `$\lambda$` fitted near zero is the common case. There `$\lambda y$` is tiny,
+        /// so forming `$\lambda y + 1$` and raising it to the power `$1/\lambda$` throws away
+        /// exactly the digits the forward transform took care to keep. Through `ln_1p` the
+        /// exponent tends smoothly to `y`, so the `$\lambda = 0$` case is the limit rather
+        /// than a discontinuity, and only the exact zero is selected apart.
+        ///
+        /// The range of the forward transform is `$\lambda y + 1 > 0$`. Outside it the result
+        /// is NaN, and on the boundary it is `$0$` for `$\lambda > 0$` and `$+\infty$` below.
+        fn inv_boxcox[][](self: Self, lambda: Self) -> Self;
+
+        /// The inverse of [`boxcox_1p`](crate::RealSpecialMath::boxcox_1p).
+        ///
+        /// ```math
+        /// \mathrm{boxcox1p}^{-1}(y, \lambda) = \begin{cases} (\lambda y + 1)^{1/\lambda} - 1 & \lambda \ne 0 \\[6pt] e^y - 1 & \lambda = 0\end{cases}
+        /// ```
+        ///
+        /// The same exponent as [`inv_boxcox`](crate::RealSpecialMath::inv_boxcox) with `expm1` outside it
+        /// instead of `exp`, so a result near zero keeps its relative accuracy, which, this
+        /// being the inverse of a transform applied to data centered near zero, is the
+        /// ordinary case rather than an edge one. Also the kernel underneath
+        /// [`inv_yeo_johnson`](crate::RealSpecialMath::inv_yeo_johnson).
+        fn inv_boxcox_1p[][](self: Self, lambda: Self) -> Self;
+
+        /// The [Yeo-Johnson transform](https://en.wikipedia.org/wiki/Power_transform) of
+        /// `y = self` with parameter `lambda`.
+        ///
+        /// ```math
+        /// \psi(y, \lambda) = \begin{cases}
+        ///   \dfrac{(y + 1)^\lambda - 1}{\lambda} & y \ge 0,\ \lambda \ne 0 \\[6pt]
+        ///   \ln(y + 1) & y \ge 0,\ \lambda = 0 \\[6pt]
+        ///   -\dfrac{(1 - y)^{2 - \lambda} - 1}{2 - \lambda} & y < 0,\ \lambda \ne 2 \\[6pt]
+        ///   -\ln(1 - y) & y < 0,\ \lambda = 2
+        /// \end{cases}
+        /// ```
+        ///
+        /// Box-Cox's sibling, and the one that gets used more, since it is defined on the whole
+        /// real line rather than on `$x > 0$`. Same job (fit `$\lambda$` by maximum likelihood
+        /// to make skewed data as close to normal as a power transform can) without the "add a
+        /// constant to make everything positive first" step, which is an arbitrary choice that
+        /// changes the fitted `$\lambda$`. Introduced by Yeo and Johnson in 2000.
+        ///
+        /// # One kernel, not four
+        ///
+        /// The four cases are one function seen twice. The `$y < 0$` branch is the `$y \ge 0$`
+        /// branch applied to `$|y|$` with `$\lambda$` reflected to `$2 - \lambda$` and the
+        /// result negated, which is what makes `$\psi$` smooth in `$\lambda$` across `$y = 0$`
+        /// in the first place. Folding the sign out first therefore collapses the two
+        /// logarithmic special cases (`$\lambda = 0$` above zero, `$\lambda = 2$` below) into
+        /// the single seam that [`boxcox_1p`](crate::RealSpecialMath::boxcox_1p) already handles, and the whole
+        /// transform is `$\pm\,\mathrm{boxcox1p}(|y|, \lambda\ \mathrm{or}\ 2 - \lambda)$`.
+        ///
+        /// That the kernel is the `1p` form and not [`boxcox`](crate::RealSpecialMath::boxcox) applied to
+        /// `$1 + |y|$` matters here more than anywhere else. `$\psi(y, \lambda) \approx y$`
+        /// near the origin for every `$\lambda$`, and the origin is where the data is: the
+        /// transform's reason for existing is samples that straddle zero. Forming `$1 + |y|$`
+        /// would round away everything below `$\varepsilon$` and return a flat zero there.
+        ///
+        /// The value is finite for every finite `y`, so there is nothing to guard: the two
+        /// domain edges of the kernel are at `$|y| = -1$`, which the fold never reaches.
+        fn yeo_johnson[][](self: Self, lambda: Self) -> Self;
+
+        /// The inverse [Yeo-Johnson transform](https://en.wikipedia.org/wiki/Power_transform),
+        /// undoing [`yeo_johnson`](crate::RealSpecialMath::yeo_johnson).
+        ///
+        /// ```math
+        /// \psi^{-1}(z, \lambda) = \begin{cases}
+        ///   (\lambda z + 1)^{1/\lambda} - 1 & z \ge 0,\ \lambda \ne 0 \\[6pt]
+        ///   e^z - 1 & z \ge 0,\ \lambda = 0 \\[6pt]
+        ///   1 - \left((\lambda - 2) z + 1\right)^{1/(2 - \lambda)} & z < 0,\ \lambda \ne 2 \\[6pt]
+        ///   1 - e^{-z} & z < 0,\ \lambda = 2
+        /// \end{cases}
+        /// ```
+        ///
+        /// The same sign fold as the forward transform, over
+        /// [`inv_boxcox_1p`](crate::RealSpecialMath::inv_boxcox_1p). `$\psi$` is increasing and fixes the origin,
+        /// so the branch on the way back is the sign of the transformed value, which is the
+        /// sign of `y`.
+        ///
+        /// Unlike the forward direction this one has a range to respect: for `$\lambda > 0$`
+        /// the transform's image is bounded below by `$-1/\lambda$`, and a `z` past that came
+        /// from no `y`. Such an input gives NaN rather than a plausible-looking number.
+        fn inv_yeo_johnson[][](self: Self, lambda: Self) -> Self;
 
         /// Evaluates **all** real spherical harmonics through degree `L` at the unit
         /// direction `(x, y, z)`, into `out[l * (l + 1) + m]` for `m` in `-l..=l`.
@@ -896,6 +1457,36 @@ decl_math! {
             ddx: &mut [Self; N],
             ddy: &mut [Self; N],
             ddz: &mut [Self; N],
+        ) -> ();
+
+        /// [`zernike_basis`](SpecialMath::zernike_basis) plus `$\partial Z_n^m/\partial x$`
+        /// and `$\partial Z_n^m/\partial y$` for every mode, in the same ANSI layout.
+        ///
+        /// This is what a Shack-Hartmann wavefront reconstruction integrates against. The
+        /// sensor measures local wavefront *slopes*, not the wavefront itself, so the fit
+        /// matrix is built from the gradient basis and the value basis never appears in it.
+        ///
+        /// Lives on [`RealPrimalMath`] rather than [`SpecialMath`] for the same reason
+        /// [`spherical_harmonics_d`](RealPrimalMath::spherical_harmonics_d) does: `Dual`
+        /// should not get it and should not want it. Seeding a `Dual<V, 2>` and calling the
+        /// value form carries two derivative components through every operation of the whole
+        /// ladder, where this differentiates only the two factors that depend on the point
+        /// and shares the radial recurrence between the value and both gradients.
+        ///
+        /// The gradient is finite everywhere, including the pupil centre. That is the
+        /// practical dividend of the Cartesian formulation: the polar
+        /// `$\partial_\theta Z/\rho$` is singular there, and hand-rolled polar
+        /// implementations guard the origin with a special case.
+        ///
+        /// `N` must equal `(L+1)(L+2)/2`, and `NORM` is as on
+        /// [`zernike_basis`](SpecialMath::zernike_basis). All three output buffers are
+        /// written in full.
+        #[skip_dispatch] fn zernike_basis_d[const L: usize, const NORM: u8, const N: usize][L, NORM, N](
+            x: Self,
+            y: Self,
+            out: &mut [Self; N],
+            ddx: &mut [Self; N],
+            ddy: &mut [Self; N],
         ) -> ();
 
         /// [`spherical_harmonics_with`](RealSpecialMath::spherical_harmonics_with) plus

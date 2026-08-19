@@ -96,6 +96,13 @@ fine -- you don't have to gate it behind `HAS_TRUE_FMA` just to dodge `libm`. Ga
 to avoid the emulation cost. If you truly need extra precision, pulling in
 `thermite-compensated` directly is often cleaner than relying on emulated FMA.
 
+There is one more reason to gate an *`e`-form* fold, and it is about op count, not
+accuracy: if the plain spelling would **share** the product you are folding
+(`t3 - a*s` and `t3 + a*s` both want `a*s`), the non-FMA lowering of two folds
+recomputes it. Fold ungated when the product appears once; gate when it would be shared.
+See [optimization-pass.md](optimization-pass.md) sec 1 - and sec 2 for why gating on a
+`Complex<V>` or `Dual<V, N>`'s own `HAS_TRUE_FMA` (always `false`) is a trap.
+
 ## 2. Fold negations into constants
 
 `nmul_adde(c, x, acc)` negates a runtime product. If `c` is a compile-time constant,
@@ -148,6 +155,12 @@ instruction count. LLVM can't do these (FP is non-associative without fast-math)
 - **Hoist reciprocals**: compute `1/x` once, multiply -- division latency dwarfs
   multiply. Share one `reciprocal_p`/`inverse_sqrt_p` between code paths that divide
   by the same root.
+- **Two quotients, one divide**: `(x/p, y/q) = (x*q*r, y*p*r)` with `r = 1/(p*q)`.
+  Any function returning a pair of ratios should pay one division, and a constant
+  numerator (`2a/...`) rides in the numerator of that division for free.
+  [optimization-pass.md](optimization-pass.md) sec 3-4 has the pattern and the larger
+  win behind it: substituting out intermediates (a relative index, a `cos_t`) that exist
+  only to be multiplied back.
 
 Algebraic transforms via the `e` variants change rounding by <1 ulp -- fine for
 convergent iterations and small corrections; verify with accuracy tests.

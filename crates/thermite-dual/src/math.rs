@@ -103,7 +103,7 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
 
     // Override the `tan` default (which would be dual `sin_cos` followed by a dual
     // division). Going through the inner `tan` primitive plus the chain rule
-    // `d/dx tan = 1 + tan^2` is cheaper -- it uses the element type's dedicated
+    // `d/dx tan = 1 + tan^2` is cheaper, since it uses the element type's dedicated
     // `tan` (f32) and avoids the per-component division.
     #[inline(always)]
     fn tan<P: Policy>(self) -> Self {
@@ -111,7 +111,7 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
         self.chain(t, t.mul_adde(t, V::ONE))
     }
 
-    // The default computes `sin_cos(self * PI)` -- the generic sine/cosine of x*pi
+    // The default computes `sin_cos(self * PI)`, the generic sine/cosine of x*pi
     // rather than the dedicated `sincos_pi` primitive, which is more precise at
     // multiples of pi. Derivatives: d/dx sin(pi x) = pi cos(pi x),
     // d/dx cos(pi x) = -pi sin(pi x). `sin_pi`/`cos_pi` inherit this via the default.
@@ -242,7 +242,7 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
         /// Kernel for [`FloatVector::with_bits`]: bitwise-OR all `N` exponent-derivative
         /// components into one accumulator (a [`FloatVectorWithBits`] is a
         /// [`BitwiseVector`], so `|` applies directly to the floats) and report whether
-        /// it is all-zero -- i.e. whether the exponent is a constant. Returns `None` on
+        /// it is all-zero, i.e. whether the exponent is a constant. Returns `None` on
         /// backends without bit access, where the caller falls back to the full path.
         struct ExpIsConstKernel;
 
@@ -273,7 +273,7 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
         // derivative. For the common `x.powf(const)` case every `e.dual` is zero,
         // so detect that and skip the whole d/dy term, falling back to the plain
         // base-direction chain rule. Bit-capable backends do it as a single
-        // OR-reduce of the partials' bits; types without bit access (e.g.
+        // OR-reduce of the partials' bits, while types without bit access (e.g.
         // Compensated) take the numeric `is_all_zero` per partial instead.
         let exp_is_const = match <V as FloatVector>::with_bits(e.dual, ExpIsConstKernel) {
             Some(is_const) => is_const,
@@ -316,7 +316,7 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
     }
 
     // The default `nth_root` runs a dual `powf` plus a Halley iteration with dual
-    // division -- very expensive. Use the inner dedicated `nth_root` for the value
+    // division, which is very expensive. Use the inner dedicated `nth_root` for the value
     // and the chain rule: d/dx x^(1/M) = (1/M) x^(1/M - 1) = v / (M*x).
     #[inline(always)]
     fn nth_root<P: Policy, const M: usize>(self) -> Self {
@@ -336,6 +336,14 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
         let v = self.re.ln_1p_p::<P>();
         // 1 / (1 + x)
         self.chain(v, (V::ONE + self.re).reciprocal_p::<P>())
+    }
+
+    #[inline(always)]
+    fn log1pmx<P: Policy>(self) -> Self {
+        let v = self.re.log1pmx_p::<P>();
+        // d/dx [ln(1 + x) - x] = 1/(1 + x) - 1 = -x/(1 + x), taken in that closed form so
+        // the derivative never forms the cancelling difference the primal exists to avoid.
+        self.chain(v, -self.re / (V::ONE + self.re))
     }
 
     #[inline(always)]
@@ -377,10 +385,80 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
     #[inline(always)]
     fn sinc<P: Policy>(self) -> Self {
         let v = self.re.sinc_p::<P>();
-        // Only cos is needed for the derivative; cos_p is a dedicated primitive on
+        // Only cos is needed for the derivative, and cos_p is a dedicated primitive on
         // f32 (cheaper than sin_cos, which would also compute the unused sine).
         let c = self.re.cos_p::<P>();
         // f(x) = sin(x)/x, f'(x) = (cos(x) - sinc(x)) / x, with f'(0) = 0
+        let factor = (c - v) / self.re;
+        let factor = self.re.is_zero().select(V::ZERO, factor);
+        self.chain(v, factor)
+    }
+
+    /// The trait default guards `x == 0` with a select, which is right for the value and
+    /// wrong for the gradient: `x ln y` is *linear* in `x`, so `d/dx` is `ln y` at the origin
+    /// like everywhere else, not the zero a select would propagate. That gradient is exactly
+    /// what a cross-entropy needs at a probability that has reached zero, so it is worth the
+    /// override rather than inheriting a silent zero.
+    #[inline(always)]
+    fn xlogy<P: Policy>(self, y: Self) -> Self {
+        let v = self.re.xlogy_p::<P>(y.re);
+        // d/dx = ln y, d/dy = x/y.
+        let ln_y = y.re.ln_p::<P>();
+        let x_over_y = self.re / y.re;
+
+        let mut dual = self.dual;
+        let mut i = 0;
+        while i < N {
+            dual[i] = x_over_y.mul_adde(y.dual[i], ln_y * self.dual[i]);
+            i += 1;
+        }
+
+        Dual { re: v, dual }
+    }
+
+    /// [`xlogy`](Self::xlogy)'s reasoning, one argument shifted: `d/dx` is `ln(1+y)` and
+    /// `d/dy` is `x/(1+y)`.
+    #[inline(always)]
+    fn xlog1py<P: Policy>(self, y: Self) -> Self {
+        let v = self.re.xlog1py_p::<P>(y.re);
+        let ln_y = y.re.ln_1p_p::<P>();
+        let x_over_y = self.re / (V::ONE + y.re);
+
+        let mut dual = self.dual;
+        let mut i = 0;
+        while i < N {
+            dual[i] = x_over_y.mul_adde(y.dual[i], ln_y * self.dual[i]);
+            i += 1;
+        }
+
+        Dual { re: v, dual }
+    }
+
+    #[inline(always)]
+    fn atanhc<P: Policy>(self) -> Self {
+        let v = self.re.atanhc_p::<P>();
+        // f(x) = atanh(x)/x, f'(x) = (1/(1-x^2) - atanhc(x)) / x, with f'(0) = 0 since f is
+        // even. Same shape and same guard as `sinc` above: the quotient is 0/0 at the origin.
+        //
+        // Known limitation, shared with `sinc`'s override and inherited from the same shape:
+        // both terms tend to 1 and differ by 2x^2/3, so the subtraction loses about
+        // 1.5*eps/x^2 in relative terms, a few ulp by |x| = 0.2, but ~2e-4 at 1e-6. The
+        // primal is unaffected, and only the derivative cancels. Fixing it properly wants an
+        // `atanhc_m1` primitive (atanh(x)/x - 1) so that (g-1) - (f-1) is formed from two
+        // small quantities instead. `log1pmx` alone does not get there, since
+        // atanh(x) - x = (log1pmx(x) - log1pmx(-x))/2 cancels its own x^2/2 terms.
+        let d = (V::ONE - self.re.square()).reciprocal_p::<P>();
+        let factor = (d - v) / self.re;
+        let factor = self.re.is_zero().select(V::ZERO, factor);
+        self.chain(v, factor)
+    }
+
+    #[inline(always)]
+    fn sinhc<P: Policy>(self) -> Self {
+        let v = self.re.sinhc_p::<P>();
+        let c = self.re.cosh_p::<P>();
+        // f(x) = sinh(x)/x, f'(x) = (cosh(x) - sinhc(x)) / x, with f'(0) = 0. Same shape as
+        // `sinc` above, and the same reason for the guard: the quotient is 0/0 at the origin.
         let factor = (c - v) / self.re;
         let factor = self.re.is_zero().select(V::ZERO, factor);
         self.chain(v, factor)
@@ -436,7 +514,7 @@ impl<V: DualMathVector, const N: usize> SpecializedSpatialMath<Dual<V::Element, 
     }
 
     // The default routes through `hypot_n_impl`: scaling, dual squaring, a dual
-    // sum and a dual sqrt -- expensive, and NaN-derivative at the origin. Compute
+    // sum and a dual sqrt, which is expensive and NaN-derivative at the origin. Compute
     // the primal with the dedicated inner `hypot_n`, then apply the analytic
     // gradient d/dt ||v|| = (sum_k v_k * v_k') / ||v||.
     #[inline(always)]

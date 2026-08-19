@@ -88,7 +88,10 @@ fn epsilon_family() {
     // sqrt(2^-23) = 2^-11.5 is NOT representable in f32: one ulp wide, brackets it.
     let (lo, hi) = <f32 as BoundedFloatConsts>::SQRT_EPSILON;
     let truth = (2f64.powi(-23)).sqrt();
-    assert!((lo as f64) < truth && truth < (hi as f64) && hi == lo.next_up(), "[{lo:e}, {hi:e}] vs {truth:e}");
+    assert!(
+        (lo as f64) < truth && truth < (hi as f64) && hi == lo.next_up(),
+        "[{lo:e}, {hi:e}] vs {truth:e}"
+    );
 }
 
 /// Exactly representable constants are degenerate.
@@ -141,5 +144,10 @@ fn thermite_float_consts_are_correctly_rounded() {
 
     thermite::for_each_float_const!(audit);
 
-    assert!(bad.is_empty(), "{} thermite constants are not correctly rounded:\n  {}", bad.len(), bad.join("\n  "));
+    assert!(
+        bad.is_empty(),
+        "{} thermite constants are not correctly rounded:\n  {}",
+        bad.len(),
+        bad.join("\n  ")
+    );
 }

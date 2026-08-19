@@ -3,7 +3,7 @@
 //! `TranscendentalMath` / `SpatialMath` / `RealMath` API through the blanket
 //! impls in `thermite::math`.
 //!
-//! # How the two policies meet
+//! # The two policies
 //!
 //! Every method here takes thermite's math policy `P` _and_ carries the
 //! type's widening policy `W`. They do different jobs:
@@ -126,6 +126,10 @@ pub const ULP_COMPOUND: u32 = 1024;
 /// `powf_m1`: measured 9.1 ulp.
 pub const ULP_POWF_M1: u32 = 64;
 
+/// `compound_m1`: shares `compound`'s `ln_1p * n` exponent, so it inherits the
+/// same wide margin rather than `powf_m1`'s narrow one.
+pub const ULP_COMPOUND_M1: u32 = 1024;
+
 /// Largest `|x|` at which thermite's trig kernels still deliver their nominal
 /// accuracy, by tier. Past this the enclosure degrades to `[-1, 1]`.
 ///
@@ -144,7 +148,9 @@ pub const ULP_POWF_M1: u32 = 64;
 #[inline(always)]
 pub(crate) fn trig_safe_magnitude<V: IntervalMathVector, P: Policy>() -> V {
     if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-        <V as FloatConsts>::EPSILON.scale(<V::Element as thermite::element::FloatElement>::from_int(8)).reciprocal_p::<P>()
+        <V as FloatConsts>::EPSILON
+            .scale(<V::Element as thermite::element::FloatElement>::from_int(8))
+            .reciprocal_p::<P>()
     } else {
         <V as FloatConsts>::SQRT_EPSILON.reciprocal_p::<P>()
     }
@@ -165,7 +171,9 @@ pub(crate) fn algo_widen<V: IntervalMathVector, P: Policy>(lo: V, hi: V) -> (V, 
 pub(crate) fn algo_widen_n<V: IntervalMathVector, P: Policy>(lo: V, hi: V, n: u32) -> (V, V) {
     // n ulps relative: n * eps * |x|, plus the denormal floor.
     let scale = <V as FloatVector>::EPSILON
-        * V::splat(<V::Element as thermite::element::FloatElement>::from_int(n as thermite::LargeInt));
+        * V::splat(<V::Element as thermite::element::FloatElement>::from_int(
+            n as thermite::LargeInt,
+        ));
 
     let lo_w = lo - (lo.abs().mul_adde(scale, V::MIN_POSITIVE));
     let hi_w = hi + (hi.abs().mul_adde(scale, V::MIN_POSITIVE));
@@ -184,10 +192,7 @@ impl<V: IntervalMathVector, W: WideningPolicy> Interval<V, W> {
     pub(crate) fn monotone_inc<P: Policy>(self, f: impl Fn(V) -> V) -> Self {
         let poison = self.is_empty();
         let (lo, hi) = algo_widen::<V, P>(f(self.lo), f(self.hi));
-        Self::from_bounds_unchecked(
-            poison.select(V::INFINITY, lo),
-            poison.select(V::NEG_INFINITY, hi),
-        )
+        Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
     }
 
     /// Enclosure of a _monotonically decreasing_ function: the endpoints swap.
@@ -195,10 +200,7 @@ impl<V: IntervalMathVector, W: WideningPolicy> Interval<V, W> {
     pub(crate) fn monotone_dec<P: Policy>(self, f: impl Fn(V) -> V) -> Self {
         let poison = self.is_empty();
         let (lo, hi) = algo_widen::<V, P>(f(self.hi), f(self.lo));
-        Self::from_bounds_unchecked(
-            poison.select(V::INFINITY, lo),
-            poison.select(V::NEG_INFINITY, hi),
-        )
+        Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
     }
 
     /// Enclosure of an _even_ function that is increasing in `|x|` (`cosh`,
@@ -214,10 +216,7 @@ impl<V: IntervalMathVector, W: WideningPolicy> Interval<V, W> {
         let poison = self.is_empty();
         let (lo, hi) = algo_widen::<V, P>(f(self.mignitude()), f(self.magnitude()));
         let lo = if const { NONNEG } { lo.max(V::ZERO) } else { lo };
-        Self::from_bounds_unchecked(
-            poison.select(V::INFINITY, lo),
-            poison.select(V::NEG_INFINITY, hi),
-        )
+        Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
     }
 
     /// Intersects the input with `[d_lo, d_hi]` before evaluating, returning
@@ -313,10 +312,7 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedCoreMath<IntervalElem<
 
         let poison = self.is_empty();
         let (lo, hi) = algo_widen::<V, P>(a.min(b).min(m), a.max(b).max(m));
-        Self::from_bounds_unchecked(
-            poison.select(V::INFINITY, lo),
-            poison.select(V::NEG_INFINITY, hi),
-        )
+        Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
     }
 }
 
@@ -373,7 +369,9 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
         let has_residue = |r: i64| -> V::Mask {
             let rv = V::splat(<V::Element as thermite::element::FloatElement>::from_int(r));
             // Largest k <= q_hi with k = r (mod 4):
-            let k = ((q_hi - rv) * four.reciprocal_p::<KernelPolicy<P>>()).floor().mul_adde(four, rv);
+            let k = ((q_hi - rv) * four.reciprocal_p::<KernelPolicy<P>>())
+                .floor()
+                .mul_adde(four, rv);
             k.cmp_gt(q_lo) & crossed.cmp_ge(V::ZERO)
         };
 
@@ -400,10 +398,7 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
         let c_h = (cos_max | full).select(one, c_h).min(one);
 
         let mk = |lo: V, hi: V| {
-            Self::from_bounds_unchecked(
-                poison.select(V::INFINITY, lo),
-                poison.select(V::NEG_INFINITY, hi),
-            )
+            Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
         };
 
         (mk(s_l, s_h), mk(c_l, c_h))
@@ -420,11 +415,10 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
         // Domain (0, inf): clamp the lower bound at zero, empty if entirely
         // non-positive.
         let all_np = self.hi.cmp_le(V::ZERO);
-        let r = self.restrict(V::ZERO, V::INFINITY).monotone_inc::<P>(|x| x.ln_p::<KernelPolicy<P>>());
-        Self::from_bounds_unchecked(
-            all_np.select(V::INFINITY, r.lo),
-            all_np.select(V::NEG_INFINITY, r.hi),
-        )
+        let r = self
+            .restrict(V::ZERO, V::INFINITY)
+            .monotone_inc::<P>(|x| x.ln_p::<KernelPolicy<P>>());
+        Self::from_bounds_unchecked(all_np.select(V::INFINITY, r.lo), all_np.select(V::NEG_INFINITY, r.hi))
     }
 
     #[inline(always)]
@@ -433,10 +427,7 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
         let r = self
             .restrict(V::ZERO, V::INFINITY)
             .monotone_inc::<P>(|x| x.log_n_p::<KernelPolicy<P>, N>());
-        Self::from_bounds_unchecked(
-            all_np.select(V::INFINITY, r.lo),
-            all_np.select(V::NEG_INFINITY, r.hi),
-        )
+        Self::from_bounds_unchecked(all_np.select(V::INFINITY, r.lo), all_np.select(V::NEG_INFINITY, r.hi))
     }
 
     /// `x^e` over intervals: via `exp(e * ln(x))` on the positive domain,
@@ -459,44 +450,77 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
         let (lo, hi) = algo_widen_n::<V, P>(lo, hi, ULP_POWF);
 
         let poison = self.is_empty() | e.is_empty() | all_np;
-        Self::from_bounds_unchecked(
-            poison.select(V::INFINITY, lo),
-            poison.select(V::NEG_INFINITY, hi),
-        )
+        Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
     }
 
     // --- monotone increasing on their whole domains ---
-    #[inline(always)] fn exph<P: Policy>(self) -> Self { self.monotone_inc::<P>(|x| x.exph_p::<KernelPolicy<P>>()) }
-    #[inline(always)] fn exp2<P: Policy>(self) -> Self { self.monotone_inc::<P>(|x| x.exp2_p::<KernelPolicy<P>>()) }
-    #[inline(always)] fn exp10<P: Policy>(self) -> Self { self.monotone_inc::<P>(|x| x.exp10_p::<KernelPolicy<P>>()) }
-    #[inline(always)] fn exp_m1<P: Policy>(self) -> Self { self.monotone_inc::<P>(|x| x.exp_m1_p::<KernelPolicy<P>>()) }
-    #[inline(always)] fn exp2_m1<P: Policy>(self) -> Self { self.monotone_inc::<P>(|x| x.exp2_m1_p::<KernelPolicy<P>>()) }
-    #[inline(always)] fn exp10_m1<P: Policy>(self) -> Self { self.monotone_inc::<P>(|x| x.exp10_m1_p::<KernelPolicy<P>>()) }
-    #[inline(always)] fn cbrt<P: Policy>(self) -> Self { self.monotone_inc::<P>(|x| x.cbrt_p::<KernelPolicy<P>>()) }
-    #[inline(always)] fn tanh<P: Policy>(self) -> Self { self.monotone_inc::<P>(|x| x.tanh_p::<KernelPolicy<P>>()) }
-    #[inline(always)] fn asinh<P: Policy>(self) -> Self { self.monotone_inc::<P>(|x| x.asinh_p::<KernelPolicy<P>>()) }
-    #[inline(always)] fn atan<P: Policy>(self) -> Self { self.monotone_inc::<P>(|x| x.atan_p::<KernelPolicy<P>>()) }
+    #[inline(always)]
+    fn exph<P: Policy>(self) -> Self {
+        self.monotone_inc::<P>(|x| x.exph_p::<KernelPolicy<P>>())
+    }
+    #[inline(always)]
+    fn exp2<P: Policy>(self) -> Self {
+        self.monotone_inc::<P>(|x| x.exp2_p::<KernelPolicy<P>>())
+    }
+    #[inline(always)]
+    fn exp10<P: Policy>(self) -> Self {
+        self.monotone_inc::<P>(|x| x.exp10_p::<KernelPolicy<P>>())
+    }
+    #[inline(always)]
+    fn exp_m1<P: Policy>(self) -> Self {
+        self.monotone_inc::<P>(|x| x.exp_m1_p::<KernelPolicy<P>>())
+    }
+    #[inline(always)]
+    fn exp2_m1<P: Policy>(self) -> Self {
+        self.monotone_inc::<P>(|x| x.exp2_m1_p::<KernelPolicy<P>>())
+    }
+    #[inline(always)]
+    fn exp10_m1<P: Policy>(self) -> Self {
+        self.monotone_inc::<P>(|x| x.exp10_m1_p::<KernelPolicy<P>>())
+    }
+    #[inline(always)]
+    fn cbrt<P: Policy>(self) -> Self {
+        self.monotone_inc::<P>(|x| x.cbrt_p::<KernelPolicy<P>>())
+    }
+    #[inline(always)]
+    fn tanh<P: Policy>(self) -> Self {
+        self.monotone_inc::<P>(|x| x.tanh_p::<KernelPolicy<P>>())
+    }
+    #[inline(always)]
+    fn asinh<P: Policy>(self) -> Self {
+        self.monotone_inc::<P>(|x| x.asinh_p::<KernelPolicy<P>>())
+    }
+    #[inline(always)]
+    fn atan<P: Policy>(self) -> Self {
+        self.monotone_inc::<P>(|x| x.atan_p::<KernelPolicy<P>>())
+    }
 
     // --- monotone increasing on a restricted domain ---
     #[inline(always)]
     fn ln_1p<P: Policy>(self) -> Self {
         // Domain (-1, inf).
         let empty = self.hi.cmp_le(V::NEG_ONE);
-        let r = self.restrict(V::NEG_ONE, V::INFINITY).monotone_inc::<P>(|x| x.ln_1p_p::<KernelPolicy<P>>());
+        let r = self
+            .restrict(V::NEG_ONE, V::INFINITY)
+            .monotone_inc::<P>(|x| x.ln_1p_p::<KernelPolicy<P>>());
         Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
     }
 
     #[inline(always)]
     fn log2<P: Policy>(self) -> Self {
         let empty = self.hi.cmp_le(V::ZERO);
-        let r = self.restrict(V::ZERO, V::INFINITY).monotone_inc::<P>(|x| x.log2_p::<KernelPolicy<P>>());
+        let r = self
+            .restrict(V::ZERO, V::INFINITY)
+            .monotone_inc::<P>(|x| x.log2_p::<KernelPolicy<P>>());
         Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
     }
 
     #[inline(always)]
     fn log10<P: Policy>(self) -> Self {
         let empty = self.hi.cmp_le(V::ZERO);
-        let r = self.restrict(V::ZERO, V::INFINITY).monotone_inc::<P>(|x| x.log10_p::<KernelPolicy<P>>());
+        let r = self
+            .restrict(V::ZERO, V::INFINITY)
+            .monotone_inc::<P>(|x| x.log10_p::<KernelPolicy<P>>());
         Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
     }
 
@@ -504,7 +528,9 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
     fn asin<P: Policy>(self) -> Self {
         // Domain [-1, 1], increasing.
         let empty = self.hi.cmp_lt(V::NEG_ONE) | self.lo.cmp_gt(V::ONE);
-        let r = self.restrict(V::NEG_ONE, V::ONE).monotone_inc::<P>(|x| x.asin_p::<KernelPolicy<P>>());
+        let r = self
+            .restrict(V::NEG_ONE, V::ONE)
+            .monotone_inc::<P>(|x| x.asin_p::<KernelPolicy<P>>());
         Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
     }
 
@@ -512,7 +538,9 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
     fn acos<P: Policy>(self) -> Self {
         // Domain [-1, 1], DEcreasing.
         let empty = self.hi.cmp_lt(V::NEG_ONE) | self.lo.cmp_gt(V::ONE);
-        let r = self.restrict(V::NEG_ONE, V::ONE).monotone_dec::<P>(|x| x.acos_p::<KernelPolicy<P>>());
+        let r = self
+            .restrict(V::NEG_ONE, V::ONE)
+            .monotone_dec::<P>(|x| x.acos_p::<KernelPolicy<P>>());
         Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
     }
 
@@ -520,7 +548,9 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
     fn acosh<P: Policy>(self) -> Self {
         // Domain [1, inf), increasing.
         let empty = self.hi.cmp_lt(V::ONE);
-        let r = self.restrict(V::ONE, V::INFINITY).monotone_inc::<P>(|x| x.acosh_p::<KernelPolicy<P>>());
+        let r = self
+            .restrict(V::ONE, V::INFINITY)
+            .monotone_inc::<P>(|x| x.acosh_p::<KernelPolicy<P>>());
         Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
     }
 
@@ -528,7 +558,28 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
     fn atanh<P: Policy>(self) -> Self {
         // Domain (-1, 1), increasing.
         let empty = self.hi.cmp_le(V::NEG_ONE) | self.lo.cmp_ge(V::ONE);
-        let r = self.restrict(V::NEG_ONE, V::ONE).monotone_inc::<P>(|x| x.atanh_p::<KernelPolicy<P>>());
+        let r = self
+            .restrict(V::NEG_ONE, V::ONE)
+            .monotone_inc::<P>(|x| x.atanh_p::<KernelPolicy<P>>());
+        Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
+    }
+
+    /// `atanhc(x) = atanh(x)/x` on the same domain `(-1, 1)`, even with its
+    /// minimum `1` at zero and increasing in `|x|` to `+inf` at the ends, so
+    /// the mignitude/magnitude pair bounds it, unlike the parent `atanh`,
+    /// which is monotone on the signed value.
+    ///
+    /// The domain handling is `atanh`'s: restrict first, and report empty for
+    /// an interval that misses `(-1, 1)` entirely. Restricting before the
+    /// mignitude matters, because an interval straddling an endpoint has its
+    /// magnitude clamped to `1` rather than running off to a finite value
+    /// outside the domain.
+    #[inline(always)]
+    fn atanhc<P: Policy>(self) -> Self {
+        let empty = self.hi.cmp_le(V::NEG_ONE) | self.lo.cmp_ge(V::ONE);
+        let r = self
+            .restrict(V::NEG_ONE, V::ONE)
+            .even_inc::<P, true>(|x| x.atanhc_p::<KernelPolicy<P>>());
         Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
     }
 
@@ -539,6 +590,15 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
             self.monotone_inc::<P>(|x| x.sinh_p::<KernelPolicy<P>>()),
             self.even_inc::<P, true>(|x| x.cosh_p::<KernelPolicy<P>>()),
         )
+    }
+
+    /// `sinhc(x) = sinh(x)/x` is even with its minimum `1` at zero and
+    /// increasing in `|x|` over the whole line, the `cosh` shape, so the
+    /// mignitude/magnitude pair bounds it directly. Contrast [`sinc`](Self::sinc)
+    /// just below, whose oscillation makes the same pair wrong.
+    #[inline(always)]
+    fn sinhc<P: Policy>(self) -> Self {
+        self.even_inc::<P, true>(|x| x.sinhc_p::<KernelPolicy<P>>())
     }
 
     /// `sinc(x) = sin(x)/x` is even with a global max of 1 at x = 0, but is
@@ -577,7 +637,9 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
     #[inline(always)]
     fn ln1m_expnx<P: Policy>(self) -> Self {
         let empty = self.hi.cmp_lt(V::ZERO);
-        let r = self.restrict(V::ZERO, V::INFINITY).monotone_inc::<P>(|x| x.ln1m_expnx_p::<KernelPolicy<P>>());
+        let r = self
+            .restrict(V::ZERO, V::INFINITY)
+            .monotone_inc::<P>(|x| x.ln1m_expnx_p::<KernelPolicy<P>>());
         Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
     }
 
@@ -623,7 +685,9 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
     /// sine. Range-clamped to `[0, 1]`.
     #[inline(always)]
     fn haversin<P: Policy>(self) -> Self {
-        let s = <Self as SpecializedTranscendentalMath<IntervalElem<V::Element>>>::sin::<P>(self.mul_interval(Self::from_bounds_unchecked(V::HALF, V::HALF)));
+        let s = <Self as SpecializedTranscendentalMath<IntervalElem<V::Element>>>::sin::<P>(
+            self.mul_interval(Self::from_bounds_unchecked(V::HALF, V::HALF)),
+        );
         let sq = s.square_interval();
         Self::from_bounds_unchecked(sq.lo.max(V::ZERO), sq.hi.min(V::ONE))
     }
@@ -632,21 +696,27 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
     #[inline(always)]
     fn sqrt1pm1<P: Policy>(self) -> Self {
         let empty = self.hi.cmp_lt(V::NEG_ONE);
-        let r = self.restrict(V::NEG_ONE, V::INFINITY).monotone_inc::<P>(|x| x.sqrt1pm1_p::<KernelPolicy<P>>());
+        let r = self
+            .restrict(V::NEG_ONE, V::INFINITY)
+            .monotone_inc::<P>(|x| x.sqrt1pm1_p::<KernelPolicy<P>>());
         Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
     }
 
     #[inline(always)]
     fn log2_p1<P: Policy>(self) -> Self {
         let empty = self.hi.cmp_le(V::NEG_ONE);
-        let r = self.restrict(V::NEG_ONE, V::INFINITY).monotone_inc::<P>(|x| x.log2_p1_p::<KernelPolicy<P>>());
+        let r = self
+            .restrict(V::NEG_ONE, V::INFINITY)
+            .monotone_inc::<P>(|x| x.log2_p1_p::<KernelPolicy<P>>());
         Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
     }
 
     #[inline(always)]
     fn log10_p1<P: Policy>(self) -> Self {
         let empty = self.hi.cmp_le(V::NEG_ONE);
-        let r = self.restrict(V::NEG_ONE, V::INFINITY).monotone_inc::<P>(|x| x.log10_p1_p::<KernelPolicy<P>>());
+        let r = self
+            .restrict(V::NEG_ONE, V::INFINITY)
+            .monotone_inc::<P>(|x| x.log10_p1_p::<KernelPolicy<P>>());
         Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
     }
 
@@ -684,6 +754,17 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
         let empty = self.hi.cmp_lt(V::NEG_ONE);
         let base = self.restrict(V::NEG_ONE, V::INFINITY);
         let r = corners4::<V, P>(base, n, ULP_COMPOUND, |x, e| x.compound_p::<KernelPolicy<P>>(e));
+        let poison = self.is_empty() | n.is_empty() | empty;
+        Self::from_bounds_unchecked(poison.select(V::INFINITY, r.0), poison.select(V::NEG_INFINITY, r.1))
+    }
+
+    /// `(1 + x)^n - 1` on `x >= -1`: same monotonicity as `compound`, since
+    /// subtracting a constant does not change it.
+    #[inline(always)]
+    fn compound_m1<P: Policy>(self, n: Self) -> Self {
+        let empty = self.hi.cmp_lt(V::NEG_ONE);
+        let base = self.restrict(V::NEG_ONE, V::INFINITY);
+        let r = corners4::<V, P>(base, n, ULP_COMPOUND_M1, |x, e| x.compound_m1_p::<KernelPolicy<P>>(e));
         let poison = self.is_empty() | n.is_empty() | empty;
         Self::from_bounds_unchecked(poison.select(V::INFINITY, r.0), poison.select(V::NEG_INFINITY, r.1))
     }
@@ -758,7 +839,10 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedSpatialMath<IntervalEl
     #[inline(always)]
     fn hypot_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
         let (migs, mags, poison) = split_mig_mag(values);
-        let (lo, hi) = algo_widen::<V, P>(V::hypot_n_p::<KernelPolicy<P>, N>(migs), V::hypot_n_p::<KernelPolicy<P>, N>(mags));
+        let (lo, hi) = algo_widen::<V, P>(
+            V::hypot_n_p::<KernelPolicy<P>, N>(migs),
+            V::hypot_n_p::<KernelPolicy<P>, N>(mags),
+        );
         Self::from_bounds_unchecked(
             poison.select(V::INFINITY, lo.max(V::ZERO)),
             poison.select(V::NEG_INFINITY, hi),
@@ -769,7 +853,10 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedSpatialMath<IntervalEl
     #[inline(always)]
     fn inv_hypot_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
         let (migs, mags, poison) = split_mig_mag(values);
-        let (lo, hi) = algo_widen::<V, P>(V::inv_hypot_n_p::<KernelPolicy<P>, N>(mags), V::inv_hypot_n_p::<KernelPolicy<P>, N>(migs));
+        let (lo, hi) = algo_widen::<V, P>(
+            V::inv_hypot_n_p::<KernelPolicy<P>, N>(mags),
+            V::inv_hypot_n_p::<KernelPolicy<P>, N>(migs),
+        );
         Self::from_bounds_unchecked(
             poison.select(V::INFINITY, lo.max(V::ZERO)),
             poison.select(V::NEG_INFINITY, hi),
@@ -829,10 +916,7 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedRealMath<IntervalElem<
         let hi = straddles_cut.select(pi_hi, hi);
         let _ = pi_lo;
 
-        Self::from_bounds_unchecked(
-            poison.select(V::INFINITY, lo),
-            poison.select(V::NEG_INFINITY, hi),
-        )
+        Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
     }
 
     /// The Heaviside step over intervals: `1` where `self` is certainly at
@@ -895,7 +979,10 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedRealMath<IntervalElem<
             poison = poison | values[i].is_empty();
             i += 1;
         }
-        let (lo, hi) = algo_widen::<V, P>(V::logsumexp_n_p::<KernelPolicy<P>, N>(los), V::logsumexp_n_p::<KernelPolicy<P>, N>(his));
+        let (lo, hi) = algo_widen::<V, P>(
+            V::logsumexp_n_p::<KernelPolicy<P>, N>(los),
+            V::logsumexp_n_p::<KernelPolicy<P>, N>(his),
+        );
         Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
     }
 
@@ -916,7 +1003,8 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedRealMath<IntervalElem<
         // Set-clamp to [0, 1]: `max_interval`/`min_interval` are the endpoint
         // maps, so a `t` entirely below 0 becomes [0, 0] and entirely above 1
         // becomes [1, 1] (the saturated points, not empty).
-        let t = t.max_interval(Self::from_bounds_unchecked(V::ZERO, V::ZERO))
+        let t = t
+            .max_interval(Self::from_bounds_unchecked(V::ZERO, V::ZERO))
             .min_interval(Self::from_bounds_unchecked(V::ONE, V::ONE));
 
         let (lo, hi) = algo_widen::<V, P>(

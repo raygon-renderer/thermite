@@ -5,8 +5,8 @@
 //! This file is the opposite: it stamps *every* directed pair whose contract is
 //! total and unambiguous, so a newly added lowering cannot land untested.
 //!
-//! The scalar backend is the oracle - its `cast_from` is literally `value as _`
-//! and its `saturating_cast_from` is the documented clamp-then-convert - so
+//! The scalar backend is the oracle: its `cast_from` is literally `value as _`
+//! and its `saturating_cast_from` is the documented clamp-then-convert, so
 //! every assertion here is a differential against the language.
 //!
 //! What is covered, per backend and per lane count (90 directed pairs, the whole
@@ -18,7 +18,7 @@
 //!   disagreement is a real defect.
 //! - **float source -> integer destination**, both strengths. Saturating runs
 //!   over the raw corpus including NaN and out-of-range, where it is exactly
-//!   `as` by contract; wrapping is gated to the in-range finite domain, since
+//!   `as` by contract, while wrapping is gated to the in-range finite domain, since
 //!   outside it `cast_from` is explicitly backend-defined (x86 yields the
 //!   hardware indefinite integer).
 //! - **float <-> float**, both strengths.
@@ -95,7 +95,7 @@ macro_rules! dom {
 /// Stricter than [`dom`] on purpose. The narrow-domain lowerings are
 /// magic-constant tricks that round to nearest, where `as` truncates, so a
 /// fractional input would fail against the oracle for a reason that is not a
-/// bug - the relaxed rounding is what `fast_cast` sells. Truncating first makes
+/// bug, since the relaxed rounding is what `fast_cast` sells. Truncating first makes
 /// the two agree and leaves the test measuring the conversion itself.
 macro_rules! fdom {
     ($fe:ty, $lo:expr, $hi:expr) => {
@@ -143,12 +143,12 @@ macro_rules! cast_dom {
 /// One lane count's worth of tests for one backend.
 ///
 /// The slot names are spelled out rather than built from the lane count because
-/// the `Simd` slots are plain associated-type names; there is no concatenating
+/// the `Simd` slots are plain associated-type names, and there is no concatenating
 /// them without a proc macro, and being explicit matches how the backend cast
 /// matrices are written.
 ///
 /// `rustfmt::skip` because the point of each row is the shape of its destination
-/// list - which nine of the ten slots it names - and rustfmt breaks every
+/// list (which nine of the ten slots it names), and rustfmt breaks every
 /// invocation onto eight lines, which buries exactly that.
 #[rustfmt::skip]
 macro_rules! lane_suite {
@@ -172,7 +172,7 @@ macro_rules! lane_suite {
             }
 
             /// The same 72 pairs at saturating strength. For the same-signedness
-            /// narrows this is a genuine clamp; for the sign-changing ones it
+            /// narrows this is a genuine clamp, while for the sign-changing ones it
             /// must still agree with the wrapping `as`, which is what pins the
             /// composition order.
             #[test]
@@ -221,9 +221,8 @@ macro_rules! lane_suite {
             /// `fast_cast` over the domain where it is actually defined.
             ///
             /// This is the operation the `_limited` magic-constant lowerings
-            /// back, and before this test it had no differential anywhere - only
-            /// a hardcoded `i32 -> f32` smoke check on `[1, 2, 3, 4]`, all
-            /// positive. That is how a wrong bias-unbias in the signed
+            /// back. A hardcoded `i32 -> f32` smoke check on `[1, 2, 3, 4]`, all
+            /// positive, is not a differential. That is how a wrong bias-unbias in the signed
             /// `f64 -> i64` direction survived: it is correct for every input
             /// strictly between 0 and 2^51 and wrong for the negatives.
             ///

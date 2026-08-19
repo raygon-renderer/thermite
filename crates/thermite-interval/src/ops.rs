@@ -131,10 +131,7 @@ impl<V: IntervalFloatVector, W: WideningPolicy> Interval<V, W> {
         // an exact product has a zero residual, but the cheaper tiers do not.)
         // Boost.Interval's `? * Z -> Z` case.
         let exact_zero = (self.lo.is_zero() & self.hi.is_zero()) | (rhs.lo.is_zero() & rhs.hi.is_zero());
-        let res = Self::from_bounds_unchecked(
-            exact_zero.select(V::ZERO, res.lo),
-            exact_zero.select(V::ZERO, res.hi),
-        );
+        let res = Self::from_bounds_unchecked(exact_zero.select(V::ZERO, res.lo), exact_zero.select(V::ZERO, res.hi));
 
         Self::from_bounds_unchecked(
             poison.select(V::INFINITY, res.lo),
@@ -184,8 +181,20 @@ impl<V: IntervalFloatVector, W: WideningPolicy> Interval<V, W> {
         let x_pos = self.lo.cmp_gt(V::ZERO);
         let x_neg = self.hi.cmp_lt(V::ZERO);
 
-        let widen_dn = |v: V| if const { is_fastest::<W>() } { scale_down(v) } else { bump_down(v) };
-        let widen_up = |v: V| if const { is_fastest::<W>() } { scale_up(v) } else { bump_up(v) };
+        let widen_dn = |v: V| {
+            if const { is_fastest::<W>() } {
+                scale_down(v)
+            } else {
+                bump_down(v)
+            }
+        };
+        let widen_up = |v: V| {
+            if const { is_fastest::<W>() } {
+                scale_up(v)
+            } else {
+                bump_up(v)
+            }
+        };
 
         // For y = [0, yu] the finite bound is x?/yu, and for y = [yl, 0] it is x?/yl.
         let lo = (zero_div & y_zero_lo & x_pos).select(widen_dn(self.lo / rhs.hi), lo);
@@ -348,7 +357,7 @@ impl<V: IntervalFloatVector, W: WideningPolicy> Div for Interval<V, W> {
     }
 }
 
-/// Containment-valid but wide: `a - trunc(a/b) * b`, composed from enclosing
+/// Containment-valid but wide: `a - trunc(a/b) * b`, composed from the enclosing
 /// ops. Exists because `NumOps` requires it. Do not expect tight remainders.
 impl<V: IntervalFloatVector, W: WideningPolicy> Rem for Interval<V, W> {
     type Output = Self;

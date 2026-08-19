@@ -22,8 +22,15 @@ type F = Vector<f32>;
 
 #[track_caller]
 fn close(name: &str, got: f64, want: f64, tol: f64) {
-    let rel = if want == 0.0 { got.abs() } else { ((got - want) / want).abs() };
-    assert!(rel <= tol, "{name}: got {got:?}, want {want:?} (rel {rel:e}, tol {tol:e})");
+    let rel = if want == 0.0 {
+        got.abs()
+    } else {
+        ((got - want) / want).abs()
+    };
+    assert!(
+        rel <= tol,
+        "{name}: got {got:?}, want {want:?} (rel {rel:e}, tol {tol:e})"
+    );
 }
 
 /// `(x, erfcx(x))` from mpmath at 40 digits.
@@ -58,7 +65,12 @@ fn f64_matches_mpmath() {
     // Best takes N = 32, and the measured floor at N = 40 is ~1.2 ulp.
     for &(x, want) in REFS.iter().chain(NEG_REFS) {
         let v = D::splat(x);
-        close("f64 best", v.erfcx_p::<BestPrecision<DefaultPolicy>>().extract::<0>(), want, 1e-12);
+        close(
+            "f64 best",
+            v.erfcx_p::<BestPrecision<DefaultPolicy>>().extract::<0>(),
+            want,
+            1e-12,
+        );
         close("f64 default", v.erfcx().extract::<0>(), want, 1e-9);
     }
 }
@@ -69,9 +81,24 @@ fn f64_lower_tiers_stay_within_their_ladder_rung() {
     // measured normwise errors 3.1e-4, 4.3e-7, 4.2e-10, 3.1e-13, 8.7e-16.
     for &(x, want) in REFS.iter().chain(NEG_REFS) {
         let v = D::splat(x);
-        close("f64 worst", v.erfcx_p::<WorstPrecision<DefaultPolicy>>().extract::<0>(), want, 1e-3);
-        close("f64 medium", v.erfcx_p::<MediumPrecision<DefaultPolicy>>().extract::<0>(), want, 2e-6);
-        close("f64 average", v.erfcx_p::<AveragePrecision<DefaultPolicy>>().extract::<0>(), want, 1e-8);
+        close(
+            "f64 worst",
+            v.erfcx_p::<WorstPrecision<DefaultPolicy>>().extract::<0>(),
+            want,
+            1e-3,
+        );
+        close(
+            "f64 medium",
+            v.erfcx_p::<MediumPrecision<DefaultPolicy>>().extract::<0>(),
+            want,
+            2e-6,
+        );
+        close(
+            "f64 average",
+            v.erfcx_p::<AveragePrecision<DefaultPolicy>>().extract::<0>(),
+            want,
+            1e-8,
+        );
     }
 }
 
@@ -94,7 +121,11 @@ fn f32_matches_mpmath() {
 fn reaches_where_erfc_has_already_underflowed() {
     // f64: erfc underflows to exactly zero here, but erfcx is an ordinary number.
     let x = 30.0_f64;
-    assert_eq!(D::splat(x).erfc().extract::<0>(), 0.0, "precondition: erfc is expected to underflow");
+    assert_eq!(
+        D::splat(x).erfc().extract::<0>(),
+        0.0,
+        "precondition: erfc is expected to underflow"
+    );
 
     let cx = D::splat(x).erfcx().extract::<0>();
     close("erfcx at 30", cx, 0.018795888861416751497, 1e-9);
@@ -105,8 +136,17 @@ fn reaches_where_erfc_has_already_underflowed() {
 
     // f32 underflows far earlier, at x ~ 9.3.
     let xf = 12.0_f32;
-    assert_eq!(F::splat(xf).erfc().extract::<0>(), 0.0, "precondition: f32 erfc underflows");
-    close("f32 erfcx at 12", F::splat(xf).erfcx().extract::<0>() as f64, 0.04685422101489376262, 1e-6);
+    assert_eq!(
+        F::splat(xf).erfc().extract::<0>(),
+        0.0,
+        "precondition: f32 erfc underflows"
+    );
+    close(
+        "f32 erfcx at 12",
+        F::splat(xf).erfcx().extract::<0>() as f64,
+        0.04685422101489376262,
+        1e-6,
+    );
 }
 
 #[test]
@@ -116,7 +156,12 @@ fn matches_the_defining_identity_where_both_are_representable() {
     for &x in &[-3.0_f64, -1.0, -0.25, 0.0, 0.25, 1.0, 3.0, 5.0, 10.0, 20.0] {
         let v = D::splat(x);
         let naive = (x * x).exp() * v.erfc_p::<BestPrecision<DefaultPolicy>>().extract::<0>();
-        close("identity", v.erfcx_p::<BestPrecision<DefaultPolicy>>().extract::<0>(), naive, 1e-12);
+        close(
+            "identity",
+            v.erfcx_p::<BestPrecision<DefaultPolicy>>().extract::<0>(),
+            naive,
+            1e-12,
+        );
     }
 }
 
@@ -125,13 +170,23 @@ fn asymptotic_tail_and_special_values() {
     // erfcx(x) -> 1/(x sqrt(pi)) as x -> +inf.
     const FRAC_1_SQRT_PI: f64 = 0.5641895835477562869;
     for &x in &[1e8_f64, 1e12, 1e15] {
-        close("asymptote", D::splat(x).erfcx().extract::<0>(), FRAC_1_SQRT_PI / x, 1e-9);
+        close(
+            "asymptote",
+            D::splat(x).erfcx().extract::<0>(),
+            FRAC_1_SQRT_PI / x,
+            1e-9,
+        );
     }
 
     // erfcx(0) = 1, to the accuracy of the tier: the default is N = 24 (4.2e-10), so
     // this is not bit-exact there, only at the top of the ladder.
     close("erfcx(0)", D::splat(0.0).erfcx().extract::<0>(), 1.0, 1e-9);
-    close("erfcx(0) best", D::splat(0.0).erfcx_p::<BestPrecision<DefaultPolicy>>().extract::<0>(), 1.0, 1e-12);
+    close(
+        "erfcx(0) best",
+        D::splat(0.0).erfcx_p::<BestPrecision<DefaultPolicy>>().extract::<0>(),
+        1.0,
+        1e-12,
+    );
 
     assert_eq!(D::splat(f64::INFINITY).erfcx().extract::<0>(), 0.0);
     assert_eq!(D::splat(f64::NEG_INFINITY).erfcx().extract::<0>(), f64::INFINITY);

@@ -4,12 +4,11 @@
 //!
 //! This is deliberately a *gross-correctness* gate, not a ULP audit: the bare
 //! (no-policy) methods use `DefaultPolicy`, which trades accuracy for speed
-//! (`Performance` on x86/scalar, `Size` on WASM - both `Average` precision but
+//! (`Performance` on x86/scalar, `Size` on WASM, both `Average` precision but
 //! WASM's `Size` flushes denormals via the `Crush` trick), so the tolerance is a
-//! loose relative bound. It is here to catch structural bugs (wrong sign, wrong
+//! loose relative bound. It is here to catch structural bugs: wrong sign, wrong
 //! identity, NaN where a number is expected, a backend that diverges from the
-//! others) - the things that had **zero** test coverage before this file
-//! existed. Tighten `TOL_*` and switch to a `Reference` policy for a precision
+//! others. Tighten `TOL_*` and switch to a `Reference` policy for a precision
 //! audit.
 #![cfg(any(
     target_arch = "x86",
@@ -198,7 +197,7 @@ macro_rules! math_suite {
                         0.5
                     }
                 };
-                // f32 tanh/exp lose to overflow well before libm does; the
+                // f32 tanh/exp lose to overflow well before libm does, so the
                 // gate stays in the principal region (large-x saturation bugs
                 // are flagged separately).
                 let small = |x: f32| if x.is_finite() { x % 20.0 } else { 1.0 };
@@ -294,7 +293,7 @@ macro_rules! math_suite {
                     TOL_F32,
                     |x: f32| if x.is_finite() { (x % 20.0).max(-0.9) } else { 0.5 }
                 );
-                // cos(x) - 1 == -2 sin²(x/2); the latter is the accurate oracle near 0
+                // cos(x) - 1 == -2 sin^2(x/2), the latter being the accurate oracle near 0
                 math_unary!(
                     $bl,
                     R,
@@ -334,12 +333,12 @@ macro_rules! math_suite {
                 math_unary!($bl, R, f32, log10, libm::log10f, TOL_F32, pos);
                 math_unary!($bl, R, f32, atanh, libm::atanhf, TOL_F32, unit);
                 // `safe`: finite, normal, nonzero, and comfortably away from the
-                // subnormal boundary - dodges the denormal-flush divergence and the
+                // subnormal boundary, which dodges the denormal-flush divergence and the
                 // hypot(0,0)/atan2(0,0) special cases. The magnitude floor matters on
                 // WASM, whose default policy is `Size` (Crush denormals via the
-                // `dt - (dt - x)` trick); that trick's ULP (~2*MIN_POSITIVE) also
+                // `dt - (dt - x)` trick), and that trick's ULP (~2*MIN_POSITIVE) also
                 // quantizes *normal* values within a few ULPs of MIN_POSITIVE. atan2 is
-                // ratio-sensitive, so such tiny inputs flip the result by O(1) - outside
+                // ratio-sensitive, so such tiny inputs flip the result by O(1), outside
                 // this gross-correctness gate (sign is preserved for quadrant coverage).
                 let safe = |x: f32| {
                     let v = if x.is_finite() { x % 1e3 } else { 1.0 };
@@ -351,7 +350,7 @@ macro_rules! math_suite {
                 };
                 math_binary!($bl, R, f32, atan2, libm::atan2f, TOL_F32, safe, safe);
                 math_binary!($bl, R, f32, hypot, libm::hypotf, TOL_F32, safe, safe);
-                // Positive base, exponent in [-8, 8]; see the f64 case above (#W11).
+                // Positive base, exponent in [-8, 8]. See the f64 case above.
                 math_binary!(
                     $bl,
                     R,
@@ -366,13 +365,24 @@ macro_rules! math_suite {
                     },
                     |y: f32| if y.is_finite() { y % 8.0 } else { 0.0 }
                 );
-                // compound(x, n) = (1+x)^n; oracle in f64 keeps x's low bits that (1+x)^n would lose
+                // compound(x, n) = (1+x)^n, with the f64 oracle keeping x's low bits that (1+x)^n would lose
                 math_binary!(
                     $bl,
                     R,
                     f32,
                     compound,
                     |x: f32, n: f32| libm::pow(1.0 + x as f64, n as f64) as f32,
+                    TOL_F32,
+                    |x: f32| if x.is_finite() { (x % 5.0).max(-0.9) } else { 0.5 },
+                    |n: f32| if n.is_finite() { n % 8.0 } else { 2.0 }
+                );
+                // compound_m1(x, n) = (1+x)^n - 1; same f64 oracle, minus one before narrowing
+                math_binary!(
+                    $bl,
+                    R,
+                    f32,
+                    compound_m1,
+                    |x: f32, n: f32| (libm::pow(1.0 + x as f64, n as f64) - 1.0) as f32,
                     TOL_F32,
                     |x: f32| if x.is_finite() { (x % 5.0).max(-0.9) } else { 0.5 },
                     |n: f32| if n.is_finite() { n % 8.0 } else { 2.0 }
@@ -680,7 +690,7 @@ macro_rules! math_suite {
                     TOL_F64,
                     |x: f64| if x.is_finite() { (x % 20.0).max(-0.9) } else { 0.5 }
                 );
-                // cos(x) - 1 == -2 sin²(x/2); the latter is the accurate oracle near 0
+                // cos(x) - 1 == -2 sin^2(x/2), the latter being the accurate oracle near 0
                 math_unary!(
                     $bl,
                     R,
@@ -731,9 +741,9 @@ macro_rules! math_suite {
                 };
                 math_binary!($bl, R, f64, atan2, libm::atan2, TOL_F64, safe, safe);
                 math_binary!($bl, R, f64, hypot, libm::hypot, TOL_F64, safe, safe);
-                // Positive base, exponent in [-8, 8] -- covers the exponent-split path in
+                // Positive base, exponent in [-8, 8], covering the exponent-split path in
                 // both directions, including the power-of-two bases and negative exponents
-                // that #W11 silently flushed to zero.
+                // an unguarded split silently flushes to zero.
                 math_binary!(
                     $bl,
                     R,
@@ -755,6 +765,19 @@ macro_rules! math_suite {
                     f64,
                     compound,
                     |x: f64, n: f64| libm::pow(1.0 + x, n),
+                    TOL_F64,
+                    |x: f64| if x.is_finite() { (x % 5.0).max(-0.9) } else { 0.5 },
+                    |n: f64| if n.is_finite() { n % 8.0 } else { 2.0 }
+                );
+                // compound_m1(x, n) = (1+x)^n - 1. The f64 oracle cancels for small results,
+                // so the domain here keeps |n * ln(1+x)| away from zero. The small-argument
+                // accuracy that motivates the function is pinned in `removable_singularities`.
+                math_binary!(
+                    $bl,
+                    R,
+                    f64,
+                    compound_m1,
+                    |x: f64, n: f64| libm::expm1(n * libm::log1p(x)),
                     TOL_F64,
                     |x: f64| if x.is_finite() { (x % 5.0).max(-0.9) } else { 0.5 },
                     |n: f64| if n.is_finite() { n % 8.0 } else { 2.0 }
@@ -987,9 +1010,9 @@ mod neon {
 // heavily on the precision tier (`if const { P::PRECISION ... }`), and the
 // default suite above only exercises the `Performance` policy. Running the same
 // functions under each preset (`UltraPerformance`..`Reference`) lights up those
-// branches. Tolerances here are deliberately loose - this is a branch-exercising
-// smoke gate (wrong function / NaN / sign / gross error), not a precision audit;
-// the tight gate stays at the default policy above.
+// branches. Tolerances here are deliberately loose, since this is a branch-exercising
+// smoke gate (wrong function / NaN / sign / gross error), not a precision audit. The
+// tight gate stays at the default policy above.
 // ===========================================================================
 use thermite::math::policy::policies::{HighPerformance, Precision, Reference, Size, UltraPerformance};
 
@@ -1334,7 +1357,7 @@ macro_rules! f64_policy_fns {
             tanpidom
         );
         // Low-precision sinc is only well-behaved at moderate magnitudes (NaN at 0 under
-        // check_overflow-off Ultra/High; approximate `1/x` blows up for tiny |x|).
+        // check_overflow-off Ultra/High, and approximate `1/x` blows up for tiny |x|).
         let sincdom = |x: f64| {
             let v = x % 100.0;
             if v.is_normal() && v.abs() >= 0.1 { v } else { 1.7 }
@@ -1440,7 +1463,7 @@ macro_rules! f64_policy_fns {
 // loose on purpose: e.g. f32 `log2_p::<UltraPerformance>(1.001)` returns ~0.058
 // vs a true ~0.00144 (poor near x==1, where log has cancellation) - whether
 // that error is acceptable for those tiers is a precision question for the
-// maintainer; here we only exercise the policy branches. The tight precision
+// maintainer. Here we only exercise the policy branches. The tight precision
 // gate stays in `math_suite!` at the default policy.
 const POL_F32_LOOSE: f64 = 2.0e-1;
 const POL_F32_TIGHT: f64 = 5.0e-3;

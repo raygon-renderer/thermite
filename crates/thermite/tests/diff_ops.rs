@@ -1,8 +1,8 @@
 //! Differential tests: every SIMD backend register op vs. the `Scalar`
-//! reference, across the element-type × width matrix.
+//! reference, across the element-type x width matrix.
 //!
 //! See `harness/mod.rs` for the methodology. Only built where the x86 SIMD
-//! backends exist; elsewhere there is nothing to differentiate against.
+//! backends exist, since elsewhere there is nothing to differentiate against.
 #![cfg(any(
     target_arch = "x86",
     target_arch = "x86_64",
@@ -52,9 +52,9 @@ macro_rules! diff_shift {
 // ---------------------------------------------------------------------------
 // Per-lane variable shift (`shlv`/`shrv`/`srav`): the shift amount is itself a
 // vector, one count per lane. On SSE the 64-bit forms have no native
-// instruction and are polyfilled - a lane-swap bug in the 64-bit polyfill (used
-// by v1 and v2) silently transposed lanes and was previously untested, since
-// `diff_shift!` only covers the uniform scalar-amount form. Differential vs the
+// instruction and are polyfilled. A lane-swap bug in the 64-bit polyfill (used
+// by v1 and v2) silently transposes lanes, and `diff_shift!` only covers the
+// uniform scalar-amount form, so it would not see one. Differential vs the
 // scalar backend over per-lane random shift amounts in `[0, bits)`.
 // ---------------------------------------------------------------------------
 macro_rules! diff_varshift {
@@ -106,23 +106,23 @@ macro_rules! float_reg_tests {
             diff_unary!($label, UT, RF, neg, Tol::Exact);
             diff_unary!($label, UT, RF, abs, Tol::Exact);
             // Rel(0.0) == exact, except it treats +0.0 and -0.0 as equal
-            // (numerically they are; which signed zero min/max returns is
+            // (numerically they are, and which signed zero min/max returns is
             // unspecified and differs harmlessly between backends).
             diff_binary_finite!($label, UT, RF, min, Tol::Rel(0.0));
             diff_binary_finite!($label, UT, RF, max, Tol::Rel(0.0));
             diff_unary!($label, UT, RF, floor, Tol::Exact);
             diff_unary!($label, UT, RF, ceil, Tol::Exact);
             diff_unary!($label, UT, RF, trunc, Tol::Exact);
-            // NOTE: `round` is intentionally excluded - its half-way rounding
+            // NOTE: `round` is intentionally excluded, as its half-way rounding
             // direction diverges between backends (scalar = half-away-from-zero,
             // x86 = half-to-even).
 
             // NOTE: `rcp`/`rsqrt` are hardware approximations and flush
-            // denormals; they are accuracy-tested as a property (rcp(x)*x ≈ 1)
+            // denormals, so they are accuracy-tested as a property (rcp(x)*x ≈ 1)
             // in `approx_recip.rs`, not differentially against exact scalar.
 
             // Horizontal reductions. `sum_elements` is non-associative so its
-            // tree-vs-fold rounding diverges on adversarial inputs - it gets a
+            // tree-vs-fold rounding diverges on adversarial inputs, so it gets a
             // tame-input accuracy test in `approx_recip.rs` instead. min/max
             // are associative, so they must agree (modulo NaN).
             diff_reduce_finite!($label, UT, RF, min_element, Tol::Rel(0.0));
@@ -133,8 +133,8 @@ macro_rules! float_reg_tests {
 
 // ---------------------------------------------------------------------------
 // Integer register suite. Every op below is correct on every integer
-// width/backend - the two defects the harness originally found here
-// (32-bit reductions, 64-bit `mul`) have been fixed.
+// width/backend. The two defects the harness originally found here were
+// 32-bit reductions and 64-bit `mul`.
 // ---------------------------------------------------------------------------
 macro_rules! int_reg_tests {
     ($modname:ident, $ut_backend:ty, $reg:ident, $label:expr, signed) => {

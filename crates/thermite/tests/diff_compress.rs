@@ -72,7 +72,7 @@ fn v3_table() {
     check::<<X86V3 as Simd>::f32x4>(0..16);
     check::<<X86V3 as Simd>::f64x4>(0..16);
     // The integer 64x4 registers route compress through their own `permutev`
-    // override (the doubled-index `vpermd`), not f64x4's - cover both.
+    // override (the doubled-index `vpermd`), not f64x4's, so cover both.
     check::<<X86V3 as Simd>::i64x4>(0..16);
     check::<<X86V3 as Simd>::u64x4>(0..16);
     check::<<X86V3 as Simd>::i64x2>(0..4);
@@ -85,14 +85,14 @@ fn v3_wide() {
     check::<<X86V3 as Simd>::u16x16>(0..(1 << 16));
     check::<<X86V3 as Simd>::i8x16>(0..(1 << 16));
     check::<<X86V3 as Simd>::u8x16>(0..(1 << 16));
-    // Native-width byte vectors (32 lanes on AVX2) - exercises 4-group routing.
+    // Native-width byte vectors (32 lanes on AVX2), exercising 4-group routing.
     check::<<X86V3 as NativeSimd>::i8xN>(sample(32, 20000));
     check::<<X86V3 as NativeSimd>::u8xN>(sample(32, 20000));
 }
 
 #[test]
 fn v3_emulated() {
-    // f32x16 is `ArrayRegister<F32x8V3, 2>` - no per-register override, so this
+    // f32x16 is `ArrayRegister<F32x8V3, 2>` with no per-register override, so this
     // exercises the `HAS_PERMUTEV` default path on an emulated wide register.
     check::<<X86V3 as Simd>::f32x16>(0..(1 << 16));
     check::<<X86V3 as Simd>::i32x16>(0..(1 << 16));

@@ -4,7 +4,7 @@
 //! - `addsub` is exact (a single IEEE add per lane), so it is differenced
 //!   bit-for-bit against the `Scalar` backend, exactly like `add`/`sub`.
 //! - `fmaddsub` / `fmsubadd` are a fused multiply then alternating add/sub. A
-//!   native FMA backend (v3) rounds once; the emulated backends round twice, so
+//!   native FMA backend (v3) rounds once while the emulated backends round twice, so
 //!   they legitimately differ. They are therefore checked against a
 //!   correctly-rounded `mul_add` oracle with a bound relative to the *operand*
 //!   magnitude `|a*b| + |c|` (not the possibly-cancelled result), which both
@@ -43,7 +43,7 @@ macro_rules! oracle_fused {
         let b_in = harness::corpus::<E>(lanes, &mut rng);
         let c_in = harness::corpus::<E>(lanes, &mut rng);
         // Floor the bound so subnormal/zero results don't demand impossible
-        // absolute accuracy; still far below any parity/sign error's magnitude.
+        // absolute accuracy, and still far below any parity/sign error's magnitude.
         let floor = (<E>::MIN_POSITIVE as f64) * 8.0;
         for ((a, b), c) in a_in.iter().zip(b_in.iter()).zip(c_in.iter()) {
             // Fused-vs-unfused divergence on inf/NaN is not meaningful here.
@@ -87,8 +87,8 @@ macro_rules! oracle_fused {
 }
 
 /// Masked binary diff (`addsub_c`/`_m`/`_z`) vs. the scalar backend. `_m`/`_z`
-/// are exact (blendv / bitand over the exact `addsub`); `_c` is exact up to the
-/// sign of a zero result - see the comment on the assertion below.
+/// are exact (blendv / bitand over the exact `addsub`), and `_c` is exact up to the
+/// sign of a zero result. See the comment on the assertion below.
 macro_rules! diff_addsub_masked {
     ($label:expr, $ut:ty, $rf:ty) => {{
         type E = <$ut as Register>::Element;

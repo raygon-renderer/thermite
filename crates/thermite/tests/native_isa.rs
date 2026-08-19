@@ -1,10 +1,10 @@
-//! `HasIsa::Native` - the backend type reachable from any vector.
+//! `HasIsa::Native`, the backend type reachable from any vector.
 //!
 //! Two properties are load-bearing and neither is visible to a functional
 //! test, so they are asserted directly here:
 //!
 //! 1. **`Native` names the backend that actually executes the vector.** A
-//!    full-width slot reports its own backend; an emulated `ArrayRegister`
+//!    full-width slot reports its own backend, while an emulated `ArrayRegister`
 //!    slot reports whatever its *lanes* run on, which is the owning backend
 //!    for `ArrayRegister<F32x4V1, 2>` but `Scalar` for the sub-native
 //!    `ArrayRegister<i16, 2>` shared by every backend. A slot that silently
@@ -83,7 +83,7 @@ fn x86_slots_name_their_own_backend() {
 
 /// The documented exception: sub-native slots that are `ArrayRegister`s of
 /// *scalar* lanes on every backend. `Scalar` is the correct answer for what
-/// executes them - and the reason `Native` must not be read as "what machine
+/// executes them, and the reason `Native` must not be read as "what machine
 /// am I on".
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]

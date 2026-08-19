@@ -1,9 +1,9 @@
 //! `expint` on `Compensated`, over both regimes of the shared kernel.
 //!
-//! Regression: everything with x >= 1 returned NaN. That is the continued-fraction half,
-//! whose Lentz sentinel is reciprocated on the first step - and the inherited default,
-//! `MIN_POSITIVE`, inverts to 4.5e307, past the ~1.3e300 where compensated
-//! multiplication's Dekker 2^27+1 splitter overflows. `Compensated` now overrides
+//! Regression: everything with x >= 1 returns NaN unguarded. That is the
+//! continued-fraction half, whose Lentz sentinel is reciprocated on the first step, and
+//! the inherited default, `MIN_POSITIVE`, inverts to 4.5e307, past the ~1.3e300 where
+//! compensated multiplication's Dekker 2^27+1 splitter overflows. `Compensated` overrides
 //! `ExpIntDetails::cf_tiny`, as `Complex` already did for the same reason.
 
 use thermite::prelude::*;

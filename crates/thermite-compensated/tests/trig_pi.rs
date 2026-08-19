@@ -2,8 +2,8 @@
 //!
 //! The inherited default is `sin_cos(self * PI)`, which rounds the product before any
 //! reduction happens and so carries an absolute error of about `|x| * 2^-106` into the
-//! argument. `Compensated` overrides it to reduce first - `sin(pi(n + r)) = (-1)^n
-//! sin(pi r)` with `x - round(x)` exact - so the only rounded product involves
+//! argument. `Compensated` overrides it to reduce first (`sin(pi(n + r)) = (-1)^n
+//! sin(pi r)` with `x - round(x)` exact), so the only rounded product involves
 //! `|r| <= 1/2` and the error does not grow with the argument. That matters because the
 //! gamma reflection goes through `sin_pi` at every negative argument, large ones
 //! included.
@@ -11,7 +11,7 @@
 //! # Reference values
 //!
 //! mpmath 1.3.0 at 40 digits, as `(hi, lo)` pairs so both words of the result are
-//! checked - collapsing to one `f64` would only ever verify the top half, which is the
+//! checked, since collapsing to one `f64` would only ever verify the top half, which is the
 //! half this type is not about.
 //!
 //! Generated from `mp.mpf(x)` on the Python **float**, never from the decimal string.

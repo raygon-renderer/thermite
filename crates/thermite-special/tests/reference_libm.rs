@@ -2,7 +2,7 @@
 //!
 //! The thermite-special half of the contract that `thermite/tests/reference_libm.rs`
 //! covers for the core transcendentals. Only the functions libm actually provides get a
-//! reference arm; everything else here (Lambert W, digamma, the elliptic integrals, the
+//! reference arm. Everything else here (Lambert W, digamma, the elliptic integrals, the
 //! activations) has no counterpart to be identical to, so it is deliberately absent.
 #![cfg(any(
     target_arch = "x86",
@@ -21,8 +21,29 @@ use thermite_special::{RealSpecialMathWithPolicy, SpecialMathWithPolicy};
 /// Spread over the interesting structure: negative reflection, the poles at the
 /// non-positive integers, the lgamma zeros at 1 and 2, and ordinary values.
 const PROBES: &[f64] = &[
-    0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 4.25, 7.5, 12.0, 30.0, 0.1, 0.01, 1e-5, -0.5, -1.5, -2.5, -3.75, -8.25, 0.0, -0.0,
-    f64::INFINITY, f64::NEG_INFINITY, f64::NAN,
+    0.5,
+    1.0,
+    1.5,
+    2.0,
+    2.5,
+    3.0,
+    4.25,
+    7.5,
+    12.0,
+    30.0,
+    0.1,
+    0.01,
+    1e-5,
+    -0.5,
+    -1.5,
+    -2.5,
+    -3.75,
+    -8.25,
+    0.0,
+    -0.0,
+    f64::INFINITY,
+    f64::NEG_INFINITY,
+    f64::NAN,
 ];
 
 fn same<E: PartialEq + Copy>(a: E, b: E, nan_a: bool, nan_b: bool) -> bool {

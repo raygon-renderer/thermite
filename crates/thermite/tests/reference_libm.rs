@@ -3,7 +3,7 @@
 //! This is the test that gives that definition teeth. Every function with a reference
 //! arm in `math/specialized/{ps,pd}.rs` is checked lane-for-lane against the scalar
 //! `libm` entry point it claims to reproduce, with an exact bit comparison rather than
-//! a tolerance - a one-ulp difference here is a bug, not noise.
+//! a tolerance. A one-ulp difference here is a bug, not noise.
 //!
 //! Both the 1-lane scalar backend and a native wide backend are covered, because the
 //! contract is that the tier is backend- and lane-count-independent. If those two ever
@@ -37,8 +37,28 @@ fn same_f64(a: f64, b: f64) -> bool {
 }
 
 /// Interesting inputs every function gets tested on regardless of its random range.
-const EDGES_F32: &[f32] = &[0.0, -0.0, 1.0, -1.0, 0.5, 2.0, f32::INFINITY, f32::NEG_INFINITY, f32::NAN];
-const EDGES_F64: &[f64] = &[0.0, -0.0, 1.0, -1.0, 0.5, 2.0, f64::INFINITY, f64::NEG_INFINITY, f64::NAN];
+const EDGES_F32: &[f32] = &[
+    0.0,
+    -0.0,
+    1.0,
+    -1.0,
+    0.5,
+    2.0,
+    f32::INFINITY,
+    f32::NEG_INFINITY,
+    f32::NAN,
+];
+const EDGES_F64: &[f64] = &[
+    0.0,
+    -0.0,
+    1.0,
+    -1.0,
+    0.5,
+    2.0,
+    f64::INFINITY,
+    f64::NEG_INFINITY,
+    f64::NAN,
+];
 
 macro_rules! suite {
     (
@@ -224,7 +244,7 @@ macro_rules! f64_suite {
 
 /// The f32 functions with no libm counterpart, composed in f64 and rounded once.
 ///
-/// Bit-identity is not the contract here - there is no external implementation to be
+/// Bit-identity is not the contract here, as there is no external implementation to be
 /// identical to. Two checks instead: hand-computed exact values pin each *definition*
 /// independently of the implementation (a wrong composition, `exp(x/2)` for `exp(x)/2`,
 /// fails loudly), and agreement with the `Best` tier confirms the two are computing the
@@ -254,7 +274,10 @@ mod composed_f32 {
             return;
         }
         let rel = ((reference - best) / reference).abs();
-        assert!(rel <= 1e-4, "{name}: Reference {reference:?} vs Best {best:?} (rel {rel:e})");
+        assert!(
+            rel <= 1e-4,
+            "{name}: Reference {reference:?} vs Best {best:?} (rel {rel:e})"
+        );
     }
 
     #[test]
@@ -269,7 +292,11 @@ mod composed_f32 {
         // exp2_m1(x) = 2^x - 1, exp10_m1(x) = 10^x - 1
         spot("exp2_m1(3)", V::splat(3.0).exp2_m1_p::<Reference>().extract::<0>(), 7.0);
         spot("exp2_m1(0)", V::splat(0.0).exp2_m1_p::<Reference>().extract::<0>(), 0.0);
-        spot("exp10_m1(2)", V::splat(2.0).exp10_m1_p::<Reference>().extract::<0>(), 99.0);
+        spot(
+            "exp10_m1(2)",
+            V::splat(2.0).exp10_m1_p::<Reference>().extract::<0>(),
+            99.0,
+        );
 
         // ln1m_expnx(x) = ln(1 - e^-x); at x = ln 2 that is ln(1/2) = -ln 2.
         spot(
@@ -281,7 +308,11 @@ mod composed_f32 {
         // log_n::<N>(x) = log base N
         spot("log_3(9)", V::splat(9.0).log_n_p::<Reference, 3>().extract::<0>(), 2.0);
         spot("log_2(8)", V::splat(8.0).log_n_p::<Reference, 2>().extract::<0>(), 3.0);
-        spot("log_10(1000)", V::splat(1000.0).log_n_p::<Reference, 10>().extract::<0>(), 3.0);
+        spot(
+            "log_10(1000)",
+            V::splat(1000.0).log_n_p::<Reference, 10>().extract::<0>(),
+            3.0,
+        );
     }
 
     #[test]
@@ -292,7 +323,11 @@ mod composed_f32 {
             let t = -4.0 + (i as f32) * 0.2;
             let v = V::splat(t);
 
-            agrees("exph", v.exph_p::<Reference>().extract::<0>(), v.exph_p::<Best>().extract::<0>());
+            agrees(
+                "exph",
+                v.exph_p::<Reference>().extract::<0>(),
+                v.exph_p::<Best>().extract::<0>(),
+            );
             agrees(
                 "exp2_m1",
                 v.exp2_m1_p::<Reference>().extract::<0>(),

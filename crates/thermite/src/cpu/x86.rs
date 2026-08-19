@@ -28,8 +28,8 @@ use super::{CacheInfo, CacheKind, CoreType, CpuInfo};
 /// `avx512-tier1..4` crate features and `backend::x86::avx512f::tiers` intrinsic
 /// modules are cut at. Each tier implies every lower one.
 ///
-/// The ladder is this crate's, not Intel's -- there is no official "tier"
-/// concept -- so [`Features::avx512_tier`] only reports which rung the hardware
+/// The ladder is this crate's, not Intel's, as there is no official "tier"
+/// concept, so [`Features::avx512_tier`] only reports which rung the hardware
 /// reaches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Avx512Tier {
@@ -104,7 +104,7 @@ fn max_leaves() -> (u32, u32) {
 ///
 /// Hygon is a licensed Zen derivative and reports `HygonGenuine` while
 /// implementing the same leaves, so it counts. Other x86 vendors exist and are
-/// deliberately *not* enumerated here -- Zhaoxin (`  Shanghai  ` and the
+/// deliberately *not* enumerated here. Zhaoxin (`  Shanghai  ` and the
 /// inherited VIA `CentaurHauls`) ships AVX2 parts, and the point of the
 /// probe-then-fall-through structure below is that an unrecognised vendor still
 /// gets whichever leaves it does implement. This only picks the order to try.
@@ -136,7 +136,7 @@ fn family() -> u32 {
 ///
 /// The two fields have different rules and mixing them up is the classic bug:
 /// the extended-family field applies only to base family `0xf`, while the
-/// extended-model field applies to base families `0x6` **and** `0xf` -- which
+/// extended-model field applies to base families `0x6` **and** `0xf`, which
 /// is exactly the pair that matters, since every Intel Core part is family 6
 /// and every AMD Zen part is family `0x17`+ (base `0xf`, extended).
 #[inline]
@@ -238,7 +238,7 @@ fn read_topology(leaf: u32) -> (Option<u16>, Option<u16>) {
 /// AMD's own topology leaves.
 ///
 /// Necessary because AMD parts advertise a max basic leaf well above `0xB`
-/// while implementing neither `0xB` nor `0x1F` -- both return all zeros, so
+/// while implementing neither `0xB` nor `0x1F`, both of which return all zeros, so
 /// bounding by the max leaf is not enough to know the standard enumeration
 /// exists. Measured on a 16-core Zen: `max_basic = 0xD`, leaf `0xB` all zeros,
 /// while `0x80000008`/`0x8000001E` carry the real counts. Linux's topology code
@@ -252,7 +252,7 @@ fn read_topology_amd(max_ext: u32) -> (Option<u16>, Option<u16>) {
         logical = u16::try_from((cpuid(0x8000_0008, 0).ecx & 0xff) + 1).ok();
     }
 
-    // EBX[15:8] is threads-per-core minus one -- but only from family 0x17
+    // EBX[15:8] is threads-per-core minus one, but only from family 0x17
     // (Zen). Family 0x15 advertises the leaf with a *non-zero* SMT field that
     // does not mean this, which is the exact trap Linux carries a patch for.
     // It also needs TopoExt (0x80000001:ECX[22]).
@@ -273,7 +273,7 @@ pub fn detect() -> CpuInfo {
         let line = ((cpuid(1, 0).ebx >> 8) & 0xff) * 8;
         if line > 0 {
             info.line_size = Some(line);
-            // x86 has no separate writeback granule; a line is the unit of
+            // x86 has no separate writeback granule, and a line is the unit of
             // coherence, so false-sharing padding is line-sized.
             info.writeback_granule = Some(line);
         }
@@ -395,7 +395,7 @@ pub struct Features {
 
     // AVX-512. `avx512f` gates every `avx512*` flag below: they are all `false`
     // unless the foundation itself is usable, so one sub-feature can be tested
-    // on its own. (`gfni`/`vaes`/`vpclmulqdq` are NOT in this group -- see below.)
+    // on its own. (`gfni`/`vaes`/`vpclmulqdq` are NOT in this group, see below.)
     pub avx512f: bool,
     pub avx512cd: bool,
     pub avx512bw: bool,
@@ -413,12 +413,12 @@ pub struct Features {
     pub avx512bf16: bool,
     /// IEEE half-precision *arithmetic* on ZMM, not merely F16C conversion.
     /// Sapphire Rapids and later on the Intel side, absent from Zen 4/5, which
-    /// is why no [`Avx512Tier`] requires it; part of the AVX10.1 baseline.
+    /// is why no [`Avx512Tier`] requires it. Part of the AVX10.1 baseline.
     pub avx512fp16: bool,
 
-    // Enumerated among the AVX-512 bits, but independent features -- Zen 3 has
+    // Enumerated among the AVX-512 bits, but independent features. Zen 3 has
     // VAES and VPCLMULQDQ with AVX2 and no AVX-512 whatsoever (GFNI arrived with
-    // Zen 4). Never gated on AVX-512; tier 3 wants their 512-bit forms, which is
+    // Zen 4). Never gated on AVX-512, and tier 3 wants their 512-bit forms, which is
     // why `avx512_tier` only consults them alongside `avx512f`.
     /// Needs no AVX: the legacy SSE encoding of `gf2p8mulb` and friends runs on
     /// any CPU reporting the bit.
@@ -430,7 +430,7 @@ pub struct Features {
     /// `1` = AVX10.1, `2` = AVX10.2, higher = a future superset. Raw so an
     /// unknown future version is preserved; [`Features::avx10`] maps it to the
     /// [`Avx10Version`] rungs this crate knows. Like the `avx512*` flags it
-    /// means **usable** -- zeroed unless the OS saves ZMM/opmask state -- and a
+    /// means **usable** (zeroed unless the OS saves ZMM/opmask state), and a
     /// non-zero version implies every `avx512*` flag above is set (see
     /// [`features`]).
     pub avx10_version: u8,
@@ -451,7 +451,7 @@ impl Features {
             return None;
         }
         // tier2: + BW + DQ + VL (Skylake-SP shipped the three together, and no
-        // CPU has BW/DQ without VL -- only Knights Landing lacked all three).
+        // CPU has BW/DQ without VL, and only Knights Landing lacked all three).
         if !(self.avx512bw && self.avx512dq && self.avx512vl) {
             return Some(Avx512Tier::Tier1);
         }
@@ -487,7 +487,7 @@ impl Features {
     }
 }
 
-/// Probe the CPU. Costs a few `cpuid`s; callers cache the result.
+/// Probe the CPU. Costs a few `cpuid`s, so callers cache the result.
 pub fn features() -> Features {
     let mut f = Features::default();
 
@@ -509,7 +509,7 @@ pub fn features() -> Features {
 
     let osxsave = bit(leaf1.ecx, 27);
     // SAFETY: `xgetbv` #UDs unless CR4.OSXSAVE is set, which is exactly what
-    // CPUID.1:ECX[27] reports; guarded above.
+    // CPUID.1:ECX[27] reports, guarded above.
     let xcr0 = if osxsave { unsafe { _xgetbv(0) } } else { 0 };
     let os_saves_ymm = osxsave && (xcr0 & XCR0_AVX) == XCR0_AVX;
     // AVX-512 and AVX10 both need three more XCR0 components on top of AVX's:
@@ -523,7 +523,7 @@ pub fn features() -> Features {
 
     if max_basic >= 7 {
         let leaf7 = cpuid(7, 0);
-        // Subleaf 0's EAX reports the max subleaf; subleaf 1 carries AVX512-BF16
+        // Subleaf 0's EAX reports the max subleaf, and subleaf 1 carries AVX512-BF16
         // and the AVX10 enumeration bit, so check before reading.
         let leaf7_1 = (leaf7.eax >= 1).then(|| cpuid(7, 1));
 
@@ -571,11 +571,11 @@ pub fn features() -> Features {
         f.vpclmulqdq = f.avx && bit(leaf7.ecx, 10);
 
         // --- AVX10 ------------------------------------------------------
-        // 7:1 EDX[19] only says leaf 0x24 is valid; the capability itself is
+        // 7:1 EDX[19] only says leaf 0x24 is valid, and the capability itself is
         // that leaf's converged version number. The 256-bit-max option (and
         // with it the vector-length enumeration in 0x24 EBX[18:16]) was
-        // dropped from the spec in rev 2.0 -- AVX10 always means all three
-        // widths -- so the length bits are deliberately not consulted: the SDM
+        // dropped from the spec in rev 2.0 (AVX10 always means all three
+        // widths), so the length bits are deliberately not consulted: the SDM
         // now marks them reserved-at-1 purely for software written against the
         // original spec (Linux/KVM read only the version too). Usability is
         // therefore gated on the same OS ZMM state as AVX-512.

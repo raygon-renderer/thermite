@@ -18,6 +18,7 @@ pub(crate) mod f32_table {
     pub const FRAC_1_SQRT_5: (f32, f32) = (f32::from_bits(0x3EE4F92E), f32::from_bits(0x3EE4F92F)); // 0.4472135954999579392818347 (RD/RU)
     pub const FRAC_2_PI: (f32, f32) = (f32::from_bits(0x3F22F983), f32::from_bits(0x3F22F984)); // 0.6366197723675813430755351 (RD/RU)
     pub const FRAC_1_SQRT_PI: (f32, f32) = (f32::from_bits(0x3F106EBA), f32::from_bits(0x3F106EBB)); // 0.5641895835477562869480795 (RD/RU)
+    pub const FRAC_1_SQRT_SQRT_PI: (f32, f32) = (f32::from_bits(0x3F4049C3), f32::from_bits(0x3F4049C4)); // 0.751125544464942482858703 (RD/RU)
     pub const FRAC_2_SQRT_PI: (f32, f32) = (f32::from_bits(0x3F906EBA), f32::from_bits(0x3F906EBB)); // 1.128379167095512573896159 (RD/RU)
     pub const FRAC_SQRT_PI_2: (f32, f32) = (f32::from_bits(0x3F62DFC4), f32::from_bits(0x3F62DFC5)); // 0.8862269254527580136490837 (RD/RU)
     pub const FRAC_1_SQRT_TAU: (f32, f32) = (f32::from_bits(0x3ECC4229), f32::from_bits(0x3ECC422A)); // 0.3989422804014326779399461 (RD/RU)
@@ -136,6 +137,7 @@ pub(crate) mod f64_table {
     pub const FRAC_1_SQRT_5: (f64, f64) = (f64::from_bits(0x3FDC9F25C5BFEDD9), f64::from_bits(0x3FDC9F25C5BFEDDA)); // 0.4472135954999579392818347 (RD/RU)
     pub const FRAC_2_PI: (f64, f64) = (f64::from_bits(0x3FE45F306DC9C882), f64::from_bits(0x3FE45F306DC9C883)); // 0.6366197723675813430755351 (RD/RU)
     pub const FRAC_1_SQRT_PI: (f64, f64) = (f64::from_bits(0x3FE20DD750429B6D), f64::from_bits(0x3FE20DD750429B6E)); // 0.5641895835477562869480795 (RD/RU)
+    pub const FRAC_1_SQRT_SQRT_PI: (f64, f64) = (f64::from_bits(0x3FE809387015590F), f64::from_bits(0x3FE8093870155910)); // 0.751125544464942482858703 (RD/RU)
     pub const FRAC_2_SQRT_PI: (f64, f64) = (f64::from_bits(0x3FF20DD750429B6D), f64::from_bits(0x3FF20DD750429B6E)); // 1.128379167095512573896159 (RD/RU)
     pub const FRAC_SQRT_PI_2: (f64, f64) = (f64::from_bits(0x3FEC5BF891B4EF6A), f64::from_bits(0x3FEC5BF891B4EF6B)); // 0.8862269254527580136490837 (RD/RU)
     pub const FRAC_1_SQRT_TAU: (f64, f64) = (f64::from_bits(0x3FD9884533D43650), f64::from_bits(0x3FD9884533D43651)); // 0.3989422804014326779399461 (RD/RU)
@@ -258,6 +260,7 @@ pub mod nearest {
         pub const FRAC_1_SQRT_5: f32 = f32::from_bits(0x3EE4F92E);
         pub const FRAC_2_PI: f32 = f32::from_bits(0x3F22F983);
         pub const FRAC_1_SQRT_PI: f32 = f32::from_bits(0x3F106EBB);
+        pub const FRAC_1_SQRT_SQRT_PI: f32 = f32::from_bits(0x3F4049C4);
         pub const FRAC_2_SQRT_PI: f32 = f32::from_bits(0x3F906EBB);
         pub const FRAC_SQRT_PI_2: f32 = f32::from_bits(0x3F62DFC5);
         pub const FRAC_1_SQRT_TAU: f32 = f32::from_bits(0x3ECC422A);
@@ -375,6 +378,7 @@ pub mod nearest {
         pub const FRAC_1_SQRT_5: f64 = f64::from_bits(0x3FDC9F25C5BFEDD9);
         pub const FRAC_2_PI: f64 = f64::from_bits(0x3FE45F306DC9C883);
         pub const FRAC_1_SQRT_PI: f64 = f64::from_bits(0x3FE20DD750429B6D);
+        pub const FRAC_1_SQRT_SQRT_PI: f64 = f64::from_bits(0x3FE8093870155910);
         pub const FRAC_2_SQRT_PI: f64 = f64::from_bits(0x3FF20DD750429B6D);
         pub const FRAC_SQRT_PI_2: f64 = f64::from_bits(0x3FEC5BF891B4EF6B);
         pub const FRAC_1_SQRT_TAU: f64 = f64::from_bits(0x3FD9884533D43651);

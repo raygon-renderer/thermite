@@ -41,7 +41,9 @@ fn contains_dd<W: WideningPolicy>(i: I<W>, r: C) -> bool {
 }
 
 fn lcg(state: &mut u64) -> u64 {
-    *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *state = state
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     *state
 }
 
@@ -81,10 +83,68 @@ point_containment!(atan_contains, -50.0, 50.0, |i: I<Tightest>| i.atan(), |c: C|
 point_containment!(asin_contains, -1.0, 1.0, |i: I<Tightest>| i.asin(), |c: C| c.asin());
 point_containment!(acos_contains, -1.0, 1.0, |i: I<Tightest>| i.acos(), |c: C| c.acos());
 point_containment!(cbrt_contains, -1e5, 1e5, |i: I<Tightest>| i.cbrt(), |c: C| c.cbrt());
-point_containment!(exp_m1_contains, -5.0, 5.0, |i: I<Tightest>| i.exp_m1(), |c: C| c.exp_m1());
+point_containment!(exp_m1_contains, -5.0, 5.0, |i: I<Tightest>| i.exp_m1(), |c: C| c
+    .exp_m1());
 point_containment!(ln_1p_contains, -0.9, 1e5, |i: I<Tightest>| i.ln_1p(), |c: C| c.ln_1p());
 point_containment!(sinh_contains, -5.0, 5.0, |i: I<Tightest>| i.sinh(), |c: C| c.sinh());
 point_containment!(cosh_contains, -5.0, 5.0, |i: I<Tightest>| i.cosh(), |c: C| c.cosh());
+point_containment!(sinhc_contains, -5.0, 5.0, |i: I<Tightest>| i.sinhc(), |c: C| c.sinhc());
+point_containment!(atanhc_contains, -0.99, 0.99, |i: I<Tightest>| i.atanhc(), |c: C| c
+    .atanhc());
+
+/// `sinhc` and `atanhc` are even with their minimum at zero, so an interval
+/// straddling zero takes its lower bound from the mignitude rather than from
+/// either endpoint. A degenerate-point test cannot see that, so sample
+/// interiors of genuinely wide intervals.
+///
+/// Both are `>= 1` everywhere on their domains, which the enclosure must not
+/// contradict by more than the widening.
+#[test]
+fn even_quotients_enclose_straddling_intervals() {
+    let mut state = 0x51DE;
+
+    for _ in 0..5_000 {
+        let a = uniform(&mut state, -4.0, 4.0);
+        let w = uniform(&mut state, 0.0, 3.0);
+        let sh = iv::<Tightest>(a, a + w).sinhc();
+
+        // atanhc needs the whole interval inside (-1, 1).
+        let b = uniform(&mut state, -0.95, 0.90);
+        let bh = uniform(&mut state, b, 0.95);
+        let ah = iv::<Tightest>(b, bh).atanhc();
+
+        for t in [0.0, 0.25, 0.5, 0.75, 1.0] {
+            let p = a + w * t;
+            assert!(
+                contains_dd(sh, C::new(V1::splat(p)).sinhc()),
+                "sinhc over [{a}, {}] misses {p}: {:?}",
+                a + w,
+                bounds(sh)
+            );
+
+            let q = b + (bh - b) * t;
+            assert!(
+                contains_dd(ah, C::new(V1::splat(q)).atanhc()),
+                "atanhc over [{b}, {bh}] misses {q}: {:?}",
+                bounds(ah)
+            );
+        }
+
+        // Neither function dips below 1, so a non-positive lower bound would
+        // mean the mignitude branch was skipped entirely.
+        assert!(bounds(sh).0 > 0.0, "sinhc over [{a}, {}] lost its sign", a + w);
+        assert!(bounds(ah).0 > 0.0, "atanhc over [{b}, {bh}] lost its sign");
+    }
+}
+
+/// Outside `(-1, 1)` `atanhc` is empty, exactly as `atanh` is.
+#[test]
+fn atanhc_is_empty_off_its_domain() {
+    for (lo, hi) in [(1.5, 2.5), (-3.0, -1.0), (1.0, 4.0)] {
+        let r = iv::<Tightest>(lo, hi).atanhc();
+        assert!(r.is_empty().all(), "atanhc over [{lo}, {hi}] should be empty: {:?}", bounds(r));
+    }
+}
 
 /// Interval inputs: sample interior points and require containment of each.
 #[test]
@@ -185,15 +245,18 @@ fn loose_policy_widens_but_contains() {
             assert!(contains_dd(i, r), "{name} policy lost containment at exp({x})");
         }
 
-        // NOTE: no "looser is wider" assertion. The margin used to scale with
-        // the math policy tier. Since the 2026-08-15 sweep it is a measured
-        // per-function constant, so a looser `P` shifts the enclosure's
-        // centre (a cheaper kernel value) without widening it, and below
-        // `Average` the kernel is floored entirely. Containment asserted
+        // NOTE: no "looser is wider" assertion. The margin is a measured
+        // per-function constant rather than a function of the math policy
+        // tier, so a looser `P` shifts the enclosure's centre (a cheaper
+        // kernel value) without widening it, and below `Average` the kernel
+        // is floored entirely. Containment asserted
         // above is the guarantee. Relative width across policies is not.
         let (tl, th) = bounds(tight);
         let (ll, lh) = bounds(loosest);
-        assert!(tl <= th && ll <= lh, "both must be well-formed: [{tl}, {th}] [{ll}, {lh}]");
+        assert!(
+            tl <= th && ll <= lh,
+            "both must be well-formed: [{tl}, {th}] [{ll}, {lh}]"
+        );
     }
 }
 
@@ -203,7 +266,10 @@ fn constants_enclose() {
     let pi: I<Balanced> = <I<Balanced> as FloatConsts>::PI;
     let (lo, hi) = bounds(pi);
 
-    assert!(lo < std::f64::consts::PI || hi > std::f64::consts::PI, "PI must be a proper enclosure");
+    assert!(
+        lo < std::f64::consts::PI || hi > std::f64::consts::PI,
+        "PI must be a proper enclosure"
+    );
     assert!(lo <= std::f64::consts::PI && std::f64::consts::PI <= hi);
     assert!(hi - lo > 0.0, "PI enclosure must have positive width");
 
@@ -241,7 +307,12 @@ fn poly_encloses() {
             r = r * C::new(V1::splat(x)) + C::new(V1::splat(c));
         }
 
-        assert!(contains_dd(enclosed, r), "poly @ {x}: {:?} misses {:?}", bounds(enclosed), dd(r));
+        assert!(
+            contains_dd(enclosed, r),
+            "poly @ {x}: {:?} misses {:?}",
+            bounds(enclosed),
+            dd(r)
+        );
     }
 }
 
@@ -272,7 +343,11 @@ fn step_encloses_uncertain_lanes() {
     let edge: I<Balanced> = pt(1.0);
 
     let unsure: I<Balanced> = iv(0.0, 2.0);
-    assert_eq!(bounds(unsure.step(edge)), (0.0, 1.0), "uncertain comparison must give [0, 1]");
+    assert_eq!(
+        bounds(unsure.step(edge)),
+        (0.0, 1.0),
+        "uncertain comparison must give [0, 1]"
+    );
 
     let above: I<Balanced> = iv(1.5, 2.0);
     assert_eq!(bounds(above.step(edge)), (1.0, 1.0));
@@ -309,13 +384,35 @@ fn nth_root_odd_keeps_negative_branch() {
 // ---------------------------------------------------------------------------
 
 point_containment!(tan_contains, -1.4, 1.4, |i: I<Tightest>| i.tan(), |c: C| c.tan());
-point_containment!(sqrt1pm1_contains, -0.99, 1e6, |i: I<Tightest>| i.sqrt1pm1(), |c: C| c.sqrt1pm1());
-point_containment!(log2_p1_contains, -0.99, 1e6, |i: I<Tightest>| i.log2_p1(), |c: C| c.log2_p1());
-point_containment!(log10_p1_contains, -0.99, 1e6, |i: I<Tightest>| i.log10_p1(), |c: C| c.log10_p1());
-point_containment!(haversin_contains, -10.0, 10.0, |i: I<Tightest>| i.haversin(), |c: C| c.haversin());
-point_containment!(nth_root5_contains, -1e5, 1e5, |i: I<Tightest>| i.nth_root::<5>(), |c: C| c.nth_root::<5>());
-point_containment!(nth_root6_contains, 0.0, 1e5, |i: I<Tightest>| i.nth_root::<6>(), |c: C| c.nth_root::<6>());
-point_containment!(ln1m_expnx_contains, 1e-3, 30.0, |i: I<Tightest>| i.ln1m_expnx(), |c: C| c.ln1m_expnx());
+point_containment!(sqrt1pm1_contains, -0.99, 1e6, |i: I<Tightest>| i.sqrt1pm1(), |c: C| c
+    .sqrt1pm1());
+point_containment!(log2_p1_contains, -0.99, 1e6, |i: I<Tightest>| i.log2_p1(), |c: C| c
+    .log2_p1());
+point_containment!(log10_p1_contains, -0.99, 1e6, |i: I<Tightest>| i.log10_p1(), |c: C| c
+    .log10_p1());
+point_containment!(haversin_contains, -10.0, 10.0, |i: I<Tightest>| i.haversin(), |c: C| c
+    .haversin());
+point_containment!(
+    nth_root5_contains,
+    -1e5,
+    1e5,
+    |i: I<Tightest>| i.nth_root::<5>(),
+    |c: C| c.nth_root::<5>()
+);
+point_containment!(
+    nth_root6_contains,
+    0.0,
+    1e5,
+    |i: I<Tightest>| i.nth_root::<6>(),
+    |c: C| c.nth_root::<6>()
+);
+point_containment!(
+    ln1m_expnx_contains,
+    1e-3,
+    30.0,
+    |i: I<Tightest>| i.ln1m_expnx(),
+    |c: C| c.ln1m_expnx()
+);
 
 /// tan: tight on one branch, entire across a pole.
 #[test]
@@ -356,12 +453,27 @@ fn hypot_structure_and_containment() {
         assert!(contains_dd(i, r), "hypot({a}, {b}): {:?} misses {:?}", bounds(i), dd(r));
 
         let i3: I<Tightest> = <I<Tightest> as thermite::math::SpatialMath>::hypot_n([pt(a), pt(b), pt(1.0)]);
-        let r3 = <C as thermite::math::SpatialMath>::hypot_n([C::new(V1::splat(a)), C::new(V1::splat(b)), C::new(V1::ONE)]);
-        assert!(contains_dd(i3, r3), "hypot_n({a}, {b}, 1): {:?} misses {:?}", bounds(i3), dd(r3));
+        let r3 =
+            <C as thermite::math::SpatialMath>::hypot_n([C::new(V1::splat(a)), C::new(V1::splat(b)), C::new(V1::ONE)]);
+        assert!(
+            contains_dd(i3, r3),
+            "hypot_n({a}, {b}, 1): {:?} misses {:?}",
+            bounds(i3),
+            dd(r3)
+        );
 
         let ii: I<Tightest> = <I<Tightest> as thermite::math::SpatialMath>::inv_hypot_n([pt(a), pt(b), pt(1.0)]);
-        let ri = <C as thermite::math::SpatialMath>::inv_hypot_n([C::new(V1::splat(a)), C::new(V1::splat(b)), C::new(V1::ONE)]);
-        assert!(contains_dd(ii, ri), "inv_hypot_n({a}, {b}, 1): {:?} misses {:?}", bounds(ii), dd(ri));
+        let ri = <C as thermite::math::SpatialMath>::inv_hypot_n([
+            C::new(V1::splat(a)),
+            C::new(V1::splat(b)),
+            C::new(V1::ONE),
+        ]);
+        assert!(
+            contains_dd(ii, ri),
+            "inv_hypot_n({a}, {b}, 1): {:?} misses {:?}",
+            bounds(ii),
+            dd(ri)
+        );
     }
 }
 
@@ -388,7 +500,12 @@ fn log_domain_containment() {
         if hi_v - lo_v > 1e-6 {
             let i = pt::<Tightest>(hi_v).logsubexp(pt(lo_v));
             let r = C::new(V1::splat(hi_v)).logsubexp(C::new(V1::splat(lo_v)));
-            assert!(contains_dd(i, r), "logsubexp({hi_v}, {lo_v}): {:?} misses {:?}", bounds(i), dd(r));
+            assert!(
+                contains_dd(i, r),
+                "logsubexp({hi_v}, {lo_v}): {:?} misses {:?}",
+                bounds(i),
+                dd(r)
+            );
         }
     }
 
@@ -440,13 +557,23 @@ fn compound_and_powf_m1_contain() {
         let n = uniform(&mut state, -5.0, 5.0);
         let i = pt::<Tightest>(x).compound(pt(n));
         let r = C::new(V1::splat(x)).compound(C::new(V1::splat(n)));
-        assert!(contains_dd(i, r), "compound({x}, {n}): {:?} misses {:?}", bounds(i), dd(r));
+        assert!(
+            contains_dd(i, r),
+            "compound({x}, {n}): {:?} misses {:?}",
+            bounds(i),
+            dd(r)
+        );
 
         let b = uniform(&mut state, 0.1, 10.0);
         let e = uniform(&mut state, -3.0, 3.0);
         let i = pt::<Tightest>(b).powf_m1(pt(e));
         let r = C::new(V1::splat(b)).powf_m1(C::new(V1::splat(e)));
-        assert!(contains_dd(i, r), "powf_m1({b}, {e}): {:?} misses {:?}", bounds(i), dd(r));
+        assert!(
+            contains_dd(i, r),
+            "powf_m1({b}, {e}): {:?} misses {:?}",
+            bounds(i),
+            dd(r)
+        );
     }
 }
 
@@ -483,9 +610,17 @@ fn poly_all_policies() {
             ("precision", CoreMathWithPolicy::poly_p::<Precision, 3>(i, &ic)),
             ("performance", CoreMathWithPolicy::poly_p::<Performance, 3>(i, &ic)),
             ("ultra", CoreMathWithPolicy::poly_p::<UltraPerformance, 3>(i, &ic)),
-            ("rev", CoreMathWithPolicy::poly_rev_p::<Precision, 3>(i, &[ic[2], ic[1], ic[0]])),
+            (
+                "rev",
+                CoreMathWithPolicy::poly_rev_p::<Precision, 3>(i, &[ic[2], ic[1], ic[0]]),
+            ),
         ] {
-            assert!(contains_dd(e, r), "poly {name} @ {x}: {:?} misses {:?}", bounds(e), dd(r));
+            assert!(
+                contains_dd(e, r),
+                "poly {name} @ {x}: {:?} misses {:?}",
+                bounds(e),
+                dd(r)
+            );
         }
     }
 }
@@ -502,8 +637,8 @@ fn poly_all_policies() {
 /// every tier.
 #[test]
 fn low_policy_tiers_still_contain() {
-    use thermite::math::policy::policies::{MediumPrecision, WorstPrecision};
     use thermite::math::policy::DefaultPolicy;
+    use thermite::math::policy::policies::{MediumPrecision, WorstPrecision};
     use thermite::math::{SpatialMathWithPolicy, TranscendentalMathWithPolicy};
 
     let mut state = 4242;
@@ -519,13 +654,22 @@ fn low_policy_tiers_still_contain() {
             ($label:literal, $m:ident, $r:expr) => {{
                 let truth: C = $r;
                 for (tier, got) in [
-                    ("Medium", TranscendentalMathWithPolicy::$m::<MediumPrecision<DefaultPolicy>>(p)),
-                    ("Worst", TranscendentalMathWithPolicy::$m::<WorstPrecision<DefaultPolicy>>(p)),
+                    (
+                        "Medium",
+                        TranscendentalMathWithPolicy::$m::<MediumPrecision<DefaultPolicy>>(p),
+                    ),
+                    (
+                        "Worst",
+                        TranscendentalMathWithPolicy::$m::<WorstPrecision<DefaultPolicy>>(p),
+                    ),
                 ] {
                     assert!(
                         contains_dd(got, truth),
                         "{} at {} tier lost containment @ x={x}: {:?} vs {:?}",
-                        $label, tier, bounds(got), dd(truth)
+                        $label,
+                        tier,
+                        bounds(got),
+                        dd(truth)
                     );
                     checked += 1;
                 }
@@ -550,10 +694,19 @@ fn low_policy_tiers_still_contain() {
         let q: I<Tightest> = pt(y);
         let cy = C::new(V1::splat(y));
         for (tier, got) in [
-            ("Medium", SpatialMathWithPolicy::hypot_p::<MediumPrecision<DefaultPolicy>>(p, q)),
-            ("Worst", SpatialMathWithPolicy::hypot_p::<WorstPrecision<DefaultPolicy>>(p, q)),
+            (
+                "Medium",
+                SpatialMathWithPolicy::hypot_p::<MediumPrecision<DefaultPolicy>>(p, q),
+            ),
+            (
+                "Worst",
+                SpatialMathWithPolicy::hypot_p::<WorstPrecision<DefaultPolicy>>(p, q),
+            ),
         ] {
-            assert!(contains_dd(got, cx.hypot(cy)), "hypot at {tier} lost containment @ ({x}, {y})");
+            assert!(
+                contains_dd(got, cx.hypot(cy)),
+                "hypot at {tier} lost containment @ ({x}, {y})"
+            );
             checked += 1;
         }
     }
@@ -567,25 +720,28 @@ fn low_policy_tiers_still_contain() {
 /// "optimizes" the floor away.
 #[test]
 fn kernel_policy_floor_is_applied() {
-    use thermite::math::policy::policies::{AveragePrecision, WorstPrecision};
-    use thermite::math::policy::DefaultPolicy;
     use thermite::math::TranscendentalMathWithPolicy;
+    use thermite::math::policy::DefaultPolicy;
+    use thermite::math::policy::policies::{AveragePrecision, WorstPrecision};
 
     let p: I<Tightest> = pt(40.0);
     let avg = TranscendentalMathWithPolicy::ln1m_expnx_p::<AveragePrecision<DefaultPolicy>>(p);
     let worst = TranscendentalMathWithPolicy::ln1m_expnx_p::<WorstPrecision<DefaultPolicy>>(p);
-    assert_eq!(bounds(avg), bounds(worst), "Worst must be floored to Average inside the interval math");
+    assert_eq!(
+        bounds(avg),
+        bounds(worst),
+        "Worst must be floored to Average inside the interval math"
+    );
 }
 
 /// REGRESSION: sin/cos containment at large arguments.
 ///
-/// Two independent failures used to live here, both measured before the fix.
-/// The quadrant index was computed as `floor(x * fl(2/pi))` in point
-/// arithmetic, so past |x| ~ 1e9 the rounding could hide a crossed extremum.
-/// And the `Average`-tier kernel's own range reduction collapses past
-/// |x| ~ 1e8 (absolute error 1.0 by 1e14, so the value is meaningless). The
-/// fixes are an interval-valued reduction through the `FRAC_2_PI` enclosure,
-/// plus a magnitude guard that degrades to `[-1, 1]`.
+/// Two independent failures meet here, both measured. A quadrant index computed
+/// as `floor(x * fl(2/pi))` in point arithmetic lets the rounding hide a crossed
+/// extremum past |x| ~ 1e9. And the `Average`-tier kernel's own range reduction
+/// collapses past |x| ~ 1e8 (absolute error 1.0 by 1e14, so the value is
+/// meaningless). Containment needs an interval-valued reduction through the
+/// `FRAC_2_PI` enclosure, plus a magnitude guard that degrades to `[-1, 1]`.
 ///
 /// Violations before the fix: 1485/6000 at 1e9, 1991/6000 at 1e12, with a
 /// worst miss of 2.0 (a complete sign flip).
@@ -593,7 +749,9 @@ fn kernel_policy_floor_is_applied() {
 fn trig_contains_at_large_arguments() {
     let mut state = 99u64;
     let mut next = || {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         (state >> 11) as f64 / (1u64 << 53) as f64
     };
 
@@ -607,8 +765,18 @@ fn trig_contains_at_large_arguments() {
             for t in [0.0, 0.5, 1.0] {
                 let p = a + w * t;
                 let r = C::new(V1::splat(p));
-                assert!(contains_dd(se, r.sin()), "sin over [{a:e}, {:e}] misses x={p:e}: {:?}", a + w, bounds(se));
-                assert!(contains_dd(ce, r.cos()), "cos over [{a:e}, {:e}] misses x={p:e}: {:?}", a + w, bounds(ce));
+                assert!(
+                    contains_dd(se, r.sin()),
+                    "sin over [{a:e}, {:e}] misses x={p:e}: {:?}",
+                    a + w,
+                    bounds(se)
+                );
+                assert!(
+                    contains_dd(ce, r.cos()),
+                    "cos over [{a:e}, {:e}] misses x={p:e}: {:?}",
+                    a + w,
+                    bounds(ce)
+                );
             }
 
             // And the range clamp still holds.
@@ -685,5 +853,9 @@ fn multiply_by_exact_zero_stays_exact() {
 
     // A non-degenerate interval containing zero is NOT exact and may widen.
     let nearly: I<Balanced> = iv(-0.0, 0.0);
-    assert_eq!(bounds(nearly * iv(1.0, 2.0)), (0.0, 0.0), "[-0, 0] is still degenerate zero");
+    assert_eq!(
+        bounds(nearly * iv(1.0, 2.0)),
+        (0.0, 0.0),
+        "[-0, 0] is still degenerate zero"
+    );
 }

@@ -1,13 +1,13 @@
 //! Gather / scatter / lookup, tested at the **`Vector` (public API) layer**.
 //!
 //! The safe wrappers (`gather`, `gather_or`, `gather_or_zero`, `lookup`,
-//! `scatter`) live only at the `Vector` layer - the register `*_ptr` primitives
-//! are unchecked - so their bounds-checking and masking logic had no coverage.
+//! `scatter`) live only at the `Vector` layer (the register `*_ptr` primitives
+//! are unchecked), so their bounds-checking and masking logic is only covered here.
 //! Each is oracled against plain Rust slice indexing.
 //!
 //! One generic `fn check_gather::<V>()` over any `GenericVector`, instantiated
 //! per backend/width (Scalar + V2 + V3). Indices are the vector's own
-//! `Unsigned` type; values are bit-preserving, so NaN lanes must match too.
+//! `Unsigned` type. Values are bit-preserving, so NaN lanes must match too.
 #![cfg(any(
     target_arch = "x86",
     target_arch = "x86_64",
@@ -85,7 +85,7 @@ where
         let want: Vec<V::Element> = idx2.iter().map(|&i| if i < len { data[i] } else { zero }).collect();
         harness::assert_lanes_eq(&format!("{label} [gather_or_zero]"), &[], &got, &want, Tol::Exact);
 
-        // --- lookup: small table; out of bounds -> table[0] ---
+        // --- lookup: small table, out of bounds -> table[0] ---
         let table = rand_vec(&mut rng, lanes);
         let idxl: Vec<usize> = (0..lanes).map(|_| rng.random_range(0..lanes * 2)).collect();
         let got = read(V::lookup(&table, mk_indices::<V>(&idxl)));
@@ -146,7 +146,7 @@ macro_rules! gather_suite {
     };
 }
 
-// scalar is the always-available oracle; on wasm gather is the scalar-fallback
+// scalar is the always-available oracle, and on wasm gather is the scalar-fallback
 // IndexableRegister path (no hw gather), which still validates the API.
 gather_suite!(scalar, Scalar, "scalar");
 

@@ -25,8 +25,16 @@ where
     V: thermite::math::PrimalProjection<Primal = V>,
 {
     type ExpIntDetails = Self;
+    const LAGUERRE_PRODUCT_SEED_CAP: i32 = 170;
 
-    // TEMP(bessel_j): disabled until orders beyond J_0 exist - see thermite-special/src/lib.rs.
+    #[inline(always)]
+    fn chebyshev<P: Policy, const K: usize, const N: usize>(self, coeffs: &[f64; N]) -> Self {
+        // Real vectors have copysign and a real nearest endpoint, so the Reinsch form is
+        // available, but the kernel still gates it on the policy asking for `Best` or better.
+        generic::chebyshev::chebyshev_series::<P, _, _, K, N, true>(self, coeffs)
+    }
+
+    // TEMP(bessel_j): disabled until orders beyond J_0 exist. See thermite-special/src/lib.rs.
     //fn bessel_j<P: Policy, const N: usize>(self) -> Self {
     //    todo!()
     //}
@@ -228,7 +236,12 @@ where
         }
 
         // 172 is the largest integer whose factorial is finite in f64.
-        generic::gamma::tgamma_impl::<P, _, _, _>(z, &crate::tables::gamma::LANCZOS_F64, 172.0, crate::tables::gamma::LN_MAX_F64)
+        generic::gamma::tgamma_impl::<P, _, _, _>(
+            z,
+            &crate::tables::gamma::LANCZOS_F64,
+            172.0,
+            crate::tables::gamma::LN_MAX_F64,
+        )
     }
 
     #[inline(always)]
@@ -262,7 +275,11 @@ where
         let terms = const {
             let needed =
                 super::generic::phi::phi_series_terms(N, f64::EPSILON * P::POLICY.precision.tolerance() as f64 / 32.0);
-            if needed < P::POLICY.max_iterations { needed } else { P::POLICY.max_iterations }
+            if needed < P::POLICY.max_iterations {
+                needed
+            } else {
+                P::POLICY.max_iterations
+            }
         };
         super::generic::phi::phi_internal::<Self, f64, P, N, false>(self, terms)
     }

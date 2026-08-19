@@ -86,7 +86,7 @@ mod x86 {
     use super::*;
     use thermite::backend::{x86_v1::X86V1, x86_v2::X86V2, x86_v3::X86V3};
 
-    // u64 v3 carries the CLMUL `N == 2` fast path; u16/u32 use the pshufb LUT;
+    // u64 v3 carries the CLMUL `N == 2` fast path, u16/u32 use the pshufb LUT, and
     // u64x2/v1 and all N != 2 exercise the cascade.
     morton_suite!(v3_u64x2, <X86V3 as Simd>::u64x2, u64, "v3 u64x2");
     morton_suite!(v3_u64x4, <X86V3 as Simd>::u64x4, u64, "v3 u64x4");
@@ -121,7 +121,7 @@ mod neon {
     use thermite::backend::neon::Neon;
 
     // u16/u32 use the `i8x16.swizzle` LUT; u64x2 and all N != 2 use the cascade.
-    // (inherited from the wasm section; revisit for NEON)
+    // (inherited from the wasm section, revisit for NEON)
     morton_suite!(neon_u16x8, <Neon as Simd>::u16x8, u16, "neon u16x8");
     morton_suite!(neon_u32x4, <Neon as Simd>::u32x4, u32, "neon u32x4");
     morton_suite!(neon_u64x2, <Neon as Simd>::u64x2, u64, "neon u64x2");

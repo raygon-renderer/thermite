@@ -12,7 +12,7 @@
 //! default suite.
 //!
 //! `X86V2` and `X86V3` share these polyfills, so a defect in one is a defect
-//! in both; the regression tests cover both backends.
+//! in both, and the regression tests cover both backends.
 #![cfg(any(
     target_arch = "x86",
     target_arch = "x86_64",
@@ -31,10 +31,10 @@ use thermite::register::{
 use thermite::simd::Simd;
 
 // ===========================================================================
-// Verified-correct polyfills - always-green.
+// Verified-correct polyfills, always-green.
 // ===========================================================================
 
-/// `mullo` (low half of the product) - exercises the now-fixed 64-bit
+/// `mullo` (low half of the product), exercising the 64-bit
 /// `_mm{,256}_mullo_epi64x` emulation. Correct for every width.
 macro_rules! mullo_for {
     ($($reg:ident: $b:ty, $e:ty, $l:expr);* $(;)?) => {
@@ -78,7 +78,7 @@ macro_rules! check_rot_const {
     )*};
 }
 
-/// Byte/bit reversal and rotates - correct for every width.
+/// Byte/bit reversal and rotates, correct for every width.
 macro_rules! bitperm_for {
     ($($reg:ident: $b:ty, $e:ty, $l:expr);* $(;)?) => {
         #[test]
@@ -92,14 +92,13 @@ macro_rules! bitperm_for {
         }
 
         /// Rotates by an amount >= the element width, and the const-generic
-        /// `roli`/`rori` forms - neither had any coverage.
+        /// `roli`/`rori` forms.
         ///
         /// Rust's `rotate_left`/`rotate_right` (and hence the scalar backend,
-        /// which literally *is* those) reduce the amount modulo the width. The
-        /// register-trait default computes `shr(v, width - shift)`, which
-        /// underflowed for `shift >= width` and made every vector backend
-        /// return zeros - a silent divergence from the scalar oracle. The
-        /// default now masks the amount; this pins that down.
+        /// which literally *is* those) reduce the amount modulo the width. An
+        /// unmasked `shr(v, width - shift)` underflows for `shift >= width` and
+        /// makes every vector backend return zeros, a silent divergence from the
+        /// scalar oracle. This pins the masked amount down.
         #[test]
         fn rotate_wraparound_and_const() {
             $({
@@ -230,8 +229,8 @@ const LIMITED_UNSIGNED: &[u64] = &[
 ///
 /// The magic constant is `1.5 * 2^52`, whose own mantissa has bit 51 set, so xor
 /// and subtract agree only where no bit-51 interaction occurs. That is every
-/// negative input - `-2` came back as `2^52 - 2`, which is what made wasm `powf`
-/// read a bogus exponent and overflow - **and** the positive endpoint `+2^51`,
+/// negative input (`-2` comes back as `2^52 - 2`, which is what makes wasm `powf`
+/// read a bogus exponent and overflow) **and** the positive endpoint `+2^51`,
 /// which is in the documented domain. Everything strictly between `0` and `2^51`
 /// was correct, which is exactly why a corpus of small naturals never noticed.
 /// Nothing on x86 could see any of it, and the x86 suite is what runs.
@@ -243,7 +242,7 @@ const LIMITED_UNSIGNED: &[u64] = &[
 /// happens to use it.
 ///
 /// Inputs are integer-valued on purpose. The trick rounds to nearest rather
-/// than truncating, which is a documented `fast_cast` relaxation; on integers
+/// than truncating, which is a documented `fast_cast` relaxation. On integers
 /// round and truncate agree, so the oracle stays exact and the test is not
 /// asserting a rounding mode the function never promised.
 macro_rules! limited_casts_for {
@@ -589,7 +588,7 @@ mod x86 {
     }
 
     // ===========================================================================
-    // X86V1 (SSE2) - these polyfills are *distinct implementations* from the
+    // X86V1 (SSE2): these polyfills are *distinct implementations* from the
     // v2/v3 ones (no SSE4.1 blendv, no pshufb, SWAR popcount, magic-number
     // rounding), so they get their own full pass against the same Rust oracles.
     // ===========================================================================
@@ -807,12 +806,11 @@ mod x86 {
     }
 
     // ===========================================================================
-    // Regression tests for the four polyfill defects the harness found - all now
-    // **fixed**, so these run in the default suite (no longer #[ignore]d).
+    // Regression tests for the four polyfill defects the harness found.
     //   P1 32-bit mulhi: `b` not shifted in _mm{,256}_mullhi_ep[iu]32x
     //   P2 signed saturating add/sub: byte-granularity blendv mask in _mm_adds*_v2
     //   P3 u64 lz/tz: 32-bit constant + count_ones copy-paste in U64x2 lz/tz
-    //   P4 u64 mullo: was todo!() - now reuses the sign-agnostic mul emulation
+    //   P4 u64 mullo: reuses the sign-agnostic mul emulation
     // ===========================================================================
     mod fixed {
         use super::*;
@@ -989,7 +987,7 @@ mod x86 {
         // whenever `rhs` is negative *regardless of `lhs`'s own sign* - wrong for
         // every negative `lhs` (e.g. copysign(-3, -1) returned +3). True copysign
         // negates exactly where the signs differ. (i64 always used the xor-of-signs
-        // form and was correct; pinned here too.)
+        // form and is correct, pinned here too.)
         #[test]
         fn p5_copysign_int() {
             fn cs32(a: i32, b: i32) -> i32 {
@@ -1049,7 +1047,7 @@ mod x86 {
 }
 
 // wasm: exercise the same backend-generic polyfill macros on Wasm's native types
-// (i32x4/u32x4/i64x2/u64x2 + f32x4/f64x2) - validates wasm's count_ones/leading_zeros/
+// (i32x4/u32x4/i64x2/u64x2 + f32x4/f64x2), validating wasm's count_ones/leading_zeros/
 // swap_bytes/reverse_bits/rotates/sra/avg/copysign/fract against scalar oracles.
 #[cfg(target_arch = "wasm32")]
 mod wasm {
@@ -1083,7 +1081,7 @@ mod wasm {
 }
 
 // neon: exercise the same backend-generic polyfill macros on Neon's native types
-// (i32x4/u32x4/i64x2/u64x2 + f32x4/f64x2) - validates neon's count_ones/leading_zeros/
+// (i32x4/u32x4/i64x2/u64x2 + f32x4/f64x2), validating neon's count_ones/leading_zeros/
 // swap_bytes/reverse_bits/rotates/sra/avg/copysign/fract against scalar oracles.
 #[cfg(target_arch = "aarch64")]
 mod neon {

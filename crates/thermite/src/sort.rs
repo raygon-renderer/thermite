@@ -5,7 +5,7 @@
 //! lower index". [`SortOrder`] is that choice, as a compile-time parameter, so
 //! one network body serves every direction.
 //!
-//! # Why this is free
+//! # The direction flip is free
 //!
 //! Flipping every comparator in an *ascending* network yields a *descending*
 //! one - for any network, not just the bitonic ones here. If `f` is an
@@ -30,7 +30,7 @@
 //! directions because each layer issues one of each regardless; only the blend
 //! operands swap.
 //!
-//! # Why the methods are generic, not the trait
+//! # Generic methods, not a generic trait
 //!
 //! The obvious shape parameterizes the trait by the register
 //! (`trait SortOrder<R: NumericRegister>`). It serves native registers fine and

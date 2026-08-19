@@ -153,7 +153,7 @@ mod v3_native_bytes {
 ///
 /// A performance invariant, not a correctness one, hence the explicit pin:
 /// `HAS_NATIVE_ALIGN` selects between two paths that agree on results, so a register
-/// dropping to `false` changes nothing a functional test can observe - it just routes
+/// dropping to `false` changes nothing a functional test can observe. It just routes
 /// the prefix-scan family (`NumericVector::prefix_sum` and friends) onto the
 /// sequential fallback.
 ///
@@ -266,7 +266,7 @@ mod native_align_flag {
 
     /// `GenericVector::HAS_NATIVE_ALIGN` has to report what the register underneath
     /// actually does. A wrong answer here is invisible to every functional test -
-    /// both align paths agree on results - and only shows up as a composite scan
+    /// both align paths agree on results, and only shows up as a composite scan
     /// picking the wrong lowering, so it is asserted directly.
     #[test]
     fn vector_layer_forwards_the_register() {

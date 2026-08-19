@@ -1,6 +1,6 @@
 //! Correctness checks for the `NumericVector`/`SignedVector`/`FloatVector`
-//! surface of `Compensated` that was previously `todo!()`: the `_c`/`_m`/`_z`
-//! masked variants, `scale`, `pairwise_sum`, `arg_minmax`, `mix`, and `probit`.
+//! surface of `Compensated`: the `_c`/`_m`/`_z` masked variants, `scale`,
+//! `pairwise_sum`, `arg_minmax`, `mix`, and `probit`.
 //!
 //! Masked-variant semantics (mask-first argument order):
 //! - `_c`: keep `self` in unmasked lanes
@@ -10,7 +10,7 @@
 use thermite::prelude::*;
 use thermite_compensated::Compensated;
 
-/// 1-lane scalar backend; enough to pin down blend semantics.
+/// 1-lane scalar backend, enough to pin down blend semantics.
 type V = Vector<f64>;
 type C = Compensated<V>;
 
@@ -57,7 +57,7 @@ fn masked_unary_variants() {
             .is_sign_negative()
     );
     // next_up/next_down step the 106-bit representation by one ulp of the
-    // error term -- far below what the folded `value()` can resolve, so
+    // error term, far below what the folded `value()` can resolve, so
     // observe the step through a compensated difference instead.
     assert_eq!(val(c(1.0).next_up_c(mf)), 1.0);
     assert!(val(c(1.0).next_up_c(mt) - c(1.0)) > 0.0);
@@ -124,7 +124,7 @@ fn pairwise_sum_preserves_compensation() {
     let s = C::pairwise_sum(big, one);
     assert_eq!(val(s - big), 1.0);
 
-    // relaxed form is the same sums (order is allowed to differ; with one
+    // relaxed form is the same sums (order is allowed to differ, though with one
     // lane it cannot)
     assert_eq!(val(C::relaxed_pairwise_sum(big, one)), val(s));
 
@@ -186,4 +186,51 @@ mod wide {
         assert_eq!(v.arg_minmax(), (1, 2));
         assert_eq!(v.arg_minmax(), v.value().arg_minmax());
     }
+}
+
+/// `harmonic_mean` / `inv_sum_inv` on `Compensated`, which takes the direct reciprocal-sum
+/// form like the other composites.
+///
+/// `Compensated` is a real single-value type, so unlike `Complex` its `min` is a genuine
+/// ordering and the zero limit does fall out, and both are checked here. The reason it is on
+/// the direct path anyway is that the min-scaled rewrite exists to stop a *binary64*
+/// reciprocal from overflowing, and double-double arithmetic has the same exponent range,
+/// so the rewrite would buy nothing it does not already have.
+#[test]
+fn harmonic_mean_and_inv_sum_inv() {
+    use thermite::math::CoreMath;
+
+    let hm = C::harmonic_mean([c(1.0), c(2.0), c(4.0)]);
+    let si = C::inv_sum_inv([c(1.0), c(2.0), c(4.0)]);
+
+    // 3/(1 + 1/2 + 1/4) = 12/7, and a seventh is where a double-double should earn its keep.
+    let want_hm = 12.0 / 7.0;
+    assert!((hm.value().extract::<0>() - want_hm).abs() < 1e-15, "got {}", hm.value().extract::<0>());
+    assert!((si.value().extract::<0>() - want_hm / 3.0).abs() < 1e-15);
+
+    // The factor of N, the identity that separates the two functions.
+    let x = 3.0;
+    let hm = C::harmonic_mean([c(x), c(x), c(x)]);
+    let si = C::inv_sum_inv([c(x), c(x), c(x)]);
+    assert!((hm.value().extract::<0>() - x).abs() < 1e-15);
+    assert!((si.value().extract::<0>() - x / 3.0).abs() < 1e-15);
+
+    // A zero element gives NaN, not the 0 a plain f64 vector gives. Being a real type is not
+    // enough for that limit: it needs plain IEEE division, where 1/0 is a clean infinity.
+    // Double-double division forms `two_prod(q1, rhs)`, which at `q1 = inf, rhs = 0` is
+    // `inf * 0 = NaN`, and the error term poisons the result from there. Same shape as
+    // `Complex`, for a different reason, and inherited from the arithmetic rather than
+    // introduced here.
+    let hz = C::harmonic_mean([c(0.0), c(1.0)]);
+    assert!(hz.value().extract::<0>().is_nan(), "a zero element gives NaN on Compensated");
+
+    let recip = c(1.0) / c(0.0);
+    assert!(recip.value().extract::<0>().is_nan(), "because 1/0 is itself NaN here");
+
+    // The compensated part should be carrying real information, not just tracking the f64
+    // result: recomputing in plain f64 and comparing to the double-double value shows the
+    // low word is doing something.
+    let hm = C::harmonic_mean([c(1.0), c(3.0), c(7.0)]);
+    let plain = 3.0 / (1.0 + 1.0 / 3.0 + 1.0 / 7.0);
+    assert!((hm.value().extract::<0>() - plain).abs() < 1e-14, "double-double tracks the f64 answer");
 }

@@ -51,3 +51,15 @@ harness = false
 [[bench]]
 name = "langevin"
 harness = false
+
+[[bench]]
+name = "zernike"
+harness = false
+
+[[bench]]
+name = "laguerre"
+harness = false
+
+[[bench]]
+name = "expint"
+harness = false

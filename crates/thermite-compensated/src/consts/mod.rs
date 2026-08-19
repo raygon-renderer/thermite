@@ -7,6 +7,8 @@
 
 #[macro_use]
 mod macros;
+#[cfg(feature = "special")]
+mod bernoulli;
 
 use core::marker::PhantomData;
 
@@ -64,6 +66,7 @@ impl_consts!(f32 {
     FRAC_1_SQRT_5 = ("0x1.c9f25c0000000p-2", "0x1.6ffb760000000p-28"),
     FRAC_2_PI = ("0x1.45f3060000000p-1", "0x1.b939100000000p-26"),
     FRAC_1_SQRT_PI = ("0x1.20dd760000000p-1", "-0x1.f7ac920000000p-26"),
+    FRAC_1_SQRT_SQRT_PI = ("0x1.8093880000000p-1", "-0x1.fd54de0000000p-26"),
     FRAC_2_SQRT_PI = ("0x1.20dd760000000p+0", "-0x1.f7ac920000000p-25"),
     FRAC_SQRT_PI_2 = ("0x1.c5bf8a0000000p-1", "-0x1.c962120000000p-26"),
     FRAC_1_SQRT_TAU = ("0x1.9884540000000p-2", "-0x1.8579360000000p-27"),
@@ -181,6 +184,7 @@ impl_consts!(f64 {
     FRAC_1_SQRT_5 = ("0x1.c9f25c5bfedd9p-2", "0x1.ab294a33804a5p-57"),
     FRAC_2_PI = ("0x1.45f306dc9c883p-1", "-0x1.6b01ec5417056p-55"),
     FRAC_1_SQRT_PI = ("0x1.20dd750429b6dp-1", "0x1.1ae3a914fed80p-57"),
+    FRAC_1_SQRT_SQRT_PI = ("0x1.8093870155910p-1", "-0x1.c225764e553cap-56"),
     FRAC_2_SQRT_PI = ("0x1.20dd750429b6dp+0", "0x1.1ae3a914fed80p-56"),
     FRAC_SQRT_PI_2 = ("0x1.c5bf891b4ef6bp-1", "-0x1.618f13eb7ca89p-55"),
     FRAC_1_SQRT_TAU = ("0x1.9884533d43651p-2", "-0x1.cbc0d30ebfd15p-56"),
@@ -331,7 +335,7 @@ impl_consts!(LOG f32 [
 // that double-single needs.
 //
 // Widening these to "more accurate" full-precision values silently makes `exp` WORSE.
-// It was previously ~21 bits per piece, which is inexact past about k = 16.
+// At ~21 bits per piece the product is inexact past about k = 16.
 ["0x1.62e4000000000p-1", "0x1.7f7e000000000p-20", "-0x1.c610ca0000000p-37"]);
 
 impl_consts!(LOG f64 [
@@ -373,8 +377,8 @@ impl_consts!(LOG f64 [
 // for |k| <= 1100. Worst-case reduction error 2.9e-42, against the ~1.2e-32 that
 // double-double needs.
 //
-// These were previously full-precision f64 values, which made every `k * piece` a rounded
-// multiply and capped `exp` at about 50 bits (1.1e-15 relative at x = 29, growing with
-// |k|). `ln` inherited that ceiling through its Halley step, and everything built on the
-// pair (`powf`, the gamma family) inherited it in turn.
+// Full-precision f64 values here make every `k * piece` a rounded multiply and cap `exp`
+// at about 50 bits (1.1e-15 relative at x = 29, growing with |k|). `ln` inherits that
+// ceiling through its Halley step, and everything built on the pair (`powf`, the gamma
+// family) inherits it in turn.
 ["0x1.62e42fefa3800p-1", "0x1.ef35793c76800p-45", "-0x1.9ff0342542fc3p-90"]);

@@ -24,11 +24,11 @@ fn c(x: f64) -> C {
 /// leans on it hardest. In the series regime `erfc` came out as `1 - erf`, so at x = 2.751
 /// (which is erfinv(0.9999)) it cancelled down to 89 bits. Moving `erf_internal_p`'s
 /// regime split from 3 to 2 hands that band to the continued fraction, which computes
-/// `erfc` directly - 101 bits - and erfinv's residual fell from 5.5e-30 to 1.8e-36.
+/// `erfc` directly, at 101 bits, and erfinv's residual falls from 5.5e-30 to 1.8e-36.
 ///
-/// Note this also explains why swapping the residual between `erf(x) - y` and
-/// `(1 - y) - erfc(x)` was bit-for-bit identical: while erfc *is* `1 - erf`, the two carry
-/// the same absolute error, so neither spelling can help. The fix had to be upstream.
+/// That also explains why swapping the residual between `erf(x) - y` and
+/// `(1 - y) - erfc(x)` is bit-for-bit identical: while erfc *is* `1 - erf`, the two carry
+/// the same absolute error, so neither spelling can help. The fix has to be upstream.
 const TOL: f64 = 1e-30;
 
 fn dd_err(got: C, hi: f64, lo: f64) -> f64 {

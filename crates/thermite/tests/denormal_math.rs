@@ -5,7 +5,7 @@
 //! f32), so the answer is the input. That makes this family self-checking and a
 //! cheap, strong exercise of the subnormal paths.
 //!
-//! `cbrt` is the interesting counter-case - it leaves the denormal range, and
+//! `cbrt` is the interesting counter-case, since it leaves the denormal range, and
 //! its fast refinement cubes the root, which for a denormal input lands back in
 //! the denormal range with ~1 significant bit. Preserving denormals therefore
 //! routes it to the extended-precision refinement.
@@ -15,8 +15,8 @@ use thermite::math::policy::policies::{AveragePrecision, Performance, PreserveDe
 use thermite::prelude::*;
 use thermite::simd::Simd;
 
-/// Preserve denormals at the DEFAULT precision - the tier that used to be wrong
-/// for `cbrt`, so the tests below would catch a regression in the policy gate.
+/// Preserve denormals at the DEFAULT precision, the tier `cbrt` is most exposed
+/// on, so the tests below catch a regression in the policy gate.
 type Preserve = AveragePrecision<PreserveDenormals<Performance>>;
 
 /// Subnormals spanning the f32 range, both signs.
@@ -77,7 +77,7 @@ macro_rules! suite {
                 );
             }
 
-            /// `cbrt` leaves the denormal range; check it stays accurate there.
+            /// `cbrt` leaves the denormal range, so check it stays accurate there.
             /// The fast refinement cubes the root back into the denormal range,
             /// so `Preserve` must route to the extended-precision form.
             #[test]

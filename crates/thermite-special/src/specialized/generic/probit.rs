@@ -46,7 +46,7 @@ where
     //   Phi(x) = 0.5*erfc(-x/sqrt2),  1/phi(x) = sqrt(2pi)*exp(x^2/2)
     //   x <- x - u / (1 + x*u/2)
     if const { REFINE && P::POLICY.precision.ge(PrecisionPolicy::Best) } {
-        let e = <V as SpecializedSpecialMath<E>>::erfc::<P>(x * -V::FRAC_1_SQRT_2).mul_adde(V::HALF, -p_in);
+        let e = <V as SpecializedSpecialMath<E>>::erfc::<P>(x * -V::FRAC_1_SQRT_2).mul_sube(V::HALF, p_in);
         let u = e * V::SQRT_TAU * (x * x * V::HALF).exp_p::<P>();
         x -= u / x.mul_adde(u * V::HALF, V::ONE);
     }

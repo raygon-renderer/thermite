@@ -14,7 +14,7 @@
 //! cargo run -p thermite-special --example sh_envmap --release -- --degree 4 --dering
 //! ```
 //!
-//! # What it demonstrates
+//! # The two halves
 //!
 //! **Projection** is the inner product `$c_i = \int_{S^2} L(\omega) Y_i(\omega)\,d\omega$`,
 //! evaluated as a Riemann sum over cubemap texels weighted by the solid angle each

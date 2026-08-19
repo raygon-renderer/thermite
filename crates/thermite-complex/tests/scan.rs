@@ -20,7 +20,7 @@ macro_rules! check {
         let lanes = <C as GenericVector>::LANES;
 
         // Real parts repeat so the lexicographic tie-break on the imaginary part
-        // is exercised; both are small exact integers so comparisons are exact.
+        // is exercised, and both are small exact integers so comparisons are exact.
         const RE: [f64; 16] = [
             5.0, 2.0, 9.0, 2.0, 7.0, 1.0, 8.0, 3.0, 6.0, 4.0, 0.0, 9.0, 1.0, 7.0, 3.0, 8.0,
         ];

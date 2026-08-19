@@ -14,8 +14,8 @@ generic over `<P: Policy>`) and default-policy `*Math` (same methods, no suffix,
 | Trait | Requires | Provides (selection) |
 |---|---|---|
 | `FloatMath` | `FloatVectorWithBits` | `ldexp`, `frexp`, `flush_denormals` |
-| `CoreMath` | `FloatVector` | `poly`, `poly_rev`, `poly_rational`, `reciprocal`, `approx_div`, `inverse_sqrt`, `powi`, `powiv` |
-| `TranscendentalMath` | `CoreMath` | `sin`,`cos`,`tan`,`sin_cos`,`sin_pi`,`cos_pi`,`tan_pi`,`sinc`,`asin`,`acos`,`atan`,`sinh`,`cosh`,`tanh`,`asinh`,`acosh`,`atanh`,`exp`,`exp2`,`exp10`,`exp_m1`,`ln`,`ln_1p`,`log2`,`log10`,`log_n`,`cbrt`,`nth_root`,`powf`,`compound`,`versin`,`haversin`,... |
+| `CoreMath` | `FloatVector` | `poly`, `poly_rev`, `poly_rational`, `reciprocal`, `approx_div`, `inverse_sqrt`, `powi`, `powiv`, `harmonic_mean`, `inv_sum_inv` |
+| `TranscendentalMath` | `CoreMath` | `sin`,`cos`,`tan`,`sin_cos`,`sin_pi`,`cos_pi`,`tan_pi`,`sinc`,`sinhc`,`cosh_m1`,`atanhc`,`asin`,`acos`,`atan`,`sinh`,`cosh`,`tanh`,`asinh`,`acosh`,`atanh`,`exp`,`exp2`,`exp10`,`exp_m1`,`ln`,`ln_1p`,`log1pmx`,`xlogy`,`xlog1py`,`log2`,`log10`,`log_n`,`cbrt`,`nth_root`,`powf`,`compound`,`versin`,`haversin`,... |
 | `SpatialMath` | `CoreMath` | `hypot`, `hypot_n`, `inv_hypot_n`, `l1_norm`, `l2_norm`, `l2_norm_squared` |
 | `RealMath` | `Transcendental + Spatial` | `atan2`, `lerp`, `rescale`, `to_degrees`, `to_radians`, `wrap_angle`, `angle_diff`, `logaddexp`, `smoothstep`, `inverse_smoothstep`, `smoothstep_derivative`, `smooth_interpolator`, `step` |
 

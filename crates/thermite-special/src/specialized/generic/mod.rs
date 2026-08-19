@@ -1,10 +1,16 @@
+pub mod chebyshev;
 pub mod digamma;
 pub mod elliptic;
 pub mod erfcx;
 pub mod expint;
 pub mod gamma;
+pub mod hermite;
+pub mod laguerre;
 pub mod langevin;
+pub mod legendre;
+pub mod phi;
+pub mod poisson;
 pub mod probit;
 pub mod sh;
 pub mod trigamma;
-pub mod phi;
+pub mod zernike;

@@ -1,6 +1,6 @@
 //! Width-changing reshape ops, tested at the **`Vector` (public API) layer**:
 //! `concat` / `split` / `extend` / `narrow`. These are pure lane-routing
-//! operations - exactly the family the #C2 widening bug lived in - and had no
+//! operations, exactly the family a widening bug hides in, and they had no
 //! lane-correctness coverage.
 //!
 //! Unlike the register-layer suites, this is written once as a generic
@@ -85,10 +85,10 @@ macro_rules! reshape {
 }
 
 // The "half" of a 128-bit x2 register (`f64x2`/`i64x2`/`u64x2`) is the *scalar*
-// element register (`Vector<f64>` etc.), not a Simd-aliased SIMD type — so the
-// scalar↔x2 reshape (`concat(scalar,scalar)→x2`, `split`/`extend`/`narrow`) needs
+// element register (`Vector<f64>` etc.), not a Simd-aliased SIMD type, so the
+// scalar/x2 reshape (`concat(scalar,scalar) -> x2`, `split`/`extend`/`narrow`) needs
 // its own pair. These are exactly the `concat`/`split`/`extend`/`narrow` lines in
-// the 64-bit register files that the x2→x4 pairs never reach.
+// the 64-bit register files that the x2->x4 pairs never reach.
 macro_rules! reshape_half {
     ($name:ident, $backend:ty, $elem:ty, $wide:ident, $label:expr) => {
         #[test]
@@ -147,7 +147,7 @@ macro_rules! reshape_suite {
             reshape!(i64x2_x4, $backend, i64x2, i64x4, concat!($bl, " i64x2|i64x4"));
             reshape!(u32x4_x8, $backend, u32x4, u32x8, concat!($bl, " u32x4|u32x8"));
             reshape!(u64x2_x4, $backend, u64x2, u64x4, concat!($bl, " u64x2|u64x4"));
-            // scalar↔x2 halves (the 64-bit register files' own concat/split/extend/narrow)
+            // scalar<->x2 halves (the 64-bit register files' own concat/split/extend/narrow)
             reshape_half!(f64_x2, $backend, f64, f64x2, concat!($bl, " f64|f64x2"));
             reshape_half!(i64_x2, $backend, i64, i64x2, concat!($bl, " i64|i64x2"));
             reshape_half!(u64_x2, $backend, u64, u64x2, concat!($bl, " u64|u64x2"));

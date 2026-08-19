@@ -14,6 +14,19 @@ use super::reference::{is_reference, map1, map1x2, map2};
 // of `SpecializedCoreMath` shadows the fixpoint blanket impl on a generic `V`, so
 // without it `V::Primal` would not normalize to `V` in the `poly_primal` body.
 impl<V: FloatVectorWithBits<Element = f32> + PrimalProjection<Primal = V>> SpecializedCoreMath<f32> for V {
+    // Scaled by the smallest input so a denormal cannot overflow the reciprocal sum. See
+    // `generic::inv_sum_inv_internal` for why the composites keep the direct form.
+    #[inline(always)]
+    fn harmonic_mean<P: Policy, const N: usize>(values: [Self; N]) -> Self {
+        let n = Self::splat(Self::Element::from_int(N as crate::LargeInt));
+        super::generic::inv_sum_inv_internal::<V, f32, P, N>(values, n)
+    }
+
+    #[inline(always)]
+    fn inv_sum_inv<P: Policy, const N: usize>(values: [Self; N]) -> Self {
+        super::generic::inv_sum_inv_internal::<V, f32, P, N>(values, Self::ONE)
+    }
+
     /// `Primal = Self`, so the coefficients are already this vector type, which means
     /// the ILP lowering [`poly`](SpecializedCoreMath::poly) uses applies unchanged, and
     /// the primal-Horner default would be a straight downgrade for real vectors.
@@ -64,8 +77,23 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
     }
 
     #[inline(always)]
+    fn sinhc<P: Policy>(self) -> Self {
+        super::generic::sinhc_internal::<V, f32, P>(self)
+    }
+
+    #[inline(always)]
+    fn atanhc<P: Policy>(self) -> Self {
+        super::generic::atanhc_internal::<V, f32, P>(self)
+    }
+
+    #[inline(always)]
     fn sinc_pi<P: Policy>(self) -> Self {
         super::generic::sinc_pi_internal::<V, f32, P>(self)
+    }
+
+    #[inline(always)]
+    fn log1pmx<P: Policy>(self) -> Self {
+        super::generic::log1pmx_internal::<V, f32, P>(self)
     }
 
     #[inline(always)]
@@ -271,7 +299,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
 
         // if not all are small, use exponential functions. Tiers with
         // `precision < Average` skip the small-x polynomial below, so they must
-        // run this path unconditionally - otherwise all-small input leaves
+        // run this path unconditionally, or all-small input leaves
         // `y2 == 0` and `sinh(small)` returns 0.
         if const { P::POLICY.avoid_branching || P::POLICY.precision.lt(PrecisionPolicy::Average) } || !x_small.all() {
             y2 = x.exph_p::<P>();
@@ -330,7 +358,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             // the identity folds to (h - 1/2) / (h + 1/2): same value, e^2x
             // overflows slightly later, and no extra square is needed.
             // (Note `exph(x)^2` would be e^2x / 4, which is *not* what tanh
-            // wants - that was the bug here.)
+            // wants.)
             let h = (x + x).exph_p::<P>();
             y2 = (h - V::HALF) / (h + V::HALF);
 
@@ -868,7 +896,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         // significant bit left), which cost ~3% at the bottom of the range.
         // Extended precision keeps t^3 comfortably normal. Asking to preserve
         // denormals is already asking for care around them, so this is the
-        // cheap and coherent fix - the alternative, refining against the
+        // cheap and coherent fix. The alternative, refining against the
         // pre-scaled value, restructures the kernel for one policy corner.
         if const {
             P::POLICY.precision.ge(PrecisionPolicy::Best)
@@ -889,8 +917,8 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         } else if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
             // Halley's method, with the ratio scaled by 1/4.
             //
-            // `t^3` alone is ~x and always fine; it is the combination that
-            // bites - the raw form's `2t^3 + x` is ~3x and overflows to NaN for
+            // `t^3` alone is ~x and always fine. It is the combination that
+            // bites: the raw form's `2t^3 + x` is ~3x and overflows to NaN for
             // the last binade (|x| > ~MAX/3). Scaling numerator and denominator
             // by 1/4 leaves the quotient bit-identical (both factors are exact
             // powers of two) while capping the intermediates near 0.75x, so no
@@ -909,13 +937,13 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
                 t *= x.mul_add(V::HALF, t3q) / t3q.mul_add(V::TWO, xq);
             }
 
-            // FMA residual correction - compute t^3 - x precisely, then one Newton step
+            // FMA residual correction: compute t^3 - x precisely, then one Newton step
             let t2 = t * t;
             t -= t2.mul_sub(t, x) / (t2 * crate::const_splat!(f32: 3.0)); // t^3 - x, exact to FMA precision
         } else {
             // Medium and below: the raw ratio, one multiply per iteration
             // cheaper. `2t^3 + x` overflows for |x| > ~MAX/3, so the top binade
-            // gives NaN - accepted at this tier, which trades edge-case range
+            // gives NaN, accepted at this tier, which trades edge-case range
             // for speed by design.
             let two = V::TWO;
 
@@ -1241,7 +1269,7 @@ fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f32>>(xa: &
     let frac_lo = V::cast_from(frac_lo_int) * crate::const_splat!(f32: f32::from_bits(0x28000000)); // 2^-47
 
     // Center from [0, 1) to [-0.5, 0.5) to match Cody-Waite's round().
-    // Only frac_hi needs adjustment; frac_lo is unchanged since
+    // Only frac_hi needs adjustment, and frac_lo is unchanged since
     // (frac_hi - 1) + frac_lo = old_total - 1.
     let needs_round = frac_hi.cmp_ge(V::HALF);
     let frac_hi = frac_hi.sub_c(needs_round, V::ONE);
@@ -1540,9 +1568,9 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
         };
 
         // Fold EXPH's halving into the exponent instead of multiplying by 0.5 after:
-        // one subtract replaces a multiply, and `2^t` no longer overflows to NaN a
-        // full binade before the halved result would (`exph(88.9)` was NaN while the
-        // answer, 2.03e38, is representable).
+        // one subtract replaces a multiply, and `2^t` keeps a full binade that the
+        // multiply-after form loses (there `exph(88.9)` is NaN while the answer,
+        // 2.03e38, is representable).
         if const { MODE == EXP_MODE_EXPH } {
             t -= V::ONE;
         }
@@ -1701,9 +1729,9 @@ fn exp_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const MODE: 
         } else {
             // The single-scale bound: `round(x log2 e)` (minus one for EXPH) must stay
             // <= 127, and `(1 + z) * 2^127` tops out safely below FLT_MAX. EXPH gets a
-            // binade more than EXPM1 from its exponent decrement. The two used to share
-            // 89.0, which put EXPM1's `r` at 128 (the NaN exponent field) for x in
-            // (88.4, 88.72], all finite results.
+            // binade more than EXPM1 from its exponent decrement, so the two cannot share
+            // a bound. A shared 89.0 puts EXPM1's `r` at 128 (the NaN exponent field) for
+            // x in (88.4, 88.72], all finite results.
             #[rustfmt::skip]
             let max_x = const { match MODE {
                 EXP_MODE_EXP | EXP_MODE_EXPM1 => 88.3, // round(x log2 e) <= 127
@@ -1866,7 +1894,7 @@ fn ln_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const P1: boo
 
     // A subnormal has no exponent field to split, so `fraction2`/`exponent` cannot
     // reduce it and the tail below hands every one of them back as -inf. That is the
-    // right answer only because denormals are flushed by default - the call above is
+    // right answer only because denormals are flushed by default, the call above being
     // a no-op precisely when they are not. Under `Preserve`, scale them into the
     // normal range by 2^25 and take those 25 powers of two back out of the exponent,
     // where the correction rides the `ln2f_hi`/`ln2f_lo` multiplies that were

@@ -1,6 +1,6 @@
 // Scalar-based, so it could run on wasm. The `ldexp` extreme-exponent case was a known
 // failure (Preserve path couldn't underflow MAX to zero); fixed by the saturated
-// three-multiply split - candidate to enable on the wasm run next time it's touched.
+// three-multiply split, a candidate to enable on the wasm run next time it's touched.
 #![cfg(not(target_arch = "wasm32"))]
 //! Tests for `ldexp` and `frexp` on FloatVectorWithBits.
 //!
@@ -600,7 +600,7 @@ fn frexp_f32_exhaustive_subnormals() {
 }
 
 // -------------------------------------------------------
-// Placeholder wrappers -- replace with your actual calls
+// Placeholder wrappers, replace with the actual calls
 // -------------------------------------------------------
 //
 // For scalar f32/f64 through the Vector<f32>/Vector<f64> path

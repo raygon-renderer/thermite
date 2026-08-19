@@ -1,6 +1,6 @@
 //! `erfcx(x) = e^{x^2} erfc(x)`, the scaled complementary error function.
 //!
-//! # Why it exists
+//! # Motivation
 //!
 //! `erfc` underflows to zero at `x ~ 27` in binary64 and `x ~ 9` in binary32, where the
 //! true value is `e^{-x^2}/(x sqrt(pi))`, nonzero and merely unrepresentable. Every

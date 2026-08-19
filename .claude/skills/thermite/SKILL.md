@@ -16,12 +16,25 @@ This skill is for crates that **depend on** Thermite. Sub-file paths like
 `crates/thermite/src/...` point into the Thermite source (authoritative impl), not
 your project. If prose ever disagrees with the code, trust the code and fix the skill.
 
-**Modifying Thermite's own source** (adding an op / math fn / backend, fixing
-internals)? Read [references/development.md](references/development.md) **first** --
-it's the contributor map (crate layout, proc-macro toolbox, a full worked example
-of adding a primitive across all backends, register-vs-math-fn checklists, the
-build/test/verify loop). The user-facing references (architecture, trait-hierarchy,
-math, performance) remain load-bearing when changing the code behind them.
+## Step 1: `Read` the reference for your task
+
+Loading this skill loaded **only this file**; the rules live in `references/` and nothing
+loads them for you. Match the request below and make your next tool call a `Read` of that
+file (both, if two match) before writing code. Every sub-file exists because a
+SKILL.md-only attempt compiled, passed tests, and was wrong or slow anyway.
+
+| Request involves | Read |
+|---|---|
+| any edit under `crates/thermite/src` (op, backend, math fn, polyfill, macro, trait) | [development.md](references/development.md) (routes onward) |
+| a new fn/kernel over `*Vector` bounds | [generic-programming.md](references/generic-programming.md), then [performance.md](references/performance.md) sec 0 |
+| "optimize" / FMA / divisions / op count / asm of an *existing* kernel | [optimization-pass.md](references/optimization-pass.md) |
+| accuracy, ulp, policy tiers `_p::<P>()`, a new math fn | [math.md](references/math.md), [performance.md](references/performance.md) sec 7 |
+| `Dual`, `Compensated`, `Complex`, or code generic over a type that might be one | [composite-types.md](references/composite-types.md) |
+| masks, `_c`/`_m`/`_z`, select vs masked ops | [masks.md](references/masks.md), [vector-api.md](references/vector-api.md) |
+| slices, alignment, `#[dispatch]`, `dispatch_dyn!` | [slices-and-dispatch.md](references/slices-and-dispatch.md) |
+| a type error you do not understand | [architecture.md](references/architecture.md), [trait-hierarchy.md](references/trait-hierarchy.md) |
+| the full method list for a trait | [vector-api.md](references/vector-api.md) |
+| `thermite-special` / `-sort` / `-sdf` / `-geometry` / `-ffi` | [special.md](references/special.md) / [sort.md](references/sort.md) / [sdf.md](references/sdf.md) / [geometry.md](references/geometry.md) / [ffi.md](references/ffi.md) |
 
 ## Add to a project
 
@@ -172,29 +185,6 @@ thermite_sort::sort::<i32x8>(&mut keys)         // thermite-sort: see references
 
 Build/test as part of your own crate -- normal `cargo build`/`cargo test`, no
 separate library step.
-
-## Sub-files: load what the task needs
-
-Core usage:
-- [generic-programming.md](references/generic-programming.md) -- **read first.** Functions over `*Vector` bounds; assoc types (`V::Element`/`V::Mask`/`V::LANES`); running on scalar/SIMD/composite; bound recipes; pitfalls.
-- [trait-hierarchy.md](references/trait-hierarchy.md) -- full `GenericVector..FloatVector` tree, supertraits, assoc types, which methods live where.
-- [vector-api.md](references/vector-api.md) -- method reference for the vector traits (construction, lanes, memory, gather/scatter, cast, interleave, compress/expand, prefix scans, conflict detection + `group_by_value`, reductions, FMA, packed fp16/bf16/fp8 storage via `PackedFloatVector`) + the `_c`/`_m`/`_z` masked system.
-- [masks.md](references/masks.md) -- `Mask<R>`, `GenericMask` (`all`/`any`/`select`/`bitmask`), casting, `zz`/`nz`.
-- [math.md](references/math.md) -- math trait families (`CoreMath`/`TranscendentalMath`/`SpatialMath`/`RealMath`/`FloatMath`), the `_p::<P>()` policy system + presets, `ScalarMath` for bare `f32`/`f64`, `FloatConsts`, FMA semantics, algorithms module.
-- [slices-and-dispatch.md](references/slices-and-dispatch.md) -- `SimdSlice` iteration (aligned/try-aligned/unaligned/streaming), alignment, `#[dispatch]`/`dispatch_dyn!`.
-
-Composite & companions:
-- [composite-types.md](references/composite-types.md) -- **the compose story.** `Dual<V,N>` and `Compensated<V>` delegate the vector traits to inner `V` so generic code differentiates/error-tracks free. Nesting (`Dual<Compensated<V>>`).
-- [special.md](references/special.md) -- `thermite-special`: erf, gamma, activations (gelu/swish), Lambert W, elliptic integrals.
-- [sort.md](references/sort.md) -- `thermite-sort`: slice quicksort (`sort`/`sort_by`), key-value (`sort_kv_by`), cached-key object sort; partition/network building blocks.
-- [sdf.md](references/sdf.md) -- `thermite-sdf`: primitives, boolean/smooth combinators, transforms, fractals; `SDF`/`GradientSdf`/`BoundedSdf`.
-- [geometry.md](references/geometry.md) -- `thermite-geometry`: SoA `Vector`/`Point`/`Ray`/`Bounds`/`Matrix`.
-- [ffi.md](references/ffi.md) -- `thermite-ffi`: C ABI, header gen, `release-ffi` profile.
-
-Cross-cutting:
-- [performance.md](references/performance.md) -- FMA-variant choice, `if const` capability gating, ILP/critical-path, cancellation-avoidance, `scale` for SPIR-V, `target_feature` codegen gotchas.
-- [architecture.md](references/architecture.md) -- **worth reading as a user.** Element -> Register -> Vector layering, backends/ISA levels, the `Simd` type hierarchy, how composites slot in; demystifies type errors.
-- [development.md](references/development.md) -- **contributor-only.** Modifying Thermite's source: crate map, proc-macro toolbox, worked example (Morton interleave across all backends), register-vs-math-fn checklists, build/test/verify loop.
 
 ## Gotchas (full list in sub-files)
 

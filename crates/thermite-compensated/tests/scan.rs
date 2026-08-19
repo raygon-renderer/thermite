@@ -2,7 +2,7 @@
 //!
 //! The scans are the interesting half. Scanning `value` and `error` with the
 //! inner vector's own scan would add the value lanes without ever renormalising
-//! the carried error into them - plausible-looking floats, no compensation - so
+//! the carried error into them, giving plausible-looking floats with no compensation, so
 //! `prefix_sum` runs the ladder on the double-double `+` instead.
 //!
 //! The test that pins this down is `catastrophic_cancellation`: a running sum
@@ -34,7 +34,7 @@ macro_rules! check {
             want.push(e);
         }
 
-        // Compare through the compensated value; the error term is checked by the
+        // Compare through the compensated value. The error term is checked by the
         // cancellation test below, where it is the only thing that can carry the answer.
         let got = |x: C| -> Vec<f64> { (0..lanes).map(|i| x.extractv(i).value()).collect() };
 
@@ -212,7 +212,7 @@ mod x86 {
 ))]
 fn catastrophic_cancellation() {
     // Needs exactly 8 f64 lanes. On every backend but AVX-512 that is a composite of
-    // native registers, which is fine here - the scan is what is under test, not the width.
+    // native registers, which is fine here, since the scan is what is under test, not the width.
     #[cfg(target_arch = "aarch64")]
     use thermite::backend::neon::f64x8;
     #[cfg(all(target_arch = "wasm32", feature = "wasm"))]

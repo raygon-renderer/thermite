@@ -14,7 +14,7 @@
 //!
 //! Exhaustive over all `2^LANES` mask patterns per width. Backends: scalar
 //! (trait defaults) plus every native backend for the target (table / wide
-//! macro paths) - the two lowerings must agree lane-for-lane.
+//! macro paths). The two lowerings must agree lane-for-lane.
 
 use thermite::backend::scalar::Scalar;
 use thermite::prelude::*;

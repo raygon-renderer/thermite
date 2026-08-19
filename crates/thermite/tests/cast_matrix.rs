@@ -1,7 +1,7 @@
 //! Completeness gate for the same-length cast matrix: every vector of N lanes
 //! must be castable to every other vector of N lanes, whatever the element types.
 //!
-//! Nothing here runs at test time - it all resolves during compilation, and the
+//! Nothing here runs at test time. It all resolves during compilation, and the
 //! file failing to build *is* the failure. What each pair computes is
 //! `diff_cast_matrix.rs`'s job.
 //!
@@ -16,7 +16,7 @@
 //!    kernel, and the concrete probe cannot see that.
 //!
 //! Both must sit in a function **body**. The obvious `where`-clause form does
-//! not work and is not a hypothetical failure - it once reported this matrix
+//! not work and is not a hypothetical failure: it once reported this matrix
 //! complete while 106 pairs had no implementation whatsoever:
 //!
 //! ```ignore
@@ -52,7 +52,7 @@ fn assert_vcast<FROM, TO: CastVector<FROM>>() {}
 /// Consumes the list head-first and pairs the head against each remaining
 /// element in **both** directions, then recurses on the tail. That yields each
 /// unordered pair exactly once and each directed pair exactly once, without
-/// needing to compare two idents for equality to skip the self-pairs - which
+/// needing to compare two idents for equality to skip the self-pairs, which
 /// `macro_rules!` cannot do.
 macro_rules! concrete_pairs_in {
     ($b:ty, $tr:ident;) => {};
@@ -150,7 +150,7 @@ mod neon {
 ///
 /// They are backed by `ReducedRegister<_, U1>` over the 4-lane registers, so
 /// every pair is implemented by the reduced blanket and none of this needs a
-/// backend lowering - but the bounds still have to be *declared* for generic
+/// backend lowering, but the bounds still have to be *declared* for generic
 /// code to reach them, on four traits rather than two (`Simd3A`/`Simd3` and
 /// their two vector mirrors).
 macro_rules! each_lane3 {
@@ -185,7 +185,7 @@ mod x86_3lane {
 /// Question 2: every pair is reachable from generic code, at both layers.
 ///
 /// These are never called. A generic body is type-checked against the trait's
-/// declared bounds regardless, which is the whole point - calling them would
+/// declared bounds regardless, which is the whole point. Calling them would
 /// only add the backend's impls back into scope and re-answer question 1.
 #[allow(dead_code)]
 mod generic_reachability {
@@ -197,7 +197,7 @@ mod generic_reachability {
     }
 
     /// Vector layer: bounds declared on `SimdVectors`, which does not inherit
-    /// them from `Simd` - the mirror states its own `CastVector` bounds. This is
+    /// them from `Simd`, since the mirror states its own `CastVector` bounds. This is
     /// the layer user code actually touches.
     pub fn vectors<S: SimdVectors>() {
         each_lane!(generic_pairs, assert_vcast);

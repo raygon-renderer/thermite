@@ -53,7 +53,11 @@ fn one_step_verdicts() {
     assert!(!v.excluded.any());
     // K(X) is strictly inside X.
     assert!(k.lo().extract::<0>() > 2.0 && k.hi().extract::<0>() < 2.5);
-    assert!(contains(k.lo().extract::<0>(), k.hi().extract::<0>(), 2.278862660075816));
+    assert!(contains(
+        k.lo().extract::<0>(),
+        k.hi().extract::<0>(),
+        2.278862660075816
+    ));
 
     let x: I<Tightest> = Interval::bounds(V1::splat(0.5), V1::splat(1.5));
     let (_, v) = krawczyk_step(f_sin::<Tightest>, x);
@@ -68,7 +72,12 @@ fn one_step_verdicts() {
 
 fn check_sin<W: WideningPolicy>() {
     let cert = certify_roots::<V1, W, _>(f_sin::<W>, -4.0, 4.0, 1e-9, 10_000);
-    assert_eq!(cert.roots.len(), 3, "sin(x) - x/3 has 3 roots on [-4, 4]: {:?}", cert.roots);
+    assert_eq!(
+        cert.roots.len(),
+        3,
+        "sin(x) - x/3 has 3 roots on [-4, 4]: {:?}",
+        cert.roots
+    );
     assert!(cert.unresolved.is_empty(), "nothing unresolved: {:?}", cert.unresolved);
 
     let mut roots = cert.roots.clone();
@@ -118,14 +127,27 @@ fn certifies_integer_roots_of_cubic() {
 #[test]
 fn double_root_is_never_certified() {
     let cert = certify_roots::<V1, Tightest, _>(double_root::<Tightest>, 0.0, 2.0, 1e-6, 10_000);
-    assert!(cert.roots.is_empty(), "a double root cannot be certified unique: {:?}", cert.roots);
+    assert!(
+        cert.roots.is_empty(),
+        "a double root cannot be certified unique: {:?}",
+        cert.roots
+    );
     assert!(!cert.unresolved.is_empty(), "the tangency must be reported");
     // Exclusion is a proof of absence, so the root can never be lost: some
     // unresolved box contains it, and all of them cluster at the tangency
     // (near a double root f is tiny, so nearby boxes cannot be excluded).
-    assert!(cert.unresolved.iter().any(|u| contains(u.lo, u.hi, 1.0)), "the root box must survive: {:?}", cert.unresolved);
+    assert!(
+        cert.unresolved.iter().any(|u| contains(u.lo, u.hi, 1.0)),
+        "the root box must survive: {:?}",
+        cert.unresolved
+    );
     for u in &cert.unresolved {
-        assert!((u.lo - 1.0).abs() < 1e-2 && (u.hi - 1.0).abs() < 1e-2, "unresolved box [{}, {}] far from the root", u.lo, u.hi);
+        assert!(
+            (u.lo - 1.0).abs() < 1e-2 && (u.hi - 1.0).abs() < 1e-2,
+            "unresolved box [{}, {}] far from the root",
+            u.lo,
+            u.hi
+        );
     }
 }
 
@@ -156,7 +178,11 @@ fn refinement_preserves_containment() {
         assert!(!v.excluded.any(), "a certified box can never be excluded on refinement");
         let w = k.width().extract::<0>();
         assert!(w <= last_w, "width must not grow: {w} > {last_w}");
-        assert!(contains(k.lo().extract::<0>(), k.hi().extract::<0>(), 2.2788626600758283));
+        assert!(contains(
+            k.lo().extract::<0>(),
+            k.hi().extract::<0>(),
+            2.2788626600758283
+        ));
         last_w = w;
         x = k;
     }

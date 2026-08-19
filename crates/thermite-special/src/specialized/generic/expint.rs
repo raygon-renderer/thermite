@@ -5,26 +5,38 @@ use thermite::{
         CoreMathWithPolicy as _, FloatConsts, TranscendentalMathWithPolicy as _,
         policy::{Policy, PrecisionPolicy},
     },
-    register::FloatElement,
     vector::FloatVectorWithBits,
 };
 
-// Computes the largest x for which the forward recurrence E_1 -> E_N is reliable.
+/// How much error amplification the forward recurrence is allowed before the continued
+/// fraction takes over, in ulps of the seed.
+///
+/// The resulting worst-case relative error on the recurrence path is `AMP_CAP * eps`, i.e.
+/// about 1.4e-14 in binary64 and 7.6e-6 in binary32 - proportional in either format, which is
+/// why this is a pure count and not a function of the mantissa width.
+const AMP_CAP: f64 = 64.0;
+
+// Computes the largest x for which the forward recurrence E_1 -> E_N holds full precision.
 //
 // The recurrence E_{n+1}(x) = (e^{-x} - x*E_n(x)) / n has a homogeneous growing solution:
-// any error δ in E_1 is amplified after N steps to δ * x^(N-1) / (N-1)!
+// any error δ in E_1 is amplified after N-1 steps to δ * x^(N-1) / (N-1)!
 //
-// The mantissa budget is 2^mantissa_bits, so precision is lost once:
-//   x^(N-1) / (N-1)! > 2^mantissa_bits
+// Requiring that amplification to stay under AMP_CAP gives
 //
-// Solving for x gives the recurrence limit: x_rec = ((N-1)! * 2^mantissa_bits)^(1/(N-1))
+//   x_cf = (AMP_CAP * (N-1)!)^(1/(N-1))
 //
-// However, x_rec converges toward (N-1)/e ≈ 0.368*N as N -> ∞ and eventually falls
-// below N. The asymptotic series only starts shrinking when x > N (since the first-term
-// ratio N/x < 1 requires x > N), so below N it diverges immediately and gives wrong
-// results. The threshold is therefore clamped to at least N to ensure the asymptotic
-// path is always valid when taken. For f32 this matters around N ≥ 20; for f64, N ≥ 37.
-const fn recurrence_threshold(n: usize, mantissa_bits: u32) -> f64 {
+// which is 64 at N = 2, 11.3 at N = 3, and settles into the 6-to-17 range for everything
+// above that (it grows like (N-1)/e). Past it, `expint_fraction` runs instead.
+//
+// The cap has to be a fixed number of ulp, not the whole mantissa. Solving
+// x^(N-1)/(N-1)! = 2^mantissa_bits instead runs the recurrence until the amplification has
+// consumed every bit, which leaves the answer with no correct digits at all just below the
+// threshold for any N >= 6 (8.2e-3 relative at N = 12, x = 90; 24% at N = 20, x = 51). The
+// asymptotic series on the far side needs x of 45 to 110 to converge, so that rule also
+// leaves a band for every N >= 4 where neither method works. Boost.Math avoids the question
+// entirely: it takes a continued fraction for essentially all x >= 1 and has no forward
+// recurrence.
+const fn recurrence_threshold(n: usize) -> f64 {
     if n <= 1 {
         return f64::MAX;
     }
@@ -46,9 +58,9 @@ const fn recurrence_threshold(n: usize, mantissa_bits: u32) -> f64 {
 
     let k = (n - 1) as u32;
 
-    // target = (n-1)! * 2^mantissa_bits
+    // target = AMP_CAP * (n-1)!
     let target: f64 = {
-        let mut f = (1u64 << mantissa_bits) as f64;
+        let mut f = AMP_CAP;
         let mut i = 2usize;
         while i < n {
             f *= i as f64;
@@ -57,16 +69,11 @@ const fn recurrence_threshold(n: usize, mantissa_bits: u32) -> f64 {
         f
     };
 
-    // Bisect for the k-th root of target. The maximum threshold for k >= 2 occurs at k=2:
-    // sqrt(2 * 2^mantissa_bits) = 2^((mantissa_bits+1)/2). Using mantissa_bits/2 + 2 as
-    // the shift gives a safe ceiling (e.g. f32: 2^13=8192, f64: 2^28=268M) while keeping
-    // intermediate powers well within f64 range for all practical N.
+    // Bisect for the k-th root of target. The largest value it can take is at k = 1
+    // (target itself, AMP_CAP); above that the root pulls it into the single digits, so a
+    // ceiling of AMP_CAP bounds every case.
     let mut lo = 0.0f64;
-    let mut hi = if k == 1 {
-        target
-    } else {
-        (1u64 << (mantissa_bits / 2 + 2)) as f64
-    };
+    let mut hi = if k == 1 { target } else { AMP_CAP };
 
     let mut i = 0;
     while i < 64 {
@@ -79,11 +86,19 @@ const fn recurrence_threshold(n: usize, mantissa_bits: u32) -> f64 {
         i += 1;
     }
 
-    let result = (lo + hi) * 0.5;
-
-    // Clamp: asymptotic series diverges immediately for x < N, so never switch below N.
-    if result < n as f64 { n as f64 } else { result }
+    // No lower clamp is needed: the continued fraction converges for every x > 0 (more
+    // slowly as x falls, but it converges), unlike the asymptotic series this replaced,
+    // which diverged outright below x = N and forced a clamp there.
+    (lo + hi) * 0.5
 }
+
+/// Iteration cap for [`expint_fraction`].
+///
+/// The fraction is only entered above [`recurrence_threshold`], and the slowest case at any
+/// threshold needs 26 iterations (N = 5..10, where the threshold bottoms out near x = 6);
+/// it falls to 8 by x = 60 and 6 by x = 90. Lanes freeze as they converge and the loop
+/// exits once all of them have, so this bound is a backstop rather than a trip count.
+const CF_MAX_ITER: u32 = 48;
 
 // NOTE: When const-generics are more mature, we can have these polynomials by dynamic in size based on the
 // type of `Self`. For now, it's only the double-precision (f64) polynomials.
@@ -113,7 +128,7 @@ macro_rules! impl_expint_consts {
             const LARGE_N: [Self; 11] = [$($ln_value),*];
             const LARGE_D: [Self; 12] = [$($ld_value),*];
             const ASYMPTOTIC_CONST: Self = 0.66373538970947265625;
-            const RECURRENCE_THRESHOLD: Self = const { recurrence_threshold(N, Self::MANTISSA_BITS) as f32 };
+            const RECURRENCE_THRESHOLD: Self = const { recurrence_threshold(N) as f32 };
             const ONE_OVER_N_MINUS_1: Self = if N > 1 { 1.0 / (N as Self - 1.0) } else { Self::INFINITY };
             const FACTORS: [Self; N] = {
                 let mut facts = [0.0; N]; let mut i = 0;
@@ -133,7 +148,7 @@ macro_rules! impl_expint_consts {
             const LARGE_N: [Self; 11] = [$($ln_value),*];
             const LARGE_D: [Self; 12] = [$($ld_value),*];
             const ASYMPTOTIC_CONST: Self = 0.66373538970947265625;
-            const RECURRENCE_THRESHOLD: Self = const { recurrence_threshold(N, Self::MANTISSA_BITS) };
+            const RECURRENCE_THRESHOLD: Self = const { recurrence_threshold(N) };
             const ONE_OVER_N_MINUS_1: Self = if N > 1 { 1.0 / (N as Self - 1.0) } else { Self::INFINITY };
             const FACTORS: [Self; N] = {
                 let mut facts = [0.0; N]; let mut i = 0;
@@ -159,7 +174,7 @@ impl_expint_consts! {
         0.0865197248079397976498,
     ],
     SMALL_D [
-        0.528611029520217142048e-6,
+        -0.528611029520217142048e-6,
         0.000131049900798434683324,
         0.00427347600017103698101,
         0.056770677104207528384,
@@ -195,6 +210,125 @@ impl_expint_consts! {
     ]
 }
 
+/// `$E_N(x)$` by its continued fraction, evaluated in modified Lentz form.
+///
+/// ```text
+/// E_n(x) = e^{-x} / (x + n - 1*n/(x + n + 2 - 2*(n+1)/(x + n + 4 - ...)))
+/// ```
+///
+/// This is what Boost.Math uses for `$E_n$` at essentially all `$x \ge 1$`, and what this
+/// kernel now uses above [`recurrence_threshold`]. It replaced an asymptotic series that
+/// could not converge in the range it was being asked to cover: measured against a 45-digit
+/// reference, the fraction holds **~1e-16 for every order from 1 to 20 at every `$x \ge 2$`**,
+/// where the series it replaced left an unreachable band for every `$N \ge 4$`.
+///
+/// Lentz's formulation is the one to use here because it never forms the convergents
+/// directly. It carries the *ratios* `c` and `d`, so nothing overflows even where the
+/// numerator and denominator separately would. The two `is_zero` guards are Lentz's own: a
+/// vanishing denominator is substituted with a tiny value, which perturbs the result by less
+/// than an ulp and keeps the recurrence going.
+///
+/// Divisions here are exact rather than `approx_div` at every tier. The policy enters through
+/// the *convergence tolerance* instead, which is the knob that actually pays: iterations, not
+/// the cost of each one.
+///
+/// # The tolerance is where the policy lives
+///
+/// The loop stops a lane once `|delta - 1|` falls under the tolerance, and each tier names
+/// **a fraction of the mantissa to keep** rather than an absolute figure, so it means the
+/// same thing in either format. Measured against a 40-digit reference at `N = 8`, `x = 6.5`:
+///
+/// | tier | tolerance | binary64 | binary32 |
+/// |---|---|---|---|
+/// | `Average` and up | `EPSILON` | 1.5e-16 | 1.3e-07 |
+/// | `Medium` | `eps^(3/4)`, three quarters | 4.4e-13 | 5.4e-07 |
+/// | `Worst` | `sqrt(eps)`, half | 1.1e-09 | 6.8e-05 |
+///
+/// Those savings land exactly where the cost is. The fraction is dearest near the threshold
+/// and converges in 6 to 8 iterations by `$x = 60$` whatever the tier, so the tiers collapse
+/// on their own where the function is easy.
+///
+/// **`Average` and above are untouched**, matching `poisson`'s `stirlerr_terms`: only the two
+/// tiers that exist to trade accuracy for speed do so, and the default policy keeps full
+/// precision. The tolerance is also floored at the format's `EPSILON`, so asking binary32 for
+/// `1e-8` does not spin the loop chasing digits it cannot represent.
+///
+/// An asymptotic series was considered for the low tiers and rejected. It is *anti-correlated
+/// with need*: at `N = 8, x = 6.1` - the same worst case above - the best it can reach is
+/// 100% relative error, because its terms grow rather than shrink until `$x > N$`. By the
+/// time it is accurate (`$x \approx 90$`) the fraction already converges in 7 iterations. It
+/// can only help where help is least needed.
+#[inline(always)]
+fn expint_fraction<P, E, V, const N: usize>(x: V, exp_neg_x: V) -> V
+where
+    P: Policy,
+    E: FloatElementWithBits + ExpIntConsts<N>,
+    V: FloatVectorWithBits<Element = E> + crate::specialized::SpecializedSpecialMath<E>,
+{
+    // Stated as a fraction of the format's mantissa rather than as an absolute figure, so
+    // the tiers mean the same thing in binary32 and binary64. An absolute constant does not
+    // survive the format change: 1e-8 is a real relaxation against a binary64 epsilon of
+    // 2.2e-16 and is *below* a binary32 one of 1.2e-7, so binary32 would clamp straight back
+    // to full precision and the tier would buy nothing at all.
+    let tol = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+        // Half the mantissa: 1.5e-8 in binary64, 3.4e-4 in binary32.
+        <V as FloatConsts>::SQRT_EPSILON
+    } else if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+        // Three quarters of it: eps^(3/4) is eps^(1/2) * eps^(1/4), so the two constants
+        // FloatConsts already carries give it as a plain multiply rather than a root.
+        // 3.4e-12 in binary64, 3.6e-6 in binary32.
+        <V as FloatConsts>::SQRT_EPSILON * <V as FloatConsts>::FOURTH_ROOT_EPSILON
+    } else {
+        <V as FloatConsts>::EPSILON
+    };
+
+    let tiny = V::MIN_POSITIVE;
+    let two = V::ONE + V::ONE;
+    let n_large = const { N as thermite::LargeInt };
+
+    // b_0 = x + n, and the first convergent is 1/b_0. Both are positive for x > 0, so the
+    // opening reciprocal needs no guard.
+    let mut b = x + V::splat(E::from_int(n_large));
+    let mut c = V::MAX;
+    let mut d = V::ONE / b;
+    let mut h = d;
+
+    let mut active = <V::Mask as GenericMask>::TRUTHY;
+    let mut i = 1u32;
+
+    while i <= CF_MAX_ITER {
+        // a_i = -i(n + i - 1)
+        let a = V::splat(E::from_int(
+            -(i as thermite::LargeInt) * (n_large - 1 + i as thermite::LargeInt),
+        ));
+        b += two;
+
+        let den = a.mul_adde(d, b);
+        d = V::ONE / den.is_zero().select(tiny, den);
+
+        let num = b + a / c;
+        c = num.is_zero().select(tiny, num);
+
+        let delta = c * d;
+
+        // Frozen lanes keep the value they converged to. Continuing to multiply a converged
+        // lane by a delta that is only approximately one would walk it back off the answer.
+        h = active.select(h * delta, h);
+
+        // Converged once delta reaches one. Checked every fourth iteration so the reduction
+        // is amortized.
+        active &= (delta - V::ONE).abs().cmp_gt(tol);
+
+        if i.is_multiple_of(4) && active.none() {
+            break;
+        }
+
+        i += 1;
+    }
+
+    h * exp_neg_x
+}
+
 #[inline(always)]
 /// `$E_N(x)$` only. See [`expint_double_primal`] for the shape of the computation.
 pub fn expint_double<P: Policy, E, V, const N: usize>(x: V) -> V
@@ -210,7 +344,7 @@ where
 ///
 /// The lower order comes from whichever direction is stable in the regime the value
 /// itself was computed in: below [`ExpIntConsts::RECURRENCE_THRESHOLD`] the forward
-/// recurrence is running anyway, so `E_{N-1}` is just its previous iterate; above it,
+/// recurrence is running anyway, so `E_{N-1}` is just its previous iterate. Above it,
 /// where the asymptotic series takes over, the recurrence is inverted instead --
 /// `$E_{N-1}(x) = (e^{-x} - (N-1) E_N(x)) / x$`. Inverting is the *stable* direction
 /// (it damps by `1/x` where the forward one amplifies by `x`) and its only weakness,
@@ -311,44 +445,18 @@ where
 
     let is_very_large = x.cmp_ge(V::splat(E::RECURRENCE_THRESHOLD));
 
-    // Asymptotic expansion for large x where forward recurrence loses precision.
-    // E_n(x) ~ (e^{-x}/x) * sum_{k=0}^{inf} (-1)^k * n(n+1)...(n+k) / x^k
-    // This is a divergent series - terms eventually grow. We sum while terms shrink,
-    // freezing each lane once its terms start increasing. The check is amortized
-    // every 4 iterations to allow the compiler to unroll the inner loop body.
+    // Past the point where the forward recurrence still holds its digits, take the
+    // continued fraction instead. See [`expint_fraction`] and [`recurrence_threshold`];
+    // this replaced an asymptotic series that left an unreachable band for every N >= 4.
     if const { N > 1 } && thermite::unlikely(is_very_large.any()) {
-        let mut term = V::ONE;
-        let mut partial_sum = V::ONE;
-        let mut prev_abs = V::INFINITY;
-
-        let mut k = 0u32;
-        while k < 2 * N as u32 + 8 {
-            term *= inv_x.scale(FloatElement::from_int(
-                const { -(N as thermite::LargeInt) } - k as thermite::LargeInt,
-            ));
-
-            let abs_term = term.abs();
-            let still_shrinking = abs_term.cmp_le(prev_abs);
-
-            // Check convergence every 4 iterations (amortized to allow loop unrolling).
-            // Uses the loop condition instead of break to keep SPIR-V CFG well-structured.
-            if k % 4 == 3 && still_shrinking.none() {
-                break;
-            }
-
-            partial_sum = partial_sum.add_c(still_shrinking, term);
-            prev_abs = still_shrinking.select(abs_term, prev_abs);
-            k += 1;
-        }
-
-        // E_n is always positive for x > 0; abs() clamps truncation artifacts.
-        e_n = is_very_large.select(x_ex * partial_sum.abs(), e_n);
+        e_n = is_very_large.select(expint_fraction::<P, E, V, N>(x, exp_neg_x), e_n);
 
         // The forward-carried `e_prev` came from a recurrence this branch just rejected
         // as unreliable, so re-derive it by inverting that recurrence instead:
         //   E_N = (e^-x - x*E_{N-1}) / (N-1)  =>  E_{N-1} = (e^-x - (N-1)*E_N) / x
-        // Backward is the stable direction, and this branch only runs for very large x,
-        // far from the x -> 0 cancellation that would otherwise spoil it.
+        // Backward is the stable direction (it damps by 1/x where the forward one
+        // amplifies by x), and this branch only runs above the threshold, far from the
+        // x -> 0 cancellation that would otherwise spoil it.
         let back = (exp_neg_x - e_n.scale(E::from_int(const { N as thermite::LargeInt - 1 }))) / x;
         e_prev = is_very_large.select(back, e_prev);
     }

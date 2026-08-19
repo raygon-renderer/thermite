@@ -26,8 +26,16 @@ where
     V: thermite::math::PrimalProjection<Primal = V>,
 {
     type ExpIntDetails = Self;
+    const LAGUERRE_PRODUCT_SEED_CAP: i32 = 29;
 
-    // TEMP(bessel_j): disabled until orders beyond J_0 exist - see the note in lib.rs.
+    #[inline(always)]
+    fn chebyshev<P: Policy, const K: usize, const N: usize>(self, coeffs: &[f32; N]) -> Self {
+        // Real vectors have copysign and a real nearest endpoint, so the Reinsch form is
+        // available, but the kernel still gates it on the policy asking for `Best` or better.
+        generic::chebyshev::chebyshev_series::<P, _, _, K, N, true>(self, coeffs)
+    }
+
+    // TEMP(bessel_j): disabled until orders beyond J_0 exist. See the note in lib.rs.
     // The `bessel_j0`/`bessel_j0_pqzero` machinery this called is kept below under the
     // same marker.
     //#[inline(always)]
@@ -304,7 +312,12 @@ where
         }
 
         // 36 is the largest integer whose factorial is finite in f32.
-        generic::gamma::tgamma_impl::<P, _, _, _>(z, &crate::tables::gamma::LANCZOS_F32, 36.0, crate::tables::gamma::LN_MAX_F32)
+        generic::gamma::tgamma_impl::<P, _, _, _>(
+            z,
+            &crate::tables::gamma::LANCZOS_F32,
+            36.0,
+            crate::tables::gamma::LN_MAX_F32,
+        )
     }
 
     #[inline(always)]
@@ -351,7 +364,11 @@ where
                 N,
                 f32::EPSILON as f64 * P::POLICY.precision.tolerance() as f64 / 32.0,
             );
-            if needed < P::POLICY.max_iterations { needed } else { P::POLICY.max_iterations }
+            if needed < P::POLICY.max_iterations {
+                needed
+            } else {
+                P::POLICY.max_iterations
+            }
         };
         super::generic::phi::phi_internal::<Self, f32, P, N, false>(self, terms)
     }
@@ -629,7 +646,7 @@ where
         // -cos(2x): fresh trig call at doubled argument for Best+ precision
         // (avoids cancellation in 1-2cos^2x near x ≈ kπ/4);
         // otherwise 1-2cos^2x, which is exact at the cancellation point
-        // and only loses bits near - but not at - those values.
+        // and only loses bits near (but not at) those values.
         let neg_cos2x = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
             -(ax + ax).cos_p::<P>()
         } else {
@@ -866,10 +883,10 @@ where
             // [7/9] rational's 18 plus that divide.
             //
             // Evaluated in t = 2x/C - 1 rather than in x directly. The monomial basis over a wide
-            // interval is badly conditioned, and it fails silently: fitting in x gives perfectly
+            // interval is badly conditioned, and fails silently: fitting in x gives perfectly
             // reasonable-looking coefficients whose exact-arithmetic error is fine, but rounding
             // them to f32 cost four orders of magnitude (1.9e-8 -> 2.0e-4 at degree 16) because
-            // x^k amplifies each rounding error - x^16 reaches 4.3e9 over this interval. Mapping
+            // x^k amplifies each rounding error, and x^16 reaches 4.3e9 over this interval. Mapping
             // to [-1, 1] bounds every power by one and the loss disappears.
             //
             // C = 4 puts the scale at exactly 0.5, so the mapping is a single exact FMA. The
@@ -899,9 +916,9 @@ where
             //   lgamma(x+1) = (x + 1/2) ln(x) - x + ln(2pi)/2 + 1/(12x) - 1/(360x^3) + ...
             //
             // Its coefficients are the Bernoulli terms B_2n/(2n(2n-1)), exact rationals rather
-            // than a fit. No polynomial can take its place out here - lgamma(x) ~ x ln(x) is not
-            // rational, which is why the old Pade decayed and eventually changed sign (it
-            // returned -17690 at x = 300, where the answer is 1409).
+            // than a fit. No polynomial can take its place out here: lgamma(x) ~ x ln(x) is not
+            // rational, so a Pade approximant decays away from its expansion point and
+            // eventually changes sign, returning -17690 at x = 300 where the answer is 1409.
             //
             // Nor can Stirling take over the small end. Its series is asymptotic, not convergent:
             // at x = 0.5 it is 1.6% off, at x = 0.1 it returns the wrong sign, and adding terms
@@ -935,9 +952,9 @@ where
             let ln_e = e.ln_p::<P>();
 
             // Stirling wants ln(x) on its own. Away from the reflection that *is* `ln_e`, so it
-            // costs nothing; only a lane that is both reflected and above the crossover needs a
+            // costs nothing. Only a lane that is both reflected and above the crossover needs a
             // second logarithm, because there the two arguments genuinely differ and no
-            // rearrangement merges them - the reflection needs ln|sin(pi z)| and Stirling needs
+            // rearrangement merges them: the reflection needs ln|sin(pi z)| and Stirling needs
             // ln(x), which are independent transcendentals. Those lanes are large negative
             // arguments, so the extra `ln` sits behind a doubly-unlikely guard.
             let mut lnx = ln_e;
@@ -959,8 +976,8 @@ where
             if const { P::POLICY.check_overflow } {
                 // Stirling's `(x + 1/2) ln(x) - x` is inf - inf at an infinite argument, and
                 // the arm is selected there since inf >= the crossover. lgamma diverges at
-                // both ends - the negative side reaches this through the reflection, whose
-                // `x = 1 - z` is likewise infinite - so both map to +inf.
+                // both ends (the negative side reaches this through the reflection, whose
+                // `x = 1 - z` is likewise infinite), so both map to +inf.
                 y = z.is_infinite().select(Self::INFINITY, y);
             }
 
@@ -1071,7 +1088,7 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
         // loss for large inputs, but will prevent overflow in the polynomial evaluation.
         let x = x.min(thermite::const_splat!(f32: 4.5));
 
-        // Both use erf(x) ≈ 1 - 1/t^n for a polynomial t; only the poly and
+        // Both use erf(x) ≈ 1 - 1/t^n for a polynomial t, and only the poly and
         // exponent differ. Worst: A&S degree-4, t^4.  Medium: A&S 7.1.27 degree-6, t^16 (3e-7).
         let tn = if const { matches!(P::POLICY.precision, PrecisionPolicy::Worst) } {
             let t = x.poly_rev_p::<P, _>(&[0.078108, 0.000972, 0.230389, 0.278393, 1.0]);

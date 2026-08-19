@@ -325,7 +325,7 @@ impl InterleaveRegister for I32x8V3 {
             let t0 = arch::_mm256_permute2x128_si256(a, b, 0x20);
             let t1 = arch::_mm256_permute2x128_si256(a, b, 0x31);
 
-            // Zero-cost cast to utilize the highly efficient float shuffle
+            // Zero-cost cast to use the efficient float shuffle
             let t0_ps = arch::_mm256_castsi256_ps(t0);
             let t1_ps = arch::_mm256_castsi256_ps(t1);
 

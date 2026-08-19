@@ -1,17 +1,17 @@
 //! Numeric `cast` (conversion) polyfill audit.
 //!
-//! Int↔float and width-changing conversions are heavily polyfilled
+//! Int<->float and width-changing conversions are heavily polyfilled
 //! (`_mm*_cvt*`, `convert_*_limited`). The scalar backend's `cast_from` is
 //! literally `value as _`, so each test is a differential against Rust's
-//! built-in `as` - the documented "like `as`" contract for `cast`.
+//! built-in `as`, the documented "like `as`" contract for `cast`.
 //!
-//! `mod gate` is the always-green correctness gate. Float→int conversions are
+//! `mod gate` is the always-green correctness gate. Float->int conversions are
 //! kept in the **in-range, finite** domain there, matching `cast`'s documented
-//! precondition (out-of-range/NaN lanes are backend-defined - x86 returns the
+//! precondition (out-of-range/NaN lanes are backend-defined, x86 returning the
 //! hardware "indefinite" integer). The total, `as`-exact op is
 //! `saturating_cast`, verified over the raw corpus (NaN/inf/out-of-range
 //! included) in each backend's `mod saturating`; those modules also pin that
-//! `cast` f64→u64 is full-range truncating (it used to route to the rounding,
+//! `cast` f64->u64 is full-range truncating (it used to route to the rounding,
 //! `[0, 2^52)`-only `_limited` polyfill that now only backs `fast_cast`).
 #![cfg(any(
     target_arch = "x86",
@@ -26,7 +26,7 @@ use harness::Tol;
 use thermite::backend::scalar::Scalar;
 use thermite::simd::Simd;
 
-// identity prep (int→int, int→float, float→float: scalar uses the same `as`,
+// identity prep (int->int, int->float, float->float: scalar uses the same `as`,
 // so the differential is bit-exact even when the conversion itself rounds).
 macro_rules! id {
     ($t:ty) => {
@@ -64,7 +64,7 @@ macro_rules! bitpair {
     };
 }
 
-// Float→int domain guards: keep strictly in-range & finite so truncation is
+// Float->int domain guards: keep strictly in-range & finite so truncation is
 // unambiguous and matches `as` on both backends.
 fn to_i32_dom(x: f32) -> f32 {
     if x.is_finite() { x.clamp(-2.0e9, 2.0e9) } else { 0.0 }
@@ -139,7 +139,7 @@ macro_rules! cast_suite {
                 cpair!($tag, $b, f64x4, f32x4, f64, id!(f64), Tol::Exact);
             }
 
-            // --- float→int, kept strictly in-range/finite ---
+            // --- float->int, kept strictly in-range/finite ---
             #[test]
             fn f32_to_i32_inrange() {
                 cpair!($tag, $b, f32x4, i32x4, f32, to_i32_dom, Tol::Exact);
@@ -152,12 +152,10 @@ macro_rules! cast_suite {
             fn f64_to_i64_inrange() {
                 cpair!($tag, $b, f64x4, i64x4, f64, to_i64_dom, Tol::Exact);
             }
-            // f64→u64 is not repeated here; it is covered exhaustively, along
-            // with every other float→int pair at every lane count, by
-            // `diff_cast_matrix.rs`. (The note that used to sit here - that the
-            // pair diverged because it routed to the rounding `_limited` epu64
-            // polyfill - is obsolete: that polyfill backs only `fast_cast` now,
-            // and the in-range differential passes.)
+            // f64->u64 is not repeated here. It is covered exhaustively, along
+            // with every other float->int pair at every lane count, by
+            // `diff_cast_matrix.rs`. The rounding `_limited` epu64 polyfill backs
+            // only `fast_cast`, so the in-range differential passes.
 
             // --- rung 3: 8/16-bit int <-> f32/f64 direct casts ---
             // widen int -> float is value-preserving and exact (every i8/u8/i16/u16 is
@@ -208,7 +206,7 @@ macro_rules! cast_suite {
             }
 
             // narrow float -> 8/16-bit int, kept strictly in the target type's range
-            // (the contract is 'like as' only in-range; out-of-range/NaN diverges).
+            // (the contract is 'like as' only in-range, and out-of-range/NaN diverges).
             #[test]
             fn f32_to_int8_inrange() {
                 cpair!(
@@ -564,7 +562,7 @@ mod x86 {
         cast_suite!(v1, X86V1, "x86_v1");
     }
 
-    // Out-of-range / NaN float→int: `cast` documents backend-defined results
+    // Out-of-range / NaN float->int: `cast` documents backend-defined results
     // there (x86 returns the hardware "indefinite" integer). The total,
     // `as`-exact op is `saturating_cast`, verified here over the RAW corpus
     // (NaN, infinities, out-of-range included) against the scalar oracle.
@@ -783,7 +781,7 @@ mod wasm {
 
     // wasm's `cast` is already total and `as`-exact in both directions
     // (`*_trunc_sat_*` for f32, per-lane scalar `as` for f64), so the raw
-    // corpus - NaN, infinities, out-of-range - must match the scalar oracle.
+    // corpus (NaN, infinities, out-of-range) must match the scalar oracle.
     // Only `fast_cast` (relaxed trunc / `_limited` magic) is narrow-domain.
     mod saturating {
         use super::*;
@@ -874,15 +872,15 @@ mod neon {
         cast_suite!(neon, Neon, "neon");
     }
 
-    // Out-of-range / NaN float→int: scalar saturates (Rust `as`), the wasm hardware
+    // Out-of-range / NaN float->int: scalar saturates (Rust `as`), the wasm hardware
     // path returns the "indefinite" integer (i64::MIN / i32::MIN). Documented
     // divergence, not auto-failed.
-    // (inherited from the wasm section; revisit for NEON)
+    // (inherited from the wasm section, revisit for NEON)
     mod divergence {
         use super::*;
 
         #[test]
-        #[ignore = "DIVERGENCE: out-of-range/NaN float→int returns the hardware \
+        #[ignore = "DIVERGENCE: out-of-range/NaN float->int returns the hardware \
                 indefinite integer instead of saturating like `as` (scalar). \
                 The general `cast` contract is 'like as'; backend needs a clamp or \
                 the `_limited` precondition must be documented."]
@@ -910,11 +908,11 @@ mod neon {
         }
 
         #[test]
-        #[ignore = "DIVERGENCE: f64→u64 `cast` routes to a `_limited` polyfill \
+        #[ignore = "DIVERGENCE: f64->u64 `cast` routes to a `_limited` polyfill \
                 which (a) only works on [0, 2^52) and (b) ROUNDS (adds 2^52) \
                 instead of truncating like `as` - so e.g. 2.7_f64 as u64 == 2 \
                 but the cast yields 3, and values ≥ 2^52 are corrupted. \
-                f64→i64 is full-range-correct and truncating; f64→u64 needs an \
+                f64->i64 is full-range-correct and truncating; f64->u64 needs an \
                 equivalent path or a documented precondition."]
         fn f64_to_u64_nonconforming() {
             // (b) rounds vs truncates, even for tiny in-range values.

@@ -267,7 +267,7 @@ impl InterleaveRegister for I32x4V3 {
 
     fn deinterleave(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         unsafe {
-            // Zero-cost cast to utilize the efficient float shuffle
+            // Zero-cost cast to use the efficient float shuffle
             let a = arch::_mm_castsi128_ps(a);
             let b = arch::_mm_castsi128_ps(b);
 

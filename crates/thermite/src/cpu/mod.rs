@@ -3,7 +3,7 @@
 //!
 //! Everything here is **reported by the hardware or the OS, never estimated**.
 //! No value is inferred from a nominal core clock, measured against a wall
-//! clock, or guessed from a model-number table -- if the machine does not say,
+//! clock, or guessed from a model-number table. If the machine does not say,
 //! the answer is `None`.
 //!
 //! [`quirks`] is the deliberate exception, and is kept in its own module for
@@ -13,11 +13,11 @@
 //! them for correctness.
 //!
 //! This is deliberately *not* on [`NativeIsa`](crate::simd::NativeIsa). Nothing
-//! here varies by backend -- `rdtsc` is the same instruction whether the caller
-//! is running SSE2 or AVX2 kernels -- it varies by **target and host**, so it
+//! here varies by backend (`rdtsc` is the same instruction whether the caller
+//! is running SSE2 or AVX2 kernels), it varies by **target and host**, so it
 //! lives in one place and every backend sees the same answer.
 //!
-//! # What each platform can actually answer
+//! # Platform coverage
 //!
 //! Only x86 can interrogate itself with a plain user-space instruction
 //! (`cpuid`), so it is the only target that fills this in without help. On
@@ -71,7 +71,7 @@ pub mod apple;
 mod aarch64;
 
 /// Which instructions this CPU implements in microcode. The one model-number
-/// table in this module -- see its own docs for why there is no alternative.
+/// table in this module. See its own docs for why there is no alternative.
 pub mod quirks;
 
 /// What a cache level holds.
@@ -114,7 +114,7 @@ pub enum CoreType {
 }
 
 /// Core counts. `logical`/`physical` are whole-machine where the OS tells us
-/// (`std`), and per-package from `cpuid` otherwise -- which differ on a
+/// (`std`), and per-package from `cpuid` otherwise, which differ on a
 /// multi-socket box.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Topology {
@@ -220,7 +220,7 @@ impl CpuInfo {
 
     /// Cache line size in bytes -- 64 on x86 and most aarch64, **128 on Apple
     /// silicon**. The number to align hot structures to and to stride prefetches
-    /// by; see [`crate::backend::prefetch`].
+    /// by. See [`crate::backend::prefetch`].
     #[inline]
     pub fn cache_line_size(&self) -> Option<u32> {
         self.line_size
@@ -256,7 +256,7 @@ const READY: u8 = 2;
 /// publish, rather than a lock.
 ///
 /// Generic over the payload so the snapshot and the [`quirks`] table share one
-/// implementation -- both are "run a short `cpuid` sequence once, publish the
+/// implementation, since both are "run a short `cpuid` sequence once, publish the
 /// result forever", and a second hand-rolled copy of this is exactly the kind
 /// of thing that acquires a subtle ordering bug in only one of its versions.
 pub(crate) struct Cache<T: 'static> {
@@ -324,8 +324,8 @@ impl<T> Cache<T> {
 ///   ([`Topology`]) but expose no user-space way to ask which one is running the
 ///   calling thread. Apple's model is that you declare intent with a QoS class
 ///   and the scheduler places the work.
-/// * **Linux / Android** could answer it in principle -- `sched_getcpu()` plus a
-///   per-CPU capacity table -- but the capacity table lives in sysfs, which a
+/// * **Linux / Android** could answer it in principle, with `sched_getcpu()` plus a
+///   per-CPU capacity table, but the capacity table lives in sysfs, which a
 ///   sandboxed Android app cannot read. The alternative, reading `MIDR_EL1`
 ///   directly, is a SIGILL-trap emulation that kills the process on kernels
 ///   lacking it.
@@ -401,7 +401,7 @@ mod tests {
     }
 
     /// Both x86 tiers must agree, and both must be self-consistent with the
-    /// cached snapshot -- this is the same machine either way.
+    /// cached snapshot, since this is the same machine either way.
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     #[test]
     fn x86_fills_in_the_basics() {
@@ -411,7 +411,7 @@ mod tests {
         assert!(info.l1d().is_some(), "x86 always enumerates L1d");
         assert_eq!(info.cache_line_size(), info.writeback_granule());
 
-        // Re-detecting must agree -- except on a hybrid part, where the thread
+        // Re-detecting must agree, except on a hybrid part, where the thread
         // may have been migrated to a core with a different L2 in between.
         if !info.is_hybrid() {
             assert_eq!(*info, CpuInfo::detect(), "uncached detect disagrees with the snapshot");
@@ -536,7 +536,7 @@ mod tests {
         assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier1));
 
         // BW + DQ alone is not tier 2: VL is required with them. (No real CPU
-        // is shaped like this -- Skylake-SP brought all three at once -- but it
+        // is shaped like this, Skylake-SP having brought all three at once, but it
         // pins that VL actually gates the rung.)
         synthetic.avx512bw = true;
         synthetic.avx512dq = true;
@@ -545,7 +545,7 @@ mod tests {
         synthetic.avx512vl = true;
         assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier2));
 
-        // Tier 3 needs all nine; check it does not promote on a partial set.
+        // Tier 3 needs all nine, so check it does not promote on a partial set.
         synthetic.avx512vbmi = true;
         synthetic.avx512vnni = true;
         assert_eq!(

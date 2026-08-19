@@ -376,12 +376,7 @@ fn sh_public_trait_surface() {
 
     // Policy variant.
     let mut out_p = [V64::splat(0.0); N];
-    V64::spherical_harmonics_p::<DefaultPolicy, L, N, false>(
-        V64::splat(x),
-        V64::splat(y),
-        V64::splat(z),
-        &mut out_p,
-    );
+    V64::spherical_harmonics_p::<DefaultPolicy, L, N, false>(V64::splat(x), V64::splat(y), V64::splat(z), &mut out_p);
     assert_eq!(out_p[5].extract::<0>(), want[5]);
 
     // Scalar aggregate (exercises the &mut [E; N] Unwrap reinterpret).

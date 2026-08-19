@@ -1,7 +1,7 @@
 //! Differential tests for the native-width 8-bit integer families (`Simd`):
 //! every backend register op vs. an element-wise scalar oracle, for i8/u8.
 //!
-//! The 8-bit families exist only at native width (`i8xN`/`u8xN`) - there is no fixed-width
+//! The 8-bit families exist only at native width (`i8xN`/`u8xN`), and there is no fixed-width
 //! ladder. The scalar backend's native 8-bit slot is 1-lane, so the differential reference is
 //! an `ArrayRegister<{i8,u8}, N>` (N = the backend's native byte width: 16 on SSE, 32 on
 //! AVX2), which is a pure element-wise scalar register of matching lane count.
@@ -111,7 +111,7 @@ mod v2 {
     int8_tests!(u8x16, <X86V2 as NativeSimd>::u8xN, ArrayRegister<u8, 16>, "x86_v2 u8x16", unsigned);
 }
 
-// --- X86V1 (SSE2): native 16-lane; many ops use SSE2 polyfills / scalar fallbacks ---
+// --- X86V1 (SSE2): native 16-lane, many ops using SSE2 polyfills / scalar fallbacks ---
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod v1 {
     use super::*;

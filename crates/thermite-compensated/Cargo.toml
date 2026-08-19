@@ -35,6 +35,9 @@ paste = "1"
 [dev-dependencies]
 libm = "0.2"
 rand = "0.10"
+# Integration tests do not inherit normal dependencies, and `tests/bernoulli.rs` needs to
+# name the `BernoulliNumbers` trait it checks the `Compensated` impls of.
+thermite-special = { workspace = true }
 
 [lints]
 workspace = true

@@ -3,8 +3,8 @@
 //! generic branchless fallback, which `tests/packed_float.rs` already pins to that oracle).
 //!
 //! Built only for x86_64 with the `avx2-f16c` feature (the gate the override impls live behind).
-//! The test calls the native register methods directly - the same pattern the other x86
-//! differential suites use - so the host must support F16C (every AVX2 CPU does).
+//! The test calls the native register methods directly, the same pattern the other x86
+//! differential suites use, so the host must support F16C (every AVX2 CPU does).
 //!
 //! - **unpack**: exhaustive over all 65536 binary16 code points, for both the 8-lane
 //!   (`U16x8V3` -> `f32x8`) and 16-lane (`U16x16V3` -> `f32x16`) registers.
@@ -242,7 +242,7 @@ fn f16c_pack_16_sweep() {
 // =============================== fast / unchecked (Fp16Fast) =========================
 //
 // The hardware fast `unpack` is the plain `vcvtph2ps`, so for the (assumed-absent) inf/NaN code
-// points it decodes inf/NaN, *not* the `Unchecked` oracle's large normals - we therefore diff it
+// points it decodes inf/NaN, *not* the `Unchecked` oracle's large normals, so this diffs it
 // against the regular `Fp16` oracle (which is exactly `vcvtph2ps`). The fast `pack` flushes
 // non-finite/overflowing inputs to signed zero and must match the `Fp16Fast` oracle exactly.
 

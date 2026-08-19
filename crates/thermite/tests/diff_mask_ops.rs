@@ -26,7 +26,7 @@ use thermite::backend::scalar::Scalar;
 
 /// Lane-count-agnostic coverage for the **`MaskRegister`** primitives on the mask
 /// register of `R` (`new_mask`/`test`/`set`/`all`/`any`/`none`/`native_bitmask`) plus
-/// `into_mask` (via `From<Vector>`) and the `GenericMask` bitwise ops — for every
+/// `into_mask` (via `From<Vector>`) and the `GenericMask` bitwise ops, for every
 /// register width, not just the 4-lane `f32x4`/`i32x4` the bespoke suite uses.
 /// Masks are built from the shared `mask_patterns` corpus and checked per-lane.
 fn check_mask_reg<R>(label: &str)

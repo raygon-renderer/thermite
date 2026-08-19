@@ -10,7 +10,7 @@
 //! and running-extent queries, where the alternative is spilling the register to
 //! memory and walking it.
 //!
-//! # Why the ladder is gated
+//! # The gate on the ladder
 //!
 //! Every stage is an `align`. Where a register has no native cross-register align
 //! ([`HAS_NATIVE_ALIGN`](Register::HAS_NATIVE_ALIGN) is false - the scalar backend,

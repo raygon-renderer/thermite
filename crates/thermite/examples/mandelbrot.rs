@@ -20,7 +20,7 @@
 //!
 //! It writes `mandelbrot.png` (or the first CLI argument).
 //!
-//! # What to look at
+//! # The two lines that matter
 //!
 //! The two lines that matter for performance are `#[thermite::dispatch(S)]` on
 //! `kernel` and `#[inline(always)]` on `escape_time`. Without the first, the body

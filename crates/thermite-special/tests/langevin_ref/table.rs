@@ -390,7 +390,11 @@ const FORWARD: &[(f64, f64, f64)] = &[
     (1e+16, 0.9999999999999999, 1e-32),
 ];
 // (y, L^-1(y), L'(L^-1(y)))
+// The x column is a uniform grid, and one of its points (0.318) sits close enough to
+// FRAC_1_PI for `approx_constant` to fire. It is a grid coordinate, not a constant anyone
+// meant to write symbolically.
 #[rustfmt::skip]
+#[allow(clippy::approx_constant)]
 const INVERSE: &[(f64, f64, f64)] = &[
     (0.001, 0.0030000018000016972, 0.33333273333347047),
     (0.002, 0.006000014400054309, 0.3333309333355276),

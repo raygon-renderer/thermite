@@ -159,7 +159,7 @@ macro_rules! real_suite {
                     rt(vxe.smoothstep::<2>(edges).inverse_smoothstep::<2>(edges), vxe, "inv_smoothstep<2>+edges");
                     rt(vxe.smoothstep::<3>(edges).inverse_smoothstep::<3>(edges), vxe, "inv_smoothstep<3>+edges");
 
-                    // N=0 is the (non-invertible) step function — just exercise both paths
+                    // N=0 is the (non-invertible) step function, so just exercise both paths
                     let _ = vx.inverse_smoothstep::<0>(None);
                     let _ = vx.inverse_smoothstep::<0>(edges);
                 }
@@ -231,7 +231,7 @@ macro_rules! real_suite {
                     let h3: Vec<f64> = (0..L).map(|i| (a[i] * a[i] + b[i] * b[i] + c[i] * c[i]).sqrt()).collect();
                     close("hypot_n<3>", &rd(V::hypot_n([va, vb, vc])), &h3);
 
-                    // inv_hypot_n = 1/hypot_n; approximate rsqrt under Performance, so loose,
+                    // inv_hypot_n = 1/hypot_n, with approximate rsqrt under Performance, so loose,
                     // and skip near-zero magnitudes where 1/h blows up.
                     let inv = rd(V::inv_hypot_n([va, vb]));
                     for i in 0..L {
@@ -400,7 +400,7 @@ macro_rules! real_suite {
                 assert_eq!(rd(V::ZERO.ln1m_expnx())[0], f64::NEG_INFINITY, "{} ln1m_expnx(0)", stringify!($mod));
                 assert!(rd(V::splat(-1.0 as $e).ln1m_expnx())[0].is_nan(), "{} ln1m_expnx(-1)", stringify!($mod));
 
-                // a == b is the log-domain zero; all-(-inf) is 0 - 0 and must not be NaN.
+                // a == b is the log-domain zero, and all-(-inf) is 0 - 0 and must not be NaN.
                 let x = V::splat(3.0 as $e);
                 assert_eq!(rd(x.logsubexp(x))[0], f64::NEG_INFINITY, "{} logsubexp(a, a)", stringify!($mod));
                 assert_eq!(

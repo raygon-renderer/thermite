@@ -45,7 +45,7 @@ macro_rules! spirv_op {
 
 // Core SPIR-V ops used by Thermite's register traits.
 // Add entries here as register implementations need them.
-// Instruction names must match the SPIR-V spec exactly - rust-gpu resolves them by name.
+// Instruction names must match the SPIR-V spec exactly, since rust-gpu resolves them by name.
 spirv_op!(OpFNegate[T](a: T));
 spirv_op!(OpSNegate[T](a: T));
 spirv_op!(OpNot[T](a: T));
@@ -394,10 +394,10 @@ macro_rules! glsl_op {
     ($vis:vis unsafe fn $fn_name:ident($($arg:ident: $ty:ident),*) -> T) => {
         #[inline(always)]
         $vis unsafe fn $fn_name<T: Copy + ConstDefault, $($ty: Copy + ConstDefault,)* const OP: u32, const RP: bool>($($arg: $ty),*) -> T {
-            // `RP` is a const generic bool; the compiler eliminates the dead branch during
+            // `RP` is a const generic bool, so the compiler eliminates the dead branch during
             // monomorphization. The decoration must live in the same asm! block as the
             // OpExtInst that defines %result, so two nearly-identical expansions are
-            // unavoidable - the @emit helper keeps the shared logic in one place.
+            // unavoidable, and the @emit helper keeps the shared logic in one place.
             if RP {
                 unsafe { glsl_op!(@emit [$($arg)*] ["OpDecorate %result RelaxedPrecision"]) }
             } else {
@@ -547,7 +547,7 @@ macro_rules! spirv_shuffle_impl {
         }
     };
 
-    // Permute: both source operands are the same register - only one OpLoad needed.
+    // Permute: both source operands are the same register, so only one OpLoad is needed.
     (permute: $result:ident, $src:ident, [$($n:literal),+]) => {
         paste::paste! {
             core::arch::asm!(

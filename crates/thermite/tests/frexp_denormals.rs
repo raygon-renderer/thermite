@@ -1,9 +1,8 @@
 //! `frexp` must satisfy BOTH halves of its contract on every finite nonzero
 //! input, including subnormals: `x == frac * 2^exp` **and** `0.5 <= |frac| < 1`.
 //!
-//! The flush path used to return `(x, 0)` for a subnormal - the identity held,
-//! the normalization bound did not, silently. These check every policy against
-//! libm.
+//! A flush path returns `(x, 0)` for a subnormal, so the identity holds while the
+//! normalization bound silently does not. These check every policy against libm.
 #![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 
 use thermite::math::policy::policies::{AvoidBranching, Performance, PreserveDenormals};

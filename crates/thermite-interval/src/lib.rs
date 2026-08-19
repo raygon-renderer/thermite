@@ -28,7 +28,7 @@
 //! strategy, which also keeps degenerate intervals degenerate through exact
 //! operations).
 //!
-//! # What is rigorous, and what is high-confidence
+//! # Rigor
 //!
 //! - **Rigorous**: arithmetic (`+ - * /`), `sqrt`, `square`, `abs`,
 //!   `min`/`max`, the set operations, and the [`FloatConsts`] constants.
@@ -77,10 +77,10 @@ pub mod math;
 pub(crate) mod ops;
 pub(crate) mod round;
 pub(crate) mod vector;
-pub mod widen;
 #[cfg(feature = "dual")]
 #[cfg_attr(docsrs, doc(cfg(feature = "dual")))]
 pub mod verify;
+pub mod widen;
 
 pub use consts::BoundedFloatConsts;
 pub use element::{IntervalElem, ScalarFloat};
@@ -92,10 +92,7 @@ pub use widen::{Balanced, Fastest, Tightest, WideningPolicy, WideningTier};
 /// error-free transforms (`two_sum`, Veltkamp-split `two_prod`) that the
 /// residual widening tier is built on.
 pub trait IntervalFloatVector:
-    FloatVector<Element: FloatElement + PartialOrd + num_traits::NumOps>
-    + ScalarValue
-    + CastVector<Self>
-    + SwizzleVector
+    FloatVector<Element: FloatElement + PartialOrd + num_traits::NumOps> + ScalarValue + CastVector<Self> + SwizzleVector
 {
 }
 impl<V> IntervalFloatVector for V where
@@ -140,7 +137,10 @@ impl<V: Copy, W> Copy for Interval<V, W> {}
 
 impl<V: core::fmt::Debug, W> core::fmt::Debug for Interval<V, W> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("Interval").field("lo", &self.lo).field("hi", &self.hi).finish()
+        f.debug_struct("Interval")
+            .field("lo", &self.lo)
+            .field("hi", &self.hi)
+            .finish()
     }
 }
 
@@ -172,7 +172,11 @@ impl<V, W> Interval<V, W> {
     /// makes every subsequent containment claim meaningless.
     #[inline(always)]
     pub const fn from_bounds_unchecked(lo: V, hi: V) -> Self {
-        Self { lo, hi, _widen: PhantomData }
+        Self {
+            lo,
+            hi,
+            _widen: PhantomData,
+        }
     }
 
     /// The lower bound of each lane.

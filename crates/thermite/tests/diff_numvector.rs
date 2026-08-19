@@ -107,7 +107,7 @@ macro_rules! numvector_suite {
             #[test]
             fn equality_and_ordering() {
                 let a = ni([1, 2, 3, 4]);
-                // eq: all lanes equal; ne: any lane differs
+                // eq: all lanes equal, ne: any lane differs
                 assert!(a == ni([1, 2, 3, 4]));
                 assert!(a != ni([1, 2, 3, 5]));
                 assert!(!(a == ni([1, 2, 3, 5]))); // one lane differs -> not all-equal
@@ -213,7 +213,7 @@ macro_rules! numvector_suite {
 
             #[test]
             fn float_math_forwards() {
-                // These just need to execute; correctness is covered by diff_math.
+                // These just need to execute, and correctness is covered by diff_math.
                 let a = nf([1.0, 2.0, 3.0, 4.0]);
                 let b = nf([0.5, 0.5, 0.5, 0.5]);
                 let _ = Float::sqrt(a);

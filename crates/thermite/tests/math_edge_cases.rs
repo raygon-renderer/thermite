@@ -134,7 +134,7 @@ fn ldexp_f32_flush_edges<S: Simd>(name: &str) {
         assert!(ldexp(f32::NAN, e).is_nan(), "[{name}] ldexp(NaN, {e})");
     }
 
-    // signed zeros pass through, for ANY shift - including one that would
+    // signed zeros pass through, for ANY shift, including one that would
     // overflow a normal input (the zero/subnormal case has to win over the
     // overflow case, not the other way around)
     for e in [-1000, -1, 0, 1, 100, 300, 1000, i32::MIN, i32::MAX] {
@@ -142,8 +142,8 @@ fn ldexp_f32_flush_edges<S: Simd>(name: &str) {
         assert_eq!(ldexp(-0.0, e).to_bits(), (-0.0f32).to_bits(), "[{name}] ldexp(-0, {e})");
     }
 
-    // subnormal input flushes to (signed) zero on this path - documented FTZ
-    // semantics - again for any shift, overflowing ones included
+    // subnormal input flushes to (signed) zero on this path, documented FTZ
+    // semantics, again for any shift, overflowing ones included
     for e in [10, 300, i32::MAX] {
         assert_eq!(
             ldexp(1.0e-40, e).to_bits(),
@@ -285,7 +285,7 @@ fn trig_large_args_best_f32<S: Simd>(name: &str) {
 }
 
 /// The <= Average tiers deliberately clamp out-of-range trig arguments to zero
-/// (sin -> 0, cos -> 1) instead of paying for Payne-Hanek; pin that behavior so
+/// (sin -> 0, cos -> 1) instead of paying for Payne-Hanek. Pin that behavior so
 /// a change to it is a deliberate decision, not an accident.
 fn trig_large_args_average_clamp<S: Simd>(name: &str) {
     // Pin the Performance (Average) policy explicitly: under `strict_ieee754`
@@ -305,12 +305,12 @@ fn trig_large_args_average_clamp<S: Simd>(name: &str) {
 //
 // - f64 `exp(709)` returned inf (gate at 708.39; ln(DBL_MAX) is 709.78), and at
 //   Best precision the whole subnormal range returned 0
-// - f64 `exph(-709)` returned -9.8e307: EXPH's `r - 1` reached -1024, which
-//   wraps `pow2n_d`'s biased exponent through the sign bit INSIDE the range gate
-// - f64 `exp_m1(-709.5)` returned garbage instead of -1 for the same reason
-// - f32 `exp_m1(88.5)` returned NaN at the DEFAULT policy (r = 128 is the NaN
-//   exponent field; the answer, 2.7e38, is finite), and `exp_m1(-88.5)` -2.1e38
-// - f32 `exph(88.9)` at Medium was NaN: 2^t overflowed before the halving
+// - f64 `exph(-709)`: EXPH's `r - 1` reaches -1024, which wraps `pow2n_d`'s
+//   biased exponent through the sign bit INSIDE the range gate, giving -9.8e307
+// - f64 `exp_m1(-709.5)`: garbage instead of -1 for the same reason
+// - f32 `exp_m1(88.5)`: NaN at the DEFAULT policy (r = 128 is the NaN exponent
+//   field, while the answer, 2.7e38, is finite), and `exp_m1(-88.5)` -2.1e38
+// - f32 `exph(88.9)` at Medium: NaN, 2^t overflowing before the halving
 // -------------------------------------------------------
 
 fn exp_shoulders_f64<S: Simd>(name: &str) {
@@ -358,7 +358,7 @@ fn exp_shoulders_f64<S: Simd>(name: &str) {
     );
 
     // Average tier: single-scale, but the widened gate and the low-side clamp
-    // must hold - sign-garbage was returned inside the old gate.
+    // must hold, since a narrower gate returns sign-garbage inside it.
     let ha = |x: f64| Vector::<S::f64x4>::splat(x).exph_p::<Performance>().extract::<0>();
     let ma = |x: f64| Vector::<S::f64x4>::splat(x).exp_m1_p::<Performance>().extract::<0>();
 
@@ -433,9 +433,9 @@ fn exp_shoulders_f32<S: Simd>(name: &str) {
 
 // -------------------------------------------------------
 // nth_root at extreme magnitudes. The textbook Halley numerator
-// `y * (x - y^N)` is O(x^{(N+1)/N}): for N = 5 it overflowed past x ~ 1e269
-// (returning sign-garbage infinities), underflowed below x ~ 1e-250 (silently
-// dropping the refinement), and produced NaN at x = 0 and x = inf.
+// `y * (x - y^N)` is O(x^{(N+1)/N}): for N = 5 it overflows past x ~ 1e269
+// (sign-garbage infinities), underflows below x ~ 1e-250 (silently dropping
+// the refinement), and gives NaN at x = 0 and x = inf.
 // -------------------------------------------------------
 
 fn nth_root_extremes<S: Simd>(name: &str) {
@@ -494,10 +494,10 @@ fn nth_root_extremes<S: Simd>(name: &str) {
 }
 
 // -------------------------------------------------------
-// wrap_angle at large |x|: the old Best path was `x - n * TAU` (fused), which
-// drifts by `n * (2pi - TAU)` ~ 0.04 rad by x = 1e15 and returned outright
-// WRONG angles (e.g. -3.164 for wrap_angle(1e15 + 1), true value +3.110).
-// The Cody-Waite pair carries 2pi to ~110 bits; expected values via mpmath.
+// wrap_angle at large |x|. A fused `x - n * TAU` drifts by `n * (2pi - TAU)`,
+// ~0.04 rad by x = 1e15, and gives outright WRONG angles (e.g. -3.164 for
+// wrap_angle(1e15 + 1), true value +3.110). The Cody-Waite pair carries 2pi to
+// ~110 bits. Expected values via mpmath.
 // -------------------------------------------------------
 
 fn wrap_angle_large_args<S: Simd>(name: &str) {

@@ -45,7 +45,9 @@ fn s_two_prod(a: f64, b: f64) -> (f64, f64) {
 }
 
 fn lcg(state: &mut u64) -> u64 {
-    *state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    *state = state
+        .wrapping_mul(6364136223846793005)
+        .wrapping_add(1442695040888963407);
     *state
 }
 
@@ -77,17 +79,29 @@ fn containment_sweep<W: WideningPolicy>() {
         // add / sub
         let (s, r) = s_two_sum(xs, ys);
         if s.is_finite() {
-            assert!(contains_exact(x + y, s, r), "add: {xs:e} + {ys:e} not in {:?}", bounds(x + y));
+            assert!(
+                contains_exact(x + y, s, r),
+                "add: {xs:e} + {ys:e} not in {:?}",
+                bounds(x + y)
+            );
         }
         let (s, r) = s_two_sum(xs, -ys);
         if s.is_finite() {
-            assert!(contains_exact(x - y, s, r), "sub: {xs:e} - {ys:e} not in {:?}", bounds(x - y));
+            assert!(
+                contains_exact(x - y, s, r),
+                "sub: {xs:e} - {ys:e} not in {:?}",
+                bounds(x - y)
+            );
         }
 
         // mul
         let (p, r) = s_two_prod(xs, ys);
         if p.is_finite() {
-            assert!(contains_exact(x * y, p, r), "mul: {xs:e} * {ys:e} not in {:?}", bounds(x * y));
+            assert!(
+                contains_exact(x * y, p, r),
+                "mul: {xs:e} * {ys:e} not in {:?}",
+                bounds(x * y)
+            );
         }
 
         // square (the dependency-correct one)
@@ -105,7 +119,10 @@ fn containment_sweep<W: WideningPolicy>() {
         let q = xs / ys;
         if q.is_finite() {
             let (lo, hi) = bounds(x / y);
-            assert!(lo <= q && q <= hi, "div: {xs:e} / {ys:e} = {q:e} not in [{lo:e}, {hi:e}]");
+            assert!(
+                lo <= q && q <= hi,
+                "div: {xs:e} / {ys:e} = {q:e} not in [{lo:e}, {hi:e}]"
+            );
         }
 
         // sqrt (correctly rounded reference)
@@ -114,7 +131,11 @@ fn containment_sweep<W: WideningPolicy>() {
             let (lo, hi) = bounds(x.abs_interval().sqrt_interval());
             let sa = xs.abs().sqrt();
             let _ = s;
-            assert!(lo <= sa && sa <= hi, "sqrt: sqrt({:e}) = {sa:e} not in [{lo:e}, {hi:e}]", xs.abs());
+            assert!(
+                lo <= sa && sa <= hi,
+                "sqrt: sqrt({:e}) = {sa:e} not in [{lo:e}, {hi:e}]",
+                xs.abs()
+            );
         }
 
         // abs, min, max are exact set maps: plain point containment.
@@ -179,7 +200,10 @@ fn width_orders_by_tier() {
     let b = chain::<Balanced>();
     let t = chain::<Tightest>();
 
-    assert!(t <= b && b <= f, "width order violated: tightest={t:e} balanced={b:e} fastest={f:e}");
+    assert!(
+        t <= b && b <= f,
+        "width order violated: tightest={t:e} balanced={b:e} fastest={f:e}"
+    );
     assert!(t > 0.0, "512 inexact ops cannot leave a degenerate interval");
 }
 
@@ -189,7 +213,16 @@ fn empty_propagates() {
     let e: I<Balanced> = Interval::empty();
     let x: I<Balanced> = iv(1.0, 2.0);
 
-    for r in [e + x, x + e, e * x, x * e, e / x, x / e, e.sqrt_interval(), e.square_interval()] {
+    for r in [
+        e + x,
+        x + e,
+        e * x,
+        x * e,
+        e / x,
+        x / e,
+        e.sqrt_interval(),
+        e.square_interval(),
+    ] {
         assert!(r.is_empty().all(), "empty must stay empty: {:?}", bounds(r));
     }
 }
@@ -246,8 +279,7 @@ fn overflow_clamps() {
 
 /// Set operations.
 #[test]
-fn set_ops()
-{
+fn set_ops() {
     let a: I<Balanced> = iv(0.0, 2.0);
     let b: I<Balanced> = iv(1.0, 3.0);
 

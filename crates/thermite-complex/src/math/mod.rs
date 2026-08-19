@@ -18,7 +18,7 @@
 //! `powi`, `sqrt1pm1`, `compound`, ...) comes from the trait defaults, which are
 //! already correct over C.
 //!
-//! [`RealMath`](thermite::math::RealMath) is not implemented; see the note at the
+//! [`RealMath`](thermite::math::RealMath) is not implemented. See the note at the
 //! bottom of this file.
 
 use thermite::math::PrimalProjection;
@@ -263,13 +263,13 @@ impl<V: RealFloatVector> SpecializedCoreMath<Complex<V::Element>> for Complex<V>
     ///
     /// Overridden only to change *which quantity* that decision is made on. The
     /// generic default tests `x.cmp_gt(ONE)`, which over C is the lexicographic order
-    /// on `(re, im)` - so it keys off the real part alone and will happily evaluate
+    /// on `(re, im)`, so it keys off the real part alone and will happily evaluate
     /// the direct form at `z = 10^150 i`, overflowing, while reporting that `z` is
     /// "not greater than one". The condition that actually matters is `|z| > 1`.
     ///
     /// Both forms are the same rational function (`P_rev(1/z)/Q_rev(1/z)` differs from
     /// `P(z)/Q(z)` only by `z^(D-N)`, corrected below), so this is a conditioning fix,
-    /// not a correctness one - except where the wrong choice overflows outright.
+    /// not a correctness one, except where the wrong choice overflows outright.
     #[inline(always)]
     fn poly_rational<P: Policy, const N: usize, const D: usize>(
         self,
@@ -339,7 +339,7 @@ impl<V: RealFloatVector> SpecializedCoreMath<Complex<V::Element>> for Complex<V>
 /// `$iz = -\operatorname{Im} z + i\operatorname{Re} z$`: a component swap and a sign flip.
 ///
 /// Worth a helper because the natural spelling is not free. `z.mul_add(Self::I, w)`
-/// is a complex FMA - four inner FMAs - over a constant of zeros and ones, and IEEE
+/// is a complex FMA (four inner FMAs) over a constant of zeros and ones, and IEEE
 /// forbids folding `a*0.0 + b` to `b` (`a` may be infinite, and the zero has a sign),
 /// so all four survive into the assembly.
 #[inline(always)]
@@ -357,7 +357,7 @@ fn mul_neg_i<V: RealFloatVector>(z: Complex<V>) -> Complex<V> {
 ///
 /// `tan`/`tanh` divide by `cosh` plus a bounded term. Past `$|2x| \approx 710$` in
 /// binary64 that denominator is infinite while the numerator's `sinh` is too, so the
-/// quotient is `inf/inf` - `NaN` in the component that should have saturated, and a
+/// quotient is `inf/inf`, giving `NaN` in the component that should have saturated and a
 /// signed zero in the other. The function itself is perfectly well behaved there and
 /// tends to a unit along one axis.
 ///
@@ -391,14 +391,14 @@ fn saturate<P: Policy, V: RealFloatVector>(res: Complex<V>, denom: V, limit: Com
 /// The naive `$\ln(p + s)$` loses everything at both extremes:
 ///
 /// - **Large `$|p|$`**: `$s \to \mp p$` and the sum cancels. At `$z = 10^8 i$` the
-///   `asin` sum is `$-10^8 + 10^8$` - *exactly* zero - so `$\ln 0$` returned an
+///   `asin` sum is `$-10^8 + 10^8$`, *exactly* zero, so `$\ln 0$` returned an
 ///   infinity where the true value is `19.11i`. The companion `$s - p$` is the other
 ///   root, and `$(p + s)(s - p) = s^2 - p^2 = 1$`, so it is both exact and the
 ///   well-conditioned one. `$|w| < 1$` tests which cancelled, and `$\ln w = -\ln w'$`
 ///   holds outright rather than up to `$2\pi i$`, the companion lying in the right
 ///   half-plane exactly when it is selected.
 /// - **Small `$|p|$`**: `$w = 1 + O(p)$`, and forming that sum rounds away the very
-///   `$p$` the answer consists of - `asinh(1e-8)` kept 8 of its 16 digits. Feeding
+///   `$p$` the answer consists of: `asinh(1e-8)` kept 8 of its 16 digits. Feeding
 ///   `$w - 1$` to `ln_1p` instead fixes it, provided `$w - 1$` is *not* formed by
 ///   subtracting: `$s - 1 = p^2/(s + 1)$` has no cancellation of its own.
 ///
@@ -422,7 +422,7 @@ fn log_asinh<P: Policy, V: RealFloatVector>(p: Complex<V>) -> Complex<V> {
     // `|w| < 1` alone is too eager. For tiny `p` with a negative real part `w = 1 + p`
     // sits just under one without anything having cancelled, and the log branch would
     // undo the `ln_1p` correction above. Genuine cancellation needs the two terms to be
-    // large and nearly opposite, so `|p| > 1` as well - which is also where `u` itself
+    // large and nearly opposite, so `|p| > 1` as well, which is also where `u` itself
     // stops being trustworthy, `u = w - 1 ~ -1` then being a difference of two terms of
     // size `|p|`.
     let flip = w.norm_sqr().cmp_lt(V::ONE) & p.norm_sqr().cmp_gt(V::ONE);
@@ -454,7 +454,7 @@ fn log_asinh<P: Policy, V: RealFloatVector>(p: Complex<V>) -> Complex<V> {
 /// returned an infinity for a true value of `19.11i`.
 ///
 /// Since `$ww' = 1$`, `$|w| < 1$` is an exact test for which one cancelled, and
-/// `$\ln w = -\ln w'$` - unambiguously, not merely up to `$2\pi i$`, because the
+/// `$\ln w = -\ln w'$` unambiguously, not merely up to `$2\pi i$`, because the
 /// companion is in the right half-plane exactly when it is the one being selected.
 ///
 /// One `ln` either way: the argument is blended *before* the logarithm, so the cost
@@ -463,7 +463,7 @@ fn log_asinh<P: Policy, V: RealFloatVector>(p: Complex<V>) -> Complex<V> {
 /// # Policy
 ///
 /// Gated at [`Best`](PrecisionPolicy::Best) and above. Below it the cancelling form is
-/// used unconditionally, as it was before - the failure needs `$|z| \gg 1$`, and the
+/// used unconditionally, as it was before. The failure needs `$|z| \gg 1$`, and the
 /// lower tiers do not promise the digits that are lost.
 #[inline(always)]
 fn ln_reciprocal_pair<P: Policy, V: RealFloatVector>(w: Complex<V>, companion: Complex<V>) -> Complex<V> {
@@ -499,8 +499,8 @@ fn expm1_from<P: Policy, V: RealFloatVector>(bm1: V, phi: V) -> Complex<V> {
 
 /// Masks `+-inf` out of a `d * ln r` angle term.
 ///
-/// `ln r` is -inf at r = 0 and +inf at r = inf, so a real exponent - `d == 0`, the
-/// overwhelmingly common case - forms `0 * inf` where the limit is plainly 0, and one
+/// `ln r` is -inf at r = 0 and +inf at r = inf, so a real exponent (`d == 0`, the
+/// overwhelmingly common case) forms `0 * inf` where the limit is plainly 0, and one
 /// NaN there takes the whole result with it: `(0+0i)^2` was NaN on the strength of it.
 /// Killing the infinity before the product exists is a compare and an AND, no branch,
 /// and it leaves the term identical wherever `d` is not zero.
@@ -531,7 +531,7 @@ impl<V: RealFloatVector> SpecializedTranscendentalMath<Complex<V::Element>> for 
     /// Must be overridden rather than left to the default. That default is
     /// `sin_cos(z * pi)`, which rounds `pi * Re z` before doing any reduction and so
     /// throws away the exact argument reduction real `sincos_pi` performs near the
-    /// integers - precisely where the Gamma reflection formulas put their poles, and
+    /// integers, precisely where the Gamma reflection formulas put their poles, and
     /// where `sin(pi z)` passes through zero. It is also no more work: one real
     /// `sincos_pi` and one real `sinh_cosh`, the same two calls the default makes.
     #[inline(always)]
@@ -596,9 +596,36 @@ impl<V: RealFloatVector> SpecializedTranscendentalMath<Complex<V::Element>> for 
     fn sinc<P: Policy>(self) -> Self {
         let is_zero = self.is_zero();
 
-        // 0/0 = NaN at the origin, so the guard has to be a select; the quotient
+        // 0/0 = NaN at the origin, so the guard has to be a select. The quotient
         // cannot be patched up after the fact.
         let q = self.sin_p::<P>() / self;
+
+        is_zero.select(Self::ONE, q)
+    }
+
+    /// `$\mathrm{atanhc}(z) = \operatorname{atanh}(z)/z$`, singularity filled in.
+    #[inline(always)]
+    fn atanhc<P: Policy>(self) -> Self {
+        let is_zero = self.is_zero();
+
+        // 0/0 = NaN at the origin, so the guard has to be a select. The quotient
+        // cannot be patched up after the fact.
+        let q = self.atanh_p::<P>() / self;
+
+        is_zero.select(Self::ONE, q)
+    }
+
+    /// `$\mathrm{sinhc}(z) = \sinh(z)/z$`, with the removable singularity filled in.
+    ///
+    /// Note `$\mathrm{sinhc}(z) = \mathrm{sinc}(iz)$`, so on the imaginary axis this is the
+    /// ordinary `sinc` and it has the same zeros, at `$z = ik\pi$`.
+    #[inline(always)]
+    fn sinhc<P: Policy>(self) -> Self {
+        let is_zero = self.is_zero();
+
+        // 0/0 = NaN at the origin, so the guard has to be a select. The quotient
+        // cannot be patched up after the fact.
+        let q = self.sinh_p::<P>() / self;
 
         is_zero.select(Self::ONE, q)
     }
@@ -606,8 +633,8 @@ impl<V: RealFloatVector> SpecializedTranscendentalMath<Complex<V::Element>> for 
     /// `$\mathrm{sinc}_\pi(z) = \frac{\sin(\pi z)}{\pi z}$`, singularity filled in.
     ///
     /// Overridden so the zeros are *exact*. The default is `sinc(z * pi)`, which
-    /// rounds `pi * Re z` before reducing; the subsequent division by `pi z` cancels
-    /// most of that error, so the default is accurate to about an ulp - but at a
+    /// rounds `pi * Re z` before reducing. The subsequent division by `pi z` cancels
+    /// most of that error, so the default is accurate to about an ulp, but at a
     /// non-zero integer it returns ~1e-16 rather than zero. Going through the real
     /// `sin_pi`, which is exactly zero there, makes this exactly zero too.
     ///
@@ -643,7 +670,7 @@ impl<V: RealFloatVector> SpecializedTranscendentalMath<Complex<V::Element>> for 
     ///
     /// Above [`Average`](PrecisionPolicy::Average) the real part goes through the real
     /// `exp2`. Rescaling it as `exp(a ln 2)` instead rounds `a ln 2` first, and `exp`
-    /// then amplifies that rounding by the argument - `exp2(1000)` is wrong in its
+    /// then amplifies that rounding by the argument: `exp2(1000)` is wrong in its
     /// tenth digit (~300 ulp) that way. The imaginary part can afford the multiply
     /// either way, feeding a `sincos` that reduces its own argument.
     ///
@@ -727,7 +754,7 @@ impl<V: RealFloatVector> SpecializedTranscendentalMath<Complex<V::Element>> for 
 
         if const { P::POLICY.check_overflow && !P::POLICY.precision.le(PrecisionPolicy::Average) } {
             // `r^c` leaves the range on its own where `e^{-dt}` would have brought the
-            // product back - `(-1e200)^(2 + 300i)` is about 1e-9 and the split form
+            // product back. `(-1e200)^(2 + 300i)` is about 1e-9 and the split form
             // gives `inf`, or `NaN` from the mirror-image `0 * inf`. The fused exponent
             // has no such intermediate, so it covers those lanes.
             let lost = !modulus.is_finite();
@@ -748,7 +775,7 @@ impl<V: RealFloatVector> SpecializedTranscendentalMath<Complex<V::Element>> for 
     fn cbrt<P: Policy>(self) -> Self {
         let (r, theta) = self.to_polar_p::<P>();
 
-        // 1/3 is not representable, so divide; multiplying by a rounded reciprocal
+        // 1/3 is not representable, so divide. Multiplying by a rounded reciprocal
         // loses a bit at the higher policies.
         let three: V = thermite::const_splat!(int <V::Element>: 3);
 
@@ -799,7 +826,7 @@ impl<V: RealFloatVector> SpecializedTranscendentalMath<Complex<V::Element>> for 
     /// `$\log_2 z = \log_2|z| + i\arg(z)\log_2 e$`.
     ///
     /// Through the real `log2` rather than `ln(z) * log2(e)`, which is the same work
-    /// (one multiply fewer, in fact - the argument is scaled but `ln|z|` is not) and
+    /// (one multiply fewer, in fact, as the argument is scaled but `ln|z|` is not) and
     /// picks up whatever the element's own `log2` does. Measured identical to the
     /// rescaled form on f64, where thermite's `log2` *is* `ln * LOG2_E`; f32 has a
     /// dedicated kernel, so no policy gate is warranted either way.
@@ -926,7 +953,7 @@ impl<V: RealFloatVector> SpecializedSpatialMath<Complex<V::Element>> for Complex
     /// Must be overridden, and not only for tuning. The generic `hypot_n` changes
     /// *meaning* over C depending on the precision policy: its high-precision path
     /// opens with `abs()`, which here is the modulus, so everything after it is real
-    /// and the result is the norm - but the `PrecisionPolicy::Worst` path skips that
+    /// and the result is the norm, but the `PrecisionPolicy::Worst` path skips that
     /// and squares directly, giving the analytic continuation `sqrt(sum z_i^2)`
     /// instead. Two different functions behind one name, chosen by a policy.
     ///

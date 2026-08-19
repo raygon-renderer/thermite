@@ -125,7 +125,7 @@ macro_rules! fast_test {
     };
 }
 
-// 8-lane u16 <-> f32 on each backend (v3's f32x8 is native; v1/v2 it's an ArrayRegister - the
+// 8-lane u16 <-> f32 on each backend (v3's f32x8 is native, on v1/v2 it's an ArrayRegister, so the
 // `PackedFloatVector` blanket handles both transparently).
 mod v1 {
     use super::*;

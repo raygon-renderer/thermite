@@ -43,7 +43,7 @@ where
     /// The inherited default is `sin_cos(self * PI)`, which throws away most of what
     /// this type exists for. Forming `x * PI` rounds the product, so the argument handed
     /// to `sin_cos` already carries an absolute error of about `|x| * 2^-106`; at
-    /// `x = -1000.5` - an ordinary argument for the gamma reflection - that is three or
+    /// `x = -1000.5` (an ordinary argument for the gamma reflection) that is three or
     /// four digits gone before any trigonometry happens.
     ///
     /// Reducing first avoids it entirely. `sin(pi(n + r)) = (-1)^n sin(pi r)` for integer
@@ -260,6 +260,64 @@ where
         y
     }
 
+    /// `atanh(x)/x`, the cardinal form of `atanh`: same structure as `sinc` below, with the
+    /// even series `1 + x^2/3 + x^4/5`. Domain `[-1, 1]`, where both ends are `+inf`.
+    #[inline(always)]
+    fn atanhc<P: Policy>(self) -> Self {
+        let is_tiny = self.value().abs().cmp_lt(FloatConsts::FOURTH_ROOT_EPSILON);
+
+        let x2 = self.square();
+
+        if !P::POLICY.avoid_branching && is_tiny.all() {
+            let res = x2 / V::splat(<V::Element as FloatElement>::ConstInt::<5>::VALUE);
+            return x2.mul_add(res + Self::FRAC_1_3, Self::ONE);
+        }
+
+        let num = is_tiny.select(x2, self.atanh_p::<P>());
+        let den = is_tiny.select(
+            Self::splat_value(<V::Element as FloatElement>::ConstInt::<5>::VALUE),
+            self,
+        );
+
+        let mut y = num / den;
+
+        y = is_tiny.select(x2.mul_add(y + Self::FRAC_1_3, Self::ONE), y);
+
+        y
+    }
+
+    /// `sinh(x)/x`, the hyperbolic twin of `sinc` above and structurally identical to it:
+    /// the series `1 + x^2/6 + x^4/120` adds where `sinc` subtracts, and the limit at
+    /// infinity is `+inf` rather than zero.
+    #[inline(always)]
+    fn sinhc<P: Policy>(self) -> Self {
+        let is_tiny = self.value().abs().cmp_lt(FloatConsts::FOURTH_ROOT_EPSILON);
+
+        let x2 = self.square();
+
+        if !P::POLICY.avoid_branching && is_tiny.all() {
+            let res = x2 / V::splat(<V::Element as FloatElement>::ConstInt::<120>::VALUE);
+            return x2.mul_add(res + Self::FRAC_1_6, Self::ONE);
+        }
+
+        let num = is_tiny.select(x2, self.sinh_p::<P>());
+        let den = is_tiny.select(
+            Self::splat_value(<V::Element as FloatElement>::ConstInt::<120>::VALUE),
+            self,
+        );
+
+        let mut y = num / den;
+
+        y = is_tiny.select(x2.mul_add(y + Self::FRAC_1_6, Self::ONE), y);
+
+        if P::POLICY.check_overflow {
+            // sinh(inf)/inf is NaN; the limit is +inf from both sides.
+            y = self.value().is_infinite().select(Self::INFINITY, y);
+        }
+
+        y
+    }
+
     #[inline(always)]
     fn sinh_cosh<P: Policy>(self) -> (Self, Self) {
         let abs_x = self.abs();
@@ -406,7 +464,7 @@ where
         //
         // Written directly, small x sends `x + sqrt(x^2 + 1)` to 1 + x + O(x^2). A
         // double-double holds that to 106 bits *relative to 1*, so the part that carries
-        // the answer keeps only 106 - log2(1/x) of them - at x = 1e-14 the result was good
+        // the answer keeps only 106 - log2(1/x) of them. At x = 1e-14 the result was good
         // to ~65 bits, not 106.
         //
         // With s = sqrt(1 + x^2), the offset from 1 is available in closed form:
@@ -613,7 +671,7 @@ where
 
     /// The `_ext` form exists so a caller who already has `ln(x)` can hand it to the
     /// low-precision approximation instead of paying for it twice. The compensated
-    /// path never takes that approximation - it evaluates `ln(1 - e^-x)` exactly - so
+    /// path never takes that approximation (it evaluates `ln(1 - e^-x)` exactly), so
     /// there is nothing to reuse and the hint is dropped, the same way the f64 kernel
     /// (`math/specialized/pd.rs`) and `Complex` do.
     #[inline(always)]
@@ -870,7 +928,7 @@ impl<V: CompensatedFloatVector> Compensated<V> {
                 y.value = W::cast_from(y.value).ldexp_p::<CheckOverflow<P, false>>(k).cast_into();
                 // The low word gets `Preserve`. The overflow pre-check above bounds the
                 // *value*, which is what justifies scaling it with the exponent clamp
-                // turned off - but it says nothing about the low word, which sits ~53
+                // turned off, but it says nothing about the low word, which sits ~53
                 // binades below and leaves the representable range first. An unclamped
                 // `ldexp` writes a negative biased exponent straight into the exponent
                 // field: exp(-700) came back with a value of 9.86e-305 and a low word of
@@ -879,7 +937,7 @@ impl<V: CompensatedFloatVector> Compensated<V> {
                 // Halley's `(x - e_y)/(x + e_y)` collapses to -1 on a garbage `e_y`).
                 //
                 // `PreserveDenormals` takes `ldexp`'s two-multiply path, which lets IEEE
-                // gradual underflow produce the subnormal instead of wrapping - so the
+                // gradual underflow produce the subnormal instead of wrapping, so the
                 // correction survives rather than merely not being poison.
                 y.error = W::cast_from(y.error)
                     .ldexp_p::<PreserveDenormals<CheckOverflow<P, false>>>(k)

@@ -1,6 +1,6 @@
 //! The Faddeeva function `w(z)` over C (`special` feature).
 //!
-//! Checked against reference values computed by mpmath at 60 digits - an oracle that
+//! Checked against reference values computed by mpmath at 60 digits, an oracle that
 //! shares no code with the implementation. The tolerances are the measured worst case
 //! for each tier (see `faddeeva`'s module docs), loosened by roughly an order.
 //!
@@ -165,7 +165,7 @@ const REF: [(f64, f64, f64, f64); 118] = [
 
 /// The lower half-plane is reached by `w(z) = 2exp(-z^2) - w(-z)`, whose relative
 /// accuracy degrades near the zeros of `w` (all of which live there) as the two terms
-/// cancel. Absolute accuracy survives, which is the standard guarantee - Poppe & Wijers
+/// cancel. Absolute accuracy survives, which is the standard guarantee. Poppe & Wijers
 /// state the same for Algorithm 680.
 fn is_near_a_zero(x: f64, y: f64) -> bool {
     y < 0.0 && (x - 1.99146684283).abs() < 0.2 && (y + 1.35481012811).abs() < 0.2
@@ -226,8 +226,8 @@ fn faddeeva_w_reference_ultra_performance() {
 
 #[test]
 fn w_of_zero_is_one() {
-    // Not exact - the origin is an ordinary point of the approximation, not a special
-    // case - so this holds only to the tier's accuracy. Im w(0) *is* exact, though: the
+    // Not exact, since the origin is an ordinary point of the approximation rather than a
+    // special case, so this holds only to the tier's accuracy. Im w(0) *is* exact: the
     // polynomial has real coefficients and Z is real at z = 0, so nothing ever writes a
     // non-zero imaginary part.
     let (re, im) = parts(c(0.0, 0.0).faddeeva_w_p::<Precision>());
@@ -252,7 +252,7 @@ fn imaginary_axis_is_erfcx_of_a_real() {
 
 #[test]
 fn erfcx_matches_w_of_iz() {
-    // erfcx(z) = w(iz), by definition; this pins the argument rotation.
+    // erfcx(z) = w(iz), by definition, so this pins the argument rotation.
     for (x, y) in [(0.5f64, 0.25f64), (3.0, -1.5), (-2.0, 0.75)] {
         let a = c(x, y).erfcx_p::<Precision>();
         let b = c(-y, x).faddeeva_w_p::<Precision>();
@@ -293,7 +293,7 @@ fn reflection_holds_across_the_real_axis() {
 #[test]
 fn re_is_exp_neg_x_squared_on_the_real_axis() {
     // On the axis every (iy)^n term of the correction vanishes, so `Re w` reduces to
-    // its seed and is *bit-exact* `exp(-x^2)` - not merely accurate to the tier. This
+    // its seed and is *bit-exact* `exp(-x^2)`, not merely accurate to the tier. This
     // is the sharpest statement of what the near-axis path buys.
     for x in [0.5f64, 1.0, 2.0, 3.0, 6.0, 12.0, 25.0] {
         let (re, _) = parts(c(x, 0.0).faddeeva_w_p::<Precision>());
@@ -353,7 +353,7 @@ fn real_axis_correction_recovers_the_real_part() {
 }
 
 /// Outside the gate the correction must be off, and `w` must stay continuous across the
-/// boundary - a seam there would show up as a discontinuity in a Voigt profile.
+/// boundary, since a seam there would show up as a discontinuity in a Voigt profile.
 #[test]
 fn correction_is_continuous_across_its_gate() {
     // REAL_AXIS_Y is 1e-5 for f64; step across it and across REAL_AXIS_X = 1e3.
@@ -393,7 +393,7 @@ fn im_holds_relative_accuracy_where_re_does_not() {
     // The two halves of the documented caveat, on the same points. Far out on the real
     // axis `Im w` *is* `|w|`, so it keeps the tier's full relative accuracy, while
     // `Re w = exp(-x^2)` has fallen so far below `|w|` that the normwise error swamps
-    // it completely - by x = 15, `Re w` is 1e-98 and not even the sign is meaningful.
+    // it completely. By x = 15, `Re w` is 1e-98 and not even the sign is meaningful.
     for x in [8.0f64, 15.0, 50.0, 1000.0] {
         let &(_, _, want_re, want_im) = REF.iter().find(|r| r.0 == x && r.1 == 0.0).unwrap();
         let (re, im) = parts(c(x, 0.0).faddeeva_w_p::<Precision>());
@@ -414,7 +414,7 @@ fn im_holds_relative_accuracy_where_re_does_not() {
 /// `w` satisfies `w'(z) = -2z w(z) + 2i/sqrt(pi)`.
 ///
 /// Two things at once: it exercises the `Complex<Dual<..>>` impl, which nothing else
-/// reaches, and it is an independent check on `w` itself - the ODE is a property of the
+/// reaches, and it is an independent check on `w` itself: the ODE is a property of the
 /// function, and the approximation is under no obligation to satisfy it. That it does,
 /// to 1e-11, says the derivative of the rational form tracks the derivative of `w` and
 /// not merely its value.
@@ -472,7 +472,7 @@ fn f32_clamps_to_its_own_ladder() {
         assert!(d <= 1e-5 * n, "f32 w({x} + {y}i) relative error {:e}", d / n);
 
         // Identical, not merely close: both policies resolve to the same N. Only outside
-        // the near-real-axis box, though - the correction is gated at `Best`, so inside
+        // the near-real-axis box, though, because the correction is gated at `Best`, so inside
         // it the two policies deliberately run different code.
         if y.abs() >= 1e-3 || x.abs() >= 1e2 {
             assert_eq!(parts32(f(x as f32, y as f32).faddeeva_w_p::<Performance>()), (re, im));
@@ -506,7 +506,7 @@ fn lanes_are_independent() {
 }
 
 /// The Voigt function `K(x, y) = Re w(x + iy)`, against its defining convolution
-/// integral rather than against `w` - an oracle that shares no code with anything here:
+/// integral rather than against `w`, an oracle that shares no code with anything here:
 ///
 ///   K(x, y) = (y/pi) * integral exp(-t^2) / ((x - t)^2 + y^2) dt
 ///
@@ -514,7 +514,7 @@ fn lanes_are_independent() {
 ///
 /// The per-point tolerances are the behaviour, not slack. Inside the correction gate
 /// (`y < 1e-5`, `|x| < 1e3`) `K` holds the tier's full relative accuracy. Outside it,
-/// `K` is `Re w` from the direct evaluation and follows `eps * |w| / K` - which is
+/// `K` is `Re w` from the direct evaluation and follows `eps * |w| / K`, which is
 /// `1` wherever `K` is of order `|w|`, and grows as `K` falls into the Lorentz wing.
 #[test]
 fn voigt_matches_the_convolution_integral() {
@@ -545,7 +545,7 @@ fn voigt_matches_the_convolution_integral() {
 /// every rational Voigt approximation in the literature fails.
 ///
 /// Note how fast the Lorentz term takes over: at `x = 12`, `K(x, 0)` is `exp(-144) =
-/// 2.9e-63`, but by `y = 1e-30` it is already `4.0e-33` - thirty orders larger, and
+/// 2.9e-63`, but by `y = 1e-30` it is already `4.0e-33`, thirty orders larger, and
 /// entirely `y/(sqrt(pi)x^2)`. Getting both regimes right at once is the whole trick,
 /// and neither is representable as a perturbation of the other.
 ///

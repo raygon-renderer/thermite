@@ -136,9 +136,9 @@ fn diff_powf() {
 ///
 /// Two distinct failures live here. A REAL exponent multiplies that infinity by a
 /// zero imaginary part, so the angle is NaN where its limit is plainly 0. A COMPLEX
-/// exponent gives a genuine `+-inf` angle - the spiral never settles - but its modulus
+/// exponent gives a genuine `+-inf` angle (the spiral never settles), but its modulus
 /// has already collapsed, and C99 takes `e^(-inf + iy)` to `+-0` for every non-finite
-/// `y`. Both used to come back NaN.
+/// `y`. Both come back NaN without a guard.
 #[test]
 fn degenerate_polar_points() {
     // z^w at z = 0, against the same rules `num_complex` follows.
@@ -162,7 +162,7 @@ fn degenerate_polar_points() {
 
     // `exp` inherits the C99 rule from `from_polar`. At the default policy the trig
     // clamp hides this, so pin it at the tier that actually propagates non-finite
-    // angles - a modulus of zero must win over an angle that never resolved.
+    // angles: a modulus of zero must win over an angle that never resolved.
     for &im in &[f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
         let got = c(f64::NEG_INFINITY, im).exp_p::<Precision>();
         let (gr, gi) = parts(got);
@@ -264,7 +264,7 @@ fn lexicographic_ordering() {
 ///
 /// The rest of this file runs on the 1-lane scalar backend, but this one needs a
 /// genuinely multi-lane register, so it has to name a backend. Which one does not
-/// matter - only that `LANES > 1` - hence one per arch rather than x86 only.
+/// matter, only that `LANES > 1`, hence one per arch rather than x86 only.
 #[test]
 #[cfg(any(
     target_arch = "x86",
@@ -294,7 +294,7 @@ fn lanes_and_memory() {
     unsafe { z.store_unaligned(out.as_mut_ptr()) };
     assert_eq!(out, elems, "store must invert load");
 
-    // sum_elements is componentwise; prod_elements needs real complex multiplies.
+    // sum_elements is componentwise, while prod_elements needs real complex multiplies.
     let sum = z.sum_elements();
     let want: Complex<f64> = elems.iter().copied().fold(Complex::new(0.0, 0.0), |a, b| a + b);
     assert_eq!(sum, want);
@@ -457,7 +457,7 @@ fn finv_survives_where_inv_overflows() {
     assert!(z.norm_sqr().extract::<0>().is_infinite(), "premise: norm_sqr overflows");
 
     // The naive inverse divides by that infinity and collapses to zero. So does
-    // num_complex's `inv()`, which is the same conj/norm_sqr formula -- hence the
+    // num_complex's `inv()`, which is the same conj/norm_sqr formula, hence the
     // expected value here is the analytic one:
     //   1/z = conj(z)/|z|^2 = (1e200 - 1e200 i) / 2e400 = 5e-201 - 5e-201 i
     assert_eq!(parts(z.inv()), (0.0, -0.0));
@@ -567,7 +567,7 @@ fn masked_mixed_real_arithmetic() {
 // tests are written so they fail against the defaults, not just so they pass against
 // the overrides.
 
-/// `sinc_pi` must be *exactly* zero at every non-zero integer - the property that
+/// `sinc_pi` must be *exactly* zero at every non-zero integer, the property that
 /// makes it an interpolating kernel. The default (`sinc(z * pi)`) is accurate to about
 /// an ulp there but not exact, returning ~1e-16, so this asserts equality with zero
 /// rather than a tolerance.
@@ -693,4 +693,57 @@ fn poly_rational_inverts_on_modulus_not_lexicographic_order() {
         / (Complex64::new(5.0, 0.0) + 6.0 * z + 7.0 * z * z + 8.0 * z * z * z);
 
     assert_close("poly_rational small", small, want, 1e-13);
+}
+
+/// `harmonic_mean` / `inv_sum_inv` on `Complex`, which take the DIRECT reciprocal-sum form
+/// rather than the min-scaled one real vectors get.
+///
+/// `Complex::min` is lexicographic by `(re, im)`, so it can return an element of large
+/// magnitude, and scaling by it would protect nothing. These tests exist to pin that the
+/// composite really is on the unscaled path and that the path is correct.
+#[test]
+fn harmonic_mean_and_inv_sum_inv() {
+    // 2 / (1/z0 + 1/z1), against num_complex directly.
+    let pairs = [
+        ((1.0, 2.0), (3.0, -1.0)),
+        ((0.5, 0.0), (0.25, 0.0)),
+        ((-2.0, 3.0), (1.0, 1.0)),
+        ((1e-8, 1e-8), (2.0, -3.0)),
+    ];
+
+    for &((a, b), (p, q)) in pairs.iter() {
+        let (z0, z1) = (Complex64::new(a, b), Complex64::new(p, q));
+        let want_isi = 1.0 / (1.0 / z0 + 1.0 / z1);
+        let want_hm = want_isi * 2.0;
+
+        let got_hm = C::harmonic_mean([c(a, b), c(p, q)]);
+        let got_isi = C::inv_sum_inv([c(a, b), c(p, q)]);
+
+        let (hr, hi) = (got_hm.re.extract::<0>(), got_hm.im.extract::<0>());
+        let (sr, si) = (got_isi.re.extract::<0>(), got_isi.im.extract::<0>());
+
+        assert!((hr - want_hm.re).abs() < 1e-12 && (hi - want_hm.im).abs() < 1e-12,
+            "harmonic_mean({z0}, {z1}): got {hr}+{hi}i want {want_hm}");
+        assert!((sr - want_isi.re).abs() < 1e-12 && (si - want_isi.im).abs() < 1e-12,
+            "inv_sum_inv({z0}, {z1}): got {sr}+{si}i want {want_isi}");
+    }
+
+    // The defining factor of N still holds on Complex: N copies give z and z/N.
+    let z = c(2.0, -5.0);
+    let hm = C::harmonic_mean([z, z, z]);
+    let si = C::inv_sum_inv([z, z, z]);
+    assert!((hm.re.extract::<0>() - 2.0).abs() < 1e-14 && (hm.im.extract::<0>() + 5.0).abs() < 1e-14);
+    assert!((si.re.extract::<0>() - 2.0 / 3.0).abs() < 1e-14 && (si.im.extract::<0>() + 5.0 / 3.0).abs() < 1e-14);
+
+    // A zero input does NOT take the real form's limit, and that is consistent rather than a
+    // defect. On a real vector 1/0 is +inf, the sum saturates and the mean is 0. Complex
+    // division computes 1/(c^2 + d^2) first, so at zero it forms 0 * inf and yields NaN -
+    // there is no complex infinity in this representation to sum toward. The mean inherits
+    // exactly what the crate's own division does, which the second assertion pins.
+    let zero = c(0.0, 0.0);
+    let hz = C::harmonic_mean([zero, c(1.0, 1.0)]);
+    assert!(hz.re.extract::<0>().is_nan(), "a zero element gives NaN on Complex, not 0");
+
+    let recip = C::ONE / zero;
+    assert!(recip.re.extract::<0>().is_nan(), "because 1/0 is itself NaN here");
 }

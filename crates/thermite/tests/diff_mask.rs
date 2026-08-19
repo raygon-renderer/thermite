@@ -1,7 +1,7 @@
 //! Mask, comparison, select, and masked-variant (`_c`/`_m`/`_z`) coverage.
 //!
 //! This is the foundational gap the other differential suites left open
-//! (`diff_ops` tests the *unmasked* register ops; nothing tested the masks
+//! (`diff_ops` tests the *unmasked* register ops, and nothing tested the masks
 //! those ops blend against). Everything here is checked against an
 //! **independent pure-Rust oracle**, not the scalar backend, so a shared
 //! blend/select bug can't hide:

@@ -10,10 +10,10 @@
 //! [`TranscendentalMath`](crate::math::TranscendentalMath), ...) is a thin shim
 //! that simply forwards to the specialized method for its element type.
 //!
-//! # Why the element is the unit of specialization
+//! # The element as the unit of specialization
 //!
-//! Splitting the implementation out by *element type* - rather than by vector or
-//! backend - is what lets the math library extend to composite number systems.
+//! Splitting the implementation out by *element type* (rather than by vector or
+//! backend) is what lets the math library extend to composite number systems.
 //! A vector's element is not required to be a primitive `f32`/`f64`: it can
 //! itself be a structured value, and a math implementation written against that
 //! element flows through the exact same public traits.
@@ -23,10 +23,10 @@
 //! implementing the specialized traits for that element gives every
 //! `Compensated` vector full transcendental support with no changes to generic
 //! callers. The same pattern is intended for `Complex` (in `thermite-complex`) and dual/hyperdual
-//! numbers as those land - implement the specialized math for the new element
+//! numbers as those land: implement the specialized math for the new element
 //! type and the entire public math API lights up for it automatically.
 //!
-//! Most code should never name these traits directly; bound on the public
+//! Most code should never name these traits directly. Bound on the public
 //! `*Math` traits instead. They are documented here for implementors adding a
 //! new element type.
 
@@ -36,7 +36,8 @@ use crate::{
     element::{FloatElement, FloatElementWithBits},
     mask::*,
     math::{
-        CoreMathWithPolicy, FloatConsts, PrimalProjection, RealMathWithPolicy, TranscendentalMathWithPolicy, algorithms,
+        CoreMathWithPolicy, FloatConsts, PrimalProjection, RealMathWithPolicy, TranscendentalMathWithPolicy,
+        algorithms,
         policy::policies::{ExtraPrecision, LessPrecision},
     },
     register::NativeCapability,
@@ -92,7 +93,7 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
             // power-of-two factors. The chunk bounds are chosen so that
             // (a) every factor is a normal float, and (b) on the negative side
             // (`exp_min + sig_total`: -102 for f32, -969 for f64) the running
-            // product cannot land subnormal until the FINAL multiply - so IEEE
+            // product cannot land subnormal until the FINAL multiply, so IEEE
             // gradual underflow rounds exactly once. Three chunks cover the
             // full useful range (max finite down past the smallest subnormal
             // and back). In the common case the first chunk absorbs the whole
@@ -141,7 +142,7 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
             exp = exp.max(-exp_limit).min(exp_limit);
         }
 
-        // the true (unclamped) new biased exponent; wrap-free thanks to the saturation above
+        // the true (unclamped) new biased exponent, wrap-free thanks to the saturation above
         let new_exp = biased_exp + exp;
 
         if const { !P::POLICY.check_overflow } {
@@ -150,9 +151,9 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
             return Self::from_bits((new_exp << mantissa_bits) | sign_mantissa);
         }
 
-        // Checked tail. Both forms clamp the biased exponent - which already
+        // Checked tail. Both forms clamp the biased exponent, which already
         // lands on the right FIELD value for the special cases (0 on underflow,
-        // MAX_BIASED_EXP on overflow) - and then fix up the specials:
+        // MAX_BIASED_EXP on overflow), and then fix up the specials:
         // - out of range: zero the mantissa, so the clamped field reads as a
         //   signed zero / signed infinity (never the NaN a mantissa-preserving
         //   clamp would encode);
@@ -164,7 +165,7 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
         // Which lowering is cheaper depends on the hardware: the bit assembly
         // is 4 ternlogs plus mask fixups (one instruction each with AVX-512),
         // while without native ternary logic each ternlog expands to a DNF
-        // chain and the blend form wins - measured on znver3 with llvm-mca,
+        // chain and the blend form wins. Measured on znver3 with llvm-mca,
         // 3.8 cyc/iter for blends against 5.8 for ternlogs.
         let clamped_exp = new_exp.max(Self::SignedBits::ZERO).min(max_biased_exp);
 
@@ -208,7 +209,7 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
 
         // a zero/subnormal input flushes to a signed zero for ANY
         // shift, so it must be applied after (and therefore win over) the
-        // overflow select - `ldexp(0.0, 300)` is 0.0, not infinity.
+        // overflow select: `ldexp(0.0, 300)` is 0.0, not infinity.
         result = overflow
             .cast::<Self::Mask>()
             .select(Self::INFINITY.copysign(self), result);
@@ -255,7 +256,7 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
             Self::Bits::ternlog::<{ crate::ternlog_imm!((A & B) | C) }>(bits, sign_mantissa_mask, half_exp_bits);
 
         // A subnormal carries no implicit leading one, so its exponent field
-        // means nothing until the value is renormalized - skip this and
+        // means nothing until the value is renormalized. Skip this and
         // `frexp(1e-40f32)` answers `(1e-40, 0)`, silently breaking the
         // `0.5 <= |frac| < 1` postcondition while still satisfying
         // `x == frac * 2^exp`.
@@ -265,8 +266,7 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
         // work sits behind a branch and the common path stays exactly as cheap
         // as it was (llvm-mca, znver3: 2.2 cyc/iter, against 4.0 if the fixup
         // runs unconditionally). Under `Preserve` they are expected instead, so
-        // the branch would only mispredict - run it straight-line there, as
-        // this kernel always used to.
+        // the branch would only mispredict, so run it straight-line there.
         //
         // The branch is the right call well past "rare". Measured with rdtsc
         // over 512 KiB of random input (TSC cycles per f32x8, subnormals placed
@@ -278,12 +278,12 @@ pub trait SpecializedFloatMath<E: FloatElementWithBits>: FloatVectorWithBits<Ele
         //
         // Crossover is ~8-9% of vectors, i.e. ~1 element in 90. Past that the
         // mispredicts dominate, peaking at 50% where the branch is maximally
-        // unpredictable (+67%); at 100% it is predictable again and the cost
+        // unpredictable (+67%). At 100% it is predictable again and the cost
         // falls back. Callers who genuinely expect dense subnormals under a
-        // flushing policy should ask for `AvoidBranching<P, true>` - or, more
+        // flushing policy should ask for `AvoidBranching<P, true>`, or, more
         // likely, they wanted `PreserveDenormals<P>` all along.
         // `Ignore` promises the hardware is running with denormals disabled
-        // (DAZ/FTZ), so one can never arrive here - skip the fixup and even its
+        // (DAZ/FTZ), so one can never arrive here. Skip the fixup and even its
         // test entirely, exactly as `flush_denormals` does for that policy.
         if const {
             <Self::Element as FloatElement>::HAS_SUBNORMALS
@@ -697,6 +697,54 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
         self * rhs.rcp()
     }
 
+    /// `numer / sum(1/x_i)` the direct way, backing both
+    /// [`harmonic_mean`](Self::harmonic_mean) and [`inv_sum_inv`](Self::inv_sum_inv), which
+    /// differ only in whether the numerator is `N` or `1`.
+    ///
+    /// This is the form every type can run, and is the default precisely because it needs
+    /// no ordering. Real f32/f64 vectors override it with a version that scales by the
+    /// smallest element to keep the sum from overflowing. That rewrite is meaningless on
+    /// `Complex`, whose `min` is *lexicographic by (re, im)* and can therefore return an
+    /// element of large magnitude, giving no protection at all and possibly making matters
+    /// worse. See `generic::inv_sum_inv_internal`.
+    ///
+    /// On a plain float vector both limits fall out here without a guard, which the scaled
+    /// form cannot claim: a zero input sends its reciprocal to infinity so the answer is `0`,
+    /// and an all-infinite input sums to `0` so the answer is infinite.
+    ///
+    /// That is a property of **IEEE division**, not of this function or of being real-valued,
+    /// and neither composite inherits it. `Complex` division forms `1/(c^2 + d^2)` first, so
+    /// a zero gives `0 * inf =` NaN with no infinity to sum toward. `Compensated` is real and
+    /// still loses it, because double-double division forms `two_prod(q1, rhs)`, which is
+    /// `inf * 0` at a zero divisor and poisons the error term. Both therefore return NaN at a
+    /// zero input, in each case exactly what that type's own `1/x` returns, so the behavior
+    /// is inherited rather than invented here. Their test suites pin it.
+    #[inline(always)]
+    fn inv_sum_inv_direct<P: Policy, const N: usize>(mut values: [Self; N], numer: Self) -> Self {
+        let mut i = 0;
+        while i < N {
+            values[i] = Self::reciprocal::<P>(values[i]);
+            i += 1;
+        }
+
+        // Log-depth rather than a running accumulator: the adds are otherwise a serial
+        // dependency chain N deep, and it is the same reduction `hypot_n` uses.
+        crate::math::algorithms::reduce_in_place(&mut values, |a, b| a + b);
+
+        Self::approx_div::<P>(numer, values[0])
+    }
+
+    #[inline(always)]
+    fn harmonic_mean<P: Policy, const N: usize>(values: [Self; N]) -> Self {
+        let n = Self::splat(Self::Element::from_int(N as crate::LargeInt));
+        Self::inv_sum_inv_direct::<P, N>(values, n)
+    }
+
+    #[inline(always)]
+    fn inv_sum_inv<P: Policy, const N: usize>(values: [Self; N]) -> Self {
+        Self::inv_sum_inv_direct::<P, N>(values, Self::ONE)
+    }
+
     #[inline(always)]
     fn reciprocal_adde<P: Policy>(self, a: Self) -> Self {
         if const { Self::HAS_APPROX_RCP && P::POLICY.precision.ge(PrecisionPolicy::Best) } {
@@ -819,11 +867,49 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
         Self::sinc::<P>(self * Self::PI)
     }
 
+    /// `x * ln_of_y`, with `x == 0` winning over an infinite log but a NaN `y` winning over
+    /// both. Shared by [`xlogy`](Self::xlogy), [`xlog1py`](Self::xlog1py) and
+    /// [`entr`](SpecializedRealMath::entr); the other two members of the family guard on the
+    /// sign of both arguments instead and cannot use it.
+    ///
+    /// `y` is passed separately from its logarithm because the NaN test belongs to `y`: a
+    /// negative `y` makes the log NaN without being NaN itself, and there the zero guard
+    /// still applies.
+    #[inline(always)]
+    fn xlog_guarded(x: Self, y: Self, ln_y: Self) -> Self {
+        (x.is_zero() & !y.is_nan()).select(Self::ZERO, x * ln_y)
+    }
+
+    #[inline(always)]
+    fn xlogy<P: Policy>(self, y: Self) -> Self {
+        Self::xlog_guarded(self, y, Self::ln::<P>(y))
+    }
+
+    #[inline(always)]
+    fn xlog1py<P: Policy>(self, y: Self) -> Self {
+        Self::xlog_guarded(self, y, Self::ln_1p::<P>(y))
+    }
+
+    fn sinhc<P: Policy>(self) -> Self;
+
+    fn atanhc<P: Policy>(self) -> Self;
+
     fn sinh_cosh<P: Policy>(self) -> (Self, Self);
 
     #[inline(always)]
     fn sinh<P: Policy>(self) -> Self {
         Self::sinh_cosh::<P>(self).0
+    }
+
+    /// `cosh(x) - 1 = 2 sinh^2(x/2)`, an exact identity, so no type needs to override this:
+    /// the composition inherits whatever accuracy that type's `sinh` has, and near zero
+    /// `sinh(x/2)` is already `x/2` to full relative precision, giving `x^2/2` with no
+    /// cancellation anywhere. Same treatment as `versin` above.
+    #[inline(always)]
+    fn cosh_m1<P: Policy>(self) -> Self {
+        let s = Self::sinh::<P>(self * Self::HALF);
+        let h = s * s;
+        h + h
     }
 
     #[inline(always)]
@@ -900,10 +986,13 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
         let p_lo = n.mul_sube(l, p);
         let e = Self::exp::<P>(p);
 
-        // The correction is only meaningful (and only safe) on a finite result: a
-        // legitimate overflow gives e = inf, where `p_lo * inf + inf` is NaN for a
-        // negative residual.
-        e.is_finite().select(p_lo.mul_adde(e, e), e)
+        // The correction is only meaningful (and only safe) where both the residual and the
+        // result are finite. `e = inf` is a legitimate overflow, where `p_lo * inf + inf` is
+        // NaN for a negative residual; `p_lo` itself is NaN at the domain edge x = -1, where
+        // `p = n * -inf` and the residual is `inf - inf`. In both cases the uncorrected value
+        // is already the exact limit, so the answer is to skip the correction, not to patch
+        // the result afterwards.
+        (p_lo.is_finite() & e.is_finite()).select(p_lo.mul_adde(e, e), e)
     }
 
     #[inline(always)]
@@ -923,8 +1012,32 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
         let p_lo = e.mul_sube(l, p);
         let r = Self::exp_m1::<P>(p);
 
-        // As in `compound`: no correction on an overflowed (infinite) result.
-        r.is_finite().select(p_lo.mul_adde(r + Self::ONE, r), r)
+        // As in `compound`: no correction unless the residual and the result are both
+        // finite. `p_lo` is NaN at x = 0, where `p = e * -inf` makes the residual
+        // `inf - inf`, and `r = -1` there is already exact.
+        (p_lo.is_finite() & r.is_finite()).select(p_lo.mul_adde(r + Self::ONE, r), r)
+    }
+
+    #[inline(always)]
+    fn compound_m1<P: Policy>(self, n: Self) -> Self {
+        // (1 + x)^n - 1 = expm1(n * ln(1 + x)). `ln_1p` keeps x's low bits, which
+        // `powf_m1(1 + x, n)` would round away, and `expm1` keeps the outer subtraction
+        // from cancelling, which `compound(x, n) - 1` would not.
+        let l = Self::ln_1p::<P>(self);
+        let p = n * l;
+
+        // As in `compound`, the Dekker residual needs a real FMA; non-FMA backends keep the
+        // uncorrected form rather than pay emulation.
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) || !Self::HAS_TRUE_FMA } {
+            return Self::exp_m1::<P>(p);
+        }
+
+        let p_lo = n.mul_sube(l, p);
+        let r = Self::exp_m1::<P>(p);
+
+        // Same guard as `powf_m1`: at the domain edge x = -1 the residual is `inf - inf`,
+        // and the uncorrected -1 (or +inf for n < 0) is already the limit.
+        (p_lo.is_finite() & r.is_finite()).select(p_lo.mul_adde(r + Self::ONE, r), r)
     }
 
     #[inline(always)]
@@ -1024,7 +1137,7 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     fn log10<P: Policy>(self) -> Self;
 
     // log_b(1 + x) = ln(1 + x) / ln(b) = ln_1p(x) * log_b(e). Routing through the
-    // cancellation-safe ln_1p keeps the near-zero accuracy; scaling by a constant
+    // cancellation-safe ln_1p keeps the near-zero accuracy, and scaling by a constant
     // preserves the relative error.
     #[inline(always)]
     fn log2_p1<P: Policy>(self) -> Self {
@@ -1034,6 +1147,15 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     #[inline(always)]
     fn log10_p1<P: Policy>(self) -> Self {
         Self::ln_1p::<P>(self) * Self::LOG10_E
+    }
+
+    /// The direct form, which cancels near zero (see the trait method's docs). Real f32/f64
+    /// vectors override this with `generic::log1pmx_internal`. The default exists so that
+    /// ordered-comparison-free types (`Complex` above all, which cannot select a window at
+    /// all) still get a correct answer rather than blocking the whole method.
+    #[inline(always)]
+    fn log1pmx<P: Policy>(self) -> Self {
+        Self::ln_1p::<P>(self) - self
     }
 
     fn log_n<P: Policy, const N: usize>(self) -> Self;
@@ -1216,7 +1338,10 @@ pub trait SpecializedSpatialMath<E>: SpecializedCoreMath<E> {
 /// Implementing this is also what _provides_ the [`PrimalProjection`] fixpoint:
 /// the blanket impl in [`crate::math`] gives every `SpecializedPrimalMath` type
 /// `Primal = Self` with identity conversions.
-pub trait SpecializedPrimalMath<E>: SpecializedRealMath<E> + SpecializedCoreMath<E> + PrimalProjection<Primal = Self> {}
+pub trait SpecializedPrimalMath<E>:
+    SpecializedRealMath<E> + SpecializedCoreMath<E> + PrimalProjection<Primal = Self>
+{
+}
 
 pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + SpecializedSpatialMath<E> {
     #[inline(always)]
@@ -1227,6 +1352,110 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     #[inline(always)]
     fn to_degrees<P: Policy>(self) -> Self {
         self * Self::FRAC_180_PI
+    }
+
+    /// `-x ln x`, `0` at zero, `-inf` below it. The zero case rides the shared guard, since
+    /// `ln 0` is the same `0 * -inf` that `xlogy` exists to absorb. Only the negative branch
+    /// is specific to this one.
+    #[inline(always)]
+    fn entr<P: Policy>(self) -> Self {
+        let v = Self::xlog_guarded(self, self, Self::ln::<P>(self));
+        self.cmp_lt(Self::ZERO).select(Self::NEG_INFINITY, -v)
+    }
+
+    /// `ln(x/y)` for positive `x` and `y`, accurate near `x = y` where the plain ratio is
+    /// not. The shared core of [`rel_entr`](Self::rel_entr) and [`kl_div`](Self::kl_div).
+    ///
+    /// `x/y` rounds to a relative `eps`, so `ln(x/y)` carries an *absolute* error of `eps`
+    /// while the answer itself is `O((x-y)/y)`, a relative error of `eps*y/(x-y)`, which is
+    /// unbounded as the arguments approach each other. That is the regime a converging
+    /// optimizer lives in, so it is the regime that matters. Near the diagonal this instead
+    /// uses `ln1p((x-y)/y)`, where `x - y` is exact by Sterbenz and no cancellation occurs.
+    ///
+    /// Neither form is good everywhere, which is why this is a select and not a rewrite.
+    /// `ln1p` degrades as `x/y -> 0`, its argument approaching `-1`, while the ratio degrades
+    /// on the diagonal. Measured against a 50-digit oracle over 211 points, the split at
+    /// `|x - y| < y/2` is never worse than the plain ratio and is up to ten orders better:
+    /// worst case `2.0e-16` against `3.7e-6`.
+    ///
+    /// A third form, `ln x - ln y`, is the only one that survives a ratio past the exponent
+    /// range (`x = 1, y = 1e-320` overflows both of the others). It costs a second `log`
+    /// everywhere and cancels on the diagonal exactly as the ratio does, so it is not used
+    /// here. SciPy has the same overflow behavior.
+    #[inline(always)]
+    fn ln_ratio<P: Policy>(x: Self, y: Self) -> Self {
+        let d = x - y;
+        let near = d.abs().cmp_lt(y * Self::HALF);
+
+        if const { !P::POLICY.avoid_branching } {
+            if near.all() {
+                return Self::ln_1p::<P>(d / y);
+            }
+            if near.none() {
+                return Self::ln::<P>(x / y);
+            }
+        }
+
+        near.select(Self::ln_1p::<P>(d / y), Self::ln::<P>(x / y))
+    }
+
+    /// `x ln(x/y)`, the Kullback-Leibler summand, extended by `0` at `x = 0, y >= 0` and
+    /// `+inf` everywhere else in the plane.
+    #[inline(always)]
+    fn rel_entr<P: Policy>(self, y: Self) -> Self {
+        // Explicit comparisons rather than the sign-bit predicates: -0.0 has to count as
+        // zero here, and `is_negative` would call it negative.
+        let inside = self.cmp_gt(Self::ZERO) & y.cmp_gt(Self::ZERO);
+        let at_zero = self.cmp_eq(Self::ZERO) & y.cmp_ge(Self::ZERO);
+
+        let v = self * Self::ln_ratio::<P>(self, y);
+
+        at_zero.select(Self::ZERO, inside.select(v, Self::INFINITY))
+    }
+
+    /// [`rel_entr`](Self::rel_entr) plus the Bregman tail `-x + y`, which is what makes this
+    /// non-negative for unnormalized arguments. Note the `x = 0` case is `y`, not `0`: the
+    /// tail survives when the log term vanishes.
+    ///
+    /// This one has a cancellation of its own, worse than `rel_entr`'s and in a different
+    /// place. With `y = x(1 + u)`, the log term is `-xu + xu^2/2` and the tail is `+xu`, so
+    /// two first-order quantities cancel to a **second**-order answer: near the diagonal
+    /// the textbook spelling is not merely imprecise, it is 100% wrong (measured, against a
+    /// 50-digit oracle). Written instead as
+    ///
+    /// ```text
+    /// kl_div(x, y) = -x * log1pmx((y - x)/x)
+    /// ```
+    ///
+    /// the cancellation moves inside [`log1pmx`](SpecializedTranscendentalMath::log1pmx),
+    /// which exists to absorb exactly it. That is an identity, not an approximation, and the
+    /// same one the Poisson deviance uses: `bd0(k, lambda)` in `thermite-special` is this
+    /// function under another name.
+    ///
+    /// The parametrization degrades as `u -> -1`, i.e. `y << x`, so past `|u| >= 1/2` the
+    /// direct form runs instead. There the two terms no longer cancel, the answer being
+    /// `O(x)` rather than `O(x u^2)`. Worst case over 160 sampled points: `1.8e-15` against
+    /// the direct form's `1.0e+00`.
+    #[inline(always)]
+    fn kl_div<P: Policy>(self, y: Self) -> Self {
+        let inside = self.cmp_gt(Self::ZERO) & y.cmp_gt(Self::ZERO);
+        let at_zero = self.cmp_eq(Self::ZERO) & y.cmp_ge(Self::ZERO);
+
+        let u = (y - self) / self;
+        let near = u.abs().cmp_lt(Self::HALF);
+
+        let v = if const { !P::POLICY.avoid_branching } && near.all() {
+            -(self * Self::log1pmx::<P>(u))
+        } else if const { !P::POLICY.avoid_branching } && near.none() {
+            self.mul_adde(Self::ln_ratio::<P>(self, y), y - self)
+        } else {
+            near.select(
+                -(self * Self::log1pmx::<P>(u)),
+                self.mul_adde(Self::ln_ratio::<P>(self, y), y - self),
+            )
+        };
+
+        at_zero.select(y, inside.select(v, Self::INFINITY))
     }
 
     #[inline(always)]
@@ -1281,7 +1510,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         let mut r = m + Self::ln_1p::<P>(Self::exp::<P>(-d));
 
         if const { P::POLICY.check_overflow } {
-            // a == b == +-inf makes a - b NaN; the answer is that infinity (= m).
+            // a == b == +-inf makes a - b NaN, but the answer is that infinity (= m).
             r = d.is_nan().select(m, r);
         }
 
@@ -1290,18 +1519,27 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
 
     #[inline(always)]
     fn logmean<P: Policy>(self, other: Self) -> Self {
-        // (x - y)/(ln x - ln y) = (x - y) / (2 atanh((x - y)/(x + y))).
+        // (x - y)/(ln x - ln y) = (x - y)/(2 atanh(f)) with f = (x - y)/(x + y), and since
+        // 2 atanh(f) = 2 f atanhc(f) while (x - y)/(2 f) is exactly the arithmetic mean, that
+        // whole expression collapses to
         //
-        // Both halves of the defining form cancel as x approaches y. This one does not:
-        // for nearby arguments the subtraction is exact by Sterbenz's lemma, and atanh
-        // is at its most accurate near zero, which is exactly where the ratio lands.
+        //     logmean(x, y) = (x + y) / (2 atanhc(f))
+        //
+        // Both halves of the defining form cancel as x approaches y. This one does not: for
+        // nearby arguments the subtraction is exact by Sterbenz's lemma, and atanhc is at its
+        // most accurate near zero, which is exactly where the ratio lands.
+        //
+        // Going through `atanhc` rather than `atanh` also moves the x == y limit into a
+        // function that already fills it in (`atanhc(0) = 1`, giving the arithmetic mean,
+        // which is the correct limit), so the guard below is only for exact equality, where
+        // f is 0/0 rather than 0.
         let d = self - other;
-        let t = Self::approx_div::<P>(d, self + other);
-        let a = Self::atanh::<P>(t);
-        let mut r = Self::approx_div::<P>(d, a + a);
+        let s = self + other;
+        let f = Self::approx_div::<P>(d, s);
+        let mut r = Self::approx_div::<P>(s, Self::atanhc::<P>(f) * Self::TWO);
 
         if const { P::POLICY.check_overflow } {
-            // x == y is 0/0, and the limit there is x itself.
+            // x == y makes f itself 0/0, so the limit has to be supplied here.
             r = d.is_zero().select(self, r);
         }
 
@@ -1776,8 +2014,8 @@ impl<const N: usize> Smoothstep<N> {
     // ensure these coefficients are generated at compile time
     pub const COEFFICIENTS: [crate::LargeInt; N] = const {
         let mut coeffs = [0; N];
-        // `N as i32 - 1` (not `(N - 1) as i32`) so the N=0 case - an empty coeff
-        // array whose loop never runs, so `n` is unused - doesn't underflow `usize`
+        // `N as i32 - 1` (not `(N - 1) as i32`) so the N=0 case, an empty coeff
+        // array whose loop never runs and leaves `n` unused, doesn't underflow `usize`
         // at compile time. This lets `smoothstep`/`inverse_smoothstep::<0>` compile.
         let n = N as i32 - 1;
 

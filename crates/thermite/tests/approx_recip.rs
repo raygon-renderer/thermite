@@ -3,7 +3,7 @@
 //!
 //!   - `rcp(x)`   ≈ 1/x        (hardware reciprocal estimate)
 //!   - `rsqrt(x)` ≈ 1/sqrt(x)  (hardware reciprocal-sqrt estimate)
-//!   - `sum_elements`          (non-associative; tree vs. left-fold)
+//!   - `sum_elements`          (non-associative, tree vs. left-fold)
 //!
 //! These had no coverage at all. Inputs are restricted to the well-behaved
 //! normal range (no denormals/inf/NaN) where the accuracy contract holds.

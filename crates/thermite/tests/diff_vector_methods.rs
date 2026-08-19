@@ -151,7 +151,7 @@ macro_rules! ilv_radix {
 }
 
 /// [`ilv_radix!`] plus the group-granularity `interleave_by`/`deinterleave_by`
-/// round-trip at `GROUP == 1` (== `interleave`) and `GROUP == 2` (pairs; native
+/// round-trip at `GROUP == 1` (== `interleave`) and `GROUP == 2` (pairs, with a native
 /// override on wide backends, the lane-wise polyfill default on the emulated ones).
 /// Even lane counts only.
 macro_rules! ilv {
@@ -283,7 +283,7 @@ macro_rules! radix_by_transpose {
     }};
 }
 
-/// Full semantic check for **any** `(N, GROUP)` shape, both directions - the
+/// Full semantic check for **any** `(N, GROUP)` shape, both directions, the
 /// non-square generalization of [`radix_by_transpose!`]. Round-trips alone cannot
 /// catch two directions that are consistently wrong together, so each direction is
 /// checked against its index formula independently (input `i` = `indexed() + i*LANES`,
@@ -358,7 +358,7 @@ macro_rules! radix_by_semantic {
 /// **Differential: a register's `(de)interleave_radix_by` override vs the portable
 /// engine it replaced.** Runs the register's own path and
 /// `(de)interleave_radix_by_default::<R, N, GROUP>` (which never re-enters the
-/// override - its arms reach only `deinterleave`/`deinterleave_by`/`deinterleave_radix`)
+/// override, its arms reaching only `deinterleave`/`deinterleave_by`/`deinterleave_radix`)
 /// on identical input and pins them equal, both directions.
 ///
 /// This is the check an override actually needs: [`radix_by_semantic!`] pins the index
@@ -510,7 +510,7 @@ mod x86 {
     /// plus non-pow-2 fallback shapes that validate the check itself against the
     /// untouched lane-wise reference. A shape the ladder's compile-time search does not
     /// certify silently falls back, so this sweep is correct regardless of which path
-    /// each shape actually takes - it pins the SEMANTICS, not the route.
+    /// each shape actually takes. It pins the SEMANTICS, not the route.
     #[test]
     fn radix_by_ladder_shapes() {
         // f32x8: the full pow-2 (N, GROUP) battery.
@@ -552,7 +552,7 @@ mod x86 {
     /// `ArrayRegister`'s `(de)interleave_radix_by` chunk-chain (`register/array.rs`):
     /// output chunk `i` is one inner `radix_by::<S, GROUP>` of flat chunks `S*i..S*i+S`,
     /// valid whenever a group fits a chunk (`GROUP` divides the inner `L`). That
-    /// decomposition is subtle enough that round-trips are not enough - these check both
+    /// decomposition is subtle enough that round-trips are not enough, so these check both
     /// directions against the index formulas at every emulated width.
     ///
     /// This is also the path that carries the AVX2 natives + ladder up to the emulated
@@ -610,14 +610,14 @@ mod x86 {
     /// **The `ArrayRegister` chunk-chain override must equal the engine it replaced.**
     /// `register/array.rs` overrides `(de)interleave_radix_by` to delegate per chunk
     /// position to the INNER register (which is how the AVX2 natives + certified ladder
-    /// reach the emulated widths - `f32x16 = ArrayRegister<F32x8V3, 2>`). Before that
-    /// override, every one of these shapes ran `(de)interleave_radix_by_default` at the
-    /// full array width; a specialization that silently diverges from what it replaced is
-    /// the exact bug this pins down.
+    /// reach the emulated widths, `f32x16 = ArrayRegister<F32x8V3, 2>`). Without the
+    /// override every one of these shapes runs `(de)interleave_radix_by_default` at the
+    /// full array width, and a specialization that silently diverges from what it
+    /// replaces is the exact bug this pins down.
     ///
-    /// Covers all three array configs the backend actually builds - 2-chunk
+    /// Covers all three array configs the backend actually builds: 2-chunk
     /// (`f32x16`/`f64x8`/`i32x16`, and v2/v1 `f32x8 = ArrayRegister<F32x4, 2>`) and
-    /// **4-chunk** (`f64x16`/`i64x16`) - plus the `GROUP > inner L` shapes where the
+    /// **4-chunk** (`f64x16`/`i64x16`), plus the `GROUP > inner L` shapes where the
     /// override declines and both sides must take the same fallback.
     #[test]
     fn radix_by_array_register_matches_default() {
@@ -683,7 +683,7 @@ mod x86 {
         // trick, radix 3/5 fall to the gather over the logical 3 lanes. This is
         // the live path behind 3D `load_deinterleaved::<3>` (ReducedRegister has
         // no memory override, so it routes through the radix engine). Only the
-        // radix ops are exercised - `interleave2` (pairs) is ill-defined on an
+        // radix ops are exercised, since `interleave2` (pairs) is ill-defined on an
         // odd lane count.
         ilv_radix!(<X86V3 as Simd3A>::f32x3A);
         ilv_radix!(<X86V3 as Simd3A>::i32x3A);

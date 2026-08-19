@@ -2,7 +2,7 @@
 //!
 //! These turn a mask into scanning primitives (find-first / find-last / popcount
 //! of true lanes). Verified against a per-lane oracle over a battery of bit
-//! patterns - empty, full, every single bit, and full-minus-one-bit - which
+//! patterns (empty, full, every single bit, and full-minus-one-bit), which
 //! pins down the first/last/count edges. Exercised across the scalar backend
 //! (native 1-lane, `ArrayRegister`, and reduced register masks), on x86 the
 //! native movemask paths of v1/v2/v3, and on aarch64 the NEON ones.
@@ -64,8 +64,8 @@ macro_rules! check {
             }
 
             // N-ary forms, over every ordered combination of a small pattern
-            // set. These take a merged path on several backends - a saturating
-            // narrowing pack on x86, a horizontal add on NEON - so N=2 and N=4
+            // set. These take a merged path on several backends (a saturating
+            // narrowing pack on x86, a horizontal add on NEON), so N=2 and N=4
             // exercise the merge and N=1/3 the odd-count leftovers it falls
             // back to. `count_set` is free to scramble lane order internally;
             // `first_set`/`last_set` are not, and only the latter two would

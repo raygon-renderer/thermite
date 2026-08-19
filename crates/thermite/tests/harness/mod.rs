@@ -9,7 +9,7 @@
 //!
 //! This is the same philosophy the `diff_swizzle` tests use (`scalar_*` as
 //! ground truth), generalised to the whole register API and parametrised over
-//! the backend × element-type × width matrix.
+//! the backend x element-type x width matrix.
 //!
 //! Used by:
 //!   - `diff_ops.rs`     - arithmetic / bitwise / shift / compare / rounding
@@ -46,12 +46,12 @@ pub enum Tol {
     ///
     /// For the `_c` variants of the additive float ops. Where the mask register
     /// is the same width as the data register, `op_c` is lowered as
-    /// `op(lhs, rhs & mask)` rather than a `blendv` of the result - an `and`
+    /// `op(lhs, rhs & mask)` rather than a `blendv` of the result: an `and`
     /// plus the op instead of the op plus a select. `+0.0` is not quite the
     /// additive identity under round-to-nearest (`-0.0 + 0.0 == +0.0`), so a
     /// masked-off `-0.0` lane comes back as `+0.0`. The scalar oracle has no
     /// equal-size mask and keeps the `blendv` form, so it preserves the sign.
-    /// That divergence is accepted; the magnitude is not.
+    /// That divergence is accepted. The magnitude is not.
     ExactOrZeroSign,
 }
 
@@ -131,8 +131,8 @@ macro_rules! impl_diff_float {
                 match tol {
                     Tol::Exact => got.to_bits() == want.to_bits(),
                     // Relaxed (non-strict) min/max may return +0.0 or -0.0 for an
-                    // opposite-signed-zero input pair (impl-defined - e.g. wasm
-                    // `f32x4_relaxed_min`); accept either, unless `strict_ieee754`
+                    // opposite-signed-zero input pair (impl-defined, e.g. wasm
+                    // `f32x4_relaxed_min`), so accept either, unless `strict_ieee754`
                     // pins the deterministic result. (`Exact`, used by copysign /
                     // signum, still distinguishes the sign of zero.)
                     Tol::ExactOrNan => {
@@ -199,7 +199,7 @@ macro_rules! impl_diff_int {
             fn close(got: Self, want: Self, tol: Tol) -> bool {
                 match tol {
                     Tol::Exact => got == want,
-                    // Integers only ever use Exact; treat the rest as exact too.
+                    // Integers only ever use Exact, so treat the rest as exact too.
                     _ => got == want,
                 }
             }
@@ -285,7 +285,7 @@ pub fn corpus<E: Diff>(lanes: usize, rng: &mut SmallRng) -> Vec<Vec<E>> {
     for &e in edges {
         out.push(vec![e; lanes]);
     }
-    // Sliding window over the edge list so adjacent lanes differ - this
+    // Sliding window over the edge list so adjacent lanes differ, which
     // catches lane-routing / horizontal-op bugs the broadcasts miss.
     for start in 0..edges.len() {
         out.push((0..lanes).map(|i| edges[(start + i) % edges.len()]).collect());
@@ -543,8 +543,8 @@ macro_rules! oracle_shift {
 /// (`<Dst as CastRegister<Src>>`) against the scalar backend, whose
 /// float -> int saturating impl is literally `value as _`. Unlike `cast_diff!`
 /// there is no domain prep: saturating casts are total (`as` semantics:
-/// NaN -> 0, out-of-range clamps), so the raw corpus - NaN, infinities, and
-/// out-of-range values included - is valid input and must be bit-exact.
+/// NaN -> 0, out-of-range clamps), so the raw corpus (NaN, infinities, and
+/// out-of-range values included) is valid input and must be bit-exact.
 #[macro_export]
 macro_rules! sat_cast_diff {
     ($label:expr, $src_ut:ty, $dst_ut:ty, $src_rf:ty, $dst_rf:ty, $se:ty) => {{
@@ -574,7 +574,7 @@ macro_rules! sat_cast_diff {
 ///
 /// `fast_cast` is the deliberately-narrow-domain conversion: out of range it
 /// returns unspecified values by contract, so `$prep` must map the corpus into
-/// the domain where it *is* defined - and, for float sources, onto integral
+/// the domain where it *is* defined, and, for float sources, onto integral
 /// values, because the magic-number lowerings round to nearest where `as`
 /// truncates.
 ///
@@ -613,8 +613,8 @@ macro_rules! fast_cast_diff {
 /// The scalar backend's `cast_from` is literally `value as _`, so this is a
 /// differential against Rust's built-in `as` (the documented "like `as`"
 /// contract). `$prep` maps each source element before the cast (applied
-/// identically to both backends) so float→int gates can stay in the
-/// in-range domain where the contract is unambiguous; pass `|x| x` otherwise.
+/// identically to both backends) so float->int gates can stay in the
+/// in-range domain where the contract is unambiguous. Pass `|x| x` otherwise.
 #[macro_export]
 macro_rules! cast_diff {
     ($label:expr, $src_ut:ty, $dst_ut:ty, $src_rf:ty, $dst_rf:ty, $se:ty, $prep:expr, $tol:expr) => {{

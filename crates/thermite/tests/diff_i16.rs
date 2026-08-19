@@ -120,7 +120,7 @@ mod v2 {
     int16_tests!(u16x16, X86V2, u16x16, "x86_v2 u16x16", unsigned);
 }
 
-// --- X86V1 (SSE2) vs Scalar. x8 native 128-bit; many ops use SSE2/scalar fallbacks. ---
+// --- X86V1 (SSE2) vs Scalar. x8 native 128-bit, many ops use SSE2/scalar fallbacks. ---
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod v1 {
     use super::*;

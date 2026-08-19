@@ -1473,7 +1473,7 @@ pub trait BitwiseVector:
     /// This function is a "programmable logic gate". It applies the logic defined in `IMM`
     /// to every bit of the inputs in parallel.
     ///
-    /// # How to Calculate `IMM`
+    /// # Calculating `IMM`
     /// The easiest way to find the correct `IMM` value is to perform your desired boolean
     /// logic on these three specific "Magic Constants":
     ///
@@ -2001,7 +2001,7 @@ pub trait NumericVector:
     /// This is the numeric conversion, *not* a bit reinterpretation; for the bit
     /// pattern of a float see [`GenericVector::into_bits`].
     ///
-    /// # Why a method and not a `CastVector` bound
+    /// # A method rather than a `CastVector` bound
     ///
     /// A bound would have to be written either as `Self::Signed: CastVector<Self>`,
     /// whose impl `Self` type is an associated-type projection and so cannot be
@@ -2925,7 +2925,8 @@ pub trait AsFloatVectorWithBitsKernel<O: FloatVector, const N: usize> {
 }
 
 /// A [`FloatVector`] that additionally exposes its raw bit representation as
-/// companion integer vectors, enabling bit-level float algorithms.
+/// companion integer vectors, so bit-level float algorithms can be written
+/// against it.
 ///
 /// On top of [`FloatVector`] this provides:
 /// - the [`Bits`](Self::Bits) (unsigned) and [`SignedBits`](Self::SignedBits)

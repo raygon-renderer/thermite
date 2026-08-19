@@ -18,7 +18,7 @@ fn close(a: f64, b: f64, eps: f64) -> bool {
     d < eps
 }
 
-// A function generic over any float/math vector -- the whole point of Thermite.
+// A function generic over any float/math vector, which is the whole point of Thermite.
 fn gaussian<W: FloatVector + TranscendentalMath>(v: W) -> W {
     (-(v * v)).exp()
 }
@@ -26,7 +26,7 @@ fn gaussian<W: FloatVector + TranscendentalMath>(v: W) -> W {
 #[test]
 fn autodiff_generic_math_function() {
     // `gaussian` is generic over any FloatVector + TranscendentalMath. AutoDiff infers and
-    // instantiates it at W = Dual<Vector<f64>, 1> directly from the input array -- no
+    // instantiates it at W = Dual<Vector<f64>, 1> directly from the input array, with no
     // turbofish or closure wrapper needed.
     let r = gaussian.ad([V::splat(0.5)]);
 
@@ -163,7 +163,7 @@ fn lowered_square_scale_clamp_fract() {
     assert!(close(sd.re.extract::<0>(), 15.0, 1e-12));
     assert!(close(sd.dual[0].extract::<0>(), 13.0, 1e-12));
 
-    // clamp: in-range keeps value + derivative; out-of-range takes the (constant) bound
+    // clamp: in-range keeps value + derivative, out-of-range takes the (constant) bound
     let lo = D::constant(V::splat(0.0));
     let hi = D::constant(V::splat(3.0));
     let inside = D::variable(V::splat(2.0), 0).clamp(lo, hi);
@@ -264,7 +264,7 @@ fn log_domain_gradients() {
 
 #[test]
 fn inverse_smoothstep_implicit_derivative() {
-    // N=3 inverse_smoothstep runs a Newton loop internally; the Dual override must
+    // N=3 inverse_smoothstep runs a Newton loop internally, so the Dual override must
     // round-trip (inverse(smoothstep(x)) == x) and give the implicit-function-theorem
     // derivative d/dy inverse(y) = 1 / smoothstep'(x), NOT a value from differentiating
     // through Newton.
@@ -347,7 +347,7 @@ fn mix_and_lerp() {
     assert!(close(m.re.extract::<0>(), 4.0, 1e-12));
     assert!(close(m.dual[0].extract::<0>(), 8.0, 1e-12));
 
-    // `lerp` is a trait default that lowers to `mix` -- it used to panic on Dual.
+    // `lerp` is a trait default that lowers to `mix`, so Dual has to reach it too.
     let l = t.lerp(a, b);
     assert!(close(l.re.extract::<0>(), 4.0, 1e-12));
     assert!(close(l.dual[0].extract::<0>(), 8.0, 1e-12));
@@ -383,8 +383,8 @@ fn log2_log10_derivatives() {
 
 #[test]
 fn masked_variants_select_and_propagate() {
-    // The `_c`/`_m`/`_z` masked ops used to be `todo!()`; verify they blend value AND
-    // derivative per the mask. Use a 1-lane mask that is all-true / all-false.
+    // The `_c`/`_m`/`_z` masked ops must blend value AND derivative per the mask.
+    // Use a 1-lane mask that is all-true / all-false.
     let x = D::variable(V::splat(4.0), 0); // sqrt -> 2, d = 0.25
     let all = x.re.cmp_gt(V::splat(0.0)); // true
     let none = x.re.cmp_lt(V::splat(0.0)); // false
@@ -407,4 +407,237 @@ fn masked_variants_select_and_propagate() {
     let mn = x.min_c(all, other); // 1 < 4 -> takes other (constant, deriv 0)
     assert!(close(mn.re.extract::<0>(), 1.0, 1e-12));
     assert!(close(mn.dual[0].extract::<0>(), 0.0, 1e-12));
+}
+
+#[test]
+fn log1pmx_carries_its_closed_form_derivative() {
+    // d/dx [ln(1 + x) - x] = -x/(1 + x). The override exists so the derivative is taken in
+    // that closed form rather than differentiating the primal's cancelling difference.
+    fn f<W: FloatVector + TranscendentalMath>(v: W) -> W {
+        v.log1pmx()
+    }
+
+    // Values from mpmath at 50 digits. They cannot be computed inline as `(1+x).ln() - x`,
+    // which is the very form log1pmx replaces: at x = -1e-9 that gives +2.78e-17, the wrong
+    // sign and 56 times the magnitude.
+    #[rustfmt::skip]
+    let rows: [(f64, f64); 8] = [
+        (-0.75,  -0.6362943611198906),
+        (-0.5,   -0.19314718055994531),
+        (-0.25,  -0.03768207245178093),
+        (-1e-9,  -5.000000003333333e-19),
+        ( 1e-9,  -4.999999996666666e-19),
+        ( 0.25,  -0.026856448685790246),
+        ( 1.0,   -0.3068528194400547),
+        ( 3.0,   -1.6137056388801094),
+    ];
+
+    for (x, want) in rows {
+        let r = f.ad([V::splat(x)]);
+        // The derivative is a plain rational, so f64 evaluates it directly without loss.
+        let dwant = -x / (1.0 + x);
+
+        assert!(
+            close(r.re.extract::<0>(), want, want.abs() * 1e-14),
+            "log1pmx({x}) = {}",
+            r.re.extract::<0>()
+        );
+        assert!(
+            close(r.dual[0].extract::<0>(), dwant, 1e-14),
+            "d log1pmx({x}) = {}",
+            r.dual[0].extract::<0>()
+        );
+    }
+
+    // At x = 0 both the value and the derivative are exactly zero.
+    let r = f.ad([V::splat(0.0)]);
+    assert_eq!(r.re.extract::<0>(), 0.0);
+    assert_eq!(r.dual[0].extract::<0>(), 0.0);
+}
+
+#[test]
+fn sinhc_and_cosh_m1_derivatives() {
+    // d/dx sinh(x)/x = (cosh(x) - sinhc(x))/x, and 0 at the origin (sinhc is even).
+    fn sh<W: FloatVector + TranscendentalMath>(v: W) -> W {
+        v.sinhc()
+    }
+    // d/dx [cosh(x) - 1] = sinh(x). No override for this one: cosh_m1 is the exact
+    // composition 2*sinh(x/2)^2, so the chain rule through it already gives
+    // 2 * 2*sinh(x/2)*cosh(x/2)*(1/2) = sinh(x). Asserted because it is automatic, not
+    // because it is hand-written. If someone later "optimizes" cosh_m1, this catches it.
+    fn cm<W: FloatVector + TranscendentalMath>(v: W) -> W {
+        v.cosh_m1()
+    }
+
+    for &x in &[-3.0, -0.5, 1e-6, 0.5, 1.0, 3.0] {
+        let r = sh.ad([V::splat(x)]);
+        let want = x.sinh() / x;
+        let dwant = (x.cosh() - want) / x;
+        assert!(close(r.re.extract::<0>(), want, want.abs() * 1e-13), "sinhc({x})");
+        assert!(
+            close(r.dual[0].extract::<0>(), dwant, dwant.abs() * 1e-9 + 1e-13),
+            "d sinhc({x})"
+        );
+
+        let r = cm.ad([V::splat(x)]);
+        // `x.cosh() - 1.0` is the very form cosh_m1 replaces (8.9e-5 off at 1e-6), so the
+        // oracle has to be the series once x is small.
+        let want = if x.abs() < 1e-3 {
+            0.5 * x * x + x.powi(4) / 24.0
+        } else {
+            x.cosh() - 1.0
+        };
+        assert!(close(r.re.extract::<0>(), want, want.abs() * 1e-13), "cosh_m1({x})");
+        assert!(
+            close(r.dual[0].extract::<0>(), x.sinh(), x.sinh().abs() * 1e-13),
+            "d cosh_m1({x})"
+        );
+    }
+
+    // At the origin both the value and the derivative are the filled-in limits.
+    let r = sh.ad([V::splat(0.0)]);
+    assert_eq!(r.re.extract::<0>(), 1.0);
+    assert_eq!(r.dual[0].extract::<0>(), 0.0);
+
+    let r = cm.ad([V::splat(0.0)]);
+    assert_eq!(r.re.extract::<0>(), 0.0);
+    assert_eq!(r.dual[0].extract::<0>(), 0.0);
+}
+
+#[test]
+fn xlogy_keeps_its_gradient_at_a_zero_first_argument() {
+    // x*ln(y) is LINEAR in x, so d/dx is ln(y) at the origin like everywhere else. The
+    // trait default guards x == 0 with a select, which is right for the value and would
+    // propagate a zero gradient; Dual overrides it for exactly this reason. The gradient
+    // at a probability that has reached zero is what a cross-entropy needs.
+    fn f<W: FloatVector + TranscendentalMath>(x: W, y: W) -> W {
+        x.xlogy(y)
+    }
+
+    let r = f.ad([V::splat(0.0), V::splat(4.0)]);
+    assert_eq!(r.re.extract::<0>(), 0.0, "the value is still guarded to 0");
+    assert!(
+        close(r.dual[0].extract::<0>(), 4.0_f64.ln(), 1e-14),
+        "d/dx must be ln y, got {}",
+        r.dual[0].extract::<0>()
+    );
+    assert_eq!(r.dual[1].extract::<0>(), 0.0, "d/dy = x/y = 0 at x = 0");
+
+    // Away from the guard both partials are the ordinary ones.
+    for &(x, y) in &[(2.0_f64, 3.0_f64), (0.5, 0.25), (1.0, 1.0)] {
+        let r = f.ad([V::splat(x), V::splat(y)]);
+        assert!(close(r.re.extract::<0>(), x * y.ln(), 1e-13), "xlogy({x},{y})");
+        assert!(close(r.dual[0].extract::<0>(), y.ln(), 1e-13), "d/dx xlogy({x},{y})");
+        assert!(close(r.dual[1].extract::<0>(), x / y, 1e-13), "d/dy xlogy({x},{y})");
+    }
+
+    // xlog1py shifts the second argument: d/dx = ln(1+y), d/dy = x/(1+y).
+    fn g<W: FloatVector + TranscendentalMath>(x: W, y: W) -> W {
+        x.xlog1py(y)
+    }
+    let r = g.ad([V::splat(0.0), V::splat(3.0)]);
+    assert_eq!(r.re.extract::<0>(), 0.0);
+    assert!(
+        close(r.dual[0].extract::<0>(), 4.0_f64.ln(), 1e-14),
+        "d/dx must be ln(1+y)"
+    );
+
+    let r = g.ad([V::splat(2.0), V::splat(3.0)]);
+    assert!(close(r.re.extract::<0>(), 2.0 * 4.0_f64.ln(), 1e-13));
+    assert!(close(r.dual[0].extract::<0>(), 4.0_f64.ln(), 1e-13));
+    assert!(close(r.dual[1].extract::<0>(), 2.0 / 4.0, 1e-13));
+}
+
+#[test]
+fn harmonic_mean_gradient() {
+    // d/dx_k of N/sum(1/x_i) is HM^2 / (N * x_k^2). Worth pinning on Dual specifically
+    // because `Dual::min` orders on the real part alone and carries the whole Dual along -
+    // so if the min-scaled path ever reached this type, `m` would drag one input's
+    // derivative into the result. It must not: composites take the direct form.
+    fn hm2<W: FloatVector + CoreMath>(a: W, b: W) -> W {
+        W::harmonic_mean([a, b])
+    }
+
+    for &(a, b) in &[(1.0_f64, 2.0_f64), (3.0, 3.0), (0.25, 8.0), (2.0, 1.0)] {
+        let r = hm2.ad([V::splat(a), V::splat(b)]);
+
+        let h = 2.0 / (1.0 / a + 1.0 / b);
+        assert!(close(r.re.extract::<0>(), h, 1e-13), "harmonic_mean({a},{b})");
+
+        // dH/da = H^2/(N a^2), likewise for b.
+        assert!(
+            close(r.dual[0].extract::<0>(), h * h / (2.0 * a * a), 1e-12),
+            "dH/da at ({a},{b})"
+        );
+        assert!(
+            close(r.dual[1].extract::<0>(), h * h / (2.0 * b * b), 1e-12),
+            "dH/db at ({a},{b})"
+        );
+    }
+
+    // Equal arguments are exactly the tie case a min-based scaling would have to break, and
+    // the gradient there is the clean 1/N each.
+    let r = hm2.ad([V::splat(4.0), V::splat(4.0)]);
+    assert!(close(r.re.extract::<0>(), 4.0, 1e-14));
+    assert!(
+        close(r.dual[0].extract::<0>(), 0.5, 1e-14),
+        "tied inputs split the gradient evenly"
+    );
+    assert!(close(r.dual[1].extract::<0>(), 0.5, 1e-14));
+
+    // inv_sum_inv is the same function over N, so its gradient is too.
+    fn si2<W: FloatVector + CoreMath>(a: W, b: W) -> W {
+        W::inv_sum_inv([a, b])
+    }
+    let (a, b) = (1.0_f64, 3.0_f64);
+    let r = si2.ad([V::splat(a), V::splat(b)]);
+    let s = 1.0 / (1.0 / a + 1.0 / b);
+    assert!(close(r.re.extract::<0>(), s, 1e-14));
+    assert!(close(r.dual[0].extract::<0>(), s * s / (a * a), 1e-13));
+    assert!(close(r.dual[1].extract::<0>(), s * s / (b * b), 1e-13));
+}
+
+#[test]
+fn atanhc_derivative() {
+    // f(x) = atanh(x)/x, f'(x) = (1/(1-x^2) - f(x))/x, and f'(0) = 0 since f is even.
+    fn f<W: FloatVector + TranscendentalMath>(v: W) -> W {
+        v.atanhc()
+    }
+
+    // (x, atanhc'(x)) from mpmath at 40 digits. Not a truncated series: it converges far
+    // too slowly near |x| = 1 to serve as an oracle there.
+    #[rustfmt::skip]
+    let rows: [(f64, f64); 6] = [
+        (-0.9,   -4.030398290962886),
+        (-0.5,   -0.4694420893304473),
+        (-1e-6,  -6.666666666674666e-07),
+        ( 0.25,   0.1800616765387412),
+        ( 0.5,    0.4694420893304473),
+        ( 0.9,    4.030398290962886),
+    ];
+
+    for (x, d) in rows {
+        let r = f.ad([V::splat(x)]);
+
+        // The primal is accurate everywhere.
+        let v = x.atanh() / x;
+        assert!(close(r.re.extract::<0>(), v, v.abs() * 1e-13), "atanhc({x})");
+
+        // The derivative is not, near zero, and the tolerance says so rather than hiding
+        // it. Both terms of (1/(1-x^2) - atanhc(x)) tend to 1 and differ by 2x^2/3, so the
+        // subtraction loses ~1.5*eps/x^2 in relative terms, a couple of ulp by |x| = 0.2,
+        // about 2e-4 at 1e-6. `sinc`'s override has the identical shape and the identical
+        // limitation, and fixing either properly wants an `atanhc_m1`-style primitive.
+        let cond = (1.5 * f64::EPSILON / (x * x)).max(1e-14);
+        assert!(
+            close(r.dual[0].extract::<0>(), d, d.abs() * cond),
+            "d atanhc({x}): got {} want {d} at conditioning {cond:e}",
+            r.dual[0].extract::<0>()
+        );
+    }
+
+    // The origin: value 1, derivative 0, both filled in rather than 0/0.
+    let r = f.ad([V::splat(0.0)]);
+    assert_eq!(r.re.extract::<0>(), 1.0);
+    assert_eq!(r.dual[0].extract::<0>(), 0.0);
 }

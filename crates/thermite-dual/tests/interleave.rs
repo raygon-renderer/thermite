@@ -9,8 +9,8 @@
 //!   load_deinterleaved:  out[j].extract(lane) == ptr[lane * M + j]
 //!   store_interleaved:   ptr[lane * M + j] == values[j].extract(lane)
 //!
-//! The grouped register engine covers every `M` and `N` directly - no dispatch
-//! ladder, no scalar fallback - so `M` is swept generously here just to
+//! The grouped register engine covers every `M` and `N` directly, with no dispatch
+//! ladder and no scalar fallback, so `M` is swept generously here just to
 //! exercise a range of stream counts, and every component of every element
 //! gets a distinct value: a de-interleave that crossed two components or two
 //! streams would still produce plausible-looking floats, so only exact

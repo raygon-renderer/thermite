@@ -85,7 +85,7 @@ mod x86 {
         sat_diff!("v3 u32x4->u8x4", X86V3, u32x4, u8x4, u32);
         sat_diff!("v3 u32x8->u8x8", X86V3, u32x8, u8x8, u32);
 
-        // 64 -> 32 (clamp + narrow; no AVX2 64-bit pack)
+        // 64 -> 32 (clamp + narrow, no AVX2 64-bit pack)
         sat_diff!("v3 i64x2->i32x2", X86V3, i64x2, i32x2, i64);
         sat_diff!("v3 u64x2->u32x2", X86V3, u64x2, u32x2, u64);
 
@@ -187,7 +187,7 @@ mod x86 {
             return;
         }
 
-        // signed: packssdw / packsswb (SSE2; single, two-source, composed)
+        // signed: packssdw / packsswb (SSE2, single, two-source, composed)
         sat_diff!("v1 i32x8->i16x8", X86V1, i32x8, i16x8, i32);
         sat_diff!("v1 i16x16->i8x16", X86V1, i16x16, i8x16, i16);
         sat_diff!("v1 i32x4->i16x4", X86V1, i32x4, i16x4, i32);
@@ -266,7 +266,7 @@ mod wasm {
         sat_diff!("wasm u32x8->u8x8", Wasm, u32x8, u8x8, u32);
         sat_diff!("wasm u32x16->u8x16", Wasm, u32x16, u8x16, u32);
 
-        // 64 -> 32 (clamp + narrow; no 64-bit narrow on WASM)
+        // 64 -> 32 (clamp + narrow, no 64-bit narrow on WASM)
         sat_diff!("wasm i64x2->i32x2", Wasm, i64x2, i32x2, i64);
         sat_diff!("wasm i64x4->i32x4", Wasm, i64x4, i32x4, i64);
         sat_diff!("wasm u64x2->u32x2", Wasm, u64x2, u32x2, u64);
@@ -312,7 +312,7 @@ mod neon {
     #[test]
     fn neon_saturating_narrows() {
         // signed: i16x8.narrow_i32x4_s / i8x16.narrow_i16x8_s (single, two-source, composed)
-        // (inherited from the wasm section; revisit for NEON)
+        // (inherited from the wasm section, revisit for NEON)
         sat_diff!("neon i32x8->i16x8", Neon, i32x8, i16x8, i32);
         sat_diff!("neon i16x16->i8x16", Neon, i16x16, i8x16, i16);
         sat_diff!("neon i32x4->i16x4", Neon, i32x4, i16x4, i32);
@@ -322,7 +322,7 @@ mod neon {
         sat_diff!("neon i32x8->i8x8", Neon, i32x8, i8x8, i32);
         sat_diff!("neon i32x16->i8x16", Neon, i32x16, i8x16, i32);
 
-        // unsigned: *.min + *.narrow_*_u (inherited from the wasm section; revisit for NEON)
+        // unsigned: *.min + *.narrow_*_u (inherited from the wasm section, revisit for NEON)
         sat_diff!("neon u32x8->u16x8", Neon, u32x8, u16x8, u32);
         sat_diff!("neon u16x16->u8x16", Neon, u16x16, u8x16, u16);
         sat_diff!("neon u32x4->u16x4", Neon, u32x4, u16x4, u32);
@@ -332,8 +332,8 @@ mod neon {
         sat_diff!("neon u32x8->u8x8", Neon, u32x8, u8x8, u32);
         sat_diff!("neon u32x16->u8x16", Neon, u32x16, u8x16, u32);
 
-        // 64 -> 32 (clamp + narrow; no 64-bit narrow on WASM)
-        // (inherited from the wasm section; revisit for NEON)
+        // 64 -> 32 (clamp + narrow, no 64-bit narrow on WASM)
+        // (inherited from the wasm section, revisit for NEON)
         sat_diff!("neon i64x2->i32x2", Neon, i64x2, i32x2, i64);
         sat_diff!("neon i64x4->i32x4", Neon, i64x4, i32x4, i64);
         sat_diff!("neon u64x2->u32x2", Neon, u64x2, u32x2, u64);

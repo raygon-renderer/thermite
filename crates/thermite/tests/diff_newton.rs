@@ -89,7 +89,7 @@ macro_rules! newton_scenarios {
         }
 
         // --- 5. Zero derivative *at* the root: f(x)=x^3, root 0 --------------
-        // f'(0)=0, so pure Newton stalls; the bisection fallback must still land on 0.
+        // f'(0)=0, so pure Newton stalls, so the bisection fallback must still land on 0.
         {
             let cube = |x: V| (x * x * x, three * x * x);
             let bounds = Some((sp(-1.0), two));
@@ -118,7 +118,7 @@ macro_rules! newton_scenarios {
         }
 
         // --- 7. Bracket collapse with tolerance = 0 (must terminate) --------
-        // No function-space or width tolerance is reachable; the loop must still
+        // No function-space or width tolerance is reachable, so the loop must still
         // converge once the midpoint can no longer land strictly inside (FP ULP).
         {
             let f = |x: V| (x * x - two, x + x);
@@ -233,11 +233,11 @@ mod neon {
 
 /// `sum_f` / `prod_f` (`math/algorithms/mod.rs`). The compensated (`UseCompensation
 /// <_, true>`) variant exercises the Kahan path, which is the *only* place
-/// `GenericMask::swap` is used in numeric code — the un-compensated tests never
+/// `GenericMask::swap` is used in numeric code. The un-compensated tests never
 /// reach it (`sum`/`prod` start at 0/1, so the first term always triggers a swap).
 #[test]
 fn series_sum_and_prod() {
-    // `sum_f`/`prod_f` are backend-agnostic; scalar `f64x4` (a real 4-lane
+    // `sum_f`/`prod_f` are backend-agnostic, and scalar `f64x4` (a real 4-lane
     // ArrayRegister) exercises the same convergence/Kahan/swap paths and runs
     // on every target.
     type V = Vector<<Scalar as Simd>::f64x4>;
@@ -252,7 +252,7 @@ fn series_sum_and_prod() {
         assert!((v - 2.0).abs() < 1e-9, "sum_f geometric = {v}");
     }
 
-    // non-convergence -> Err(partial). f(n)=1 never falls below tol; sums 10 terms.
+    // non-convergence -> Err(partial). f(n)=1 never falls below tol, so it sums 10 terms.
     let err = sum_f::<V, Performance, _>(V::splat(1e-12), 0, 10, |_| V::ONE);
     let p = err.expect_err("constant series must not converge").into_array()[0];
     assert!((p - 10.0).abs() < 1e-9, "partial sum = {p}");

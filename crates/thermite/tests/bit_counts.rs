@@ -4,8 +4,8 @@
 //! The register layer is already differentially tested against the scalar
 //! oracle (`diff_polyfill`'s `for_lztz`), so what this suite guards is the
 //! *vector-layer wiring*: each `Vector<R>` method must forward to the matching
-//! register method. The realistic bug is a swap - `trailing_zeros` delegating
-//! to `leading_zeros`, or `*_ones` to `*_zeros` - which no register-layer test
+//! register method. The realistic bug is a swap (`trailing_zeros` delegating
+//! to `leading_zeros`, or `*_ones` to `*_zeros`), which no register-layer test
 //! can see. Values are chosen so every one of the six answers differs
 //! (asymmetric bit patterns, not palindromes), making a crossed wire a failure
 //! rather than a coincidence.

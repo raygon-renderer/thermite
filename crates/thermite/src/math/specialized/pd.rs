@@ -10,6 +10,19 @@ use super::reference::{is_reference, map1, map1x2, map2};
 // of `SpecializedCoreMath` shadows the fixpoint blanket impl on a generic `V`, so
 // without it `V::Primal` would not normalize to `V` in the `poly_primal` body.
 impl<V: FloatVectorWithBits<Element = f64> + PrimalProjection<Primal = V>> SpecializedCoreMath<f64> for V {
+    // Scaled by the smallest input so a denormal cannot overflow the reciprocal sum. See
+    // `generic::inv_sum_inv_internal` for why the composites keep the direct form.
+    #[inline(always)]
+    fn harmonic_mean<P: Policy, const N: usize>(values: [Self; N]) -> Self {
+        let n = Self::splat(Self::Element::from_int(N as crate::LargeInt));
+        super::generic::inv_sum_inv_internal::<V, f64, P, N>(values, n)
+    }
+
+    #[inline(always)]
+    fn inv_sum_inv<P: Policy, const N: usize>(values: [Self; N]) -> Self {
+        super::generic::inv_sum_inv_internal::<V, f64, P, N>(values, Self::ONE)
+    }
+
     /// `Primal = Self`, so the coefficients are already this vector type, which means
     /// the ILP lowering [`poly`](SpecializedCoreMath::poly) uses applies unchanged, and
     /// the primal-Horner default would be a straight downgrade for real vectors.
@@ -60,8 +73,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealMath<f64> for V {
         // large |x| is not the rounding of `n * TAU` (a fused step makes that
         // single-rounded for free), it is that TAU is only 2 pi to half an ulp, so even a
         // perfectly fused `x - n * TAU` drifts by `n * 2.45e-16`. That is 0.04 rad by
-        // x = 1e15, a WRONG angle once it crosses the +-pi seam, which is exactly what
-        // the old FMA branch did.
+        // x = 1e15, a WRONG angle once it crosses the +-pi seam.
         let mut r = if const { Self::HAS_TRUE_FMA } {
             // Two fused steps: tau_hi is fl(2 pi) == TAU (full mantissa, so the FMA
             // multiplies it exactly), tau_lo the next 53 bits, together 2 pi to ~1e-32
@@ -128,8 +140,23 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
     }
 
     #[inline(always)]
+    fn sinhc<P: Policy>(self) -> Self {
+        super::generic::sinhc_internal::<V, f64, P>(self)
+    }
+
+    #[inline(always)]
+    fn atanhc<P: Policy>(self) -> Self {
+        super::generic::atanhc_internal::<V, f64, P>(self)
+    }
+
+    #[inline(always)]
     fn sinc_pi<P: Policy>(self) -> Self {
         super::generic::sinc_pi_internal::<V, f64, P>(self)
+    }
+
+    #[inline(always)]
+    fn log1pmx<P: Policy>(self) -> Self {
+        super::generic::log1pmx_internal::<V, f64, P>(self)
     }
 
     #[inline(always)]
@@ -730,7 +757,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
             z = xsign.select(z1, z);
         }
 
-        // x^0 == 1 for every (finite) x; line 534 only covered x == 0, so without
+        // x^0 == 1 for every (finite) x, and line 534 only covered x == 0, so without
         // this the `not_special` fast return below leaks x's exponent for y == 0.
         z = yzero.select(V::ONE, z);
 
@@ -815,7 +842,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
         // Preserving denormals also forces the exact form: the fast one cubes
         // the root, and for a denormal `x` that lands back in the denormal
-        // range with almost no precision left. `x / (t * t)` never does - see
+        // range with almost no precision left. `x / (t * t)` never does. See
         // the matching note in `ps.rs`.
         let r = if const {
             P::POLICY.precision.ge(PrecisionPolicy::Best)
@@ -824,7 +851,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         } {
             // original form, 5 simple ops, 2 divisions. Every intermediate is
             // provably well-behaved (`t*t` exact, `t+t` exact, `r-t` exact,
-            // |r| < |t|), which is what buys the <0.667 ulp bound - fdlibm,
+            // |r| < |t|), which is what buys the <0.667 ulp bound. fdlibm,
             // musl and Rust's own libm all use exactly this and never form t^3.
             let xtt = x / (t * t);
             (xtt - t) / ((t + t) + xtt)
@@ -843,7 +870,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
             (xq - t3q) / t3q.mul_add(Self::TWO, xq)
         } else {
             // fast form, 3 simple ops, 1 division, 1 fma. Overflows for the top
-            // binade - accepted at Medium and below.
+            // binade, accepted at Medium and below.
             let t3 = t * t * t;
             (x - t3) / t3.mul_add(Self::TWO, x)
         };
@@ -955,11 +982,11 @@ fn ln_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const P1: boo
 
     // A subnormal has no exponent field to split, so `fraction2`/`exponent` cannot
     // reduce it and the tail below hands every one of them back as -inf. That is the
-    // right answer only because denormals are flushed by default; under `Preserve`,
+    // right answer only because denormals are flushed by default. Under `Preserve`,
     // scale them into the normal range by 2^54 and take those 54 powers of two back
     // out of the exponent. The correction then rides the `ln2_hi`/`ln2_lo` multiplies
     // that were happening anyway, so it keeps the full double-word accuracy and costs
-    // nothing beyond the scale itself - `ln(5e-324)` is -744.44, not -inf.
+    // nothing beyond the scale itself: `ln(5e-324)` is -744.44, not -inf.
     let mut scaled = GenericMask::FALSY;
 
     if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
@@ -1380,7 +1407,7 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
 /// enough that the arguments this gives up on are rare enough not to pay for on every
 /// call.
 ///
-/// When `PI` is true this performs the sinpi/cospi reduction instead - the argument is
+/// When `PI` is true this performs the sinpi/cospi reduction instead: the argument is
 /// reduced in units of one half turn and scaled by pi afterwards, which needs no
 /// extended-precision split at all.
 #[thermite_macros::dispatch(V, thermite = "crate")]
@@ -1468,7 +1495,7 @@ fn payne_hanek_reduction<P: Policy, V: FloatVectorWithBits<Element = f64>>(xa: &
     let frac_lo = V::cast_from(frac_lo_int) * crate::const_splat!(f64: hexf::hexf64!("0x1.0p-104"));
 
     // Center from [0, 1) to [-0.5, 0.5) to match Cody-Waite's round().
-    // Only frac_hi needs adjustment; frac_lo is unchanged since
+    // Only frac_hi needs adjustment, and frac_lo is unchanged since
     // (frac_hi - 1) + frac_lo = old_total - 1.
     let needs_round = frac_hi.cmp_ge(V::HALF);
     let frac_hi = frac_hi.sub_c(needs_round, V::ONE);
@@ -1498,9 +1525,9 @@ pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f
         xa + xa // 2x for sinpi/cospi
     } else {
         // Without true FMA, `y * dp1` (30-bit dp1) is only exact while y fits in
-        // 23 bits, i.e. |x| <~ 1.3e7 - beyond that Cody-Waite quietly loses bits.
-        // At Best+ (where Payne-Hanek takes over) hand off there; at <= Average
-        // the limit only gates the bounded clamp, so keep the old wider window.
+        // 23 bits, i.e. |x| <~ 1.3e7. Beyond that Cody-Waite quietly loses bits.
+        // At Best+ (where Payne-Hanek takes over) hand off there. At <= Average
+        // the limit only gates the bounded clamp, so the wider window stands.
         is_large = xa.cmp_gt(if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
             crate::const_splat!(<V> = <V: FloatVectorWithBits> f64: {
                 match V::HAS_TRUE_FMA {
@@ -1615,7 +1642,7 @@ fn sincos_d_internal<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI:
     if const { P::POLICY.check_overflow } {
         // `q` is the exact integer form of the quotient the reduction rounded, and the
         // quotient is non-negative because `xa` is an absolute value, so testing it is
-        // equivalent to the old test on that float. `xa` here is pre-clamp, which also
+        // equivalent to testing the float directly. `xa` here is pre-clamp, which also
         // agrees: the clamp only fires above the limit, and there the quotient is zero.
         let overflow = q.cmp_gt(V::Bits::splat((1u64 << 52) - 1)).cast::<V::Mask>() & xa.is_finite();
 

@@ -3,7 +3,7 @@
 //!
 //! The vectorized `pack`/`unpack` (see `register::{pack_packed, unpack_packed}`) reconstruct
 //! the same transcoding as `FloatSpec::pack`/`unpack` purely with register ops. Here we drive
-//! the emulated `ArrayRegister` container (which takes those defaults verbatim - no hardware
+//! the emulated `ArrayRegister` container (which takes those defaults verbatim, no hardware
 //! override) and assert it matches the oracle lane-for-lane:
 //!
 //! - **unpack**: exhaustive over *every* code point (all 65536 for the 16-bit formats, all 256

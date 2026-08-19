@@ -168,7 +168,7 @@ fn beta_is_symmetric_including_gradients() {
     assert!(close(fwd.dual[1].extract::<0>(), rev.dual[1].extract::<0>(), 1e-12));
 }
 
-// psi reference by recurrence + Bernoulli asymptotic series - libm has no digamma.
+// psi reference by recurrence + Bernoulli asymptotic series, since libm has no digamma.
 // Differentiating it numerically gives psi_1, which is what `Dual::digamma` chains
 // through, so this checks the trigamma port and the chain rule at once.
 fn digamma_ref(mut x: f64) -> f64 {
@@ -244,11 +244,11 @@ fn expint_order_one_derivative_is_plain_exp() {
 
 #[test]
 fn expint_high_order_large_argument_takes_the_guarded_path() {
-    // Regression: `Dual` used to inherit the generic default, which applies the forward
-    // order recurrence unconditionally. That recurrence amplifies error by
-    // |x|^(N-1)/(N-1)!, and the real path switches to an asymptotic series above
-    // RECURRENCE_THRESHOLD (~33 for f32 at N=8) precisely to avoid it. Dual now
-    // delegates the value, so these must agree bit for bit.
+    // The generic default applies the forward order recurrence unconditionally, and that
+    // recurrence amplifies error by |x|^(N-1)/(N-1)!. The real path switches to an
+    // asymptotic series above RECURRENCE_THRESHOLD (~33 for f32 at N=8) precisely to avoid
+    // it, so `Dual` must delegate the value rather than inherit the default. These agree
+    // bit for bit when it does.
     type VF = Vector<f32>;
     type DF = Dual<VF, 1>;
 
@@ -262,8 +262,7 @@ fn expint_high_order_large_argument_takes_the_guarded_path() {
 
 #[test]
 fn expint_order_zero_is_the_closed_form() {
-    // The generic default used to fall through to E_1 for N = 0; both paths now return
-    // E_0(x) = e^-x / x.
+    // N = 0 is a closed form, not a case of E_1. Both paths return E_0(x) = e^-x / x.
     for &x in &[0.5, 3.0, 20.0] {
         let r = D::variable(V::splat(x), 0).expint::<0>();
 
@@ -271,5 +270,57 @@ fn expint_order_zero_is_the_closed_form() {
         // E_0'(x) = -E_{-1}(x) = -e^-x (1 + 1/x) / x
         let expect = -(-x).exp() * (1.0 + 1.0 / x) / x;
         assert!(close(r.dual[0].extract::<0>(), expect, 1e-14), "E_0'({x})");
+    }
+}
+
+#[test]
+fn yeo_johnson_derivative_is_the_two_sided_power_rule() {
+    // psi'(y, l) = (1 + |y|)^(s - 1) where s is l above zero and 2 - l below - the same
+    // reflection the value uses, which is what makes psi continuously differentiable
+    // through the origin. The kernel folds the sign rather than branching four ways, so
+    // this is the check that the fold differentiates correctly on both sides.
+    for &l in &[0.0_f64, 0.5, 1.0, 1.5, 2.0, 3.0, -1.0] {
+        for &y in &[0.25_f64, 1.0, 3.0] {
+            let r = D::variable(V::splat(y), 0).yeo_johnson(D::constant(V::splat(l)));
+            let expect = (1.0 + y).powf(l - 1.0);
+            assert!(close(r.dual[0].extract::<0>(), expect, 1e-11), "psi'({y}, {l})");
+
+            let r = D::variable(V::splat(-y), 0).yeo_johnson(D::constant(V::splat(l)));
+            let expect = (1.0 + y).powf(1.0 - l);
+            assert!(close(r.dual[0].extract::<0>(), expect, 1e-11), "psi'({}, {l})", -y);
+        }
+
+        // psi'(0, l) = 1 for every lambda, from both sides: the origin is where the two
+        // branches meet, and they meet smoothly.
+        let r = D::variable(V::splat(0.0), 0).yeo_johnson(D::constant(V::splat(l)));
+        assert!(close(r.dual[0].extract::<0>(), 1.0, 1e-12), "psi'(0, {l})");
+    }
+}
+
+#[test]
+fn the_boxcox_family_differentiates_to_its_own_inverses() {
+    // d/dx boxcox(x, l) = x^(l-1), and the inverse transforms differentiate to the
+    // reciprocal of the forward derivative evaluated at the recovered point, the identity
+    // that any correct inverse pair satisfies, checked here through autodiff rather than
+    // through a second closed form.
+    for &l in &[0.0_f64, 0.5, 1.0, 2.0, -1.5] {
+        for &x in &[0.5_f64, 1.0, 3.0] {
+            let r = D::variable(V::splat(x), 0).boxcox(D::constant(V::splat(l)));
+            assert!(
+                close(r.dual[0].extract::<0>(), x.powf(l - 1.0), 1e-11),
+                "boxcox'({x}, {l})"
+            );
+
+            let y = r.re.extract::<0>();
+            let inv = D::variable(V::splat(y), 0).inv_boxcox(D::constant(V::splat(l)));
+            assert!(
+                close(inv.re.extract::<0>(), x, 1e-11),
+                "inv_boxcox round trip at ({x}, {l})"
+            );
+            assert!(
+                close(inv.dual[0].extract::<0>(), 1.0 / x.powf(l - 1.0), 1e-10),
+                "inv_boxcox'({y}, {l})"
+            );
+        }
     }
 }

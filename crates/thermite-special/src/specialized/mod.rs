@@ -35,7 +35,7 @@ pub trait ExpIntDetails<E, V: thermite::vector::FloatVector<Element = E>> {
     /// Lanes that should take the power series rather than the continued fraction.
     ///
     /// On the real line this is `x < 1`. Over C it is `|z| < 1`, which is *not* what a
-    /// complex `cmp_lt` means - that is a lexicographic sort order, and reading it as a
+    /// complex `cmp_lt` means. That is a lexicographic sort order, and reading it as a
     /// magnitude silently routes far-off-axis points into the wrong regime.
     #[inline(always)]
     fn use_series(z: V) -> V::Mask {
@@ -66,10 +66,37 @@ pub trait ExpIntDetails<E, V: thermite::vector::FloatVector<Element = E>> {
     }
 }
 
+/// `1/(k+1)`, the Laguerre recurrence's leading coefficient, as one scalar divide.
+///
+/// The divisor is a small loop-invariant integer, so this sits off the recurrence's
+/// critical path (and folds to a literal outright when the degree is a const generic).
+/// Dividing the vector instead would put a full divide latency straight into the
+/// dependency chain (roughly 14 cycles per step against 4 for the multiply) to save
+/// half an ulp on a step that already carries several.
+#[inline(always)]
+fn laguerre_rcp<E: FloatElement>(k: usize) -> E {
+    E::from_ratio(1, (k + 1) as thermite::LargeInt)
+}
+
 pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTranscendentalMath<E> {
     /// Per-arithmetic details of the [`expint`](Self::expint) kernel. Almost always
     /// `Self`, with an empty [`ExpIntDetails`] impl taking every default.
     type ExpIntDetails: ExpIntDetails<E, Self>;
+
+    /// Largest integer weight for which `laguerre_function_i` seeds by the direct product
+    /// `x^{alpha/2} / sqrt(alpha!)` (a scalar factorial, `powi`, at most one `sqrt`) instead
+    /// of the general `exp(alpha/2 ln x - lgamma(alpha+1)/2)`. `0` disables it.
+    ///
+    /// The bound is per arithmetic because it is set by the exponent range: `alpha!` must
+    /// stay finite, and `x^{alpha/2}` must stay finite wherever `e^{-x/4}` is still
+    /// non-zero (so `inf * 0` cannot arise). Those give 170 / 29 for binary64 / binary32;
+    /// see `generic::laguerre::product_seed`. The default is the safe "never".
+    ///
+    /// It lives on the trait rather than as a const generic on the kernel so that the
+    /// composites can inherit it: `Dual<V, N>` is one blanket impl with no binary32/64
+    /// split to hang a literal on, and forwarding `V`'s value is the only way it keeps the
+    /// product seed at all.
+    const LAGUERRE_PRODUCT_SEED_CAP: i32 = 0;
 
     fn erf<P: Policy>(self) -> Self;
 
@@ -80,8 +107,8 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
     /// `$e^{x^2}\operatorname{erfc}(x)$`, which does not underflow where `erfc` does.
     ///
-    /// This default is the direct form, and it is the direct form's failure that the
-    /// function exists to fix: `$e^{x^2}$` overflows just where `erfc` underflows, so it
+    /// This default is the direct form, whose failure is what the function exists to
+    /// fix: `$e^{x^2}$` overflows just where `erfc` underflows, so it
     /// is useful only for `$|x|$` under about 26.6 (binary64) or 9.3 (binary32). The
     /// real backends override it with the imaginary-axis Weideman evaluation, which has
     /// no such limit (see `generic::erfcx`). Element types without a Weideman table
@@ -355,8 +382,8 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     /// The trigamma function `psi_1(x) = d/dx psi(x)`, the second derivative of `ln Gamma`.
     ///
     /// Deliberately absent from the public `SpecialMath` trait, unlike every sibling
-    /// here. It exists only so that `digamma` is differentiable - forward-mode AD over
-    /// the Gamma family needs `psi_1` the way `ln Gamma` needs `psi` - and keeping it
+    /// here. It exists only so that `digamma` is differentiable (forward-mode AD over
+    /// the Gamma family needs `psi_1` the way `ln Gamma` needs `psi`), and keeping it
     /// off the public trait is what stops that need from cascading: a public
     /// `trigamma` would oblige `Dual` to implement it, which requires `psi_2`, which
     /// requires `psi_3`, and so on, because the Gamma-derivative family is not closed
@@ -457,11 +484,15 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
                 break;
             }
 
-            (p0, p1) = (p1, p0); // swap p0, p1
-
-            let next0 = x.mul_sube(p0, cf * p1);
+            // H_{k+1} = 2x H_k - 2k H_{k-1}
+            let next0 = x.mul_sube(p1, cf * p0);
             let next = next0 + next0; // 2 * next0
 
+            // Freeze BOTH halves of the pair on lanes that have reached their own
+            // degree. `hermite`'s unconditional (p0, p1) swap cannot be reused here:
+            // on a retired lane it moves H_{k-1} into p1, and a select that only
+            // guards p1 then preserves that instead of the lane's answer.
+            p0 = cont.select(p1, p0);
             p1 = cont.select(next, p1);
 
             c += i1;
@@ -472,71 +503,148 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
+    fn hermite_function<P: Policy, const N: usize>(mut x: Self) -> Self {
+        #[cfg(not(target_arch = "spirv"))]
+        if let Some(new_x) = FlushDenormals::<P>::flush_denormals([x]) {
+            x = new_x[0];
+        }
+
+        generic::hermite::hermite_function::<P, _, _, N>(x)
+    }
+
+    #[inline(always)]
+    fn hermite_function_series<P: Policy, const N: usize>(self, coeffs: &[Self::Element; N]) -> Self {
+        generic::hermite::hermite_function_series::<P, _, _, N>(self, coeffs)
+    }
+
+    #[inline(always)]
+    fn laguerre<P: Policy, const N: usize>(mut x: Self, mut alpha: Self) -> Self {
+        #[cfg(not(target_arch = "spirv"))]
+        if let Some(new) = FlushDenormals::<P>::flush_denormals([x, alpha]) {
+            x = new[0];
+            alpha = new[1];
+        }
+
+        if const { N == 0 } {
+            return Self::ONE;
+        }
+
+        let mut p0 = Self::ONE; // L_0 = 1
+        let mut p1 = (Self::ONE + alpha) - x; // L_1 = 1 + a - x
+
+        let mut k = 1;
+        let mut kf = Self::ONE; // k as a float, counted alongside to avoid a convert per step
+
+        while k < N {
+            // (k+1) L_{k+1} = (2k + a + 1 - x) L_k - (k + a) L_{k-1}
+            let b = ((kf + kf) + Self::ONE + alpha) - x;
+            let c = kf + alpha;
+
+            let next = b.mul_sube(p1, c * p0) * Self::splat(laguerre_rcp::<E>(k));
+
+            p0 = p1;
+            p1 = next;
+
+            k += 1;
+            kf += Self::ONE;
+        }
+
+        p1
+    }
+
+    #[inline(always)]
+    fn laguerrev<P: Policy>(mut x: Self, mut alpha: Self, n: Self::Unsigned) -> Self {
+        #[cfg(not(target_arch = "spirv"))]
+        if let Some(new) = FlushDenormals::<P>::flush_denormals([x, alpha]) {
+            x = new[0];
+            alpha = new[1];
+        }
+
+        let i1 = Self::Unsigned::ONE;
+        let n_is_zero = n.cmp_eq(Self::Unsigned::ZERO);
+
+        let mut c = i1;
+
+        let mut k = 1;
+        let mut kf = Self::ONE;
+
+        let mut p0 = Self::ONE;
+        let mut p1 = (Self::ONE + alpha) - x;
+
+        loop {
+            let cont = c.cmp_lt(n);
+
+            if cont.none() {
+                break;
+            }
+
+            let b = ((kf + kf) + Self::ONE + alpha) - x;
+            let ck = kf + alpha;
+
+            let next = b.mul_sube(p1, ck * p0) * Self::splat(laguerre_rcp::<E>(k));
+
+            // Freeze BOTH halves of the pair on lanes that have reached their own degree.
+            // Carrying `p0` forward unconditionally would leave a finished lane holding
+            // `L_{k-1}` in `p1` on the next step instead of its answer.
+            p0 = cont.select(p1, p0);
+            p1 = cont.select(next, p1);
+
+            c += i1;
+            k += 1;
+            kf += Self::ONE;
+        }
+
+        n_is_zero.select(Self::ONE, p1)
+    }
+
+    #[inline(always)]
+    fn laguerre_function<P: Policy, const N: usize>(mut x: Self, mut alpha: Self) -> Self {
+        #[cfg(not(target_arch = "spirv"))]
+        if let Some(new) = FlushDenormals::<P>::flush_denormals([x, alpha]) {
+            x = new[0];
+            alpha = new[1];
+        }
+
+        generic::laguerre::laguerre_function::<P, _, _, N, false>(x, alpha, 0)
+    }
+
+    #[inline(always)]
+    fn laguerre_function_i<P: Policy, const N: usize>(mut x: Self, alpha: i32) -> Self {
+        #[cfg(not(target_arch = "spirv"))]
+        if let Some(new) = FlushDenormals::<P>::flush_denormals([x]) {
+            x = new[0];
+        }
+
+        generic::laguerre::laguerre_function::<P, _, _, N, true>(x, Self::ZERO, alpha)
+    }
+
+    #[inline(always)]
+    fn poisson_pmf<P: Policy>(self, lambda: Self) -> Self {
+        generic::poisson::poisson_pmf::<P, _, _, false>(self, lambda)
+    }
+
+    #[inline(always)]
+    fn poisson_log_pmf<P: Policy>(self, lambda: Self) -> Self {
+        generic::poisson::poisson_pmf::<P, _, _, true>(self, lambda)
+    }
+
+    #[inline(always)]
+    fn laguerre_function_series<P: Policy, const N: usize>(self, alpha: Self, coeffs: &[Self::Element; N]) -> Self {
+        generic::laguerre::laguerre_function_series::<P, _, _, N, false>(self, alpha, 0, coeffs)
+    }
+
+    #[inline(always)]
+    fn laguerre_function_series_i<P: Policy, const N: usize>(self, alpha: i32, coeffs: &[Self::Element; N]) -> Self {
+        generic::laguerre::laguerre_function_series::<P, _, _, N, true>(self, Self::ZERO, alpha, coeffs)
+    }
+
+    #[inline(always)]
     fn chebyshev<P: Policy, const K: usize, const N: usize>(self, coeffs: &[Self::Element; N]) -> Self {
-        const {
-            assert!(K >= 1 && K <= 4, "chebyshev: K must be 1, 2, 3, or 4");
-            assert!(N >= 1, "chebyshev: N must be at least 1");
-        }
-
-        // S = Σ c_k P_0 = c_0 when N = 1; skip the whole recurrence.
-        if const { N == 1 } {
-            return Self::splat(coeffs[0]);
-        }
-
-        let x = self;
-        let x2 = x + x;
-
-        // P_1: T_1 = x, U_1 = 2x, V_1 = 2x - 1, W_1 = 2x + 1.
-        let p1 = if const { K == 1 } {
-            x
-        } else if const { K == 2 } {
-            x2
-        } else if const { K == 3 } {
-            x2 - Self::ONE
-        } else if const { K == 4 } {
-            x2 + Self::ONE
-        } else {
-            unsafe { core::hint::unreachable_unchecked() }
-        };
-
-        let cn1 = Self::splat(coeffs[N - 1]);
-        let cn2 = Self::splat(coeffs[N - 2]);
-
-        // S = c_0 + c_1*P_1(x) when N = 2.
-        if const { N == 2 } {
-            return p1.mul_adde(cn1, cn2);
-        }
-
-        // Clenshaw's backward recurrence. All four kinds share the recurrence
-        // P_{k+1} = 2x*P_k - P_{k-1} with P_0 = 1, so the b_k loop is identical for all of them
-        // and only the final-step P_1(x) differs:
-        //
-        //     b_{N+1} = b_N = 0
-        //     for k = N-1 down to 1:  b_k = 2x*b_{k+1} - b_{k+2} + c_k
-        //     S = (c_0 - b_2) + b_1 * P_1(x)
-        //
-        // This is more numerically stable than the forward sum (especially when the
-        // partial sums of Σ c_k P_k are much smaller than max|c_k P_k|) and uses only two
-        // running scalars instead of three.
-        //
-        // Hoist the first two iterations to eliminate the b_2 = 0 subtraction in the loop:
-        //     k = N-1:  b_{N-1} = 2x*0 + c_{N-1} - 0          = c_{N-1}
-        //     k = N-2:  b_{N-2} = 2x*c_{N-1} + c_{N-2} - 0    = 2x*c_{N-1} + c_{N-2}
-        let mut b1 = x2.mul_adde(cn1, cn2); // b_{k+1} = b_{N-2}
-        let mut b2 = cn1; // b_{k+2} = b_{N-1}
-
-        // Iterate k = N-3, N-4, ..., 1.
-        let mut k = N - 2;
-        while k > 1 {
-            k -= 1;
-            // b_k = (2x*b_{k+1} + c_k) - b_{k+2}
-            let bk = x2.mul_adde(b1, Self::splat(coeffs[k]) - b2);
-            b2 = b1;
-            b1 = bk;
-        }
-
-        // S = b_1 * P_1(x) + (c_0 - b_2)
-        b1.mul_adde(p1, Self::splat(coeffs[0]) - b2)
+        // Plain Clenshaw. Real vectors override this in `ps.rs`/`pd.rs` to pass `true` for
+        // the kernel's `REINSCH` parameter, which buys accuracy near `$x = \pm 1$` under a
+        // `Best`-or-better policy; `Complex` and the composites take this default, since the
+        // endpoint form needs a real `copysign` and a meaningful nearest endpoint.
+        generic::chebyshev::chebyshev_series::<P, _, _, K, N, false>(self, coeffs)
     }
 
     #[inline(always)]
@@ -670,7 +778,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     #[rustfmt::skip]
     #[inline(always)]
     fn legendre0<P: Policy, const N: u32>(x: Self, n: u32) -> Self {
-        macro_rules! c { ($n:literal / $d:literal) => { Self::splat(E::from_int($n) / E::from_int($d)) }; }
+        macro_rules! c { ($n:literal / $d:literal) => { Self::splat(<E as FloatElement>::ConstRatio::<{ $n }, { $d }>::VALUE) }; }
 
         let x2 = x.square();
         let x4 = x2.square();
@@ -779,9 +887,79 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         }
     }
 
+    #[inline(always)]
+    fn legendre_series<P: Policy, const N: usize>(self, coeffs: &[Self::Element; N]) -> Self {
+        // Plain Clenshaw at every policy, as the kernel has no policy-dependent path.
+        generic::legendre::legendre_series::<_, _, N>(self, coeffs)
+    }
+
+    #[inline(always)]
+    fn zernike_r<P: Policy>(mut rho: Self, n: u32, m: u32) -> Self {
+        // A mode that does not exist contributes nothing, rather than whatever a
+        // recurrence run outside its range happens to produce.
+        if thermite::unlikely(m > n || (n - m) & 1 == 1) {
+            return Self::ZERO;
+        }
+
+        #[cfg(not(target_arch = "spirv"))]
+        if let Some(new) = FlushDenormals::<P>::flush_denormals([rho]) {
+            rho = new[0];
+        }
+
+        // R_n^m(rho) = rho^m * Q_{(n-m)/2, m}(rho^2), the shifted Jacobi identity with the
+        // change of variable folded into the recurrence coefficients. See the trait docs
+        // for why this rather than the direct factorial sum, and where the usual (-1)^k
+        // prefactor went; `reduced_radial_impl` for why not a general `jacobi` call.
+        let radial = generic::zernike::reduced_radial_impl::<E, Self>(rho.square(), (n - m) >> 1, m);
+
+        if m == 0 {
+            radial
+        } else {
+            radial * Self::powi::<P>(rho, m as i32)
+        }
+    }
+
+    #[inline(always)]
+    fn zernike<P: Policy, const NORM: u8>(rho: Self, theta: Self, n: u32, m: i32) -> Self {
+        const {
+            assert!(
+                NORM == crate::ZERNIKE_UNIT_PEAK || NORM == crate::ZERNIKE_ORTHONORMAL,
+                "zernike: NORM must be ZERNIKE_UNIT_PEAK or ZERNIKE_ORTHONORMAL"
+            );
+        }
+
+        let am = m.unsigned_abs();
+
+        let radial = Self::zernike_r::<P>(rho, n, am);
+
+        let z = if m == 0 {
+            radial // cos(0) = 1
+        } else {
+            let (sin, cos) = Self::sin_cos::<P>(theta * Self::splat(E::from_int(am as thermite::LargeInt)));
+
+            radial * if m > 0 { cos } else { sin }
+        };
+
+        if const { NORM == crate::ZERNIKE_UNIT_PEAK } {
+            return z;
+        }
+
+        // N_n^m = sqrt(2(n+1) / (1 + delta_{m,0})). Both the radicand and the root are
+        // exact in the element type for any n a pupil fit will reach, and n is
+        // loop-invariant, so this is a splat of a constant rather than a vector sqrt.
+        let radicand = if m == 0 { n + 1 } else { 2 * (n + 1) };
+
+        z * Self::splat(FloatElement::sqrt(E::from_int(radicand as thermite::LargeInt)))
+    }
+
+    #[inline(always)]
+    fn zernike_basis<P: Policy, const L: usize, const NORM: u8, const N: usize>(x: Self, y: Self, out: &mut [Self; N]) {
+        generic::zernike::zernike_basis_impl::<P, E, Self, L, NORM, N>(x, y, out);
+    }
+
     fn lambert_w<P: Policy>(self) -> (Self, Self);
 
-    // TEMP(bessel_j): disabled until orders beyond J_0 exist - see the note in lib.rs.
+    // TEMP(bessel_j): disabled until orders beyond J_0 exist. See the note in lib.rs.
     //fn bessel_j<P: Policy, const N: usize>(self) -> Self;
 
     #[inline(always)]
@@ -794,7 +972,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 }
 
 // The Carlson / Legendre entry points are kind-dispatched (`SpecialMath::carlson` / `::ellint`),
-// generated by decl_math!'s `@kinds` blocks - they call the request struct's `eval` directly, so
+// generated by decl_math!'s `@kinds` blocks. They call the request struct's `eval` directly, so
 // they need no method here. The request structs and their traits are re-exported below.
 // `EllipticConsts` is re-exported because `EllipticKind` is bounded on it: any
 // generic caller of `ellint`/`carlson` has to name it in a where-clause, so
@@ -812,6 +990,10 @@ pub use generic::sh::{
     sh_eval_mixed_impl, sh_impl, sh_table_impl,
 };
 
+// The batch Zernike kernel's unrolled-degree cap, named in `zernike_basis`'s docs as the
+// point past which it stops being straight-line code.
+pub use generic::zernike::{MAX_DEGREE as MAX_ZERNIKE_DEGREE, zernike_basis_d_impl, zernike_basis_impl};
+
 /// Specialized implementation trait for real-only special math functions.
 ///
 /// Extends [`SpecializedSpecialMath`] with functions that have no meaningful
@@ -820,6 +1002,126 @@ pub use generic::sh::{
 pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
     fn erfinv<P: Policy>(self) -> Self;
     fn probit<P: Policy>(self) -> Self;
+
+    /// `(x^lambda - 1)/lambda`, `ln x` at `lambda = 0`.
+    ///
+    /// `powf_m1` builds `x^lambda - 1` without forming `x^lambda`, so the division by lambda
+    /// is the *whole* algorithm: there is no cancellation left to protect against and hence
+    /// no near-zero series, which the obvious `(pow(x, l) - 1)/l` spelling would need by
+    /// `l = 1e-8`. Verified a few ulp from `lambda = 1e-300` outward.
+    ///
+    /// `lambda` is a fitted parameter, so it is uniform across a vector in every real use and
+    /// the two uniform branches are what actually run. The blend is there for correctness on
+    /// a mixed vector, not for speed.
+    /// The domain edge `x = 0` needs no guard here. `powf_m1(0, lambda)` is `-1` for
+    /// `lambda > 0` and `+inf` below, so the division delivers the conventional `-1/lambda` and
+    /// `-inf` on its own, and more accurately than a `reciprocal` would. The Best-tier Dekker
+    /// residual in `powf_m1` carries the edge itself, so nothing is patched up here.
+    #[inline(always)]
+    fn boxcox<P: Policy>(self, lambda: Self) -> Self {
+        let at_zero = lambda.is_zero();
+
+        if const { !P::POLICY.avoid_branching } && at_zero.all() {
+            Self::ln::<P>(self)
+        } else if const { !P::POLICY.avoid_branching } && at_zero.none() {
+            Self::powf_m1::<P>(self, lambda) / lambda
+        } else {
+            at_zero.select(Self::ln::<P>(self), Self::powf_m1::<P>(self, lambda) / lambda)
+        }
+    }
+
+    /// `((1 + x)^lambda - 1)/lambda`, `ln(1 + x)` at `lambda = 0`.
+    ///
+    /// Structurally identical to [`boxcox`](Self::boxcox), over `compound_m1` instead of
+    /// `powf_m1` so that `x` near zero keeps its low bits, which is the only reason to have
+    /// it, and the reason Yeo-Johnson is built on it.
+    #[inline(always)]
+    fn boxcox_1p<P: Policy>(self, lambda: Self) -> Self {
+        let at_zero = lambda.is_zero();
+
+        if const { !P::POLICY.avoid_branching } && at_zero.all() {
+            Self::ln_1p::<P>(self)
+        } else if const { !P::POLICY.avoid_branching } && at_zero.none() {
+            Self::compound_m1::<P>(self, lambda) / lambda
+        } else {
+            at_zero.select(Self::ln_1p::<P>(self), Self::compound_m1::<P>(self, lambda) / lambda)
+        }
+    }
+
+    /// `(lambda*y + 1)^(1/lambda)`, `e^y` at `lambda = 0`. The inverse of
+    /// [`boxcox`](Self::boxcox).
+    ///
+    /// Evaluated as `exp(ln1p(lambda*y)/lambda)` rather than `powf`:
+    /// `lambda*y` is small exactly where the forward transform's `lambda` is, so `1 + lambda*y`
+    /// would round it away and the whole reason `boxcox` is accurate near `lambda = 0` would
+    /// be undone on the way back.
+    #[inline(always)]
+    fn inv_boxcox<P: Policy>(self, lambda: Self) -> Self {
+        let at_zero = lambda.is_zero();
+
+        if const { !P::POLICY.avoid_branching } && at_zero.all() {
+            Self::exp::<P>(self)
+        } else if const { !P::POLICY.avoid_branching } && at_zero.none() {
+            Self::exp::<P>(Self::ln_1p::<P>(lambda * self) / lambda)
+        } else {
+            at_zero.select(
+                Self::exp::<P>(self),
+                Self::exp::<P>(Self::ln_1p::<P>(lambda * self) / lambda),
+            )
+        }
+    }
+
+    /// `(lambda*y + 1)^(1/lambda) - 1`, `e^y - 1` at `lambda = 0`. The inverse of
+    /// [`boxcox_1p`](Self::boxcox_1p).
+    ///
+    /// Same exponent as [`inv_boxcox`](Self::inv_boxcox) with `expm1` outside it, so the
+    /// result keeps its relative accuracy where it is near zero, which, this being the
+    /// inverse of a transform of data centered near zero, is the ordinary case.
+    #[inline(always)]
+    fn inv_boxcox_1p<P: Policy>(self, lambda: Self) -> Self {
+        let at_zero = lambda.is_zero();
+
+        if const { !P::POLICY.avoid_branching } && at_zero.all() {
+            Self::exp_m1::<P>(self)
+        } else if const { !P::POLICY.avoid_branching } && at_zero.none() {
+            Self::exp_m1::<P>(Self::ln_1p::<P>(lambda * self) / lambda)
+        } else {
+            at_zero.select(
+                Self::exp_m1::<P>(self),
+                Self::exp_m1::<P>(Self::ln_1p::<P>(lambda * self) / lambda),
+            )
+        }
+    }
+
+    /// The Yeo-Johnson transform of `y = self` with parameter `lambda`.
+    ///
+    /// Four cases in the literature, one kernel here: the transform is odd about the origin
+    /// in the sense that the `y < 0` branch is the `y >= 0` branch applied to `|y|` with
+    /// `lambda` reflected to `2 - lambda` and the result negated. Folding the sign out first
+    /// collapses both `ln` special cases (`lambda = 0` above zero, `lambda = 2` below) into
+    /// the single `lambda = 0` seam that [`boxcox_1p`](Self::boxcox_1p) already handles.
+    #[inline(always)]
+    fn yeo_johnson<P: Policy>(self, lambda: Self) -> Self {
+        let neg = self.cmp_lt(Self::ZERO);
+        let reflected = neg.select(Self::TWO - lambda, lambda);
+        let r = Self::boxcox_1p::<P>(self.abs(), reflected);
+
+        neg.select(-r, r)
+    }
+
+    /// The inverse Yeo-Johnson transform. The same sign fold as
+    /// [`yeo_johnson`](Self::yeo_johnson), over [`inv_boxcox_1p`](Self::inv_boxcox_1p).
+    ///
+    /// The transform is monotone increasing and fixes the origin, so the branch condition on
+    /// the way back is the sign of the *transformed* value, which is the sign of `y`.
+    #[inline(always)]
+    fn inv_yeo_johnson<P: Policy>(self, lambda: Self) -> Self {
+        let neg = self.cmp_lt(Self::ZERO);
+        let reflected = neg.select(Self::TWO - lambda, lambda);
+        let r = Self::inv_boxcox_1p::<P>(self.abs(), reflected);
+
+        neg.select(-r, r)
+    }
 
     fn langevin<P: Policy>(self) -> Self;
     fn inv_langevin<P: Policy>(self) -> Self;
@@ -1072,6 +1374,19 @@ pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> + PrimalPr
         let mut table = ShTable::<Self, N>::zeroed();
         Self::spherical_harmonics_table::<P, L, N, CS>(&mut table);
         Self::spherical_harmonics_d_with::<P, L, N>(&table, x, y, z, out, ddx, ddy, ddz);
+    }
+
+    /// [`zernike_basis`](SpecializedSpecialMath::zernike_basis) plus the Cartesian
+    /// gradient of every mode. See [`zernike_basis_d_impl`] for the algorithm.
+    #[inline(always)]
+    fn zernike_basis_d<P: Policy, const L: usize, const NORM: u8, const N: usize>(
+        x: Self,
+        y: Self,
+        out: &mut [Self; N],
+        ddx: &mut [Self; N],
+        ddy: &mut [Self; N],
+    ) {
+        generic::zernike::zernike_basis_d_impl::<P, E, Self, L, NORM, N>(x, y, out, ddx, ddy);
     }
 
     #[inline(always)]

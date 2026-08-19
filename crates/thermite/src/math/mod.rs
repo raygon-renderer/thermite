@@ -2,12 +2,12 @@
 
 //! Mathematical functions for floating-point vector types.
 //!
-//! This module provides a comprehensive set of mathematical operations tailored for floating-point vector types.
-//! It includes core mathematical functions, transcendental functions, spatial computations, and real-valued operations.
+//! Covers core mathematical functions, transcendental functions, spatial computations, and
+//! real-valued operations, all written over the vector traits rather than a concrete backend.
 //!
-//! The traits defined here are designed to be flexible and efficient, allowing for different precision and performance trade-offs
-//! through the use of policies. Each mathematical trait has a corresponding version that accepts a policy parameter,
-//! enabling fine-tuned control over the behavior of the functions.
+//! Precision and performance trade-offs are made through policies. Each mathematical trait
+//! has a corresponding version that accepts a policy parameter, which controls the behavior
+//! of the functions at the call site.
 
 mod consts;
 pub mod policy;
@@ -86,7 +86,7 @@ macro_rules! decl_math {
         #[doc = ""]
         #[doc = "This trait provides a set of " [<$trait:lower>] " mathematical operations that can be performed"]
         #[doc = "on floating-point vector types. Each function has a variant that accepts"]
-        #[doc = "a policy parameter, allowing for fine-tuned control over precision and performance."]
+        #[doc = "a policy parameter, which controls precision and performance."]
         #[doc = ""]
         #[doc = "For convenience, a default implementation is also provided in the [`" $trait "Math`] trait,"]
         #[doc = "which uses the [`DefaultPolicy`]. All floating-point vector types that implement"]
@@ -191,7 +191,7 @@ macro_rules! decl_math {
 
             /// Square root of `self`.
             ///
-            /// Unlike the rest of this trait, `sqrt` is not a policy-driven approximation - it is
+            /// Unlike the rest of this trait, `sqrt` is not a policy-driven approximation. It is
             /// exact (correctly rounded) on all supported formats, so the policy is ignored. This
             /// exists only so scalar code can spell it the same way as the other `scalar_` methods;
             /// on vectors, `sqrt` is an inherent [`FloatVector`] method rather than a math trait one.
@@ -477,6 +477,42 @@ decl_math! {
         /// performance, at the cost of accuracy.
         fn approx_div[][](self: Self, divisor: Self) -> Self;
 
+        /// The harmonic mean of `N` values, `$N / \sum_i 1/x_i$`.
+        ///
+        /// The mean that averages *rates*: harmonic over speeds gives the average speed of a
+        /// journey, over resistances the value each resistor could be replaced by, over
+        /// precision and recall the F1 score. Dominated by the smallest element, which is the
+        /// property that makes it the right average for anything that behaves like a
+        /// bottleneck.
+        ///
+        /// Evaluated by scaling every reciprocal by the smallest element before summing, so
+        /// the sum lands in `[1, N]` and no term can overflow whatever the spread of the
+        /// inputs. Written directly as `$N/\sum 1/x_i$` a single denormal input sends its
+        /// reciprocal to infinity and collapses the answer to zero. Scaled, an input range of
+        /// `5e-324` to `1e300` is still exact. Below `Average` precision the direct form runs,
+        /// with approximate reciprocals, and that failure comes back.
+        ///
+        /// A zero anywhere in the input gives `0`, which is the limit rather than a special
+        /// case. An infinite element simply contributes nothing.
+        fn harmonic_mean[const N: usize][N](values: [Self; N]) -> Self;
+
+        /// `$1 / \sum_i 1/x_i$`, the reciprocal of the sum of reciprocals of `N` values.
+        ///
+        /// [`harmonic_mean`](CoreMath::harmonic_mean) without the `N`, and the quantity most
+        /// physical "combine these" laws actually want: resistors in parallel, capacitors in
+        /// series, spring compliances, the reduced mass `$m_1 m_2/(m_1+m_2)$` of a two-body
+        /// problem, thermal contact conductances, and the effective conductivity of a layered
+        /// medium. Each of those is this function, **not** the harmonic mean, which is `N`
+        /// times larger, a factor that silently multiplies through an entire model if the
+        /// two are confused.
+        ///
+        /// The distinguishing identity: `inv_sum_inv` of `N` copies of `x` is `$x/N$`, while
+        /// the harmonic mean of them is `$x$`.
+        ///
+        /// Same scaled evaluation and same edge cases as
+        /// [`harmonic_mean`](CoreMath::harmonic_mean).
+        fn inv_sum_inv[const N: usize][N](values: [Self; N]) -> Self;
+
         /// Returns the inverse square root of `self`, which is `1 / sqrt(self)`.
         ///
         /// If using the policy version, you may select lower precision policies for extra performance,
@@ -611,6 +647,19 @@ decl_math! {
         /// This is the IEEE 754 `compound` operation, and is more precise than `powf(1 + x, n)` for small `x`
         /// (e.g. compound-growth/interest over `n` periods at rate `x`).
         fn compound[][](self: Self, n: Self) -> Self;
+        /// Returns `$(1 + x)^n - 1$` where `x = self`, the `$-1$` sibling of
+        /// [`compound`](TranscendentalMath::compound).
+        ///
+        /// Accurate at both ends where the two obvious spellings are not: `compound(x, n) - 1`
+        /// cancels when the result is near zero (small `x` or small `n`), and
+        /// `powf_m1(1 + x, n)` has already lost `x` entirely by `$|x| < \varepsilon$` because
+        /// forming `$1 + x$` rounds it away. Evaluated as `$\mathrm{expm1}(n \ln(1 + x))$`,
+        /// which does neither.
+        ///
+        /// This is the numerator of the shifted Box-Cox transform, and the kernel underneath
+        /// `thermite-special`'s `boxcox_1p` and Yeo-Johnson transform, whose whole reason for
+        /// existing is data that straddles zero.
+        fn compound_m1[][](self: Self, n: Self) -> Self;
         /// Returns the cube root of `self`.
         fn cbrt[][](self: Self) -> Self;
         /// Returns the Nth root of `self`.
@@ -622,7 +671,7 @@ decl_math! {
         ///
         /// # Examples
         ///
-        /// Every math function takes a precision policy via its `_p` variant; a quick
+        /// Every math function takes a precision policy via its `_p` variant. A quick
         /// sweep against a scalar reference is the cheapest way to validate that a
         /// policy choice is accurate enough for your domain:
         ///
@@ -641,6 +690,78 @@ decl_math! {
         /// assert!(max_err < 1e-14, "max relative error {max_err}");
         /// ```
         fn ln[][](self: Self) -> Self;
+        /// Returns `$x \ln y$` with `x = self`, defined as `0` wherever `x` is zero.
+        ///
+        /// `$0 \cdot \ln 0$` is `$0 \cdot -\infty =$` NaN written directly, and one NaN poisons
+        /// every reduction downstream of it: a cross-entropy over a batch with a single
+        /// zero-probability term returns NaN for the whole batch. The convention `$x = 0
+        /// \Rightarrow 0$` is the limit `$\lim_{x \to 0^+} x \ln y$` and is what information
+        /// theory assumes everywhere.
+        ///
+        /// **A NaN `y` still propagates**, taking priority over the zero guard, matching SciPy
+        /// and PyTorch. A negative `y` does not: it is not NaN, so `x = 0` gives `0` there and
+        /// only a non-zero `x` yields NaN from the log.
+        ///
+        /// This is the case where a vector implementation is strictly ahead of a scalar one:
+        /// the guard is a masked select costing one instruction, where scalar code needs a
+        /// branch per element.
+        fn xlogy[][](self: Self, y: Self) -> Self;
+
+        /// Returns `$x \ln(1 + y)$` with `x = self`, defined as `0` wherever `x` is zero.
+        ///
+        /// [`xlogy`](TranscendentalMath::xlogy)'s companion for the case where `y` is a small
+        /// perturbation, keeping [`ln_1p`](TranscendentalMath::ln_1p)'s accuracy near zero
+        /// rather than losing it to `$1 + y$` first. Same zero and NaN conventions.
+        fn xlog1py[][](self: Self, y: Self) -> Self;
+
+        /// Returns `$\sinh(x)/x$` of `self`, the hyperbolic counterpart of [`sinc`](TranscendentalMath::sinc),
+        /// with its removable singularity `$\mathrm{sinhc}(0) = 1$` filled in.
+        ///
+        /// Written directly, `$\sinh(x)/x$` is `$0/0$` at the origin. Small arguments take the
+        /// even series `$1 + x^2/6 + x^4/120$` instead, which also skips the `sinh`.
+        ///
+        /// Unlike `sinc`, this one grows: `$\mathrm{sinhc}(\pm\infty) = +\infty$`, and the naive
+        /// spelling gets `$\infty/\infty = $` NaN there rather than the limit.
+        ///
+        /// Turns up in the hyperbolic exponential map, catenary curves, beam and rod stiffness
+        /// matrices in FEM, exact solutions of linear ODE blocks, and the Einstein heat-capacity
+        /// function `$x^2 e^x/(e^x-1)^2$`, which is exactly `$1/\mathrm{sinhc}(x/2)^2$`.
+        fn sinhc[][](self: Self) -> Self;
+
+        /// Returns `$\operatorname{atanh}(x)/x$` of `self`, with its removable singularity
+        /// `$\mathrm{atanhc}(0) = 1$` filled in.
+        ///
+        /// The cardinal form of `atanh`, in the same relation to it as
+        /// [`sinc`](TranscendentalMath::sinc) is to `sin`. Small arguments take the even series
+        /// `$1 + x^2/3 + x^4/5$`, which also skips the `atanh`.
+        ///
+        /// Defined on `$[-1, 1]$`, even, with `$\mathrm{atanhc}(\pm 1) = +\infty$` and NaN outside.
+        ///
+        /// This is the shape the *logarithmic mean* actually reduces to, and
+        /// [`logmean`](RealMath::logmean) is written on it: with
+        /// `$f = \frac{a-b}{a+b}$`,
+        ///
+        /// ```math
+        /// \mathrm{logmean}(a, b) = \frac{a+b}{2\,\mathrm{atanhc}(f)}
+        /// ```
+        ///
+        /// so the `$a \to b$` limit is carried by this function rather than special-cased there.
+        /// It is also the inner object of the Ismail-Roe entropy-stable flux, where production
+        /// codes write it as an `if` on `$f^2 < 10^{-4}$` that mispredicts across shocks. It also
+        /// turns up in relativistic velocity addition, optical-depth ratios in radiative
+        /// transfer, and the Legendre function of the second kind `$Q_0$`.
+        fn atanhc[][](self: Self) -> Self;
+
+        /// Returns `$\cosh(x) - 1$` of `self`, the hyperbolic counterpart of
+        /// [`cos_m1`](TranscendentalMath::cos_m1).
+        ///
+        /// Evaluated as `$2\sinh^2(x/2)$`, an exact identity rather than an approximation, so
+        /// there is no series and no cutoff, the same treatment shipped `versin` gets from
+        /// `$1 - \cos x = 2\sin^2(x/2)$`. The direct spelling instead cancels: `$\cosh x - 1$` is
+        /// `$O(x^2)$` against a `$\cosh$` of `$1$`, so it has lost half the mantissa by
+        /// `$x \approx 10^{-8}$` and all of it by `$x \approx 10^{-16}$`.
+        fn cosh_m1[][](self: Self) -> Self;
+
         /// Returns `$\ln(1 + x)$` of `self`.
         fn ln_1p[][](self: Self) -> Self;
         /// Returns the base-2 logarithm of `self`.
@@ -651,6 +772,34 @@ decl_math! {
         fn log2_p1[][](self: Self) -> Self;
         /// Returns `$\log_{10}(1 + x)$` of `self`, which is more precise than `log10(1 + x)` directly near zero.
         fn log10_p1[][](self: Self) -> Self;
+
+        /// Returns `$\ln(1 + x) - x$` of `self`, which is accurate near zero where the
+        /// subtraction otherwise cancels away every significant digit.
+        ///
+        /// `$\ln(1+x) \approx x - x^2/2$` for small `x`, so the difference is `$O(x^2)$` while
+        /// both terms are `$O(x)$`: computing it as written costs about `$2\varepsilon/|x|$` of
+        /// relative error, which is total loss by `$|x| \approx \varepsilon$`. On
+        /// `$-1/2 \le x \le 1$` this instead sums the odd series in `$r = x/(2+x)$`,
+        ///
+        /// ```math
+        /// \ln(1+x) - x = r\left(2r^2 \sum_{k \ge 0} \frac{r^{2k}}{2k+3} - x\right)
+        /// ```
+        ///
+        /// which has no cancellation and is exact at `$x = 0$`. Outside that window the
+        /// direct form is already accurate to a few ulp and is what runs.
+        ///
+        /// **The `Medium` and `Worst` policies return the direct form everywhere**, dropping the
+        /// series and its window test. That is a change of behavior near zero, not a few ulp:
+        /// once `$1 + x$` rounds to `1` the direct form yields `$-x$`, which differs from
+        /// `$-x^2/2$` by every digit and by an unbounded factor. Those tiers are the right
+        /// choice for arguments that stay clear of zero (where the direct form is a few ulp
+        /// anyway, so the series is pure cost) and the wrong one for the near-zero case this
+        /// function exists to serve. Ask for `Average` or better there.
+        ///
+        /// The natural home of `$\ln(1+x)-x$` is a density or deviance: the Poisson/binomial
+        /// deviance is `$-k \cdot \mathrm{log1pmx}((\lambda-k)/k)$`, and the same shape turns up
+        /// in entropies, Kullback-Leibler divergences and saddle-point approximations.
+        fn log1pmx[][](self: Self) -> Self;
 
         /// Returns the logarithm of `self` with respect to the given `base`.
         fn log[][](self: Self, base: Self) -> Self;
@@ -837,6 +986,56 @@ decl_math! {
         /// is out of domain and gives NaN at `Average` precision and above.
         fn logsubexp[][](self: Self, other: Self) -> Self;
 
+        /// The entropy term `$-x \ln x$` of `self`, extended to the closed half-line.
+        ///
+        /// ```math
+        /// \mathrm{entr}(x) = \begin{cases} -x \ln x & x > 0 \\ 0 & x = 0 \\ -\infty & x < 0\end{cases}
+        /// ```
+        ///
+        /// The `$x = 0$` value is the limit. The `$-\infty$` below zero is not a limit but a
+        /// convention, the extended-value form that keeps `entr` concave over all of `$\mathbb{R}$`
+        /// so a convex solver can use it as a barrier. SciPy, CVXPY and Convex.jl all define it
+        /// this way. Summing `entr` over a distribution gives its Shannon entropy in nats.
+        fn entr[][](self: Self) -> Self;
+
+        /// The relative-entropy term `$x \ln(x/y)$`, with `x = self`.
+        ///
+        /// ```math
+        /// \mathrm{rel\_entr}(x, y) = \begin{cases} x \ln(x/y) & x > 0,\; y > 0 \\ 0 & x = 0,\; y \ge 0 \\ +\infty & \text{otherwise}\end{cases}
+        /// ```
+        ///
+        /// **This is the Kullback-Leibler summand**: `$D_{KL}(P \Vert Q)$` is the sum of
+        /// `rel_entr` over the two distributions, and [`kl_div`](RealMath::kl_div) is the one
+        /// that carries extra terms, not this. The naming is
+        /// SciPy's and catches people out in both directions.
+        ///
+        /// The `$+\infty$` covers `$y = 0$` at positive `x` (an event the model assigns zero
+        /// probability but the data observed, which is genuinely infinite surprise) as well as
+        /// negative inputs, which are out of domain.
+        fn rel_entr[][](self: Self, y: Self) -> Self;
+
+        /// The convex-programming Kullback-Leibler divergence term, with `x = self`.
+        ///
+        /// ```math
+        /// \mathrm{kl\_div}(x, y) = \begin{cases} x \ln(x/y) - x + y & x > 0,\; y > 0 \\ y & x = 0,\; y \ge 0 \\ +\infty & \text{otherwise}\end{cases}
+        /// ```
+        ///
+        /// The `$-x + y$` tail is **not** part of the Kullback-Leibler divergence. It is what
+        /// makes this the Bregman divergence generated by `$x \ln x$`, which is non-negative and
+        /// zero only at `$x = y$` even when the arguments are unnormalized, the property a
+        /// solver needs and that the bare summand lacks. For the divergence itself use
+        /// [`rel_entr`](RealMath::rel_entr), whose sum over a *normalized* pair equals this
+        /// one's because the tails cancel.
+        ///
+        /// That tail is also why the written form cannot be evaluated as written. With
+        /// `$y = x(1+u)$` the log term is `$-xu + xu^2/2$` and the tail is `$+xu$`: two
+        /// first-order quantities cancelling to a second-order answer, so near `$x = y$` the
+        /// direct spelling is not imprecise but **entirely wrong**. Evaluated here as the
+        /// identity `$-x \cdot \mathrm{log1pmx}((y-x)/x)$`, which moves the cancellation inside
+        /// [`log1pmx`](TranscendentalMath::log1pmx), where it belongs. Same identity as the
+        /// Poisson deviance; `bd0` in `thermite-special` is this function under another name.
+        fn kl_div[][](self: Self, y: Self) -> Self;
+
         /// Generalized smoothstep function of Order `2N-1`. Note: The "smoothness"
         /// for higher order is in terms of the number of continuous derivatives,
         /// not in terms of visual smoothness, though they are related in some ways.
@@ -900,14 +1099,14 @@ decl_math! {
         /// ```
         ///
         /// The result is C∞-differentiable (infinitely smooth), with all derivatives vanishing
-        /// at both endpoints - making it strictly superior to polynomial smoothstep for
-        /// applications requiring flatness at the edges.
+        /// at both endpoints, so it beats polynomial smoothstep wherever flatness at the edges
+        /// is what matters.
         ///
         /// The `k` parameter controls the shape of the transition:
         /// - `k < 1`: sharpens the curve, concentrating the transition near the midpoint.
         /// - `k = 1`: the standard balanced sigmoid-like transition.
-        /// - `k > 1`: stretches the transition region, making the curve more gradual.
-        /// - `$k \approx 2/\sqrt{3}$` (~1.1547): the function becomes bimodal - use with caution above this value.
+        /// - `k > 1`: stretches the transition region, so the curve is more gradual.
+        /// - `$k \approx 2/\sqrt{3}$` (~1.1547): the function becomes bimodal. Use with caution above this value.
         fn smooth_interpolator[][](self: Self, edges: Option<(Self, Self)>, k: Self) -> Self;
 
         /// Inverse of [`smooth_interpolator`](crate::math::RealMath::smooth_interpolator).

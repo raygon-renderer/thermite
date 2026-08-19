@@ -6,13 +6,13 @@
 //! edge-case + random corpus, on `Scalar`, `X86V2`, and `X86V3`.
 //!
 //! Note `is_nan` is implemented as `ne(value, value)`, so this is also the
-//! regression gate for the V3 `ne` fix (ordered `_CMP_NEQ_OQ` → unordered
+//! regression gate for the V3 `ne` fix (ordered `_CMP_NEQ_OQ` -> unordered
 //! `_CMP_NEQ_UQ`): before it, `is_nan(NaN)` was `false` on f32x8/f64x{2,4}.
 //!
 //! Semantics oracles match thermite's *comparison-based* definitions, which
 //! differ from the sign-bit ones for ±0.0:
-//!   - `is_negative(x) == (x < 0)`   → `is_negative(-0.0)` is `false`
-//!   - `is_positive(x) == (x >= 0)`  → `is_positive(-0.0)` is `true`
+//!   - `is_negative(x) == (x < 0)`   -> `is_negative(-0.0)` is `false`
+//!   - `is_positive(x) == (x >= 0)`  -> `is_positive(-0.0)` is `true`
 #![cfg(any(
     target_arch = "x86",
     target_arch = "x86_64",
@@ -82,7 +82,7 @@ macro_rules! val_un {
 }
 
 /// Float `signum`, NaN-aware. For every non-NaN input it must match `x.signum()`
-/// exactly on all backends (finite, ±0 and ±inf all agree — copysign-based ±1).
+/// exactly on all backends (finite, ±0 and ±inf all agree, being copysign-based ±1).
 /// For a NaN input the result is **unspecified without the `strict_ieee754`
 /// feature**: the scalar backend propagates NaN (`f32::signum`), while the x86
 /// backends take the fast copysign path and yield ±1 (the NaN blend is gated
@@ -127,7 +127,7 @@ macro_rules! float_pred_tests {
             pred!($label, UT, E, is_positive, |x| x >= 0.0);
             // Sign-bit ±1 for every non-NaN input (signum(+0)=+1, signum(-0)=-1,
             // signum(±inf)=±1), matching Rust `f32::signum`. NaN signum is only
-            // NaN under `strict_ieee754`; by default x86 yields ±1 — see `signum_float`.
+            // NaN under `strict_ieee754`. By default x86 yields ±1, see `signum_float`.
             signum_float!($label, UT, E);
         }
     };

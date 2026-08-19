@@ -5,7 +5,7 @@
 //! and `total_order`/`linear_order`.
 //!
 //! These impls are generic over `R`, so a single concrete instantiation per impl
-//! covers its source lines; we use `X86V3` (+ `Scalar` for the masked ops, whose
+//! covers its source lines, so this uses `X86V3` (+ `Scalar` for the masked ops, whose
 //! `_c`/`_m`/`_z` lowering differs from the x86 blend path).
 #![cfg(any(
     target_arch = "x86",
@@ -56,7 +56,7 @@ mod x86 {
         m.as_mut_slice()[1] = 8;
         assert_eq!(m.as_slice(), &[9, 8, 4, 1]);
 
-        // splat_const (const fn — exercise at runtime), default, clone, Debug
+        // splat_const (const fn, exercised at runtime), default, clone, Debug
         const C: VI = VI::splat_const(7);
         assert_eq!(C.as_slice(), &[7; 4]);
         assert_eq!(VI::splat_const(5).as_slice(), &[5; 4]);
@@ -83,7 +83,7 @@ mod x86 {
         // is_power_of_two (UnsignedIntegerVector)
         let u = VU::new([1, 3, 8, 0]);
         let pot = u.is_power_of_two().select(VU::ONE, VU::ZERO).into_array();
-        // 1 and 8 are powers of two; 3 is not. (0 is reported as a power of two — a known quirk.)
+        // 1 and 8 are powers of two, 3 is not. (0 is reported as a power of two, a known quirk.)
         assert_eq!(pot.as_slice(), &[1, 0, 1, 1]);
 
         // create_divider / create_branchfree_divider (NumericVector helpers)
@@ -125,7 +125,7 @@ mod x86 {
             let sq = v.square();
             let src = Vector::<R>::TWO; // explicit non-zero merge source
             let mask = v.cmp_lt(Vector::<R>::splat(num_traits_three::<R>())); // first two lanes true
-            // _c: mask ? v² : v ; _m: mask ? v² : src ; _z: mask ? v² : 0
+            // _c: mask ? v^2 : v ; _m: mask ? v^2 : src ; _z: mask ? v^2 : 0
             let zero = Vector::<R>::ZERO;
             let c = v.square_c(mask);
             let m = v.square_m(src, mask);
@@ -197,7 +197,7 @@ mod x86 {
         let (slo, shi) = Concat::split(wide);
         assert_eq!(rb4(slo), vec![1, 0, 1, 0]);
         assert_eq!(rb4(shi), vec![0, 0, 1, 1]);
-        // extend: low half = lo, high half = false; narrow keeps the low half
+        // extend: low half = lo, high half = false, and narrow keeps the low half
         let ext: MI8 = Extend::extend(lo);
         assert_eq!(rb8(ext), vec![1, 0, 1, 0, 0, 0, 0, 0]);
         assert_eq!(rb4(ext.narrow()), vec![1, 0, 1, 0]);
@@ -294,7 +294,7 @@ mod wasm {
         m.as_mut_slice()[1] = 8;
         assert_eq!(m.as_slice(), &[9, 8, 4, 1]);
 
-        // splat_const (const fn — exercise at runtime), default, clone, Debug
+        // splat_const (const fn, exercised at runtime), default, clone, Debug
         const C: VI = VI::splat_const(7);
         assert_eq!(C.as_slice(), &[7; 4]);
         assert_eq!(VI::splat_const(5).as_slice(), &[5; 4]);
@@ -321,7 +321,7 @@ mod wasm {
         // is_power_of_two (UnsignedIntegerVector)
         let u = VU::new([1, 3, 8, 0]);
         let pot = u.is_power_of_two().select(VU::ONE, VU::ZERO).into_array();
-        // 1 and 8 are powers of two; 3 is not. (0 is reported as a power of two — a known quirk.)
+        // 1 and 8 are powers of two, 3 is not. (0 is reported as a power of two, a known quirk.)
         assert_eq!(pot.as_slice(), &[1, 0, 1, 1]);
 
         // create_divider / create_branchfree_divider (NumericVector helpers)
@@ -363,7 +363,7 @@ mod wasm {
             let sq = v.square();
             let src = Vector::<R>::TWO; // explicit non-zero merge source
             let mask = v.cmp_lt(Vector::<R>::splat(num_traits_three::<R>())); // first two lanes true
-            // _c: mask ? v² : v ; _m: mask ? v² : src ; _z: mask ? v² : 0
+            // _c: mask ? v^2 : v ; _m: mask ? v^2 : src ; _z: mask ? v^2 : 0
             let zero = Vector::<R>::ZERO;
             let c = v.square_c(mask);
             let m = v.square_m(src, mask);
@@ -435,7 +435,7 @@ mod wasm {
         let (slo, shi) = Concat::split(wide);
         assert_eq!(rb4(slo), vec![1, 0, 1, 0]);
         assert_eq!(rb4(shi), vec![0, 0, 1, 1]);
-        // extend: low half = lo, high half = false; narrow keeps the low half
+        // extend: low half = lo, high half = false, and narrow keeps the low half
         let ext: MI8 = Extend::extend(lo);
         assert_eq!(rb8(ext), vec![1, 0, 1, 0, 0, 0, 0, 0]);
         assert_eq!(rb4(ext.narrow()), vec![1, 0, 1, 0]);
@@ -532,7 +532,7 @@ mod neon {
         m.as_mut_slice()[1] = 8;
         assert_eq!(m.as_slice(), &[9, 8, 4, 1]);
 
-        // splat_const (const fn — exercise at runtime), default, clone, Debug
+        // splat_const (const fn, exercised at runtime), default, clone, Debug
         const C: VI = VI::splat_const(7);
         assert_eq!(C.as_slice(), &[7; 4]);
         assert_eq!(VI::splat_const(5).as_slice(), &[5; 4]);
@@ -559,7 +559,7 @@ mod neon {
         // is_power_of_two (UnsignedIntegerVector)
         let u = VU::new([1, 3, 8, 0]);
         let pot = u.is_power_of_two().select(VU::ONE, VU::ZERO).into_array();
-        // 1 and 8 are powers of two; 3 is not. (0 is reported as a power of two — a known quirk.)
+        // 1 and 8 are powers of two, 3 is not. (0 is reported as a power of two, a known quirk.)
         assert_eq!(pot.as_slice(), &[1, 0, 1, 1]);
 
         // create_divider / create_branchfree_divider (NumericVector helpers)
@@ -601,7 +601,7 @@ mod neon {
             let sq = v.square();
             let src = Vector::<R>::TWO; // explicit non-zero merge source
             let mask = v.cmp_lt(Vector::<R>::splat(num_traits_three::<R>())); // first two lanes true
-            // _c: mask ? v² : v ; _m: mask ? v² : src ; _z: mask ? v² : 0
+            // _c: mask ? v^2 : v ; _m: mask ? v^2 : src ; _z: mask ? v^2 : 0
             let zero = Vector::<R>::ZERO;
             let c = v.square_c(mask);
             let m = v.square_m(src, mask);
@@ -673,7 +673,7 @@ mod neon {
         let (slo, shi) = Concat::split(wide);
         assert_eq!(rb4(slo), vec![1, 0, 1, 0]);
         assert_eq!(rb4(shi), vec![0, 0, 1, 1]);
-        // extend: low half = lo, high half = false; narrow keeps the low half
+        // extend: low half = lo, high half = false, and narrow keeps the low half
         let ext: MI8 = Extend::extend(lo);
         assert_eq!(rb8(ext), vec![1, 0, 1, 0, 0, 0, 0, 0]);
         assert_eq!(rb4(ext.narrow()), vec![1, 0, 1, 0]);

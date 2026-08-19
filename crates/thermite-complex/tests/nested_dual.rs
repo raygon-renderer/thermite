@@ -1,6 +1,6 @@
-//! `Complex<Dual<V, N>>` -- complex arithmetic whose parts carry derivatives.
+//! `Complex<Dual<V, N>>`, complex arithmetic whose parts carry derivatives.
 //!
-//! Nothing here is written against `Dual`; it is written against `RealValue`,
+//! Nothing here is written against `Dual`. It is written against `RealValue`,
 //! which `Dual` satisfies, so the complex kernels differentiate themselves. For a
 //! holomorphic `f` seeded along the real axis (`dz = 1`) the dual parts are `f'(z)`:
 //!

@@ -1,9 +1,9 @@
 //! [`NativeIsa::prefetch`] across every backend the host can run.
 //!
 //! A prefetch has no architecturally visible effect, so there is nothing to
-//! diff against the scalar oracle; what *is* worth pinning is the contract:
+//! diff against the scalar oracle. What *is* worth pinning is the contract:
 //! every `LOCALITY`/`WRITE` combination must be instantiable on every backend,
-//! and the address is only ever a hint -- null, dangling, unaligned and far
+//! and the address is only ever a hint, so null, dangling, unaligned and far
 //! out-of-bounds pointers must all be accepted without faulting. That last
 //! property is what lets hot loops feed it `base.wrapping_add(i)` with no
 //! bounds check, so it deserves to be executed rather than assumed.

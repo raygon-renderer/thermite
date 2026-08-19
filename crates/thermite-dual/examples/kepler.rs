@@ -25,7 +25,7 @@
 //! cargo run --release -p thermite-dual --example kepler
 //! ```
 //!
-//! # Why bother, when this derivative is easy?
+//! # The point of an easy derivative
 //!
 //! It is: `f'(E) = 1 - e cos(E)`, and the example asserts the dual part matches it
 //! exactly. That check is the point. Verifying automatic differentiation against a

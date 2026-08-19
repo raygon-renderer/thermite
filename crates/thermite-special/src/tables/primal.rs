@@ -7,7 +7,7 @@
 //! a hand-written adapter that rebuilds the table as `Dual` constants with every
 //! augmented field zero.
 //!
-//! # Why this is keyed on the primal, and what that excludes
+//! # Keying on the primal, and what that excludes
 //!
 //! The trait says "this type can supply the Lanczos/asymptotic coefficients _at its own
 //! precision_". That is a claim about the algorithm, not just about storage. A primal

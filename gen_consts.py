@@ -1,7 +1,7 @@
 """
 Single source of truth for every mathematical constant in the workspace.
 
-    python gen_consts.py            # regenerate all four files
+    python gen_consts.py            # regenerate all six files
     python gen_consts.py --check    # exit 1 if anything is stale (CI)
 
 Generates, in full:
@@ -10,6 +10,8 @@ Generates, in full:
     crates/thermite-compensated/src/consts/mod.rs   double-double splits + log tables
     crates/thermite-interval/src/consts/mod.rs      BoundedFloatConsts wiring
     crates/thermite-interval/src/consts_table.rs    exact enclosure pairs
+    crates/thermite-special/src/tables/bernoulli.rs        BernoulliNumbers, f32/f64 tables
+    crates/thermite-compensated/src/consts/bernoulli.rs    the same tables, double-double
 
 The reusable machinery each of those needs lives in a hand-written `macros.rs`
 beside it and is never touched here. Adding a constant is therefore one edit:
@@ -143,6 +145,7 @@ CONSTS = [
     ("FRAC_1_SQRT_5", 1 / mp.sqrt(5), r"`$1/\sqrt{5}$`"),
     ("FRAC_2_PI", 2 / pi, r"`$2/\pi$`"),
     ("FRAC_1_SQRT_PI", 1 / mp.sqrt(pi), r"`$1/\sqrt{\pi}$`"),
+    ("FRAC_1_SQRT_SQRT_PI", 1 / mp.sqrt(mp.sqrt(pi)), r"`$\pi^{-1/4}$`, the normalization of the Hermite functions"),
     ("FRAC_2_SQRT_PI", 2 / mp.sqrt(pi), r"`$2/\sqrt{\pi}$`"),
     ("FRAC_SQRT_PI_2", mp.sqrt(pi) / 2, r"`$\sqrt{\pi}/2$`"),
     ("FRAC_1_SQRT_TAU", 1 / mp.sqrt(2 * pi), r"`$1/\sqrt{2\pi}$`"),
@@ -592,6 +595,8 @@ def gen_compensated():
     p("")
     p("#[macro_use]")
     p("mod macros;")
+    p("#[cfg(feature = \"special\")]")
+    p("mod bernoulli;")
     p("")
     p("use core::marker::PhantomData;")
     p("")
@@ -741,11 +746,256 @@ def gen_interval_table():
 
 # --- driver ------------------------------------------------------------------
 
+# --- 5/6. Bernoulli numbers --------------------------------------------------
+#
+# Unlike everything above, these are not mpmath values: Bernoulli numbers are exact
+# rationals, so they are built with `Fraction` and rounded once, the same way the rest of
+# the file converts.
+#
+# Generation lives here rather than in Rust because the recurrence needs bignums even
+# where the results do not. Boost's tangent-number recurrence overflows any fixed-width
+# integer far earlier than the outputs do: T_20 already needs 39 digits, while reduced
+# B_2n numerators stay inside i128 through B_58. Boost therefore runs that recurrence in
+# floating point with a scale factor to keep it from overflowing; Python just uses
+# bignums and emits the values.
+
+
+def tangent_numbers(m):
+    """`T_1 .. T_m`, exact integers, by the standard triangle recurrence."""
+    t = [0] * (m + 2)
+    t[1] = 1
+    out = [0] * (m + 1)
+    out[1] = 1
+    for i in range(2, m + 1):
+        t[1] *= i - 1
+        for j in range(2, i + 1):
+            t[j] = t[j] * (i - j) + t[j - 1] * (i - j + 2)
+        out[i] = t[i]
+    return out
+
+
+def bernoulli_even(count):
+    """`B_0, B_2, ..., B_{2(count-1)}` as exact Fractions, via the tangent numbers:
+
+        B_2n = (-1)^(n+1) * 2n * T_n / (2^2n * (2^2n - 1))
+
+    Odd-index Bernoulli numbers past B_1 are all zero and B_1 is convention-dependent,
+    so neither is generated - see the emitted module docs."""
+    t = tangent_numbers(count)
+    out = [Fraction(1)]
+    for i in range(1, count):
+        p2 = 1 << (2 * i)
+        b = Fraction(2 * i * t[i], p2 * (p2 - 1))
+        out.append(b if i % 2 else -b)
+    return out
+
+
+def finite_in(fmt, frac):
+    """`frac` rounded to `fmt`, or None if it rounds to infinity."""
+    try:
+        v = FMT[fmt][1](frac)
+    except (OverflowError, ValueError):
+        return None
+    return v if abs(v) != float("inf") else None
+
+
+_BERNOULLI = None
+
+
+def bernoulli_table(fmt):
+    """`B_2, B_4, ...` - every `B_2n` with `n >= 1` that is finite in `fmt`, as exact
+    Fractions. `|B_2n|` grows factorially, so this terminates: the last finite one is
+    B_64 for f32 and B_258 for f64.
+
+    B_0 = 1 is skipped along with B_1. B_0 and B_1 co-occur in practice - a formula that
+    indexes the sequence from 0 (Faulhaber, the binomial recurrence, the Bernoulli
+    polynomials) reaches B_1 at k = 1, and a formula that skips B_1 (Euler-Maclaurin, the
+    asymptotic series, the zeta identity) starts at B_2 and never wanted B_0 either. So
+    anything needing B_0 already special-cases the head of the sequence for B_1's sake."""
+    global _BERNOULLI
+    if _BERNOULLI is None:
+        # 140 entries reaches B_278, comfortably past f64's last finite B_258.
+        _BERNOULLI = bernoulli_even(140)
+    out = []
+    for fr in _BERNOULLI[1:]:
+        if finite_in(fmt, fr) is None:
+            break
+        out.append(fr)
+    return out
+
+
+def rust_float_literal(v, fmt):
+    """Shortest decimal literal that parses back to exactly `v` in `fmt`.
+
+    Rust parses float literals with correct rounding, so a shortest round-tripping
+    decimal is exact. Hex is reserved for the double-double splits, where it is what
+    keeps the two limbs unambiguous."""
+    if fmt == "f64":
+        s = repr(v)
+    else:
+        s = next(
+            f"{v:.{p}g}"
+            for p in range(1, 18)
+            if struct.unpack("<f", struct.pack("<f", float(f"{v:.{p}g}")))[0] == v
+        )
+    if "." not in s and "e" not in s and "E" not in s:
+        s += ".0"
+    return s
+
+
+BERNOULLI_MODULE_DOC = r"""//! Bernoulli numbers `$B_{2n}$`, as one static table per float format.
+//!
+//! **The tables start at `$B_2$`**, so entry `i` is `$B_{2i+2}$`. They are even-index
+//! only: every odd-index Bernoulli number past `$B_1$` is zero, so storing them would
+//! double the table for nothing.
+//!
+//! ```
+//! use thermite_special::tables::bernoulli::BernoulliNumbers;
+//!
+//! assert_eq!(f64::B2N[0], 1.0 / 6.0);           // B_2
+//! assert_eq!(f64::B2N[2], 1.0 / 42.0);          // B_6
+//! ```
+//!
+//! # `$B_0$` and `$B_1$` are deliberately absent
+//!
+//! `$B_1$` is the single value the two competing conventions disagree on: `$-1/2$` if
+//! you take the generating function to be `$x/(e^x - 1)$`, `$+1/2$` if you take it to be
+//! `$x/(1 - e^{-x})$` (Knuth has argued in print for the latter). Every _other_ Bernoulli
+//! number is identical under both, so omitting `$B_1$` makes this table convention-free
+//! rather than convention-bearing.
+//!
+//! `$B_0 = 1$` is not contested, but it goes with it, because the two co-occur. A formula
+//! that indexes the sequence from zero - Faulhaber's sum of powers, the binomial
+//! recurrence, the Bernoulli polynomials - reaches `$B_1$` at `$k = 1$` and therefore
+//! already special-cases the head of the sequence. A formula that skips `$B_1$` -
+//! Euler-Maclaurin, the `$\ln\Gamma$` / `$\psi$` asymptotic series, the `$\zeta(2n)$`
+//! identity - starts at `$B_2$` and never wanted `$B_0$` either. Nothing sits in the gap,
+//! so the table holds exactly the values that need a table.
+//!
+//! Callers who want the head should let their heart guide them on `$B_1 = \pm\tfrac{1}{2}$`
+//! and write `$B_0 = 1$` beside it.
+//!
+//! # The table ends where the format does
+//!
+//! `$|B_{2n}|$` grows factorially,
+//!
+//! ```math
+//! |B_{2n}| = \frac{2\,(2n)!}{(2\pi)^{2n}}\,\zeta(2n)
+//!     \sim 4\sqrt{\pi n}\left(\frac{n}{\pi e}\right)^{2n}
+//! ```
+//!
+//! with consecutive terms growing by roughly `$n^2/\pi^2$`, so each format has a _last_
+//! representable Bernoulli number and nothing beyond it to return.
+//!
+//! The tables stop exactly there, which means **`B2N.len()` is the overflow boundary**:
+//! `B2N.get(i)` is `None` precisely where the value would be infinite. There is no
+//! overflow policy, no error type and no limit constant, because the slice length
+//! already carries that information.
+//!
+//! There is no underflow at the other end - `$|B_{2n}|$` bottoms out at
+//! `$B_6 = 1/42$` and grows monotonically after it, so no entry is denormal.
+//!
+//! | format | entries | first | last finite | first to overflow |
+//! |---|---|---|---|---|
+//! | `f32` | 32 | `$B_2$` | `$B_{64}$` | `$B_{66}$` |
+//! | `f64` | 129 | `$B_2$` | `$B_{258}$` | `$B_{260}$` |
+//!
+//! `thermite-compensated` implements the same trait for `Compensated<f32>` and
+//! `Compensated<f64>` under its `special` feature. Those tables are the SAME lengths: a
+//! double-double carries twice the mantissa but the same exponent range, so widening the
+//! type buys precision, not reach."""
+
+
+def gen_special_bernoulli():
+    w = []
+    p = w.append
+    p(GENERATED)
+    p(BERNOULLI_MODULE_DOC)
+    p("")
+    p("use thermite::element::FloatElement;")
+    p("")
+    p("/// Static Bernoulli number tables for a float format.")
+    p("///")
+    p("/// Implemented for `f32` and `f64` here, and for `Compensated<f32>` /")
+    p("/// `Compensated<f64>` by `thermite-compensated` under its `special` feature.")
+    p("pub trait BernoulliNumbers: FloatElement {")
+    p(r"    /// `$B_2, B_4, B_6, \ldots$` - every even-index Bernoulli number finite in `Self`,")
+    p(r"    /// starting at `$B_2$`, so that entry `i` is `$B_{2i+2}$`.")
+    p("    ///")
+    p(r"    /// See the [module docs](self) for why the table ends where it does, and why")
+    p(r"    /// `$B_0$` and `$B_1$` are not in it.")
+    p("    const B2N: &'static [Self];")
+    p("}")
+    p("")
+    p(r"/// `$B_{2n}$`, or `None` when it is not tabulated: either `$n = 0$`, or `$B_{2n}$`")
+    p("/// overflows `E`.")
+    p("///")
+    p(r"/// The argument is `n` as in `$B_{2n}$`, following the mathematics rather than the")
+    p(r"/// slice index, so `bernoulli_b2n::<f64>(1)` is `$B_2$` - the first entry. Reach for")
+    p(r"/// [`BernoulliNumbers::B2N`] directly when iterating, where entry `i` is `$B_{2i+2}$`.")
+    p("#[inline]")
+    p("#[must_use]")
+    p("pub fn bernoulli_b2n<E: BernoulliNumbers>(n: usize) -> Option<E> {")
+    p("    E::B2N.get(n.checked_sub(1)?).copied()")
+    p("}")
+    for fmt in ("f32", "f64"):
+        table = bernoulli_table(fmt)
+        nearest = FMT[fmt][1]
+        p("")
+        p(f"impl BernoulliNumbers for {fmt} {{")
+        p("    #[rustfmt::skip]")
+        p(f"    const B2N: &'static [{fmt}] = &[")
+        for k, fr in enumerate(table):
+            lit = rust_float_literal(nearest(fr), fmt)
+            p(f"        {lit},  // B_{2 * (k + 1)}")
+        p("    ];")
+        p("}")
+    p("")
+    return "\n".join(w)
+
+
+def gen_compensated_bernoulli():
+    w = []
+    p = w.append
+    p(GENERATED)
+    p("//! Bernoulli numbers at double-double precision.")
+    p("//!")
+    p("//! The `thermite-special` [`BernoulliNumbers`] tables, split into `(value, error)`")
+    p(r"//! limbs. Entry `i` is `$B_{2i+2}$`, same as there.")
+    p("//!")
+    p(r"//! The lengths match the underlying format's exactly: a double-double carries twice")
+    p(r"//! the mantissa but the SAME exponent range, so `Compensated<f64>` runs out at")
+    p(r"//! `$B_{260}$` just as `f64` does. Widening buys precision, not reach.")
+    p("")
+    p("use thermite_special::tables::bernoulli::BernoulliNumbers;")
+    p("")
+    p("use crate::Compensated;")
+    for fmt in ("f32", "f64"):
+        table = bernoulli_table(fmt)
+        nearest = FMT[fmt][1]
+        p("")
+        p(f"impl BernoulliNumbers for Compensated<{fmt}> {{")
+        p("    #[rustfmt::skip]")
+        p(f"    const B2N: &'static [Compensated<{fmt}>] = &[")
+        for k, fr in enumerate(table):
+            hi, lo = split(fr, nearest)
+            p(
+                f"        Compensated {{ value: hexf::hex{fmt}!(\"{hi.hex()}\"),"
+                f" error: hexf::hex{fmt}!(\"{lo.hex()}\") }},  // B_{2 * (k + 1)}"
+            )
+        p("    ];")
+        p("}")
+    p("")
+    return "\n".join(w)
+
+
 OUTPUTS = [
     ("crates/thermite/src/math/consts/mod.rs", gen_thermite),
     ("crates/thermite-compensated/src/consts/mod.rs", gen_compensated),
     ("crates/thermite-interval/src/consts/mod.rs", gen_interval_consts),
     ("crates/thermite-interval/src/consts_table.rs", gen_interval_table),
+    ("crates/thermite-special/src/tables/bernoulli.rs", gen_special_bernoulli),
+    ("crates/thermite-compensated/src/consts/bernoulli.rs", gen_compensated_bernoulli),
 ]
 
 

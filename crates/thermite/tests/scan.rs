@@ -5,7 +5,7 @@
 //! against the obvious definition rather than against itself. Run across the scalar
 //! backend and every native backend for the target, which is what makes this a real
 //! test of the ladder: the scalar backend has `HAS_NATIVE_ALIGN == false` and so takes
-//! the sequential fallback, while v1/v2/v3/wasm/neon take the ladder - the two must
+//! the sequential fallback, while v1/v2/v3/wasm/neon take the ladder, and the two must
 //! agree.
 //!
 //! Values are small exact integers (also when the element type is float) because the
@@ -165,7 +165,7 @@ macro_rules! suite {
             }
 
             /// A scan of one lane is the identity, and a scan of a constant vector is
-            /// that constant (for min/max) - cheap invariants that catch an off-by-one
+            /// that constant (for min/max), cheap invariants that catch an off-by-one
             /// in the ladder's stage count.
             #[test]
             fn degenerate() {

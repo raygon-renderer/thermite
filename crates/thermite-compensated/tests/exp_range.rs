@@ -1,21 +1,20 @@
 //! `exp` and `ln` at the ends of the exponent range.
 //!
-//! Regression: `exp`'s **low word** was garbage for large negative arguments - the value
-//! was right but the correction was 300 orders too large. `exp_internal` scales both words
+//! The hazard is `exp`'s **low word** at large negative arguments, where the value can be
+//! right while the correction is 300 orders too large. `exp_internal` scales both words
 //! with `ldexp` under `CheckOverflow<P, false>`, which is safe for the value (overflow is
 //! pre-checked) but not for the low word, which sits ~53 binades lower and leaves the
-//! representable range first. Unclamped, `ldexp` wrote a negative biased exponent straight
+//! representable range first. Unclamped, `ldexp` writes a negative biased exponent straight
 //! into the exponent field.
 //!
-//! That poisoned everything refining through `exp`: `ln(1e-300)` came back off by exactly
+//! That poisons everything refining through `exp`: `ln(1e-300)` comes back off by exactly
 //! 2.0, because Halley's `(x - e_y)/(x + e_y)` collapses to -1 when `e_y` is garbage.
 //!
 //! Scaling the low word under `PreserveDenormals` is what lets the correction survive
-//! into the subnormal range instead of being flushed; that policy was commented out in
-//! thermite's `math::policy` and is resurrected for this.
+//! into the subnormal range instead of being flushed.
 //!
 //! `ln(1e300)` is deliberately absent. It fails on backends without true FMA, where
-//! `two_prod` falls back to Dekker splitting and `2e300 * (2^27+1)` overflows - a separate
+//! `two_prod` falls back to Dekker splitting and `2e300 * (2^27+1)` overflows, a separate
 //! limitation of the fallback path, above `MAX / 2^27`. With FMA it is correct.
 
 use thermite::math::TranscendentalMath;
@@ -71,13 +70,13 @@ fn exp_low_word_stays_a_valid_correction() {
 }
 
 /// Below roughly 2e-292 the low word itself is subnormal, so it carries fewer than the
-/// usual 53 bits - `exp(-700)`'s correction is 8.4979e-322 against a true 8.4485e-322,
+/// usual 53 bits: `exp(-700)`'s correction is 8.4979e-322 against a true 8.4485e-322,
 /// about 0.6% of a term that is already 2^-53 of the value.
 ///
 /// That is inherent to the format, not to the implementation: it is what gradual underflow
-/// leaves. Scaling the low word under `PreserveDenormals` is what gets it at all - flushing
-/// to zero (the state before that policy was resurrected) cost 2^-53 outright, so this is
-/// still two orders better than the fallback.
+/// leaves. Scaling the low word under `PreserveDenormals` is what gets it at all, since
+/// flushing to zero costs 2^-53 outright, so this is still two orders better than the
+/// fallback.
 const SUBNORMAL_LOW: f64 = 1e-18;
 /// `ln` inherits the same ceiling one step removed, but lands far inside it.
 const LN_SUBNORMAL: f64 = 1e-26;
@@ -95,7 +94,7 @@ fn exp_matches_mpmath_across_the_range() {
 
 #[test]
 fn ln_matches_mpmath_across_the_range() {
-    // 1e-300 is the one that came back off by exactly 2.0. It is 1.2e-27 now - the same
+    // 1e-300 is the one that goes off by exactly 2.0 unguarded. It holds 1.2e-27, the same
     // subnormal ceiling one step removed: `ln` refines through `exp`, and near the
     // underflow floor `exp`'s own low word has only ~26 bits, so there is less to refine
     // against. Everything above the floor is full double-double.

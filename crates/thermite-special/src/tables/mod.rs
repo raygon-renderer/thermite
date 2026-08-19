@@ -23,3 +23,4 @@
 pub mod gamma;
 pub mod primal;
 pub mod weideman;
+pub mod bernoulli;
