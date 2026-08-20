@@ -736,9 +736,9 @@ fn erfc_on_the_imaginary_axis_has_real_part_one() {
 
 /// `erfc` at every precision tier, including the wedge.
 ///
-/// The `w`-based branch inherits its tier's `N`, so the low policies degrade in a way
-/// the continued fraction it replaced did not. This pins that they still degrade
-/// *gracefully* - `UltraPerformance` is N=8 (3e-4), not garbage.
+/// The `w`-based branch inherits its tier's `N`, so the low policies degrade in a way a
+/// continued fraction does not. This pins that they still degrade *gracefully*:
+/// `UltraPerformance` is N=8 (3e-4), not garbage.
 #[test]
 fn erfc_degrades_gracefully_across_policies() {
     use thermite::math::policy::policies::{HighPerformance, Performance, Precision, UltraPerformance};

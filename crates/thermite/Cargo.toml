@@ -28,10 +28,23 @@ bitvec = ["dep:bitvec", "generic-array/bitvec"]
 
 document_registers = [] # Whether to document individual register abstractions
 
-# Disable Fast FMA emulation to ensure correctness, instead using scalar libm fma,
-# which is very, very slow. Only set this feature if you need bitwise identical results with
-# scalar fma implementations. The emulated Fast FMA will be accurate, but not bitwise identical,
-# using compensated arithmetic.
+# Disable the emulated FMA on backends without hardware FMA, using the exact scalar
+# `libm::fma` instead - which is very, very slow. Set this only if you need bitwise
+# identical results with a true FMA.
+#
+# The emulated FMA is close but NOT bitwise identical. Measured against `f64::mul_add` /
+# `f32::mul_add` on the x86_v1 (SSE2) backend, over uniformly random bit patterns:
+#
+#   f64 (Dekker/Veltkamp compensated split): 81 of 13,977,417 differ, about 1 in 173,000.
+#     Worst relative error 2.0e-15. Same-sign normal results are never more than 1 ulp out;
+#     19 of the 81 are results in the subnormal/zero range, where the split underflows.
+#   f32 (widen to f64, operate, narrow): 23 of 69,088,068 differ, about 1 in 3,000,000,
+#     never more than 1 ulp. This one double-rounds - the f64 add rounds, then the narrowing
+#     rounds again - which a round-to-odd intermediate would fix, though it has not been.
+#
+# So the f64 path is the one that actually motivates this feature; it disagrees roughly 17x
+# more often than the f32 path. Neither is affected on hardware WITH FMA, where both paths
+# are bypassed entirely.
 disable_fast_fma = []
 
 # Disable all static dispatch on the SIMD ISA, instead opting for an #[inline(always)] signatures.
@@ -87,7 +100,21 @@ strict_ieee754 = ["preserve_denormals", "disable_fast_fma"]
 # `algebraic-scalar` works on stable with no code change.
 algebraic-scalar = []
 
-std = ["num-traits/std"] # Also enables fmt functionality for panicking functions
+# Emit the scalar rounding fallbacks (`element::float::arch::soft`) out of line instead
+# of inlining them at every call site. They are small integer-masking routines, so
+# inlining lets them constant-fold and CSE - `floor(x) + floor(x)` becomes one body plus
+# an add - at the cost of code size wherever they are reached (a `no_std` build whose
+# baseline lacks SSE4.1, or a target with no explicit rung at all). Enable this to trade
+# that back for size. No effect where a rung above `soft` supplies the operation.
+outline_scalar_math = []
+
+# Also enables fmt functionality for panicking functions. Additionally backs the last
+# rung of the scalar float ladder (`element::float::arch`) with std's methods instead of
+# `libm`: they lower to generic LLVM intrinsics, which ARE selected with the enclosing
+# function's target features, so scalar math inside a `#[dispatch]` trampoline can still
+# reach one instruction. Capability consts like `HAS_TRUE_FMA` stay baseline-gated
+# regardless - std cannot promise which side of that it will land on.
+std = ["num-traits/std"]
 partial-ord = []         # Implements PartialOrd for Vector, only if all lanes are that order
 
 # NOTE: there is deliberately no `neon` feature. NEON/AdvSIMD is mandatory in
@@ -133,6 +160,8 @@ avx512-tier4 = ["avx512-tier3"] # RESERVED: cutting-edge AVX512 CPUs (Sapphire R
 spirv = ["nightly"]
 
 # Nightly features
+# Takes the top rung of the scalar float ladder (`core::intrinsics`), which supersedes
+# the `std` rung entirely - same lowering, no std required.
 nightly = []
 # std_simd = ["nightly", "std"] # WIP
 

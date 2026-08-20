@@ -36,6 +36,11 @@ SKILL.md-only attempt compiled, passed tests, and was wrong or slow anyway.
 | the full method list for a trait | [vector-api.md](references/vector-api.md) |
 | `thermite-special` / `-sort` / `-sdf` / `-geometry` / `-ffi` | [special.md](references/special.md) / [sort.md](references/sort.md) / [sdf.md](references/sdf.md) / [geometry.md](references/geometry.md) / [ffi.md](references/ffi.md) |
 
+You may not know which to read at first. Read one the moment any of these happen:
+you are about to guess at a method name or signature; a compile error names a
+trait you did not write; you are reaching for `#[dispatch]`, a masked variant, or
+a policy tier; you have written 30+ lines without opening one.
+
 ## Add to a project
 
 On crates.io at `0.2.0`. Add `thermite = "0.2.0"` (its proc-macro crate
@@ -64,7 +69,7 @@ Defaults: `document_registers`, `bitvec`, `avx2-f16c`, `avx2-pclmul`.
 | `strict_ieee754` | off | Spec-exact denormals/NaN/min-max; implies `preserve_denormals`+`disable_fast_fma`. Much slower. |
 | `preserve_denormals` | off | Keep denormals (required for strict IEEE-754); slower on denormal-heavy data. |
 | `ignore_denormals` | off | Flush denormals by default. |
-| `disable_fast_fma` | off | Exact but very slow scalar `libm::fma` instead of accurate emulated FMA on non-FMA backends. |
+| `disable_fast_fma` | off | Exact but very slow scalar `libm::fma` instead of the emulated FMA on non-FMA backends. The emulation is close, not bit-identical (~1 in 173k for f64). |
 | `algebraic-scalar` | off | Scalar (1-lane) backend uses LLVM `algebraic_*` ops so loops written against it can autovectorize. Costs exact cancellation: `thermite-compensated` rejects it at compile time. `strict_ieee754` overrides it. Needs `nightly` until 1.98. |
 | `disable_dispatch` | off | Replace runtime dispatch with `#[inline(always)]`. Bloats/slows unless all inlines. Advanced. |
 | `nightly` | off | Nightly-only paths (requires nightly compiler). |
@@ -192,7 +197,7 @@ separate library step.
 - **Bare `f32`/`f64` don't impl `FloatVector`.** Wrap: `x.as_vector()` (`Element` method, in the prelude) / `Vector::<f64>::splat(x)` / `Vector(x)`, or use `ScalarMath` `scalar_`-prefixed methods (`x.scalar_sin()`).
 - **Masked variants take the mask FIRST**: `a.add_c(mask, b)`, `v.sqrt_c(mask)`, `a.add_m(src, mask, b)` (merge: `src` then `mask`). Old `add_c(b, mask)` order is wrong.
 - **Math trait names are `use`d anonymously by the prelude** (`as _`): methods work, but to write `<V: TranscendentalMath>` you must `use thermite::math::TranscendentalMath;`.
-- **Prefer `mul_adde` (estimating FMA) over `mul_add` for speed.** On non-FMA backends `mul_add` lowers to vectorized emulated FMA (single-rounding-accurate, still SIMD) by default -- only becomes slow scalar `libm::fma` under `disable_fast_fma`/`strict_ieee754`. So `mul_add` is a valid accuracy choice.
+- **Prefer `mul_adde` (estimating FMA) over `mul_add` for speed.** On non-FMA backends `mul_add` lowers to vectorized emulated FMA (FMA-quality, still SIMD, but *not* bit-identical to a true FMA -- ~1 in 173k differ for f64, worst relative error 2.0e-15) by default -- only becomes slow scalar `libm::fma` under `disable_fast_fma`/`strict_ieee754`. So `mul_add` is a valid accuracy choice, just not an exact one.
 - **`>>` is LOGICAL even on signed vectors.** Use `srai`/`sra`/`srav` for sign-filling shifts.
 - **`bitandnot` differs by layer**: `a.bitandnot(b)` on `Vector`/`Mask` = `a & !b`, but the register layer `R::bitandnot(lhs, rhs)` = `!lhs & rhs` (x86 convention) -- the vector impls swap operands when delegating.
 - **`V::load` is an ALIGNED load.** Loading a table from a plain `Box`/`Vec` faults nondeterministically; use `load_unaligned` or an aligned container.

@@ -102,7 +102,7 @@ mod x86 {
         check_all_m!("x86_v3 Dual<f32x8, 2>", f32x8, 2);
         check_all_m!("x86_v3 Dual<f32x8, 3>", f32x8, 3);
         check_all_m!("x86_v3 Dual<f32x8, 4>", f32x8, 4);
-        // f32x16 is an ArrayRegister on AVX2 - covers its per-chunk grouped override.
+        // f32x16 is an ArrayRegister on AVX2, so this covers its per-chunk grouped override.
         check_all_m!("x86_v3 Dual<f32x16, 2>", f32x16, 2);
     }
 

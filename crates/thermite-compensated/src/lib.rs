@@ -31,7 +31,6 @@ const _: () = assert!(
 pub mod consts;
 pub mod math;
 
-
 #[cfg(feature = "special")]
 pub mod special;
 pub mod specialized;
@@ -51,6 +50,21 @@ pub trait ScalarValue:
 {
     /// for Veltkamp's splitting
     const SPLITTER: Self;
+
+    /// `|a|` above this overflows `a * SPLITTER`, so [`rebalance_for_split`] must bring
+    /// it down first.
+    ///
+    /// Need not be a power of two, and is not one for `f64`: that value is the largest
+    /// double strictly below `2^996`, which errs in the safe direction.
+    ///
+    /// [`rebalance_for_split`]: ScalarValue::rebalance_for_split
+    const SPLIT_THRESH: Self;
+
+    /// Exact power of two to scale a large operand down by before splitting.
+    const SPLIT_DOWN: Self;
+
+    /// Exact reciprocal of [`ScalarValue::SPLIT_DOWN`], also a power of two.
+    const SPLIT_UP: Self;
 
     /// The value zero. Named this way to avoid conflicts.
     const SCALAR_ZERO: Self;
@@ -97,6 +111,61 @@ pub trait ScalarValue:
         (s, e)
     }
 
+    /// Veltkamp's splitting: `a == hi + lo` exactly, with each part narrow enough that
+    /// products of the parts are themselves exact.
+    ///
+    /// `a * SPLITTER` overflows once `|a|` passes `MAX / SPLITTER` - 8.3056e34 for f32,
+    /// 1.3394e300 for f64 - so callers must bring `a` under that first. [`two_prod`] does
+    /// it with [`rebalance_for_split`].
+    ///
+    /// [`SPLIT_THRESH`](ScalarValue::SPLIT_THRESH) sits at or below that point rather
+    /// than exactly on it: for f32 it is `2^115`, comfortably under, because the obvious
+    /// `2^116` is 8.3077e34 and so lands just *above* the real limit. That near miss was
+    /// a live bug.
+    ///
+    /// [`two_prod`]: ScalarValue::two_prod
+    /// [`rebalance_for_split`]: ScalarValue::rebalance_for_split
+    #[inline(always)]
+    fn veltkamp_split(a: Self) -> (Self, Self) {
+        let c = a * Self::SPLITTER;
+        let hi = c - (c - a);
+        (hi, a - hi)
+    }
+
+    /// Move an exact power of two from whichever operand is large enough to overflow
+    /// [`veltkamp_split`] into the other one, leaving `a * b` unchanged.
+    ///
+    /// Scaling the split's *output* back up does not work: for `a` near `MAX` the split
+    /// rounds `hi` up past `MAX / scale`, so scaling back overflows anyway. Rebalancing
+    /// the inputs against each other never has to scale anything back.
+    ///
+    /// The receiving operand cannot overflow. If `|a| > THRESH` and `a * b` is finite,
+    /// then `|b| < MAX / |a| <= MAX / THRESH`, which is exactly the scale factor - so
+    /// `b * scale` stays in range. When both operands are that large the true product is
+    /// already infinite, and an infinite result is the correct answer.
+    ///
+    /// # Residual limit
+    ///
+    /// One case remains, and it is inherent to Dekker's `two_prod` rather than to the
+    /// guard: the split rounds `hi` up by up to a relative `2^-53`, so `a_hi * b_hi`
+    /// slightly exceeds `a * b`. If `a * b` is within that relative distance of `MAX`,
+    /// that product overflows and the error term comes back infinite. The value is still
+    /// correct. `two_prod(MAX, 0.5)` is fine; only `two_prod(MAX, 1.0)` is affected.
+    ///
+    /// # Implementing
+    ///
+    /// Required rather than defaulted, because a default that ignored
+    /// [`SPLIT_THRESH`](ScalarValue::SPLIT_THRESH) would silently make those constants
+    /// dead and hand the implementor a `two_prod` that returns NaN on large operands. It
+    /// cannot be given a working default either: a generic body would need a lane-wise
+    /// comparison and select, which this trait's bounds do not provide.
+    ///
+    /// A scalar implementation branches; a vector one selects per lane. See the `f64` and
+    /// `Vector<R>` implementations below.
+    ///
+    /// [`veltkamp_split`]: ScalarValue::veltkamp_split
+    fn rebalance_for_split(a: Self, b: Self) -> (Self, Self);
+
     #[inline(always)]
     fn two_prod(a: Self, b: Self) -> (Self, Self) {
         // fast path if we have FMA available
@@ -107,17 +176,11 @@ pub trait ScalarValue:
             return (p, e);
         }
 
-        let splitter = Self::SPLITTER;
-
-        // Split a
-        let c_a = a * splitter;
-        let a_hi = c_a - (c_a - a);
-        let a_lo = a - a_hi;
-
-        // Split b
-        let c_b = b * splitter;
-        let b_hi = c_b - (c_b - b);
-        let b_lo = b - b_hi;
+        // Guard the split against overflow. `p` uses the ORIGINAL operands; the rebalance
+        // preserves the product exactly, so the split parts describe the same value.
+        let (sa, sb) = Self::rebalance_for_split(a, b);
+        let (a_hi, a_lo) = Self::veltkamp_split(sa);
+        let (b_hi, b_lo) = Self::veltkamp_split(sb);
 
         // exact product
         let p = a * b;
@@ -137,12 +200,10 @@ pub trait ScalarValue:
             return (p, e);
         }
 
-        let splitter = Self::SPLITTER;
-
-        // Split a
-        let c_a = a * splitter;
-        let a_hi = c_a - (c_a - a);
-        let a_lo = a - a_hi;
+        // No overflow guard here: `veltkamp_split` only overflows above `MAX / SPLITTER`,
+        // and squaring anything that large already overflows `p` itself, so an infinite
+        // result is the correct answer.
+        let (a_hi, a_lo) = Self::veltkamp_split(a);
 
         // exact product
         let p = a * a;
@@ -156,9 +217,31 @@ pub trait ScalarValue:
 
 impl ScalarValue for f32 {
     const SPLITTER: Self = ((1u64 << 12) + 1) as f32; // 2^12 + 1
+    const SPLIT_THRESH: Self = 4.153_837_5e34; // 2^115
+    const SPLIT_DOWN: Self = 1.220_703_1e-4; // 2^-13
+    const SPLIT_UP: Self = 8192.0; // 2^13
     const SCALAR_ZERO: Self = 0.0;
     const SCALAR_ONE: Self = 1.0;
     const MAX_ERFINV_SERIES: Self = 0.75;
+
+    #[inline(always)]
+    #[allow(
+        clippy::manual_range_contains,
+        reason = "RangeInclusive::contains is false for NaN, so the negated form would send NaN down the rebalance path; the explicit comparison leaves it on the fast path"
+    )]
+    fn rebalance_for_split(a: Self, b: Self) -> (Self, Self) {
+        const THRESH: f32 = <f32 as ScalarValue>::SPLIT_THRESH;
+        const DOWN: f32 = <f32 as ScalarValue>::SPLIT_DOWN;
+        const UP: f32 = <f32 as ScalarValue>::SPLIT_UP;
+
+        if a > THRESH || a < -THRESH {
+            (a * DOWN, b * UP)
+        } else if b > THRESH || b < -THRESH {
+            (a * UP, b * DOWN)
+        } else {
+            (a, b)
+        }
+    }
 
     #[inline(always)]
     fn scalar_trunc(self) -> Self {
@@ -171,9 +254,31 @@ impl ScalarValue for f32 {
 
 impl ScalarValue for f64 {
     const SPLITTER: Self = ((1u64 << 27) + 1) as f64; // 2^27 + 1
+    const SPLIT_THRESH: Self = 6.69692879491417e299; // largest f64 below 2^996
+    const SPLIT_DOWN: Self = 3.725_290_298_461_914e-9; // 2^-28
+    const SPLIT_UP: Self = 268435456.0; // 2^28
     const SCALAR_ZERO: Self = 0.0;
     const SCALAR_ONE: Self = 1.0;
     const MAX_ERFINV_SERIES: Self = 0.545;
+
+    #[inline(always)]
+    #[allow(
+        clippy::manual_range_contains,
+        reason = "RangeInclusive::contains is false for NaN, so the negated form would send NaN down the rebalance path; the explicit comparison leaves it on the fast path"
+    )]
+    fn rebalance_for_split(a: Self, b: Self) -> (Self, Self) {
+        const THRESH: f64 = <f64 as ScalarValue>::SPLIT_THRESH;
+        const DOWN: f64 = <f64 as ScalarValue>::SPLIT_DOWN;
+        const UP: f64 = <f64 as ScalarValue>::SPLIT_UP;
+
+        if a > THRESH || a < -THRESH {
+            (a * DOWN, b * UP)
+        } else if b > THRESH || b < -THRESH {
+            (a * UP, b * DOWN)
+        } else {
+            (a, b)
+        }
+    }
 
     #[inline(always)]
     fn scalar_trunc(self) -> Self {
@@ -196,6 +301,55 @@ impl<E: ScalarValue> SplatConst<E> for SplitterValue<E> {
     const VALUE: E = <E as ScalarValue>::SPLITTER;
 }
 
+// The guard rests on three properties that the decimal literals on the impls do not make
+// obvious, so they are pinned at compile time.
+//
+// Note the thresholds are NOT themselves powers of two, and need not be: the f64 value is
+// the largest double strictly below 2^996 (the same literal Bailey's QD uses), which is
+// conservative in the right direction. What matters is only that splitting anything at or
+// below the threshold cannot overflow. An earlier f32 threshold of 2^116 passed casual
+// testing but failed exactly this check - `2^116 * 4097` exceeds `f32::MAX`.
+const _: () = {
+    // 1. The scale factors are exact reciprocals, so rebalancing preserves the product.
+    assert!(<f32 as ScalarValue>::SPLIT_DOWN * <f32 as ScalarValue>::SPLIT_UP == 1.0);
+    assert!(<f64 as ScalarValue>::SPLIT_DOWN * <f64 as ScalarValue>::SPLIT_UP == 1.0);
+
+    // 2. Both are powers of two, so scaling is lossless. A power of two has an all-zero
+    //    significand field.
+    assert!(<f32 as ScalarValue>::SPLIT_DOWN.to_bits() & ((1 << 23) - 1) == 0);
+    assert!(<f64 as ScalarValue>::SPLIT_DOWN.to_bits() & ((1 << 52) - 1) == 0);
+    assert!(<f32 as ScalarValue>::SPLIT_UP.to_bits() & ((1 << 23) - 1) == 0);
+    assert!(<f64 as ScalarValue>::SPLIT_UP.to_bits() & ((1 << 52) - 1) == 0);
+
+    // 3. Splitting is safe on both sides of the branch: at the threshold unscaled, and at
+    //    the largest finite value once scaled down.
+    assert!(<f32 as ScalarValue>::SPLIT_THRESH * <f32 as ScalarValue>::SPLITTER < f32::MAX);
+    assert!(<f64 as ScalarValue>::SPLIT_THRESH * <f64 as ScalarValue>::SPLITTER < f64::MAX);
+    assert!(f32::MAX * <f32 as ScalarValue>::SPLIT_DOWN * <f32 as ScalarValue>::SPLITTER < f32::MAX);
+    assert!(f64::MAX * <f64 as ScalarValue>::SPLIT_DOWN * <f64 as ScalarValue>::SPLITTER < f64::MAX);
+};
+
+/// `SplatConst` carrier for [`ScalarValue::SPLIT_THRESH`]. See [`SplitterValue`].
+struct SplitThreshValue<E>(core::marker::PhantomData<E>);
+
+impl<E: ScalarValue> SplatConst<E> for SplitThreshValue<E> {
+    const VALUE: E = <E as ScalarValue>::SPLIT_THRESH;
+}
+
+/// `SplatConst` carrier for [`ScalarValue::SPLIT_DOWN`]. See [`SplitterValue`].
+struct SplitDownValue<E>(core::marker::PhantomData<E>);
+
+impl<E: ScalarValue> SplatConst<E> for SplitDownValue<E> {
+    const VALUE: E = <E as ScalarValue>::SPLIT_DOWN;
+}
+
+/// `SplatConst` carrier for [`ScalarValue::SPLIT_UP`]. See [`SplitterValue`].
+struct SplitUpValue<E>(core::marker::PhantomData<E>);
+
+impl<E: ScalarValue> SplatConst<E> for SplitUpValue<E> {
+    const VALUE: E = <E as ScalarValue>::SPLIT_UP;
+}
+
 /// `SplatConst` carrier for [`ScalarValue::MAX_ERFINV_SERIES`]. See [`SplitterValue`].
 struct MaxErfinvSeriesValue<E>(core::marker::PhantomData<E>);
 
@@ -203,14 +357,57 @@ impl<E: ScalarValue> SplatConst<E> for MaxErfinvSeriesValue<E> {
     const VALUE: E = <E as ScalarValue>::MAX_ERFINV_SERIES;
 }
 
+/// Cold half of [`ScalarValue::rebalance_for_split`] for vectors.
+///
+/// Outlined so the hot path neither blends nor spills. The rebalance is per lane, so one
+/// huge value cannot disturb its neighbours, and both factors are exact powers of two, so
+/// lanes under the threshold come out bit-identical to the unguarded path.
+#[cold]
+#[inline(never)]
+fn rebalance_split_cold<R: thermite::register::FloatRegister>(a: Vector<R>, b: Vector<R>) -> (Vector<R>, Vector<R>)
+where
+    R::Element: ScalarValue,
+{
+    let thresh = <Vector<R> as ScalarValue>::SPLIT_THRESH;
+    let down = <Vector<R> as ScalarValue>::SPLIT_DOWN;
+    let up = <Vector<R> as ScalarValue>::SPLIT_UP;
+    let one = <Vector<R> as ScalarValue>::SCALAR_ONE;
+
+    let big_a = a.abs().cmp_gt(thresh);
+    let big_b = b.abs().cmp_gt(thresh);
+
+    let sa = big_a.select(down, big_b.select(up, one));
+    let sb = big_a.select(up, big_b.select(down, one));
+
+    (a * sa, b * sb)
+}
+
 impl<R: thermite::register::FloatRegister> ScalarValue for Vector<R>
 where
     R::Element: ScalarValue,
 {
     const SPLITTER: Self = const_splat::<Self, SplitterValue<R::Element>>();
+    const SPLIT_THRESH: Self = const_splat::<Self, SplitThreshValue<R::Element>>();
+    const SPLIT_DOWN: Self = const_splat::<Self, SplitDownValue<R::Element>>();
+    const SPLIT_UP: Self = const_splat::<Self, SplitUpValue<R::Element>>();
     const SCALAR_ZERO: Self = Self::ZERO;
     const SCALAR_ONE: Self = Self::ONE;
     const MAX_ERFINV_SERIES: Self = const_splat::<Self, MaxErfinvSeriesValue<R::Element>>();
+
+    // Operands this large are rare, so the packet takes one predictable branch rather
+    // than four blends on every call. Below SSE4.1 there is no `blendv` and each select
+    // is a three-op polyfill; the rebalance itself also needs enough registers to force
+    // callee-saved spills into the prologue, which the hot path would pay even when the
+    // branch is not taken. Both costs move into `rebalance_split_cold`.
+    #[inline(always)]
+    fn rebalance_for_split(a: Self, b: Self) -> (Self, Self) {
+        // One test for the whole packet, on the larger of the two magnitudes.
+        if a.abs().max(b.abs()).cmp_gt(Self::SPLIT_THRESH).any() {
+            rebalance_split_cold(a, b)
+        } else {
+            (a, b)
+        }
+    }
 
     #[inline(always)]
     fn scalar_trunc(self) -> Self {
@@ -358,6 +555,13 @@ const fn two_sum_f64(a: f64, b: f64) -> (f64, f64) {
 
 // EFT two_product via Dekker splitting: returns (p, e) such that p + e = a * b exactly,
 // p = fl(a * b). Requires no FMA; accurate when |a|, |b| < 2^996 (no overflow in split).
+//
+// Deliberately UNGUARDED, unlike `ScalarValue::two_prod`. Its only caller is the
+// `N/D` rational-constant carrier below, whose operands are structurally bounded:
+// `frac = r/D` with `r = N % D`, so `|frac| < 1`, and `D: LargeInt` (i64), so
+// `|D as f64| <= 9.3e18`. Both are ~280 orders of magnitude under the 1.34e300 threshold,
+// so `rebalance_for_split` could never fire here. It is also const-evaluated, so a guard
+// would cost nothing and do nothing. Do not "fix" this to match `two_prod`.
 const fn two_product_f64(a: f64, b: f64) -> (f64, f64) {
     let p = a * b;
     let c = f64::SPLITTER * a;
@@ -531,7 +735,7 @@ impl<E: ScalarValue + FloatElement> FloatElement for Compensated<E> {
     fn sqrt(this: Self) -> Self {
         let s = E::sqrt(this.value);
 
-        let (p, e) = E::two_prod(s, s);
+        let (p, e) = E::square(s);
 
         // sum of differences
         let remainder = (this.value - p) + (this.error - e);

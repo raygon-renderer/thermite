@@ -2659,12 +2659,17 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
     /// element, kept in the float representation.
     #[conditional] fn ceil(self) -> Self;
 
-    /// Lane-wise round-to-nearest.
+    /// Lane-wise round-to-nearest, **ties to even** (banker's rounding).
     ///
-    /// Halfway cases follow the current rounding mode of the hardware. On
-    /// x86 this is round-half-to-even (banker's rounding), which differs
-    /// from the scalar `f32::round` / `f64::round` half-away-from-zero
-    /// convention. If you need a specific tie-breaking rule, do it explicitly.
+    /// Every backend uses its native nearest-integer instruction - `roundps`/`roundpd`
+    /// with `_MM_FROUND_TO_NEAREST_INT`, NEON `frintn`, WASM `nearest` - so this is a
+    /// single instruction everywhere except SSE2, which has no rounding instruction at
+    /// all and synthesizes the same result.
+    ///
+    /// This is NOT the half-away-from-zero convention of `f32::round` / `f64::round`.
+    /// Thermite follows the hardware rather than the standard library, and does so at
+    /// every width: a one-lane `Vector<f64>` breaks ties the same way a `f64x8` does.
+    /// If you need ties-away, do it explicitly.
     #[conditional] fn round(self) -> Self;
 
     /// Lane-wise truncation toward zero (drops the fractional part), kept

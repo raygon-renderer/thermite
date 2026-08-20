@@ -1,24 +1,22 @@
 use super::{SignedElement, SignedIntegerElement, UnsignedIntegerElement};
 use crate::LargeInt;
-// Named only by the `std` arm of the `cfg_if!` below.
-#[cfg(feature = "std")]
-use crate::register::FloatRegister;
 use crate::vector::SplatConst;
 use crate::vector::ops::MulAddExt;
 
 pub mod spec;
 
 pub(crate) mod algebraic;
+pub(crate) mod arch;
 
 /// Marker type for a compile-time integer constant cast to a float element type.
 ///
-/// Implements [`SplatConst<f32>`] and [`SplatConst<f64>`], enabling use with
+/// Implements [`SplatConst<f32>`] and [`SplatConst<f64>`], so it works with
 /// [`const_splat!`](crate::const_splat) and [`FloatElement::ConstInt`].
 pub struct IntConst<const N: crate::LargeInt>;
 
 /// Marker type for a compile-time rational constant (N/D) cast to a float element type.
 ///
-/// Implements [`SplatConst<f32>`] and [`SplatConst<f64>`], enabling use with
+/// Implements [`SplatConst<f32>`] and [`SplatConst<f64>`], so it works with
 /// [`const_splat!`](crate::const_splat) and [`FloatElement::ConstRatio`].
 pub struct RatioConst<const N: crate::LargeInt, const D: crate::LargeInt>;
 
@@ -59,13 +57,13 @@ pub trait FloatElement:
 {
     /// Marker type for splatting a compile-time integer constant as this float type.
     ///
-    /// Satisfies `SplatConst<Self>`, enabling const-folded splats via
+    /// Satisfies `SplatConst<Self>`, so const-folded splats go through
     /// [`const_splat!`](crate::const_splat).
     type ConstInt<const N: crate::LargeInt>: SplatConst<Self>;
 
     /// Marker type for splatting a compile-time rational constant (N/D) as this float type.
     ///
-    /// Satisfies `SplatConst<Self>`, enabling const-folded splats via
+    /// Satisfies `SplatConst<Self>`, so const-folded splats go through
     /// [`const_splat!`](crate::const_splat).
     type ConstRatio<const N: crate::LargeInt, const D: crate::LargeInt>: SplatConst<Self>;
 
@@ -111,6 +109,14 @@ pub trait FloatElement:
     fn sqrt(value: Self) -> Self;
     fn floor(value: Self) -> Self;
     fn ceil(value: Self) -> Self;
+    /// Round to nearest, **ties to even**.
+    ///
+    /// This deliberately differs from `f32::round`/`f64::round`, which break ties away
+    /// from zero. Ties-to-even is what every SIMD backend's nearest-integer instruction
+    /// does (`roundps`/`roundpd` with `_MM_FROUND_TO_NEAREST_INT`, NEON `frintn`, WASM
+    /// `nearest`), so matching it here keeps a one-lane `Vector<f64>` in agreement with
+    /// a `f64x4` and keeps this a single instruction on every target. Synthesizing
+    /// ties-away would cost five instructions and disagree with the vector layer.
     fn round(value: Self) -> Self;
     fn trunc(value: Self) -> Self;
 
@@ -202,14 +208,7 @@ macro_rules! impl_float_element {
 
         const HAS_INFINITY: bool = true;
         const HAS_SIGNED_ZERO: bool = true;
-        const HAS_SUBNORMALS: bool = cfg!(not(feature = "ignore-denormals"));
-    };
-
-    (MUL_ADDE) => {
-        #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { self * rhs + acc }
-        #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { self * rhs - acc }
-        #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { acc - self * rhs }
-        #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { self * -rhs - acc }
+        const HAS_SUBNORMALS: bool = cfg!(not(feature = "ignore_denormals"));
     };
 
     ($t:ty $(: $f:ident)? => $bits:ty, $signed:ty { $($const:ident: $const_ty:ty = $value:expr;)* }) => {paste::paste! {
@@ -251,42 +250,12 @@ macro_rules! impl_float_element {
         }
 
         cfg_if::cfg_if! {
-            if #[cfg(feature = "std")] {
-                impl FloatElement for $t {
-                    #[inline(always)] fn sqrt(value: Self) -> Self { value.sqrt() }
-                    #[inline(always)] fn floor(value: Self) -> Self { value.floor() }
-                    #[inline(always)] fn ceil(value: Self) -> Self { value.ceil() }
-                    #[inline(always)] fn round(value: Self) -> Self { value.round() }
-                    #[inline(always)] fn trunc(value: Self) -> Self { value.trunc() }
-                    #[inline(always)] fn fract(value: Self) -> Self { value.fract() }
-                    #[inline(always)] fn next_up(value: Self) -> Self { value.next_up() }
-                    #[inline(always)] fn next_down(value: Self) -> Self { value.next_down() }
-
-                    impl_float_element!(COMMON);
-                }
-
-                impl MulAddExt for $t {
-                    type Output = Self;
-
-                    // trust the register implementation
-                    const HAS_TRUE_FMA: bool = <$t as FloatRegister>::HAS_TRUE_FMA;
-
-                    #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, rhs, acc) }
-                    #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, rhs, -acc) }
-                    #[inline(always)] fn nmul_add(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, -rhs, acc) }
-                    #[inline(always)] fn nmul_sub(self, rhs: Self, acc: Self) -> Self { <$t>::mul_add(self, -rhs, -acc) }
-
-                    #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * rhs + acc } else { <$t>::mul_add(self, rhs, acc) } }
-                    #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * rhs - acc } else { <$t>::mul_add(self, rhs, -acc) } }
-                    #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { acc - self * rhs } else { <$t>::mul_add(self, -rhs, acc) } }
-                    #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * -rhs - acc } else { <$t>::mul_add(self, -rhs, -acc) } }
-                }
-            } else if #[cfg(all(feature = "spirv", target_arch = "spirv"))] {
+            if #[cfg(all(feature = "spirv", target_arch = "spirv"))] {
                 impl FloatElement for $t {
                     #[inline(always)] fn sqrt(value: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op1::<Self, Self, {crate::backend::spirv::arch::glsl::SQRT}, false>(value) } }
                     #[inline(always)] fn floor(value: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op1::<Self, Self, {crate::backend::spirv::arch::glsl::FLOOR}, false>(value) } }
                     #[inline(always)] fn ceil(value: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op1::<Self, Self, {crate::backend::spirv::arch::glsl::CEIL}, false>(value) } }
-                    #[inline(always)] fn round(value: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op1::<Self, Self, {crate::backend::spirv::arch::glsl::ROUND}, false>(value) } }
+                    #[inline(always)] fn round(value: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op1::<Self, Self, {crate::backend::spirv::arch::glsl::ROUND_EVEN}, false>(value) } }
                     #[inline(always)] fn trunc(value: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op1::<Self, Self, {crate::backend::spirv::arch::glsl::TRUNC}, false>(value) } }
                     #[inline(always)] fn fract(value: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op1::<Self, Self, {crate::backend::spirv::arch::glsl::FRACT}, false>(value) } }
                     #[inline(always)] fn next_up(value: Self) -> Self { value.next_up() }
@@ -311,45 +280,18 @@ macro_rules! impl_float_element {
                     #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { self.nmul_add(rhs, acc) }
                     #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { self.nmul_sub(rhs, acc) }
                 }
-            } else if #[cfg(all(feature = "nightly", feature = "wasm", any(target_arch = "wasm32", target_arch = "wasm64")))] {
-                impl FloatElement for $t {
-                    // WASM has native scalar float ops for these
-                    #[inline(always)] fn sqrt(value: Self) -> Self { crate::backend::wasm::arch::[<$t _sqrt>](value) }
-                    #[inline(always)] fn floor(value: Self) -> Self { crate::backend::wasm::arch::[<$t _floor>](value) }
-                    #[inline(always)] fn ceil(value: Self) -> Self { crate::backend::wasm::arch::[<$t _ceil>](value) }
-                    #[inline(always)] fn trunc(value: Self) -> Self { crate::backend::wasm::arch::[<$t _trunc>](value) }
-                    #[inline(always)] fn fract(value: Self) -> Self { value - crate::backend::wasm::arch::[<$t _trunc>](value) }
-                    // WASM nearest() is banker's rounding (ties-to-even), not half-away-from-zero
-                    #[inline(always)] fn round(value: Self) -> Self { libm::[<round $($f)?>](value) }
-                    // No WASM scalar nextafter; fall back to libm
-                    #[inline(always)] fn next_up(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::INFINITY) }
-                    #[inline(always)] fn next_down(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::NEG_INFINITY) }
-
-                    impl_float_element!(COMMON);
-                }
-
-                impl MulAddExt for $t {
-                    type Output = Self;
-
-                    // No hardware scalar FMA on WASM; use libm for exact, separate ops for estimating
-                    const HAS_TRUE_FMA: bool = false;
-
-                    #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, rhs, acc) }
-                    #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, rhs, -acc) }
-                    #[inline(always)] fn nmul_add(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, -rhs, acc) }
-                    #[inline(always)] fn nmul_sub(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, -rhs, -acc) }
-
-                    impl_float_element!(MUL_ADDE);
-                }
             } else {
+                // `arch` walks its own ladder: `core::intrinsics` under `nightly`, then
+                // the explicit per-ISA intrinsics the baseline proves are available, then
+                // std's methods (or `libm` without std). See its module docs.
                 impl FloatElement for $t {
-                    #[inline(always)] fn sqrt(value: Self) -> Self { libm::[<sqrt $($f)?>](value) }
-                    #[inline(always)] fn floor(value: Self) -> Self { libm::[<floor $($f)?>](value) }
-                    #[inline(always)] fn ceil(value: Self) -> Self { libm::[<ceil $($f)?>](value) }
-                    #[inline(always)] fn round(value: Self) -> Self { libm::[<round $($f)?>](value) }
-                    #[inline(always)] fn trunc(value: Self) -> Self { libm::[<trunc $($f)?>](value) }
-                    #[inline(always)] fn next_up(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::INFINITY) }
-                    #[inline(always)] fn next_down(value: Self) -> Self { libm::[<nextafter $($f)?>](value, Self::NEG_INFINITY) }
+                    #[inline(always)] fn sqrt(value: Self) -> Self { arch::[<sqrt $($f)?>](value) }
+                    #[inline(always)] fn floor(value: Self) -> Self { arch::[<floor $($f)?>](value) }
+                    #[inline(always)] fn ceil(value: Self) -> Self { arch::[<ceil $($f)?>](value) }
+                    #[inline(always)] fn round(value: Self) -> Self { arch::[<round $($f)?>](value) }
+                    #[inline(always)] fn trunc(value: Self) -> Self { arch::[<trunc $($f)?>](value) }
+                    #[inline(always)] fn next_up(value: Self) -> Self { value.next_up() }
+                    #[inline(always)] fn next_down(value: Self) -> Self { value.next_down() }
 
                     impl_float_element!(COMMON);
                 }
@@ -357,14 +299,19 @@ macro_rules! impl_float_element {
                 impl MulAddExt for $t {
                     type Output = Self;
 
-                    const HAS_TRUE_FMA: bool = false;
+                    const HAS_TRUE_FMA: bool = arch::HAS_TRUE_FMA;
 
-                    #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, rhs, acc) }
-                    #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, rhs, -acc) }
-                    #[inline(always)] fn nmul_add(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, -rhs, acc) }
-                    #[inline(always)] fn nmul_sub(self, rhs: Self, acc: Self) -> Self { libm::[<fma $($f)?>](self, -rhs, -acc) }
+                    #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { arch::[<fma $($f)?>](self, rhs, acc) }
+                    #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { arch::[<fma $($f)?>](self, rhs, -acc) }
+                    #[inline(always)] fn nmul_add(self, rhs: Self, acc: Self) -> Self { arch::[<fma $($f)?>](self, -rhs, acc) }
+                    #[inline(always)] fn nmul_sub(self, rhs: Self, acc: Self) -> Self { arch::[<fma $($f)?>](self, -rhs, -acc) }
 
-                    impl_float_element!(MUL_ADDE);
+                    // Only worth the FMA when it is a single instruction; without one the
+                    // estimating forms must stay as separate multiply and add.
+                    #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * rhs + acc } else { <Self as MulAddExt>::mul_add(self, rhs, acc) } }
+                    #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * rhs - acc } else { <Self as MulAddExt>::mul_sub(self, rhs, acc) } }
+                    #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { acc - self * rhs } else { <Self as MulAddExt>::nmul_add(self, rhs, acc) } }
+                    #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * -rhs - acc } else { <Self as MulAddExt>::nmul_sub(self, rhs, acc) } }
                 }
             }
         }

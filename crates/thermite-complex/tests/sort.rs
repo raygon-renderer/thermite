@@ -1,5 +1,5 @@
-//! Lane sorts on `Complex<V>`: keyed on the lexicographic (re, im) order -
-//! the same order `cmp_lt`/`min`/`max` already use.
+//! Lane sorts on `Complex<V>`: keyed on the lexicographic (re, im) order,
+//! the same one `cmp_lt`/`min`/`max` already use.
 //!
 //! The `re` pattern contains duplicates ON PURPOSE, with distinct `im` values:
 //! lexicographic order must break those ties by `im`, which is observable in

@@ -423,7 +423,7 @@ fn stages_deinterleave_flat<R: Register>(buf: &mut [Storage<R>], tmp: &mut [Stor
             while i < sub {
                 let g = base + 3 * i;
                 // SAFETY: `g + 2 < base + size <= n` and the three writes land in
-                // the same block. Bounds checks here are not merely redundant -
+                // the same block. Bounds checks here are not merely redundant:
                 // their panic paths keep LLVM from promoting `buf`/`tmp` out of
                 // memory, which turns the whole stage into stack traffic.
                 unsafe {

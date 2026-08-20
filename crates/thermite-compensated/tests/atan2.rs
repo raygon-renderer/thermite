@@ -45,7 +45,9 @@ fn quadrants_match_std() {
 fn principal_range() {
     let mut state = 12345u64;
     let mut next = || {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((state >> 11) as f64 / (1u64 << 53) as f64) * 20.0 - 10.0
     };
 
@@ -67,12 +69,18 @@ fn principal_range() {
 fn second_quadrant_is_positive() {
     for (y, x) in [(1.0, -1.0), (1e-100, -1e100), (1e-300, -1.0), (0.5, -2.0)] {
         let got = atan2_dd(y, x);
-        assert!(got > 0.0, "atan2({y:e}, {x:e}) = {got} must be positive (second quadrant)");
+        assert!(
+            got > 0.0,
+            "atan2({y:e}, {x:e}) = {got} must be positive (second quadrant)"
+        );
         assert!(got <= core::f64::consts::PI + 1e-15, "and at most pi");
     }
     // Third quadrant stays negative.
     for (y, x) in [(-1.0, -1.0), (-1e-100, -1e100)] {
         let got = atan2_dd(y, x);
-        assert!(got < 0.0, "atan2({y:e}, {x:e}) = {got} must be negative (third quadrant)");
+        assert!(
+            got < 0.0,
+            "atan2({y:e}, {x:e}) = {got} must be negative (third quadrant)"
+        );
     }
 }

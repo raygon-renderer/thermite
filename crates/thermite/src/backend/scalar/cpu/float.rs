@@ -226,11 +226,7 @@ impl FloatRegister for [<f $width>] {
     type SignedBits = [<i $width>];
     type ExtendedPrecision = f64;
 
-    // best guess we can do
-    const HAS_TRUE_FMA: bool = cfg!(any(
-        all(feature = "spirv", target_arch = "spirv"),
-        all(feature = "std", any(target_feature = "fma", target_feature = "avx2", target_feature = "avxifma", target_feature = "avx512ifma"))
-    ));
+    const HAS_TRUE_FMA: bool = crate::element::float::arch::HAS_TRUE_FMA;
 
     const HALF: Storage<Self> = 0.5;
     const NEG_ZERO: Storage<Self> = -0.0;
@@ -274,7 +270,7 @@ impl FloatRegister for [<f $width>] {
 
             // `:v` names the whole vector register; the template is only a
             // comment (this is a pure compiler barrier), so the formatting is
-            // cosmetic - the modifier just silences `asm_sub_register`.
+            // cosmetic, and the modifier just silences `asm_sub_register`.
             #[cfg(target_arch = "aarch64")]
             core::arch::asm!(
                 "/* {0:v} */",

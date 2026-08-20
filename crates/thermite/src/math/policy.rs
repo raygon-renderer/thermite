@@ -86,6 +86,33 @@ pub enum DenormalBehavior {
     /// Uses a "crush denormals" trick of `(a - (a - x))` where `a` is a very small constant. This
     /// removes denormals and is very fast in the happy path where the number is NOT denormal,
     /// but will incur a heavy cost if the number is denormal.
+    ///
+    /// # Precision
+    ///
+    /// **This is a lossy operation on small normal values, not only on denormals.** The two
+    /// roundings snap the result onto a grid of `ulp(a)`, which is twice the smallest normal
+    /// (`2^-1021` for f64, `2^-125` for f32), so every bit below that grid step is discarded.
+    ///
+    /// `a` is [`FloatElementWithBits::DENORMAL_TRICK`](crate::element::FloatElementWithBits::DENORMAL_TRICK):
+    /// `2^-969 * (1 + 2^-52)` = 2.0042e-292 for f64, `2^-102 * (1 + 2^-23)` = 1.9722e-31 for f32.
+    /// That is the smallest constant that still flushes *every* denormal to exactly zero. A grid
+    /// step of twice the minimum normal is what puts the whole subnormal range on the zero side of
+    /// a round-to-nearest tie. Halving it would land the top half of that range on the minimum
+    /// normal instead, which removes the denormal but is no longer flush-to-zero.
+    ///
+    /// The price is paid by normal values below `a`:
+    ///
+    /// - `|x| >= a` is exact (2.0042e-292 for f64, 1.9722e-31 for f32).
+    /// - Below that the absolute error is at most half a grid step (the minimum normal itself),
+    ///   so the relative error runs at roughly `MIN_POSITIVE / |x|`. For f64 that is ~8e-9
+    ///   (27 bits) at 1e-300 and ~1e-3 at 1e-305, and for f32, ~1e-7 at 1e-31 and ~1e-3 at 1e-35.
+    /// - `MIN_POSITIVE` itself is doubled rather than preserved, and everything under it is zero.
+    ///
+    /// So do not select `Crush` for code where small normals carry information: log-space
+    /// probabilities, `ln_1p`/`exp_m1` chains, `powf_m1` at a tiny exponent. [`FlushToZero`] costs
+    /// a compare and a select more, and is exact for every normal value.
+    ///
+    /// [`FlushToZero`]: DenormalBehavior::FlushToZero
     Crush,
 
     /// Actively try to preserve and handle denormal values. This has a non-zero performance cost,
@@ -108,6 +135,24 @@ impl DenormalBehavior {
         #[cfg(feature = "ignore_denormals")]
         return DenormalBehavior::Ignore;
 
+        // Software flushing exists to dodge the hardware penalty on denormal operands, and on
+        // wasm there is no way to dodge it: the spec mandates exact IEEE-754 subnormal results,
+        // so the engine may not set FTZ/DAZ on the module's behalf, and whatever the host CPU
+        // charges is charged either way. That leaves the flush as pure cost: two to three
+        // instructions on every kernel entry, paid on all inputs to avoid a stall on rare ones,
+        // and it only ever covered *inputs* anyway (a denormal produced inside a polynomial
+        // sails past it).
+        //
+        // Not flushing is also the more accurate answer. Every kernel that flushes has a
+        // denormal input whose true result is `x` or `1`, so leaving the value alone matches
+        // libm, while flushing returns zero. `cbrt` is the sharpest case: the cube root of a
+        // denormal is normal (cbrt(5e-324) = 1.7e-108), and flushing discards it outright.
+        // Nothing here needs the flush to be correct. `ln` is the one kernel that mishandles a
+        // denormal input, and it does so identically under every behavior but `Preserve`.
+        #[cfg(all(feature = "wasm", any(target_arch = "wasm32", target_arch = "wasm64")))]
+        return DenormalBehavior::Ignore;
+
+        #[allow(unreachable_code)]
         if crush {
             DenormalBehavior::Crush
         } else {

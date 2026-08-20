@@ -815,8 +815,10 @@ workflow deploys docs (KaTeX header) for the `rewrite` branch.
   default it lowers to a **vectorized emulated FMA** -- a Dekker/Veltkamp
   compensated split (see `_mm_fmadd_pdx_v1` in
   `backend/x86_v1/polyfills/math.rs`, `2^27+1` splitter) -- slower than true
-  FMA, **not bit-identical** to it, but still SIMD, far cheaper than `libm`,
-  single-rounding-quality. Only `disable_fast_fma` (implied by
+  FMA, **not bit-identical** to it (about 1 in 173,000 differ for f64, 1 in
+  3,000,000 for f32, worst relative error 2.0e-15), but still SIMD and far
+  cheaper than `libm`. Note the split needs an overflow guard above 1.34e300 --
+  see `rebalance_for_split`. Only `disable_fast_fma` (implied by
   `strict_ieee754`) swaps in exact-but-very-slow scalar `libm::fma`. So
   `mul_add` is a legitimate *accuracy* choice without hardware FMA; gate behind
   `if const { V::HAS_TRUE_FMA }` only to avoid the *emulation* cost. The `cbrt`

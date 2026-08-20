@@ -112,7 +112,10 @@ fn sequence_iterator_reaches_compensated() {
 
     type C = Compensated<Vector<f64>>;
 
-    let b1 = Compensated { value: -0.5, error: 0.0 };
+    let b1 = Compensated {
+        value: -0.5,
+        error: 0.0,
+    };
     let seq: Vec<Compensated<f64>> = C::bernoulli_numbers(b1).take(5).map(|c| c.extract::<0>()).collect();
 
     assert_eq!(seq[0].value, 1.0, "B_0");

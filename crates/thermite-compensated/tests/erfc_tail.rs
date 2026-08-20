@@ -1,10 +1,10 @@
 //! `erf` / `erfc` over the continued-fraction tail (|x| >= 3).
 //!
-//! Regression: this whole regime returned NaN. Lentz's method seeds with a `tiny`
+//! Regression: this whole regime returns NaN unguarded. Lentz's method seeds with a `tiny`
 //! sentinel and reciprocates it on the first step, and `MIN_POSITIVE` reciprocates to
-//! 4.5e307 - past the ~1.3e300 where compensated multiplication's Dekker 2^27+1 splitter
-//! overflows, so the next product was infinity and everything downstream NaN. Only the
-//! CF branch reaches that code, which is exactly why the failure started at |x| = 3.
+//! 4.5e307, past the ~1.3e300 where compensated multiplication's Dekker 2^27+1 splitter
+//! overflows, so the next product is infinity and everything downstream NaN. Only the
+//! CF branch reaches that code, which is exactly why the failure starts at |x| = 3.
 //!
 //! References are mpmath 1.3.0 at 45 digits, as `(hi, lo)` pairs.
 

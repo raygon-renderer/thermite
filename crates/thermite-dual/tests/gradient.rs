@@ -551,7 +551,7 @@ fn xlogy_keeps_its_gradient_at_a_zero_first_argument() {
 #[test]
 fn harmonic_mean_gradient() {
     // d/dx_k of N/sum(1/x_i) is HM^2 / (N * x_k^2). Worth pinning on Dual specifically
-    // because `Dual::min` orders on the real part alone and carries the whole Dual along -
+    // because `Dual::min` orders on the real part alone and carries the whole Dual along,
     // so if the min-scaled path ever reached this type, `m` would drag one input's
     // derivative into the result. It must not: composites take the direct form.
     fn hm2<W: FloatVector + CoreMath>(a: W, b: W) -> W {

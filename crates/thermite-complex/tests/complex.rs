@@ -737,8 +737,8 @@ fn harmonic_mean_and_inv_sum_inv() {
 
     // A zero input does NOT take the real form's limit, and that is consistent rather than a
     // defect. On a real vector 1/0 is +inf, the sum saturates and the mean is 0. Complex
-    // division computes 1/(c^2 + d^2) first, so at zero it forms 0 * inf and yields NaN -
-    // there is no complex infinity in this representation to sum toward. The mean inherits
+    // division computes 1/(c^2 + d^2) first, so at zero it forms 0 * inf and yields NaN.
+    // There is no complex infinity in this representation to sum toward. The mean inherits
     // exactly what the crate's own division does, which the second assertion pins.
     let zero = c(0.0, 0.0);
     let hz = C::harmonic_mean([zero, c(1.0, 1.0)]);

@@ -190,7 +190,7 @@ pub unsafe fn _mm_abs_epi32x_v1(value: __m128i) -> __m128i {
     _mm_sub_epi32(_mm_xor_si128(value, m), m)
 }
 
-/// POLYFILL: true `copysign` for `i32` lanes - the magnitude of `lhs` with the
+/// POLYFILL: true `copysign` for `i32` lanes, the magnitude of `lhs` with the
 /// sign of `rhs` (negates `lhs` exactly where the signs differ).
 #[inline(always)]
 pub unsafe fn _mm_copysign_epi32x_v1(lhs: __m128i, rhs: __m128i) -> __m128i {
@@ -441,7 +441,21 @@ pub unsafe fn _mm_fmadd_psx_v1(x: __m128, m: __m128, a: __m128) -> __m128 {
     let res_hi = _mm_add_pd(_mm_mul_pd(x_hi, m_hi), a_hi);
 
     // 3. Convert back to f32.
-    // This conversion applies the single mandatory IEEE-754 rounding step.
+    //
+    // NOTE: this is a DOUBLE rounding, not a single one. The f64 add above rounds, then
+    // this narrowing rounds again. It is very nearly a true FMA but not exactly one:
+    // measured 23 disagreements in 69,088,068 random triples, about 1 in 3,000,000, never
+    // more than 1 ulp.
+    //
+    // The "2p+2 rule" (double rounding is harmless when the intermediate has at least
+    // 2*24+2 = 50 bits, and f64 has 53) does NOT rescue this. That rule covers rounding
+    // ONE correctly rounded arithmetic result; an FMA's exact value can need ~3p bits,
+    // and 72 > 53, so the f64 add has already discarded what the narrowing needs.
+    //
+    // Fixable with a round-to-odd intermediate: recover the f64 add's residual with a
+    // two_sum and step `s` one ulp toward the exact value when it was inexact and landed
+    // on an even last bit. Verified correct (0 in 3.45M) but not applied, since the error is
+    // within what the emulated FMA promises. See `disable_fast_fma` in Cargo.toml.
     let out_lo = _mm_cvtpd_ps(res_lo);
     let out_hi = _mm_cvtpd_ps(res_hi);
 
@@ -449,10 +463,74 @@ pub unsafe fn _mm_fmadd_psx_v1(x: __m128, m: __m128, a: __m128) -> __m128 {
     _mm_movelh_ps(out_lo, out_hi)
 }
 
+/// Threshold above which `a * (2^27 + 1)` overflows: the largest f64 below `2^996`.
+/// Same literal Bailey.s QD uses; it is deliberately one ulp under the power of two.
+const SPLIT_THRESH_PD_V1: f64 = 6.69692879491417e299;
+
+/// Move an exact power of two from whichever operand would overflow Veltkamp's splitting
+/// into the other one, leaving `x * m` unchanged.
+///
+/// Scaling the split's *output* back up (which is what Bailey's QD library does) does
+/// not work at the top of the range: for an operand near `MAX` the split rounds `hi` up
+/// past `MAX / scale`, so scaling back overflows anyway. Rebalancing the inputs against
+/// each other never scales anything back, and so handles cases QD does not.
+///
+/// The receiving operand cannot overflow: if `|x| > THRESH` and `x * m` is finite, then
+/// `|m| < MAX / |x| <= MAX / THRESH`, which is exactly the scale factor. When both are
+/// that large the true product is already infinite, which is the correct answer.
+///
+/// Kept out of line and `#[cold]`: operands this large are rare, and inlining the blends
+/// forces callee-saved spills into the prologue that the common path would pay on every
+/// call. Measured across five CPU models, the branch shape beat an unconditional blend
+/// everywhere, by up to 2x.
+#[cold]
+#[inline(never)]
+unsafe fn rebalance_split_cold_pdx_v1(x: __m128d, m: __m128d) -> (__m128d, __m128d) {
+    unsafe {
+        let thresh = _mm_set1_pd(SPLIT_THRESH_PD_V1);
+        let down = _mm_set1_pd(3.725_290_298_461_914e-9); // 2^-28
+        let up = _mm_set1_pd(268435456.0); // 2^28
+        let one = _mm_set1_pd(1.0);
+
+        let abs_mask = _mm_castsi128_pd(_mm_set1_epi64x(0x7FFF_FFFF_FFFF_FFFFu64 as i64));
+        let big_x = _mm_cmpgt_pd(_mm_and_pd(x, abs_mask), thresh);
+        let big_m = _mm_cmpgt_pd(_mm_and_pd(m, abs_mask), thresh);
+
+        // select(mask, t, f) == (mask & t) | (!mask & f); there is no blendv below SSE4.1.
+        let pick = |mask: __m128d, t: __m128d, f: __m128d| _mm_or_pd(_mm_and_pd(mask, t), _mm_andnot_pd(mask, f));
+
+        let sx = pick(big_x, down, pick(big_m, up, one));
+        let sm = pick(big_x, up, pick(big_m, down, one));
+
+        (_mm_mul_pd(x, sx), _mm_mul_pd(m, sm))
+    }
+}
+
+/// One test for the whole packet, on the larger of the two magnitudes.
+#[inline(always)]
+unsafe fn rebalance_for_split_pdx_v1(x: __m128d, m: __m128d) -> (__m128d, __m128d) {
+    unsafe {
+        let abs_mask = _mm_castsi128_pd(_mm_set1_epi64x(0x7FFF_FFFF_FFFF_FFFFu64 as i64));
+        let largest = _mm_max_pd(_mm_and_pd(x, abs_mask), _mm_and_pd(m, abs_mask));
+
+        if _mm_movemask_pd(_mm_cmpgt_pd(largest, _mm_set1_pd(SPLIT_THRESH_PD_V1))) != 0 {
+            rebalance_split_cold_pdx_v1(x, m)
+        } else {
+            (x, m)
+        }
+    }
+}
+
 #[inline(always)]
 pub unsafe fn _mm_fmadd_pdx_v1(x: __m128d, m: __m128d, a: __m128d) -> __m128d {
     // Constants for Veltkamp's splitting (2^27 + 1)
     let splitter = _mm_set1_pd(134217729.0);
+
+    // 0. Keep the splits below the magnitude where `x * splitter` overflows. Without
+    //    this the split returns `inf - inf` = NaN, and this function returned NaN for
+    //    products that are perfectly finite, measured at 26639 of 1747713 random
+    //    triples, every one of them above 1.34e300.
+    let (x, m) = unsafe { rebalance_for_split_pdx_v1(x, m) };
 
     // 1. Veltkamp's Split for 'x'
     // Splits x into x_h and x_l such that x = x_h + x_l exactly.

@@ -62,8 +62,8 @@ macro_rules! const_suite {
             }
 
             /// The two limbs must not be swapped. `error` is the low limb, so it is
-            /// strictly smaller in magnitude than `value` for every non-zero entry -
-            /// an entrywise-correct but limb-swapped table would still pass a weaker check.
+            /// strictly smaller in magnitude than `value` for every non-zero entry.
+            /// An entrywise-correct but limb-swapped table would still pass a weaker check.
             #[test]
             fn log_table_limbs_are_not_swapped() {
                 let scalar_table = <E as CompensatedLogTable<E>>::LOG_TABLE;

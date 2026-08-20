@@ -72,7 +72,7 @@ fn dual_value_only_gelu_matches_primal_gelu_d() {
 #[test]
 fn composed_default_differentiates() {
     // logistic_sigmoid is a *default* (composes from exp): sigma' = sigma(1-sigma).
-    // At x = 0: sigma = 0.5, derivative = 0.25 -- proving defaults differentiate
+    // At x = 0: sigma = 0.5, derivative = 0.25, which is defaults differentiating
     // automatically through dual arithmetic.
     let x = D::variable(V::splat(0.0), 0);
     let s = x.logistic_sigmoid();
@@ -275,7 +275,7 @@ fn expint_order_zero_is_the_closed_form() {
 
 #[test]
 fn yeo_johnson_derivative_is_the_two_sided_power_rule() {
-    // psi'(y, l) = (1 + |y|)^(s - 1) where s is l above zero and 2 - l below - the same
+    // psi'(y, l) = (1 + |y|)^(s - 1) where s is l above zero and 2 - l below, the same
     // reflection the value uses, which is what makes psi continuously differentiable
     // through the origin. The kernel folds the sign rather than branching four ways, so
     // this is the check that the fold differentiates correctly on both sides.

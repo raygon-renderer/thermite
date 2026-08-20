@@ -90,7 +90,7 @@ mod x86 {
 
         check_all_m!("x86_v3 Compensated<f32x4>", f32x4);
         check_all_m!("x86_v3 Compensated<f32x8>", f32x8);
-        // f32x16 is an ArrayRegister on AVX2 - covers its per-chunk grouped override.
+        // f32x16 is an ArrayRegister on AVX2, so this covers its per-chunk grouped override.
         check_all_m!("x86_v3 Compensated<f32x16>", f32x16);
     }
 

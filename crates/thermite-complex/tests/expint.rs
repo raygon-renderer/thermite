@@ -11,7 +11,7 @@
 //!
 //! Tolerances widen with `N` on purpose. `E_1` is at machine precision over the whole
 //! set, and each order above it goes through one step of
-//! `E_{n+1} = (e^-z - z E_n) / n`, which amplifies error by `|z|/n` - so the loss grows
+//! `E_{n+1} = (e^-z - z E_n) / n`, which amplifies error by `|z|/n`, so the loss grows
 //! like `|z|^(N-1)/(N-1)!`. That is the same contract the real path holds itself to
 //! (see `RECURRENCE_THRESHOLD` in `thermite-special`), and these points sit well inside
 //! it. The asymptotic series that path swaps in beyond the threshold has no complex

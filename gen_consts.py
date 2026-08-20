@@ -384,7 +384,7 @@ LN_2_EXTENDED_DOC = {
 // that double-single needs.
 //
 // Widening these to "more accurate" full-precision values silently makes `exp` WORSE.
-// It was previously ~21 bits per piece, which is inexact past about k = 16.""",
+// At ~21 bits per piece the product is inexact past about k = 16.""",
     "f64": """// LN_2_EXTENDED: Cody-Waite pieces. See the f32 table above for why these are narrow.
 //
 // f64 carries 53 mantissa bits and `exp` overflows near 709.8, so |k| <= 1024 needs 11
@@ -392,10 +392,10 @@ LN_2_EXTENDED_DOC = {
 // for |k| <= 1100. Worst-case reduction error 2.9e-42, against the ~1.2e-32 that
 // double-double needs.
 //
-// These were previously full-precision f64 values, which made every `k * piece` a rounded
-// multiply and capped `exp` at about 50 bits (1.1e-15 relative at x = 29, growing with
-// |k|). `ln` inherited that ceiling through its Halley step, and everything built on the
-// pair (`powf`, the gamma family) inherited it in turn.""",
+// Full-precision f64 values here make every `k * piece` a rounded multiply and cap `exp`
+// at about 50 bits (1.1e-15 relative at x = 29, growing with |k|). `ln` inherits that
+// ceiling through its Halley step, and everything built on the pair (`powf`, the gamma
+// family) inherits it in turn.""",
 }
 
 
@@ -865,11 +865,11 @@ BERNOULLI_MODULE_DOC = r"""//! Bernoulli numbers `$B_{2n}$`, as one static table
 //! rather than convention-bearing.
 //!
 //! `$B_0 = 1$` is not contested, but it goes with it, because the two co-occur. A formula
-//! that indexes the sequence from zero - Faulhaber's sum of powers, the binomial
-//! recurrence, the Bernoulli polynomials - reaches `$B_1$` at `$k = 1$` and therefore
-//! already special-cases the head of the sequence. A formula that skips `$B_1$` -
-//! Euler-Maclaurin, the `$\ln\Gamma$` / `$\psi$` asymptotic series, the `$\zeta(2n)$`
-//! identity - starts at `$B_2$` and never wanted `$B_0$` either. Nothing sits in the gap,
+//! that indexes the sequence from zero (Faulhaber's sum of powers, the binomial
+//! recurrence, the Bernoulli polynomials) reaches `$B_1$` at `$k = 1$` and therefore
+//! already special-cases the head of the sequence. A formula that skips `$B_1$`
+//! (Euler-Maclaurin, the `$\ln\Gamma$` / `$\psi$` asymptotic series, the `$\zeta(2n)$`
+//! identity) starts at `$B_2$` and never wanted `$B_0$` either. Nothing sits in the gap,
 //! so the table holds exactly the values that need a table.
 //!
 //! Callers who want the head should let their heart guide them on `$B_1 = \pm\tfrac{1}{2}$`
@@ -892,7 +892,7 @@ BERNOULLI_MODULE_DOC = r"""//! Bernoulli numbers `$B_{2n}$`, as one static table
 //! overflow policy, no error type and no limit constant, because the slice length
 //! already carries that information.
 //!
-//! There is no underflow at the other end - `$|B_{2n}|$` bottoms out at
+//! There is no underflow at the other end. `$|B_{2n}|$` bottoms out at
 //! `$B_6 = 1/42$` and grows monotonically after it, so no entry is denormal.
 //!
 //! | format | entries | first | last finite | first to overflow |

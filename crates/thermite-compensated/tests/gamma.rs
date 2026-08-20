@@ -98,7 +98,7 @@ fn lgamma_r_carries_the_sign() {
 
 #[test]
 fn exact_at_one_and_two() {
-    // Gamma(1) = Gamma(2) = 1, so both logs are exactly zero. Nothing forces this - it
+    // Gamma(1) = Gamma(2) = 1, so both logs are exactly zero. Nothing forces this. It
     // has to come out of the shift, the series and the final subtraction agreeing.
     for x in [1.0f64, 2.0] {
         let g = c(x).lgamma();

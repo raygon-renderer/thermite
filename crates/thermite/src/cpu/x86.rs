@@ -40,8 +40,8 @@ pub enum Avx512Tier {
     /// three together, and what most people mean by "has AVX-512".
     ///
     /// VL is the one that matters most to this crate: it is not new operations
-    /// but an orthogonal capability letting the EVEX encodings apply to XMM/YMM
-    /// -- write-masking, zero-masking, embedded broadcast and registers 16-31 at
+    /// but an orthogonal capability letting the EVEX encodings apply to XMM/YMM:
+    /// write-masking, zero-masking, embedded broadcast and registers 16-31 at
     /// 128/256-bit. That is what turns the `_c`/`_m`/`_z` variants into single
     /// masked instructions on the *existing* `f32x4`/`f32x8` register widths,
     /// rather than only on new 512-bit ones.
@@ -59,7 +59,7 @@ pub enum Avx512Tier {
 /// monotonic version number: version N is a strict superset of version N-1,
 /// and there are no optional sub-features to enumerate. AVX10.1 is
 /// architecturally defined as the complete Granite Rapids AVX-512 feature set
-/// -- every `avx512*` flag in [`Features`], including FP16 -- at 128/256/512-bit
+/// (every `avx512*` flag in [`Features`], including FP16) at 128/256/512-bit
 /// vector lengths, so [`Features::avx512_tier`] reports [`Avx512Tier::Tier4`]
 /// on any AVX10 part.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -590,8 +590,8 @@ pub fn features() -> Features {
 
         // AVX10.1 is architecturally defined as the complete Granite Rapids
         // AVX-512 feature set at every vector length, so fold that guarantee
-        // into the individual flags. On every shipped part this is a no-op --
-        // the legacy bits are still enumerated alongside AVX10 -- but the
+        // into the individual flags. On every shipped part this is a no-op,
+        // since the legacy bits are still enumerated alongside AVX10, but the
         // spec only promises that for early processors, and dispatch keyed on
         // `avx512f` (or the tier ladder) must keep working when the legacy
         // bits eventually go dark.

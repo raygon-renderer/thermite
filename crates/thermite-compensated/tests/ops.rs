@@ -205,7 +205,11 @@ fn harmonic_mean_and_inv_sum_inv() {
 
     // 3/(1 + 1/2 + 1/4) = 12/7, and a seventh is where a double-double should earn its keep.
     let want_hm = 12.0 / 7.0;
-    assert!((hm.value().extract::<0>() - want_hm).abs() < 1e-15, "got {}", hm.value().extract::<0>());
+    assert!(
+        (hm.value().extract::<0>() - want_hm).abs() < 1e-15,
+        "got {}",
+        hm.value().extract::<0>()
+    );
     assert!((si.value().extract::<0>() - want_hm / 3.0).abs() < 1e-15);
 
     // The factor of N, the identity that separates the two functions.
@@ -222,7 +226,10 @@ fn harmonic_mean_and_inv_sum_inv() {
     // `Complex`, for a different reason, and inherited from the arithmetic rather than
     // introduced here.
     let hz = C::harmonic_mean([c(0.0), c(1.0)]);
-    assert!(hz.value().extract::<0>().is_nan(), "a zero element gives NaN on Compensated");
+    assert!(
+        hz.value().extract::<0>().is_nan(),
+        "a zero element gives NaN on Compensated"
+    );
 
     let recip = c(1.0) / c(0.0);
     assert!(recip.value().extract::<0>().is_nan(), "because 1/0 is itself NaN here");
@@ -232,5 +239,8 @@ fn harmonic_mean_and_inv_sum_inv() {
     // low word is doing something.
     let hm = C::harmonic_mean([c(1.0), c(3.0), c(7.0)]);
     let plain = 3.0 / (1.0 + 1.0 / 3.0 + 1.0 / 7.0);
-    assert!((hm.value().extract::<0>() - plain).abs() < 1e-14, "double-double tracks the f64 answer");
+    assert!(
+        (hm.value().extract::<0>() - plain).abs() < 1e-14,
+        "double-double tracks the f64 answer"
+    );
 }

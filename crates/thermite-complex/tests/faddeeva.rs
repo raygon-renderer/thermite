@@ -302,7 +302,7 @@ fn re_is_exp_neg_x_squared_on_the_real_axis() {
     }
 
     // Outside the gate it falls back to the direct evaluation, which cannot represent
-    // exp(-x^2) at all next to |w| - by x = 1000 the true value is 1e-434000 and the
+    // exp(-x^2) at all next to |w|. By x = 1000 the true value is 1e-434000 and the
     // computed one is pure roundoff. Documented, not a regression.
     let (re, _) = parts(c(1500.0, 0.0).faddeeva_w_p::<Precision>());
     assert!(re.abs() < 1e-15, "far past the gate Re w should be roundoff, got {re}");

@@ -79,8 +79,8 @@ fn cos_pi_matches_shifted_sin() {
 
 #[test]
 fn integers_and_half_integers_are_exact() {
-    // sin(pi n) = 0 and |sin(pi(n + 1/2))| = 1 exactly - pinned by the reduction being
-    // exact, not by the series converging. Both words must be clean.
+    // sin(pi n) = 0 and |sin(pi(n + 1/2))| = 1 exactly, pinned by the reduction being
+    // exact rather than by the series converging. Both words must be clean.
     for n in [-8i32, -3, -1, 0, 1, 2, 7, 40] {
         let s = c(n as f64).sin_pi();
         assert_eq!(s.value.extract::<0>(), 0.0, "sin_pi({n}) value");

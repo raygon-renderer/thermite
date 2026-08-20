@@ -1,12 +1,12 @@
 //! `asinh` / `atanh` near zero.
 //!
-//! Regression: both lost ~41 bits below |x| ~ 1e-10. Each formed a quantity that tends to
-//! 1 as x -> 0 - `x + sqrt(x^2 + 1)` for asinh, `(1 + x)/(1 - x)` for atanh - and then
-//! took `ln` of it. A double-double near 1 holds the part that carries the answer to only
-//! `106 - log2(1/x)` bits, so at x = 1e-14 the result was good to ~65.
+//! Regression: both lose ~41 bits below |x| ~ 1e-10 if they form a quantity that tends to
+//! 1 as x -> 0 (`x + sqrt(x^2 + 1)` for asinh, `(1 + x)/(1 - x)` for atanh) and then
+//! take `ln` of it. A double-double near 1 holds the part that carries the answer to only
+//! `106 - log2(1/x)` bits, so at x = 1e-14 the result is good to ~65.
 //!
-//! Both now compute the offset from 1 in closed form and feed it to `ln_1p`, which costs
-//! the same as `ln`:
+//! Both instead compute the offset from 1 in closed form and feed it to `ln_1p`, which
+//! costs the same as `ln`:
 //!
 //!   x + sqrt(x^2 + 1) - 1 = x + x^2/(1 + sqrt(1 + x^2))
 //!   (1 + x)/(1 - x)   - 1 = 2x/(1 - x)
@@ -73,8 +73,8 @@ fn atanh_matches_mpmath() {
 #[test]
 fn small_argument_series_agreement() {
     // asinh(x) = x - x^3/6 + O(x^5) and atanh(x) = x + x^3/3 + O(x^5). At x = 1e-10 the
-    // cubic term is 1e-30 - about 2^-100 of the value - so it lands squarely in the low
-    // word and needs no oracle to check. This is the term that used to be lost entirely.
+    // cubic term is 1e-30, about 2^-100 of the value, so it lands squarely in the low
+    // word and needs no oracle to check. This is the term the direct form loses entirely.
     let x = 1e-10f64;
 
     let a = c(x).asinh();

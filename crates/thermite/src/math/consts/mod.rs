@@ -409,7 +409,6 @@ macro_rules! for_each_math_const {
     };
 }
 
-
 crate::for_each_float_const!(impl_consts);
 
 impl_consts! {@

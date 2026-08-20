@@ -265,7 +265,7 @@ pub(crate) struct Cache<T: 'static> {
 }
 
 // SAFETY: `value` is written exactly once, by whichever thread wins the CAS to
-// `BUSY`, and is only ever read after an `Acquire` load observes `READY` --
+// `BUSY`, and is only ever read after an `Acquire` load observes `READY`,
 // which synchronizes with that writer's `Release` store.
 unsafe impl<T: Send> Sync for Cache<T> {}
 

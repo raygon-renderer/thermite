@@ -94,10 +94,11 @@ Two families, four signs each:
 
 - **Estimating (`*e`)**: real FMA if hardware has it, else separate `mul`+`add`.
   Default choice -- fast everywhere.
-- **Always single-rounded (no `e`)**: real FMA if available; otherwise **by
-  default** a *vectorized emulated FMA* (compensated split -- single-rounding
-  accuracy, slower than true FMA but still SIMD and far cheaper than `libm`, not
-  bit-identical to true FMA). Only `disable_fast_fma` (implied by
+- **FMA-quality (no `e`)**: real FMA if available -- then genuinely single-rounded.
+  Otherwise **by default** a *vectorized emulated FMA* (compensated split --
+  slower than true FMA but still SIMD and far cheaper than `libm`, and **not**
+  bit-identical to one: measured, about 1 in 173,000 differ for f64 and 1 in
+  3,000,000 for f32, worst relative error 2.0e-15). Only `disable_fast_fma` (implied by
   `strict_ieee754`) makes the fallback the exact scalar `libm::fma`, *dozens of
   times slower*. So non-`e` forms are a valid **accuracy** choice even without
   hardware FMA; gate on `V::HAS_TRUE_FMA` to avoid the *emulation* cost, not
