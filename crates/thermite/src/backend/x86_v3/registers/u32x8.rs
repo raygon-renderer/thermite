@@ -206,6 +206,10 @@ impl Register for U32x8V3 {
         unsafe { arch::_mm256_store_si256(ptr as *mut _, value) }
     }
 
+    unsafe fn store_masked(ptr: *mut Self::Element, mask: Storage<Self::Mask>, value: Storage<Self>) {
+        unsafe { arch::_mm256_maskstore_epi32(ptr as *mut _, mask, value) }
+    }
+
     unsafe fn store_unaligned(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm256_storeu_si256(ptr as *mut _, value) }
     }

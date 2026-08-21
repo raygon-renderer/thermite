@@ -795,9 +795,6 @@ pub trait Register:
         unsafe { Self::load(ptr) }
     }
 
-    // TODO: Masked stores? Would have to fallback to scalar on all but AVX-512,
-    // but could still be useful for some patterns.
-
     /// # SAFETY
     ///
     /// The pointer must be valid, aligned, and point to a memory location

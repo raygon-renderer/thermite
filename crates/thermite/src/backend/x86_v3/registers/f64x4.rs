@@ -316,6 +316,10 @@ impl Register for F64x4V3 {
         unsafe { arch::_mm256_store_pd(ptr, value) }
     }
 
+    unsafe fn store_masked(ptr: *mut Self::Element, mask: Storage<Self::Mask>, value: Storage<Self>) {
+        unsafe { arch::_mm256_maskstore_pd(ptr, arch::_mm256_castpd_si256(mask), value) }
+    }
+
     unsafe fn store_unaligned(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm256_storeu_pd(ptr, value) }
     }

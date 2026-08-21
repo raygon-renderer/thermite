@@ -200,6 +200,10 @@ impl Register for F32x4V3 {
         unsafe { arch::_mm_store_ps(ptr, value) }
     }
 
+    unsafe fn store_masked(ptr: *mut Self::Element, mask: Storage<Self::Mask>, value: Storage<Self>) {
+        unsafe { arch::_mm_maskstore_ps(ptr, arch::_mm_castps_si128(mask), value) }
+    }
+
     unsafe fn store_unaligned(ptr: *mut Self::Element, value: Storage<Self>) {
         unsafe { arch::_mm_storeu_ps(ptr, value) }
     }
