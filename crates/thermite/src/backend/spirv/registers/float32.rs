@@ -850,8 +850,8 @@ impl ExtendRegister<F32x3> for F32x4 {
 }
 
 // Scalar difference-of-products: (a*b) - (c*d) with error compensation via FMA.
-// Used by both F32x3 and F32x4 cross3 DOP paths. GPUs execute lanes independently,
-// so direct element access is always preferable to permutes.
+// Used by both F32x3 and F32x4 cross3 `FAST = false` paths. GPUs execute lanes
+// independently, so direct element access is always preferable to permutes.
 #[inline(always)]
 fn cross_dop(a: f32, b: f32, c: f32, d: f32) -> f32 {
     let cd = c * d;
@@ -861,8 +861,8 @@ fn cross_dop(a: f32, b: f32, c: f32, d: f32) -> f32 {
 // LinAlg3Register impls for F32x3 and F32x4.
 //
 // Both override cross3 with scalar per-component implementations.
-// F32x3: uses GLSLstd450 Cross for the standard (non-DOP) path.
-// F32x4: uses the plain scalar formula for the standard path (w zeroed).
+// F32x3: uses GLSLstd450 Cross for the `FAST = true` path.
+// F32x4: uses the plain scalar formula for the `FAST = true` path (w zeroed).
 macro_rules! impl_spirv_linalg3 {
     // Element-only reduction methods, shared between F32x3 and F32x4.
     // F32x3: all three lanes are the full register.
@@ -903,8 +903,8 @@ macro_rules! impl_spirv_linalg3 {
 impl LinAlg3Register for F32x3 {
     impl_spirv_linalg3!(@reductions);
 
-    fn cross3<const DOP: bool>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        if DOP {
+    fn cross3<const FAST: bool>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        if !FAST {
             F32x3 {
                 x: cross_dop(lhs.y, rhs.z, lhs.z, rhs.y),
                 y: cross_dop(lhs.z, rhs.x, lhs.x, rhs.z),
@@ -921,8 +921,8 @@ impl LinAlg3Register for F32x3 {
 impl LinAlg3Register for F32x4 {
     impl_spirv_linalg3!(@reductions);
 
-    fn cross3<const DOP: bool>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        if DOP {
+    fn cross3<const FAST: bool>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        if !FAST {
             F32x4 {
                 x: cross_dop(lhs.y, rhs.z, lhs.z, rhs.y),
                 y: cross_dop(lhs.z, rhs.x, lhs.x, rhs.z),
@@ -971,13 +971,13 @@ impl LinAlg4Register for F32x4 {
 
     // Giesen fast quat-vec3 rotate: v + 2w(q x v) + 2(q x (q x v)).
     // Replaces the SIMD default which broadcasts w into a full register before multiplying.
-    fn quat4_vec3_product<const DOP: bool>(q: Storage<Self>, v: Storage<Self>) -> Storage<Self> {
+    fn quat4_vec3_product<const FAST: bool>(q: Storage<Self>, v: Storage<Self>) -> Storage<Self> {
         let w = q.w;
         // t = 2 * cross(q, v)
-        let t = Self::cross3::<DOP>(q, v);
+        let t = Self::cross3::<FAST>(q, v);
         let t = F32x4 { x: t.x + t.x, y: t.y + t.y, z: t.z + t.z, w: 0.0 };
         // result = v + w*t + cross(q, t)
-        let ct = Self::cross3::<DOP>(q, t);
+        let ct = Self::cross3::<FAST>(q, t);
         F32x4 {
             x: v.x + <f32 as FloatRegister>::mul_add(w, t.x, ct.x),
             y: v.y + <f32 as FloatRegister>::mul_add(w, t.y, ct.y),
@@ -1033,7 +1033,9 @@ impl LinAlg4Register for F32x4 {
     // GLSL Determinant + MatrixInverse in one asm block (via arch::glsl_determinant_and_inverse).
     // Returns the determinant and leaves `m` untouched for an exactly-singular
     // matrix (GLSL MatrixInverse is undefined there); the caller inspects the det.
-    fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> Self::Element {
+    // `FAST` is inert here: GLSL `MatrixInverse` is one opaque intrinsic,
+    // so there is no difference-of-products for it to select a lowering for.
+    fn mat4_inverse<const FAST: bool>(m: &mut [Storage<Self>; 4]) -> Self::Element {
         let mat = F32x4x4 { x: m[0], y: m[1], z: m[2], w: m[3] };
         let (d, result): (f32, F32x4x4) = unsafe { arch::glsl_determinant_and_inverse(mat) };
         if crate::likely(d != 0.0) {
@@ -1045,7 +1047,7 @@ impl LinAlg4Register for F32x4 {
         d
     }
 
-    fn mat4_det(cols: &[Storage<Self>; 4]) -> Self::Element {
+    fn mat4_det<const FAST: bool>(cols: &[Storage<Self>; 4]) -> Self::Element {
         let mat = F32x4x4 { x: cols[0], y: cols[1], z: cols[2], w: cols[3] };
         unsafe { arch::glsl_determinant(mat) }
     }

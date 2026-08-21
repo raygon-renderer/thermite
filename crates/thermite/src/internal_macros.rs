@@ -1,3 +1,82 @@
+/// `a*b - c*d`, evaluated so the two products cannot cancel catastrophically.
+///
+/// Reads `FAST` from the enclosing function's const generic, so the whole
+/// 4x4 det/inverse picks one form at monomorphization.
+///
+/// The accurate form recovers the rounding that `c * d` discarded
+/// (`nmul_add(c, d, cd)` = `round(cd) - cd`, the pbrt sign convention) and adds it
+/// back. Same algorithm as `LinAlg3Register::cross3<FAST = false>`. It costs two extra
+/// ops per site and buys the property the whole thing exists for: a 2x2 minor of a
+/// rank-deficient matrix comes back as exactly zero.
+///
+/// `FAST` (and any register without a real FMA) takes `mul_sube` instead. Which
+/// of the two lowerings that picks does not matter here, because both are
+/// acceptable under `FAST` and without FMA the naive one is the only option:
+///
+/// - no FMA -> `a*b - c*d`, two roundings that cancel, so a self-minor is still
+///   exactly zero. Only general cancellation suffers.
+/// - FMA -> `fma(a, b, -cd)`, one op cheaper again, but `a*b` stays exact while
+///   `c*d` rounds, so a self-minor comes back as the discarded rounding rather
+///   than zero. That is the edge case `FAST` buys its performance with.
+macro_rules! dop {
+    ($a:expr, $b:expr, $c:expr, $d:expr) => {{
+        let (a, b, c, d) = ($a, $b, $c, $d);
+        let cd = Self::mul(c, d);
+
+        if const { Self::HAS_TRUE_FMA && !FAST } {
+            Self::add(Self::mul_sub(a, b, cd), Self::nmul_add(c, d, cd))
+        } else {
+            Self::mul_sube(a, b, cd)
+        }
+    }};
+}
+
+/// Scale an unscaled adjugate by `1/det`, writing into `$out`.
+///
+/// `FAST` reciprocates once and multiplies four times: two roundings per
+/// entry, the first shared by all sixteen. Otherwise four true divisions, one
+/// correctly-rounded division per entry.
+///
+/// The division looks 4x worse in isolation (12.0 against 3.0 RThroughput on
+/// znver3) and is not, because `vdivps` occupies FP1 alone and the caller arrives
+/// here ~75% data-dependency bound with the divider idle. Cost of choosing it,
+/// measured on `mat4_inverse` in cycles per call against the same body with the
+/// reciprocal:
+///
+/// | | reciprocal | four divisions |
+/// |---|---|---|
+/// | f32x4 | 34.0 / lat 81 | 35.7 / lat 84 (+5%) |
+/// | f64x4 | 56.0 / lat 96 | 64.3 / lat 104 (+15%) |
+///
+/// **Scale at the widest register available.** `vmulpd`/`vdivpd` cost the same at
+/// 128 and 256 bits on znver3, so scaling a 2x128 pair issues every op twice for
+/// nothing. That is why [`LinAlg4Register::mat4_adjugate`] hands the adjugate back
+/// unscaled: `F64x4V3` computes it paired and recombines before arriving here.
+/// Doing so took `f64x4` from 8 `vdivpd` to 4 and improved both settings of
+/// `FAST`, 49.0 cycles down to 46.8 at `true` and 73.0 down to 64.3 at `false`,
+/// because the pairing had been silently doubling the multiplies too.
+macro_rules! mat4_scale {
+    ($out:ident, $adj:expr, $det:expr) => {{
+        let adj = $adj;
+
+        if const { FAST } {
+            let rcp = Self::div(Self::ONE, Self::splat($det));
+
+            $out[0] = Self::mul(adj[0], rcp);
+            $out[1] = Self::mul(adj[1], rcp);
+            $out[2] = Self::mul(adj[2], rcp);
+            $out[3] = Self::mul(adj[3], rcp);
+        } else {
+            let det = Self::splat($det);
+
+            $out[0] = Self::div(adj[0], det);
+            $out[1] = Self::div(adj[1], det);
+            $out[2] = Self::div(adj[2], det);
+            $out[3] = Self::div(adj[3], det);
+        }
+    }};
+}
+
 macro_rules! impl_mat4_inverse {
     (DET_ONLY $input:ident, $swizzle:ident) => {{
         let [x_axis, y_axis, z_axis, w_axis] = *$input;
@@ -18,11 +97,11 @@ macro_rules! impl_mat4_inverse {
         let z_b = $swizzle!(Self: z_axis, [1, 0, 0, 0]);
         let w_b = $swizzle!(Self: w_axis, [1, 0, 0, 0]);
 
-        let minor_a = Self::mul_sube(z_hi, w_hi, Self::mul(z_lo, w_lo));
-        let minor_b = Self::mul_sube(z_b, w_hi, Self::mul(z_lo, w_b));
-        let minor_c = Self::mul_sube(z_b, w_lo, Self::mul(z_hi, w_b));
+        let minor_a = dop!(z_hi, w_hi, z_lo, w_lo);
+        let minor_b = dop!(z_b, w_hi, z_lo, w_b);
+        let minor_c = dop!(z_b, w_lo, z_hi, w_b);
 
-        // y-column coefficients with alternating signs:
+        // y-column coefficients with alternat... ing signs:
         //   coef_a = [ y1,-y0, y0,-y0]  coef_b = [-y2, y2,-y1, y1]  coef_c = [ y3,-y3, y3,-y2]
         let pnpn = const { reg::<Self, 4>([E::ZERO, C::NEG_ZERO, E::ZERO, C::NEG_ZERO]) };
         let npnp = const { reg::<Self, 4>([C::NEG_ZERO, E::ZERO, C::NEG_ZERO, E::ZERO]) };
@@ -37,8 +116,6 @@ macro_rules! impl_mat4_inverse {
     }};
 
     ($input:ident, $swizzle:ident) => {{
-        use num_traits::Zero as _;
-
         // Based on glam and https://github.com/g-truc/glm `glm_mat4_inverse`
         let [x_axis, y_axis, z_axis, w_axis] = *$input;
 
@@ -51,7 +128,7 @@ macro_rules! impl_mat4_inverse {
             let swp02 = $swizzle!(Self: swp0b, [0, 0, 0, 2]);
             let swp03 = $swizzle!(Self: z_axis, y_axis, [3, 3, 7, 7]);
 
-            Self::mul_sube(swp00, swp01, Self::mul(swp02, swp03))
+            dop!(swp00, swp01, swp02, swp03)
         };
 
         let fac1 = {
@@ -63,7 +140,7 @@ macro_rules! impl_mat4_inverse {
             let swp02 = $swizzle!(Self: swp0b, [0, 0, 0, 2]);
             let swp03 = $swizzle!(Self: z_axis, y_axis, [3, 3, 7, 7]);
 
-            Self::mul_sube(swp00, swp01, Self::mul(swp02, swp03))
+            dop!(swp00, swp01, swp02, swp03)
         };
 
         let fac2 = {
@@ -75,7 +152,7 @@ macro_rules! impl_mat4_inverse {
             let swp02 = $swizzle!(Self: swp0b, [0, 0, 0, 2]);
             let swp03 = $swizzle!(Self: z_axis, y_axis, [2, 2, 6, 6]);
 
-            Self::mul_sube(swp00, swp01, Self::mul(swp02, swp03))
+            dop!(swp00, swp01, swp02, swp03)
         };
 
         let fac3 = {
@@ -87,7 +164,7 @@ macro_rules! impl_mat4_inverse {
             let swp02 = $swizzle!(Self: swp0b, [0, 0, 0, 2]);
             let swp03 = $swizzle!(Self: z_axis, y_axis, [3, 3, 7, 7]);
 
-            Self::mul_sube(swp00, swp01, Self::mul(swp02, swp03))
+            dop!(swp00, swp01, swp02, swp03)
         };
 
         let fac4 = {
@@ -99,7 +176,7 @@ macro_rules! impl_mat4_inverse {
             let swp02 = $swizzle!(Self: swp0b, [0, 0, 0, 2]);
             let swp03 = $swizzle!(Self: z_axis, y_axis, [2, 2, 6, 6]);
 
-            Self::mul_sube(swp00, swp01, Self::mul(swp02, swp03))
+            dop!(swp00, swp01, swp02, swp03)
         };
 
         let fac5 = {
@@ -111,7 +188,7 @@ macro_rules! impl_mat4_inverse {
             let swp02 = $swizzle!(Self: swp0b, [0, 0, 0, 2]);
             let swp03 = $swizzle!(Self: z_axis, y_axis, [1, 1, 5, 5]);
 
-            Self::mul_sube(swp00, swp01, Self::mul(swp02, swp03))
+            dop!(swp00, swp01, swp02, swp03)
         };
 
         use crate::{math::FloatConsts as C, register::Element as E};
@@ -131,19 +208,19 @@ macro_rules! impl_mat4_inverse {
         let temp3 = $swizzle!(Self: y_axis, x_axis, [3, 3, 7, 7]);
         let vec3 = $swizzle!(Self: temp3, [0, 2, 2, 2]);
 
-        let sub00 = Self::mul_sube(vec1, fac0, Self::mul(vec2, fac1));
+        let sub00 = dop!(vec1, fac0, vec2, fac1);
         let add00 = Self::mul_adde(vec3, fac2, sub00);
         let inv0 = Self::bitxor(sign_b, add00);
 
-        let sub01 = Self::mul_sube(vec0, fac0, Self::mul(vec2, fac3));
+        let sub01 = dop!(vec0, fac0, vec2, fac3);
         let add01 = Self::mul_adde(vec3, fac4, sub01);
         let inv1 = Self::bitxor(sign_a, add01);
 
-        let sub02 = Self::mul_sube(vec0, fac1, Self::mul(vec1, fac3));
+        let sub02 = dop!(vec0, fac1, vec1, fac3);
         let add02 = Self::mul_adde(vec3, fac5, sub02);
         let inv2 = Self::bitxor(sign_b, add02);
 
-        let sub03 = Self::mul_sube(vec0, fac2, Self::mul(vec1, fac4));
+        let sub03 = dop!(vec0, fac2, vec1, fac4);
         let add03 = Self::mul_adde(vec2, fac5, sub03);
         let inv3 = Self::bitxor(sign_a, add03);
 
@@ -153,17 +230,6 @@ macro_rules! impl_mat4_inverse {
 
         let dot0 = Self::dot4(x_axis, row2);
 
-        // Leave the matrix untouched for an exactly-singular determinant (a
-        // well-predicted branch); otherwise scale the adjugate by 1/det.
-        if crate::likely(!dot0.is_zero()) {
-            let rcp = Self::div(Self::ONE, Self::splat(dot0));
-
-            $input[0] = Self::mul(inv0, rcp);
-            $input[1] = Self::mul(inv1, rcp);
-            $input[2] = Self::mul(inv2, rcp);
-            $input[3] = Self::mul(inv3, rcp);
-        }
-
-        dot0
+        ([inv0, inv1, inv2, inv3], dot0)
     }}
 }

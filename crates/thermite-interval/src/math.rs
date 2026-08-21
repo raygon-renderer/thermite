@@ -271,6 +271,31 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedCoreMath<IntervalElem<
         res
     }
 
+    /// Two interval multiplies and an interval subtract, at every policy.
+    ///
+    /// The trait default compensates above `Average`, recovering the rounding
+    /// `c * d` discarded and adding it back. That is meaningless here and
+    /// actively harmful: `c * d` is an interval, not a rounded point, so the
+    /// default's `err = c.nmul_adde(d, cd)` evaluates `cd - cd`, which for an
+    /// interval is not zero but a symmetric band of twice its width. Adding that
+    /// back inflates the result by 2x the product's width. That is still an
+    /// enclosure, so still sound, just needlessly loose.
+    ///
+    /// The cancellation the default exists to fight is already absent: an
+    /// interval multiply is outward-rounded, so it never claims the precision
+    /// that catastrophic cancellation would destroy. Tightening belongs in
+    /// `W::TIER` (see `ops.rs`), not in the math policy.
+    #[inline(always)]
+    fn difference_of_products<P: Policy>(self, b: Self, c: Self, d: Self) -> Self {
+        self.mul_interval(b).sub_interval(c.mul_interval(d))
+    }
+
+    /// See [`difference_of_products`](Self::difference_of_products).
+    #[inline(always)]
+    fn sum_of_products<P: Policy>(self, b: Self, c: Self, d: Self) -> Self {
+        self.mul_interval(b).add_interval(c.mul_interval(d))
+    }
+
     #[inline(always)]
     fn reciprocal<P: Policy>(self) -> Self {
         self.recip_interval()

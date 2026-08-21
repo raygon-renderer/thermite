@@ -972,7 +972,7 @@ impl<R: FloatRegister> FloatVectorWithBits for Vector<R> {
 #[rustfmt::skip] #[thermite_macros::inline_always]
 impl<R: LinAlg3Register> LinAlg3Vector for Vector<R> {
     fn dot3(self, other: Self) -> Self::Element { R::dot3(self.0, other.0) }
-    fn cross3<const DOP: bool>(self, other: Self) -> Self { Vector(R::cross3::<DOP>(self.0, other.0)) }
+    fn cross3<const FAST: bool>(self, other: Self) -> Self { Vector(R::cross3::<FAST>(self.0, other.0)) }
     fn refract(self, n: Self, eta: Self::Element) -> Self { Vector(R::refract(self.0, n.0, eta)) }
     fn zero4(self) -> Self { Vector(R::zero4(self.0)) }
     fn one4(self) -> Self { Vector(R::one4(self.0)) }
@@ -1012,19 +1012,19 @@ impl<R: LinAlg3Register> LinAlg3Vector for Vector<R> {
         .map(Vector)
     }
 
-    fn mat3_det(m: &[Self; 3]) -> Self::Element {
+    fn mat3_det<const FAST: bool>(m: &[Self; 3]) -> Self::Element {
         // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
-        R::mat3_det(unsafe { core::mem::transmute(m) })
+        R::mat3_det::<FAST>(unsafe { core::mem::transmute(m) })
     }
 
-    fn mat3_inverse_inplace(m: &mut [Self; 3]) -> Self::Element {
+    fn mat3_inverse_inplace<const FAST: bool>(m: &mut [Self; 3]) -> Self::Element {
         // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
-        R::mat3_inverse(unsafe { core::mem::transmute(m) })
+        R::mat3_inverse::<FAST>(unsafe { core::mem::transmute(m) })
     }
 
-    fn mat3_normal<const DIVIDE: bool>(m: &[Self; 3]) -> [Self; 3] {
+    fn mat3_normal<const DIVIDE: bool, const FAST: bool>(m: &[Self; 3]) -> [Self; 3] {
         // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
-        R::mat3_normal::<DIVIDE>(unsafe { core::mem::transmute(m) }).map(Vector)
+        R::mat3_normal::<DIVIDE, FAST>(unsafe { core::mem::transmute(m) }).map(Vector)
     }
 }
 
@@ -1038,8 +1038,8 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
         Vector(R::quat4_product(self.0, other.0))
     }
 
-    fn quat4_vec3_product<const DOP: bool>(self, vec: Self) -> Self {
-        Vector(R::quat4_vec3_product::<DOP>(self.0, vec.0))
+    fn quat4_vec3_product<const FAST: bool>(self, vec: Self) -> Self {
+        Vector(R::quat4_vec3_product::<FAST>(self.0, vec.0))
     }
 
     fn quat_to_mat3<const COLUMN_MAJOR: bool>(self) -> [Self; 3] {
@@ -1118,16 +1118,16 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
         unsafe { core::mem::transmute_copy::<[Storage<R>; N], [Self; N]>(&raw) }
     }
 
-    fn mat4_det(m: &[Self; 4]) -> Self::Element {
+    fn mat4_det<const FAST: bool>(m: &[Self; 4]) -> Self::Element {
         // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
         // because Vector<R> is repr(transparent) around Storage<R>
-        R::mat4_det(unsafe { core::mem::transmute(m) })
+        R::mat4_det::<FAST>(unsafe { core::mem::transmute(m) })
     }
 
-    fn mat4_inverse_inplace(m: &mut [Self; 4]) -> Self::Element {
+    fn mat4_inverse_inplace<const FAST: bool>(m: &mut [Self; 4]) -> Self::Element {
         // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
         // because Vector<R> is repr(transparent) around Storage<R>
-        R::mat4_inverse(unsafe { core::mem::transmute(m) })
+        R::mat4_inverse::<FAST>(unsafe { core::mem::transmute(m) })
     }
 }
 

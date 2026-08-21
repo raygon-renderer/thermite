@@ -88,7 +88,7 @@
 use core::f64::consts::PI;
 
 use thermite::{
-    math::{PrimalProjection, policy::Policy, scalar::Unwrap},
+    math::{CoreMath, PrimalProjection, policy::Policy, scalar::Unwrap},
     prelude::*,
     register::FloatElement,
 };
@@ -492,8 +492,8 @@ macro_rules! sh_value_columns {
                     0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16);
 
                 // (c, s) *= (x + iy)
-                let c_next = $y.nmul_adde($s, $x * $c);
-                let s_next = $y.mul_adde($c, $x * $s);
+                let c_next = $x.difference_of_products($c, $y, $s);
+                let s_next = $x.sum_of_products($s, $y, $c);
                 $c = c_next;
                 $s = s_next;
             }
@@ -564,8 +564,8 @@ macro_rules! sh_grad_columns {
                 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16);
 
             if $mv < $L {
-                let c_next = $y.nmul_adde($s, $x * $c);
-                let s_next = $y.mul_adde($c, $x * $s);
+                let c_next = $x.difference_of_products($c, $y, $s);
+                let s_next = $x.sum_of_products($s, $y, $c);
                 $cp = $c;
                 $sp = $s;
                 $c = c_next;
@@ -635,7 +635,7 @@ pub fn sh_impl<P, E, V, const L: usize, const N: usize, const CS: bool>(x: V, y:
 where
     P: Policy,
     E: FloatElement + ShConsts<L, N, CS>,
-    V: FloatVector<Element = E>,
+    V: FloatVector<Element = E> + CoreMath,
 {
     const {
         assert!(N == (L + 1) * (L + 1));
@@ -689,7 +689,7 @@ pub fn sh_d_impl<P, E, V, const L: usize, const N: usize, const CS: bool>(
 ) where
     P: Policy,
     E: FloatElement + ShConsts<L, N, CS>,
-    V: FloatVector<Element = E>,
+    V: FloatVector<Element = E> + CoreMath,
 {
     const {
         assert!(N == (L + 1) * (L + 1));
@@ -844,7 +844,7 @@ where
 #[inline(always)]
 pub fn sh_eval_impl<V, const L: usize, const N: usize>(t: &ShTable<V, N>, x: V, y: V, z: V, out: &mut [V; N])
 where
-    V: FloatVector,
+    V: FloatVector + CoreMath,
 {
     const {
         assert!(N == (L + 1) * (L + 1));
@@ -874,8 +874,8 @@ where
                 l += 1;
             }
 
-            let c_next = y.nmul_adde(s, x * c);
-            let s_next = y.mul_adde(c, x * s);
+            let c_next = x.difference_of_products(c, y, s);
+            let s_next = x.sum_of_products(s, y, c);
             c = c_next;
             s = s_next;
         }
@@ -902,7 +902,7 @@ pub fn sh_eval_lifted_impl<W, const L: usize, const N: usize>(
     z: W,
     out: &mut [W; N],
 ) where
-    W: FloatVector + PrimalProjection,
+    W: FloatVector + PrimalProjection + CoreMath,
 {
     const {
         assert!(N == (L + 1) * (L + 1));
@@ -932,8 +932,8 @@ pub fn sh_eval_lifted_impl<W, const L: usize, const N: usize>(
                 l += 1;
             }
 
-            let c_next = y.nmul_adde(s, x * c);
-            let s_next = y.mul_adde(c, x * s);
+            let c_next = x.difference_of_products(c, y, s);
+            let s_next = x.sum_of_products(s, y, c);
             c = c_next;
             s = s_next;
         }
@@ -970,7 +970,7 @@ pub fn sh_eval_mixed_impl<W, R, const L: usize, const N: usize>(
     z: W,
     out: &mut [W; N],
 ) where
-    W: FloatVector + core::ops::Mul<R, Output = W>,
+    W: FloatVector + core::ops::Mul<R, Output = W> + CoreMath,
     R: PrimalProjection,
 {
     const {
@@ -1006,8 +1006,8 @@ pub fn sh_eval_mixed_impl<W, R, const L: usize, const N: usize>(
                 l += 1;
             }
 
-            let c_next = y.nmul_adde(s, x * c);
-            let s_next = y.mul_adde(c, x * s);
+            let c_next = x.difference_of_products(c, y, s);
+            let s_next = x.sum_of_products(s, y, c);
             c = c_next;
             s = s_next;
         }
@@ -1030,7 +1030,7 @@ pub fn sh_eval_d_impl<V, const L: usize, const N: usize>(
     ddy: &mut [V; N],
     ddz: &mut [V; N],
 ) where
-    V: FloatVector,
+    V: FloatVector + CoreMath,
 {
     const {
         assert!(N == (L + 1) * (L + 1));
@@ -1109,8 +1109,8 @@ pub fn sh_eval_d_impl<V, const L: usize, const N: usize>(
         }
 
         if m < L {
-            let c_next = y.nmul_adde(s, x * c);
-            let s_next = y.mul_adde(c, x * s);
+            let c_next = x.difference_of_products(c, y, s);
+            let s_next = x.sum_of_products(s, y, c);
             cp = c;
             sp = s;
             c = c_next;

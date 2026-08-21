@@ -704,7 +704,14 @@ impl FloatRegister for F64x4V3 {
 impl LinAlg4Register for F64x4V3 {
     // Use 2x128-bit registers on AVX2 f64x4 to avoid lane-crossing shuffles
     // that are significantly slower than just using two xmm registers.
-    fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> f64 {
+    //
+    // Only the ADJUGATE is computed paired. The pairing makes every step issue
+    // twice, which is the right trade against a lane-crossing shuffle and a pure
+    // loss on the scale, because `vmulpd` and `vdivpd` cost the same at 128 and
+    // 256 bits on znver3. Scaling the pair would issue 8 operations where 4 will
+    // do. Recombining first and inheriting the default `mat4_inverse` scales once
+    // at native width.
+    fn mat4_adjugate<const FAST: bool>(m: &[Storage<Self>; 4]) -> ([Storage<Self>; 4], f64) {
         type Paired = ArrayRegister<super::F64x2V3, 2>;
 
         let mut pm: [Storage<Paired>; 4] = [Paired::EMPTY; 4];
@@ -716,21 +723,25 @@ impl LinAlg4Register for F64x4V3 {
             i += 1;
         }
 
-        // On a singular matrix the paired inverse leaves `pm` untouched, so
-        // recombining it unconditionally yields the original (un-clobbered) matrix.
-        let det = <Paired as LinAlg4Register>::mat4_inverse(&mut pm);
+        let (padj, det) = <Paired as LinAlg4Register>::mat4_adjugate::<FAST>(&pm);
 
-        let mut i = 0;
-        while i < 4 {
-            let (lo, hi) = <Paired as ConcatRegister<super::F64x2V3>>::split(pm[i]);
-            m[i] = Self::concat(lo, hi);
-            i += 1;
-        }
+        let (l0, h0) = <Paired as ConcatRegister<super::F64x2V3>>::split(padj[0]);
+        let (l1, h1) = <Paired as ConcatRegister<super::F64x2V3>>::split(padj[1]);
+        let (l2, h2) = <Paired as ConcatRegister<super::F64x2V3>>::split(padj[2]);
+        let (l3, h3) = <Paired as ConcatRegister<super::F64x2V3>>::split(padj[3]);
 
-        det
+        (
+            [
+                Self::concat(l0, h0),
+                Self::concat(l1, h1),
+                Self::concat(l2, h2),
+                Self::concat(l3, h3),
+            ],
+            det,
+        )
     }
 
-    fn mat4_det(cols: &[Storage<Self>; 4]) -> f64 {
+    fn mat4_det<const FAST: bool>(cols: &[Storage<Self>; 4]) -> f64 {
         // Same paired-128 split as the inverse; no recombine needed.
         type Paired = ArrayRegister<super::F64x2V3, 2>;
 
@@ -743,7 +754,7 @@ impl LinAlg4Register for F64x4V3 {
             i += 1;
         }
 
-        <Paired as LinAlg4Register>::mat4_det(&pm)
+        <Paired as LinAlg4Register>::mat4_det::<FAST>(&pm)
     }
 }
 

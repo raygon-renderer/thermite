@@ -63,13 +63,15 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> {
 
     #[allow(clippy::upper_case_acronyms)]
     #[inline(always)]
-    fn cross3<const DOP: bool>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    fn cross3<const FAST: bool>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         type ZXYW<R> = <<R as CoreRegister>::Lanes as ValidLinAlg3Length<R>>::ZXYW;
         type YZXW<R> = <<R as CoreRegister>::Lanes as ValidLinAlg3Length<R>>::YZXW;
 
-        if DOP {
-            // More accurate cross product using the "accurate difference of sums" method, but
-            // requires fused multiply-add/subtract operations for best accuracy.
+        if !FAST {
+            // Kahan's compensated difference of products: `err` recovers the rounding
+            // that `c * d` discarded and adds it back, so the two sides cancel exactly.
+            // Needs a real FMA to be worth anything, and degrades to the naive form
+            // without one, which has the same exactness property for free.
             let a = Self::permutev_const::<YZXW<Self>>(lhs); // [y, z, x]
             let b = Self::permutev_const::<ZXYW<Self>>(rhs); // [z, x, y]
             let c = Self::permutev_const::<ZXYW<Self>>(lhs); // [z, x, y]
@@ -272,9 +274,13 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> {
 
     /// Determinant of a column-major 3x3 matrix: the scalar triple product
     /// `c0 . (c1 x c2)`.
+    ///
+    /// In lieu of a full policy system, `FAST` is used to pick the internal behavior.
+    /// It is forwarded to [`cross3`](Self::cross3), which this is built from. See
+    /// there for what it does.
     #[inline(always)]
-    fn mat3_det(cols: &[Storage<Self>; 3]) -> Self::Element {
-        Self::dot3(cols[0], Self::cross3::<false>(cols[1], cols[2]))
+    fn mat3_det<const FAST: bool>(cols: &[Storage<Self>; 3]) -> Self::Element {
+        Self::dot3(cols[0], Self::cross3::<FAST>(cols[1], cols[2]))
     }
 
     /// In-place inverse of a column-major 3x3 matrix; **returns the determinant**.
@@ -285,23 +291,37 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> {
     /// An **exactly-zero determinant leaves the matrix untouched**; a near-zero
     /// (ill-conditioned) determinant produces a finite but unreliable result, so
     /// inspect the returned determinant before trusting the matrix.
+    ///
+    /// In lieu of a full policy system, `FAST` is used to pick the internal behavior.
+    /// It is forwarded to [`cross3`](Self::cross3), which the cofactors are built
+    /// from, and also picks how the adjugate is scaled: `FAST=true` takes one
+    /// reciprocal and multiplies, `FAST=false` divides once per column for a single
+    /// rounding per entry.
     #[inline(always)]
-    fn mat3_inverse(cols: &mut [Storage<Self>; 3]) -> Self::Element {
+    fn mat3_inverse<const FAST: bool>(cols: &mut [Storage<Self>; 3]) -> Self::Element {
         let [c0, c1, c2] = *cols;
 
         // Cofactor rows; these transpose into the inverse's columns.
-        let r0 = Self::cross3::<false>(c1, c2);
-        let r1 = Self::cross3::<false>(c2, c0);
-        let r2 = Self::cross3::<false>(c0, c1);
+        let r0 = Self::cross3::<FAST>(c1, c2);
+        let r1 = Self::cross3::<FAST>(c2, c0);
+        let r2 = Self::cross3::<FAST>(c0, c1);
 
         let d = Self::dot3(c0, r0);
 
         if crate::likely(!d.is_zero()) {
-            let dv = Self::splat(d);
             let t = Self::mat3_transpose(&[r0, r1, r2]);
-            cols[0] = Self::div(t[0], dv);
-            cols[1] = Self::div(t[1], dv);
-            cols[2] = Self::div(t[2], dv);
+
+            if const { FAST } {
+                let rcp = Self::div(Self::ONE, Self::splat(d));
+                cols[0] = Self::mul(t[0], rcp);
+                cols[1] = Self::mul(t[1], rcp);
+                cols[2] = Self::mul(t[2], rcp);
+            } else {
+                let dv = Self::splat(d);
+                cols[0] = Self::div(t[0], dv);
+                cols[1] = Self::div(t[1], dv);
+                cols[2] = Self::div(t[2], dv);
+            }
         }
 
         d
@@ -319,18 +339,32 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> {
     ///   it transforms normals to the *same direction*, so it's the cheaper
     ///   choice whenever you re-normalize the result.
     ///
-    /// Either way this is cheaper than [`mat3_inverse`](Self::mat3_inverse) - it
+    /// Either way this is cheaper than [`mat3_inverse`](Self::mat3_inverse), it
     /// skips that method's transpose step.
+    ///
+    /// In lieu of a full policy system, `FAST` is used to pick the internal behavior.
+    /// It is forwarded to [`cross3`](Self::cross3), which the cofactors are built
+    /// from, and also picks how the cofactor matrix is scaled: `FAST=true` takes one
+    /// reciprocal and multiplies, `FAST=false` divides once per column for a single
+    /// rounding per entry. With `DIVIDE=false` there is no scale, so
+    /// `FAST` only reaches `cross3`.
     #[inline(always)]
-    fn mat3_normal<const DIVIDE: bool>(cols: &[Storage<Self>; 3]) -> [Storage<Self>; 3] {
+    fn mat3_normal<const DIVIDE: bool, const FAST: bool>(cols: &[Storage<Self>; 3]) -> [Storage<Self>; 3] {
         let [c0, c1, c2] = *cols;
-        let a = Self::cross3::<false>(c1, c2);
-        let b = Self::cross3::<false>(c2, c0);
-        let c = Self::cross3::<false>(c0, c1);
+        let a = Self::cross3::<FAST>(c1, c2);
+        let b = Self::cross3::<FAST>(c2, c0);
+        let c = Self::cross3::<FAST>(c0, c1);
 
         if const { DIVIDE } {
-            let dv = Self::splat(Self::dot3(c0, a));
-            [Self::div(a, dv), Self::div(b, dv), Self::div(c, dv)]
+            let d = Self::dot3(c0, a);
+
+            if const { FAST } {
+                let rcp = Self::div(Self::ONE, Self::splat(d));
+                [Self::mul(a, rcp), Self::mul(b, rcp), Self::mul(c, rcp)]
+            } else {
+                let dv = Self::splat(d);
+                [Self::div(a, dv), Self::div(b, dv), Self::div(c, dv)]
+            }
         } else {
             [a, b, c]
         }
@@ -402,7 +436,7 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
     }
 
     #[inline(always)]
-    fn quat4_vec3_product<const DOP: bool>(q: Storage<Self>, v: Storage<Self>) -> Storage<Self> {
+    fn quat4_vec3_product<const FAST: bool>(q: Storage<Self>, v: Storage<Self>) -> Storage<Self> {
         // --- Fast method by Giesen ---
         // Formula: v + 2w(q x v) + 2(q x (q x v))
 
@@ -410,12 +444,12 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
         let q_xyz = q;
 
         // t = 2 * cross(q, v)
-        let t = Self::cross3::<DOP>(q_xyz, v);
+        let t = Self::cross3::<FAST>(q_xyz, v);
         let t = Self::add(t, t); // multiply by 2
 
         // result = v + w*t + cross(q, t)
         let w_t = Self::mul(w, t);
-        let cross_q_t = Self::cross3::<DOP>(q_xyz, t);
+        let cross_q_t = Self::cross3::<FAST>(q_xyz, t);
 
         // compute wt + v first to allow for better instruction level parallelism,
         // while waiting on the cross product to complete
@@ -769,21 +803,42 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
         Self::add(lo, hi)
     }
 
-    /// Full in-place 4x4 inverse; **returns the determinant**.
+    /// The UNSCALED adjugate of a column-major 4x4 matrix, plus its determinant.
     ///
-    /// An exactly-zero determinant leaves the matrix untouched; a near-zero
-    /// (ill-conditioned) determinant produces a finite but unreliable result, so
-    /// inspect the returned determinant before trusting the matrix.
+    /// The override point for the 4x4 inverse: a backend supplies its own swizzle
+    /// here and inherits [`mat4_inverse`](Self::mat4_inverse) unchanged.
     #[inline(always)]
-    fn mat4_inverse(m: &mut [Storage<Self>; 4]) -> Self::Element {
+    fn mat4_adjugate<const FAST: bool>(m: &[Storage<Self>; 4]) -> ([Storage<Self>; 4], Self::Element) {
         // standard implementation using swizzle macro that
         // invokes permutev/swizzle meta-instructions
         impl_mat4_inverse!(m, s)
     }
 
+    /// Full in-place 4x4 inverse; **returns the determinant**.
+    ///
+    /// An exactly-zero determinant leaves the matrix untouched; a near-zero
+    /// (ill-conditioned) determinant produces a finite but unreliable result, so
+    /// inspect the returned determinant before trusting the matrix.
+    ///
+    /// Backends override [`mat4_adjugate`](Self::mat4_adjugate), not this.
+    #[inline(always)]
+    fn mat4_inverse<const FAST: bool>(m: &mut [Storage<Self>; 4]) -> Self::Element {
+        use num_traits::Zero as _;
+
+        let (adj, det) = Self::mat4_adjugate::<FAST>(m);
+
+        // Leave the matrix untouched for an exactly-singular determinant (a
+        // well-predicted branch).
+        if crate::likely(!det.is_zero()) {
+            mat4_scale!(m, adj, det);
+        }
+
+        det
+    }
+
     /// Determinant of a column-major 4x4 matrix.
     #[inline(always)]
-    fn mat4_det(m: &[Storage<Self>; 4]) -> Self::Element {
+    fn mat4_det<const FAST: bool>(m: &[Storage<Self>; 4]) -> Self::Element {
         impl_mat4_inverse!(DET_ONLY m, s)
     }
 }

@@ -116,11 +116,11 @@ macro_rules! linalg_suite {
                     harness::assert_lanes_eq(concat!($bl, " [dot3]"), &[], &[va.dot3(vb) as f64], &[o_dot3(af, bf)], Tol::Rel($tol));
                     harness::assert_lanes_eq(concat!($bl, " [dot4]"), &[], &[va.dot4(vb) as f64], &[o_dot4(af, bf)], Tol::Rel($tol));
 
-                    // cross3 (both DOP modes), first 3 lanes
+                    // cross3 (both FAST modes), first 3 lanes
                     let want3 = o_cross3(af, bf);
-                    let g = rd(va.cross3::<false>(vb));
-                    harness::assert_lanes_eq(concat!($bl, " [cross3<false>]"), &[], &g[..3], &want3, Tol::Rel($tol));
                     let g = rd(va.cross3::<true>(vb));
+                    harness::assert_lanes_eq(concat!($bl, " [cross3<false>]"), &[], &g[..3], &want3, Tol::Rel($tol));
+                    let g = rd(va.cross3::<false>(vb));
                     harness::assert_lanes_eq(concat!($bl, " [cross3<true>]"), &[], &g[..3], &want3, Tol::Rel($tol));
 
                     // quat4_product (full 4 lanes)

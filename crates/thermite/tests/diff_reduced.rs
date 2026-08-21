@@ -782,7 +782,7 @@ macro_rules! castt {
     }};
 }
 
-/// LinAlg3Register: dot3, cross3 (both DOP), zero4/one4, the four element3
+/// LinAlg3Register: dot3, cross3 (both FAST), zero4/one4, the four element3
 /// reductions, mat3_transpose, and column-major mat3_vec3_product.
 macro_rules! linalg3 {
     ($reg:ty, $e:ty, $l:expr, $tol:expr) => {{
@@ -804,8 +804,8 @@ macro_rules! linalg3 {
                 xa[2] * xb[0] - xa[0] * xb[2],
                 xa[0] * xb[1] - xa[1] * xb[0],
             ];
-            harness::assert_lanes_eq(concat!($l, " [cross3 F]"), &[&xa, &xb], &r3(a.cross3::<false>(b)), &cross, $tol);
-            harness::assert_lanes_eq(concat!($l, " [cross3 T]"), &[&xa, &xb], &r3(a.cross3::<true>(b)), &cross, $tol);
+            harness::assert_lanes_eq(concat!($l, " [cross3 exact]"), &[&xa, &xb], &r3(a.cross3::<true>(b)), &cross, $tol);
+            harness::assert_lanes_eq(concat!($l, " [cross3 fast]"), &[&xa, &xb], &r3(a.cross3::<false>(b)), &cross, $tol);
 
             // On a genuine 3-lane register zero4/one4 leave the visible lanes alone.
             harness::assert_lanes_eq(concat!($l, " [zero4]"), &[&xa], &r3(a.zero4()), &xa, $tol);

@@ -1161,8 +1161,8 @@ where
     }
 
     #[inline(always)]
-    fn cross3<const DOP: bool>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        Self(R::cross3::<DOP>(lhs.0, rhs.0), PhantomData)
+    fn cross3<const FAST: bool>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+        Self(R::cross3::<FAST>(lhs.0, rhs.0), PhantomData)
     }
 
     #[inline(always)]

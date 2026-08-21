@@ -485,6 +485,32 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
     }
 
     #[inline(always)]
+    fn difference_of_products<P: Policy>(self, b: Self, c: Self, d: Self) -> Self {
+        let (a, cd) = (self, c * d);
+
+        if const { !Self::HAS_TRUE_FMA } {
+            a * b - cd
+        } else if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
+            a.mul_sub(b, cd)
+        } else {
+            a.mul_sub(b, cd) + c.nmul_add(d, cd) // value + error
+        }
+    }
+
+    #[inline(always)]
+    fn sum_of_products<P: Policy>(self, b: Self, c: Self, d: Self) -> Self {
+        let (a, cd) = (self, c * d);
+
+        if const { !Self::HAS_TRUE_FMA } {
+            a * b + cd
+        } else if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
+            a.mul_add(b, cd)
+        } else {
+            a.mul_add(b, cd) - c.nmul_add(d, cd)
+        }
+    }
+
+    #[inline(always)]
     fn poly<P: Policy, const N: usize>(self, coeffs: &[E; N]) -> Self {
         let x = self;
 

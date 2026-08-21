@@ -333,3 +333,82 @@ fn primal_projection() {
     assert_eq!(bounds(i), (3.5, 3.5));
     assert_eq!(i.to_primal().extract::<0>(), 3.5);
 }
+
+// --- difference_of_products / sum_of_products --------------------------------
+//
+// These carry a `SpecializedCoreMath` override (see `src/math.rs`). The trait
+// default compensates above `Average` precision by recovering the rounding that
+// `c * d` discarded and adding it back. For an interval there is no such discarded
+// rounding to recover (`c * d` is already an outward-rounded enclosure), so the
+// default's correction degenerates to `cd - cd`, a symmetric band of twice the
+// product's width, and adding it back inflates the result 2x for nothing.
+//
+// Two things are pinned: THE law still holds (it is an enclosure), and the result
+// does not move with the precision policy, which is what would fail if the override
+// were dropped and the default's compensation came back.
+
+/// Enclosure, plus policy-independence, for `ab - cd` and `ab + cd`.
+#[test]
+fn products_enclose_and_ignore_precision_policy() {
+    use thermite::math::policy::policies::{HighPerformance, Performance, Precision};
+    use thermite::math::{CoreMath, CoreMathWithPolicy};
+
+    // Degenerate (point) intervals: the exact result is then a single real, so the
+    // enclosure check is sharp rather than trivially satisfied by a wide input.
+    let cases: &[(f64, f64, f64, f64)] = &[
+        (0.1, 0.3, 0.3, 0.1),                       // exactly-equal products
+        (33962.035, -30438.8, 41563.4, -24871.969), // Kahan's cancelling case
+        (1.0 / 3.0, 7.0 / 11.0, 1e-8, 3.7e12),
+        (-2.718281828459045, 3.141592653589793, 0.1, 0.3),
+    ];
+
+    fn point<W: WideningPolicy>(x: f64) -> I<W> {
+        Interval::bounds(V1::splat(x), V1::splat(x))
+    }
+
+    for &(a, b, c, d) in cases {
+        // Exact `a*b - c*d` as a double-double, via error-free transforms.
+        let (p, pe) = s_two_prod(a, b);
+        let (q, qe) = s_two_prod(c, d);
+        let (diff, de) = s_two_sum(p, -q);
+        let (sum, se) = s_two_sum(p, q);
+
+        let (ai, bi, ci, di) = (
+            point::<Tightest>(a),
+            point::<Tightest>(b),
+            point::<Tightest>(c),
+            point::<Tightest>(d),
+        );
+
+        let dop = ai.difference_of_products(bi, ci, di);
+        let sop = ai.sum_of_products(bi, ci, di);
+
+        assert!(
+            contains_exact(dop, diff, de + pe - qe),
+            "difference_of_products({a:e}, {b:e}, {c:e}, {d:e}) = {:?} excludes {diff:e}",
+            bounds(dop)
+        );
+        assert!(
+            contains_exact(sop, sum, se + pe + qe),
+            "sum_of_products({a:e}, {b:e}, {c:e}, {d:e}) = {:?} excludes {sum:e}",
+            bounds(sop)
+        );
+
+        // Policy-independent: identical bounds either side of the Average boundary
+        // the trait default keys on.
+        for (name, got) in [
+            ("Performance", ai.difference_of_products_p::<Performance>(bi, ci, di)),
+            ("Precision", ai.difference_of_products_p::<Precision>(bi, ci, di)),
+            (
+                "HighPerformance",
+                ai.difference_of_products_p::<HighPerformance>(bi, ci, di),
+            ),
+        ] {
+            assert_eq!(
+                bounds(got),
+                bounds(dop),
+                "difference_of_products moved with policy {name} on ({a:e}, {b:e}, {c:e}, {d:e})"
+            );
+        }
+    }
+}

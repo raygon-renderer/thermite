@@ -79,7 +79,11 @@
 //! kernels do not renormalize their direction. Outside it the polynomials are still
 //! evaluated correctly and simply are not orthogonal.
 
-use thermite::{math::policy::Policy, prelude::*, register::FloatElement};
+use thermite::{
+    math::{CoreMath, policy::Policy},
+    prelude::*,
+    register::FloatElement,
+};
 
 use crate::zernike::{ZERNIKE_ORTHONORMAL, ZERNIKE_UNIT_PEAK};
 
@@ -316,8 +320,8 @@ macro_rules! zernike_columns {
 
             if $mv < $L {
                 // (u, v) *= (x + iy)
-                let u_next = $y.nmul_adde($v, $x * $u);
-                let v_next = $y.mul_adde($u, $x * $v);
+                let u_next = $x.difference_of_products($u, $y, $v);
+                let v_next = $x.sum_of_products($v, $y, $u);
                 $u = u_next;
                 $v = v_next;
             }
@@ -396,8 +400,8 @@ macro_rules! zernike_grad_columns {
 
             if $mv < $L {
                 // (up, vp) = (u, v); (u, v) *= (x + iy)
-                let u_next = $y.nmul_adde($v, $x * $u);
-                let v_next = $y.mul_adde($u, $x * $v);
+                let u_next = $x.difference_of_products($u, $y, $v);
+                let v_next = $x.sum_of_products($v, $y, $u);
 
                 $up = $u;
                 $vp = $v;
@@ -458,7 +462,7 @@ pub fn zernike_basis_impl<P, E, V, const L: usize, const NORM: u8, const N: usiz
 where
     P: Policy,
     E: FloatElement,
-    V: FloatVector<Element = E>,
+    V: FloatVector<Element = E> + CoreMath,
 {
     const {
         assert!(N == (L + 1) * (L + 2) / 2, "zernike_basis: N must equal (L+1)(L+2)/2");
@@ -490,7 +494,7 @@ where
 fn rolled<E, V, const L: usize, const NORM: u8, const N: usize>(s: V, x: V, y: V, out: &mut [V; N])
 where
     E: FloatElement,
-    V: FloatVector<Element = E>,
+    V: FloatVector<Element = E> + CoreMath,
 {
     let mut u = V::ONE;
     let mut v = V::ZERO;
@@ -525,8 +529,8 @@ where
         }
 
         if m < L {
-            let u_next = y.nmul_adde(v, x * u);
-            let v_next = y.mul_adde(u, x * v);
+            let u_next = x.difference_of_products(u, y, v);
+            let v_next = x.sum_of_products(v, y, u);
             u = u_next;
             v = v_next;
         }
@@ -566,7 +570,7 @@ pub fn zernike_basis_d_impl<P, E, V, const L: usize, const NORM: u8, const N: us
 ) where
     P: Policy,
     E: FloatElement,
-    V: FloatVector<Element = E>,
+    V: FloatVector<Element = E> + CoreMath,
 {
     const {
         assert!(N == (L + 1) * (L + 2) / 2, "zernike_basis_d: N must equal (L+1)(L+2)/2");
@@ -602,7 +606,7 @@ fn rolled_d<E, V, const L: usize, const NORM: u8, const N: usize>(
     ddy: &mut [V; N],
 ) where
     E: FloatElement,
-    V: FloatVector<Element = E>,
+    V: FloatVector<Element = E> + CoreMath,
 {
     let mut u = V::ONE;
     let mut v = V::ZERO;
@@ -650,8 +654,8 @@ fn rolled_d<E, V, const L: usize, const NORM: u8, const N: usize>(
         }
 
         if m < L {
-            let u_next = y.nmul_adde(v, x * u);
-            let v_next = y.mul_adde(u, x * v);
+            let u_next = x.difference_of_products(u, y, v);
+            let v_next = x.sum_of_products(v, y, u);
 
             up = u;
             vp = v;

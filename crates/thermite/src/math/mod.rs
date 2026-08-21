@@ -477,6 +477,50 @@ decl_math! {
         /// performance, at the cost of accuracy.
         fn approx_div[][](self: Self, divisor: Self) -> Self;
 
+        /// `$ab - cd$`, spelled `a.difference_of_products(b, c, d)`, evaluated so the
+        /// two products cannot cancel catastrophically.
+        ///
+        /// Reach for this wherever an expression's correctness story is "the two
+        /// errors cancel by symmetry": cross products and perp-dots, 2x2
+        /// determinants and matrix adjugates, discriminants `$b^2 - 4ac$`, the
+        /// `$ac - bd$` of a complex multiply, and every sign test built on one of
+        /// those.
+        ///
+        /// Longhand gets this wrong in two ways. Naive `a * b - c * d` loses the
+        /// whole difference when the products are close. A _one-sided_ fused
+        /// spelling (`a.mul_sube(b, c * d)`) looks like the fix and is worse for the
+        /// case that usually matters, because it leaves one product exact and rounds
+        /// the other, so `$ab - ba$` comes back as a small non-zero rather than
+        /// exactly zero. It does that only on hardware with FMA, which makes it a
+        /// portability bug as much as an accuracy one: the same source gives a
+        /// self-cross-product of zero on baseline x86 and a denormal on AArch64.
+        ///
+        /// Three lowerings, chosen at compile time from the FMA capability and the
+        /// precision policy:
+        ///
+        /// | condition | evaluated as | cost |
+        /// |---|---|---|
+        /// | no true FMA | `a * b - c * d` | 3 ops |
+        /// | true FMA, precision below `Average` | `fma(a, b, -cd)` | 2 ops |
+        /// | true FMA, precision `Average` or above | Kahan's compensated form | 4 ops |
+        ///
+        /// Kahan's form recovers the discarded rounding of `$cd$` with a second FMA
+        /// and adds it back, for ~1.5 ulp, correctly signed, and exact whenever the
+        /// two products are equal. `Average` is the default policy's tier, so that is
+        /// what an unsuffixed call gets. Without FMA the naive form is both the
+        /// cheapest available _and_ the only one with the exactness property, so it
+        /// runs at every precision rather than emulating a fused multiply.
+        fn difference_of_products[][](self: Self, b: Self, c: Self, d: Self) -> Self;
+
+        /// `$ab + cd$`, spelled `a.sum_of_products(b, c, d)`.
+        ///
+        /// The companion to [`difference_of_products`](CoreMath::difference_of_products),
+        /// with the same three lowerings and the same reasoning. A sum of products
+        /// cancels exactly as badly as a difference when the two terms have opposite
+        /// signs, which is the ordinary case for the imaginary half of a complex
+        /// multiply.
+        fn sum_of_products[][](self: Self, b: Self, c: Self, d: Self) -> Self;
+
         /// The harmonic mean of `N` values, `$N / \sum_i 1/x_i$`.
         ///
         /// The mean that averages *rates*: harmonic over speeds gives the average speed of a

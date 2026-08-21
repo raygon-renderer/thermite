@@ -3333,14 +3333,14 @@ pub trait LinAlg3Vector: FloatVector {
     /// This is more efficient than a raw cross product, as there is no need to
     /// zero out the last lane of the register.
     ///
-    /// The `DOP` generic parameter indicates whether to use the
-    /// "Difference of Products" method for computing the cross product,
-    /// which can be more accurate in some cases, but _requires_
-    /// hardware fused multiply-add instructions to be efficient.
+    /// In lieu of a full policy system, `FAST` is used to pick the internal behavior.
     ///
-    /// If you want the best performance, set `DOP` to `false`.\
-    /// If you want the best accuracy or have FMA support, set `DOP` to `true`.
-    fn cross3<const DOP: bool>(self, other: Self) -> Self;
+    /// `FAST=true` is the standard textbook cross-product implemented with SIMD. It's
+    /// good enough for almost every case.
+    ///
+    /// `FAST=false`, and potentially depending on the presence of FMA, will try to
+    /// compensate for catastrophic cancellation errors that can occur in some edge cases.
+    fn cross3<const FAST: bool>(self, other: Self) -> Self;
 
     /// Refraction of incident vector `self` through a surface with normal `n`
     /// and relative index of refraction `eta` (`$\eta = \eta_i/\eta_t$`). `self` and `n` are
@@ -3400,14 +3400,24 @@ pub trait LinAlg3Vector: FloatVector {
     fn mat3_product<const COLUMN_MAJOR: bool>(lhs: &[Self; 3], rhs: &[Self; 3]) -> [Self; 3];
 
     /// Determinant of a column-major 3x3 matrix.
-    fn mat3_det(m: &[Self; 3]) -> Self::Element;
+    ///
+    /// In lieu of a full policy system, `FAST` is used to pick the internal behavior.
+    /// It is forwarded to [`cross3`](LinAlg3Vector::cross3), which this is built
+    /// from. See there for what it does.
+    fn mat3_det<const FAST: bool>(m: &[Self; 3]) -> Self::Element;
 
     /// In-place 3x3 Matrix inversion; **returns the determinant**.
     ///
     /// An exactly-zero determinant leaves the matrix untouched; a near-zero
     /// (ill-conditioned) determinant gives a finite but unreliable result, so
     /// inspect the returned determinant before trusting the matrix.
-    fn mat3_inverse_inplace(m: &mut [Self; 3]) -> Self::Element;
+    ///
+    /// In lieu of a full policy system, `FAST` is used to pick the internal behavior.
+    /// It is forwarded to [`cross3`](LinAlg3Vector::cross3), which the cofactors are
+    /// built from, and also picks how the adjugate is scaled: `FAST=true` takes one
+    /// reciprocal and multiplies, `FAST=false` divides once per column for a single
+    /// rounding per entry.
+    fn mat3_inverse_inplace<const FAST: bool>(m: &mut [Self; 3]) -> Self::Element;
 
     /// 3x3 Matrix inversion.
     ///
@@ -3415,9 +3425,9 @@ pub trait LinAlg3Vector: FloatVector {
     /// Consider [`mat3_inverse_inplace`](Self::mat3_inverse_inplace) (which hands
     /// back the determinant) to avoid the copy and to use a custom tolerance.
     #[inline(always)]
-    fn mat3_inverse(m: &[Self; 3]) -> Option<[Self; 3]> {
+    fn mat3_inverse<const FAST: bool>(m: &[Self; 3]) -> Option<[Self; 3]> {
         let mut mat = *m;
-        if Self::mat3_inverse_inplace(&mut mat) == Self::Element::ZERO {
+        if Self::mat3_inverse_inplace::<FAST>(&mut mat) == Self::Element::ZERO {
             None
         } else {
             Some(mat)
@@ -3431,7 +3441,14 @@ pub trait LinAlg3Vector: FloatVector {
     /// singular); `DIVIDE = false` gives the un-divided cofactor matrix, which is
     /// cheaper, never singular, and points normals the same direction (use it
     /// when you re-normalize the result). Cheaper than a full inverse either way.
-    fn mat3_normal<const DIVIDE: bool>(m: &[Self; 3]) -> [Self; 3];
+    ///
+    /// In lieu of a full policy system, `FAST` is used to pick the internal behavior.
+    /// It is forwarded to [`cross3`](LinAlg3Vector::cross3), which the cofactors are
+    /// built from, and also picks how the cofactor matrix is scaled: `FAST=true` takes one
+    /// reciprocal and multiplies, `FAST=false` divides once per column for a single
+    /// rounding per entry. With `DIVIDE=false` there is no
+    /// scale, so `FAST` only reaches `cross3`.
+    fn mat3_normal<const DIVIDE: bool, const FAST: bool>(m: &[Self; 3]) -> [Self; 3];
 }
 
 /// Vector suitable for 4D linear algebra operations.
@@ -3462,14 +3479,10 @@ pub trait LinAlg4Vector: LinAlg3Vector {
     /// and a single cross product. This is because cross products require
     /// several shuffles/permutations to compute efficiently with SIMD.
     ///
-    /// The `DOP` generic parameter indicates whether to use the
-    /// "Difference of Products" method for computing the cross product(s),
-    /// which can be more accurate in some cases, but _requires_
-    /// hardware fused multiply-add instructions to be efficient.
-    ///
-    /// If you want the best performance, set `DOP` to `false`.\
-    /// If you want the best accuracy or have FMA support, set `DOP` to `true`.
-    fn quat4_vec3_product<const DOP: bool>(self, vec: Self) -> Self;
+    /// In lieu of a full policy system, `FAST` is used to pick the internal behavior.
+    /// See [`cross`](LinAlg3Vector::cross) for why, since this method internally uses cross
+    /// products.
+    fn quat4_vec3_product<const FAST: bool>(self, vec: Self) -> Self;
 
     /// Rotation matrix of a **unit** quaternion as 3 registers; the 4th lane of
     /// each is unspecified.
@@ -3582,10 +3595,44 @@ pub trait LinAlg4Vector: LinAlg3Vector {
     /// An exactly-zero determinant leaves the matrix untouched; a near-zero
     /// (ill-conditioned) determinant gives a finite but unreliable result, so
     /// inspect the returned determinant before trusting the matrix.
-    fn mat4_inverse_inplace(m: &mut [Self; 4]) -> Self::Element;
+    ///
+    /// In lieu of a full policy system, `FAST` is used to pick the internal behavior.
+    ///
+    /// `false` is the accurate setting and the right default. The 2x2 minors the
+    /// determinant is built from are differences of products, evaluated so their
+    /// roundings cancel, and the adjugate is divided by the determinant rather than
+    /// multiplied by its reciprocal. A minor of a rank-deficient matrix therefore
+    /// comes back as exactly zero, and every entry of the inverse carries one
+    /// rounding instead of two.
+    ///
+    /// `true` takes the simpler form for both, at the cost of those edge cases. On
+    /// Zen 3, `false` costs 9.9 cycles per call against `true`'s 8.4 for
+    /// `mat4_det`, and 35.7 against 29.0 at `f32x4` or 64.3 against 46.8 at
+    /// `f64x4` for `mat4_inverse_inplace`.
+    ///
+    /// Which algorithm the minors compile to also depends on hardware FMA. Without
+    /// it, the two settings differ only in the final scale.
+    fn mat4_inverse_inplace<const FAST: bool>(m: &mut [Self; 4]) -> Self::Element;
 
     /// Compute the determinant of a 4x4 matrix without inverting it.
-    fn mat4_det(m: &[Self; 4]) -> Self::Element;
+    ///
+    /// In lieu of a full policy system, `FAST` is used to pick the internal behavior.
+    ///
+    /// `false` is the accurate setting and the right default. The 2x2 minors the
+    /// determinant is built from are differences of products, evaluated so their
+    /// roundings cancel, and the adjugate is divided by the determinant rather than
+    /// multiplied by its reciprocal. A minor of a rank-deficient matrix therefore
+    /// comes back as exactly zero, and every entry of the inverse carries one
+    /// rounding instead of two.
+    ///
+    /// `true` takes the simpler form for both, at the cost of those edge cases. On
+    /// Zen 3, `false` costs 9.9 cycles per call against `true`'s 8.4 for
+    /// `mat4_det`, and 35.7 against 29.0 at `f32x4` or 64.3 against 46.8 at
+    /// `f64x4` for `mat4_inverse_inplace`.
+    ///
+    /// Which algorithm the minors compile to also depends on hardware FMA. Without
+    /// it, the two settings differ only in the final scale.
+    fn mat4_det<const FAST: bool>(m: &[Self; 4]) -> Self::Element;
 
     /// 4x4 Matrix inversion.
     ///
@@ -3593,10 +3640,10 @@ pub trait LinAlg4Vector: LinAlg3Vector {
     /// singular. Consider [`Vector::mat4_inverse_inplace`] (which hands back the
     /// determinant) to avoid the copy and to use a custom tolerance.
     #[inline(always)]
-    fn mat4_inverse(m: &[Self; 4]) -> Option<[Self; 4]> {
+    fn mat4_inverse<const FAST: bool>(m: &[Self; 4]) -> Option<[Self; 4]> {
         let mut mat = *m;
 
-        if crate::likely(Self::mat4_inverse_inplace(&mut mat) != Self::Element::ZERO) {
+        if crate::likely(Self::mat4_inverse_inplace::<FAST>(&mut mat) != Self::Element::ZERO) {
             Some(mat)
         } else {
             None

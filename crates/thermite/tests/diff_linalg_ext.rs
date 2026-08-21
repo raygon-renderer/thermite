@@ -5,7 +5,7 @@
 //! `register/linalg.rs`, which had no coverage:
 //!   - `mat3_transpose`, `mat3_vec3_product` (col- and row-major)
 //!   - `mat4_vec3_product` (col- and row-major)
-//!   - `quat4_vec3_product` (both `DOP` modes)
+//!   - `quat4_vec3_product` (both `FAST` modes)
 //!   - `mat4_product` (col- and row-major)
 //!   - `mat4_det` / `mat4_inverse` / `mat4_inverse_inplace` (incl. `DET_ONLY`
 //!     and the singular-matrix path)
@@ -161,12 +161,12 @@ macro_rules! linalg_ext_suite {
                     harness::assert_lanes_eq(concat!($bl, " [max_element3]"), &[], &[va.max_element3() as f64], &[mx], Tol::Rel($tol));
                     harness::assert_lanes_eq(concat!($bl, " [prod_elements3]"), &[], &[va.prod_elements3() as f64], &[pr], Tol::Rel($tol));
 
-                    // quat4_vec3_product (both DOP modes), first 3 lanes
+                    // quat4_vec3_product (both FAST modes), first 3 lanes
                     let (q, vq) = rv(&mut rng);
                     let want = quat_vec3(f4(q), af);
-                    let g = rd(vq.quat4_vec3_product::<false>(va));
-                    harness::assert_lanes_eq(concat!($bl, " [quat4_vec3<false>]"), &[], &g[..3], &want, Tol::Rel($tol));
                     let g = rd(vq.quat4_vec3_product::<true>(va));
+                    harness::assert_lanes_eq(concat!($bl, " [quat4_vec3<false>]"), &[], &g[..3], &want, Tol::Rel($tol));
+                    let g = rd(vq.quat4_vec3_product::<false>(va));
                     harness::assert_lanes_eq(concat!($bl, " [quat4_vec3<true>]"), &[], &g[..3], &want, Tol::Rel($tol));
 
                     // refract, per GLSL/GLM: unit incident & normal, random eta covers
@@ -244,28 +244,54 @@ macro_rules! linalg_ext_suite {
                         harness::assert_lanes_eq(concat!($bl, " [mat3_product<row>]"), &[], &rd(got_r[k])[..3], &want_r[..3], Tol::Rel($tol));
                     }
 
-                    // mat3_det: scalar triple product == det of the 3x3.
+                    // mat3_det: scalar triple product == det of the 3x3. Both
+                    // settings of `FAST` are accurate to the suite's tolerance on a
+                    // well-conditioned matrix, so both are checked against it.
                     let m3: [[f64; 3]; 3] = core::array::from_fn(|i| core::array::from_fn(|j| cf[i][j]));
-                    harness::assert_lanes_eq(concat!($bl, " [mat3_det]"), &[], &[V::mat3_det(&cols) as f64], &[det3(m3)], Tol::Rel($tol));
+                    harness::assert_lanes_eq(concat!($bl, " [mat3_det]"), &[], &[V::mat3_det::<false>(&cols) as f64], &[det3(m3)], Tol::Rel($tol));
+                    harness::assert_lanes_eq(concat!($bl, " [mat3_det fast]"), &[], &[V::mat3_det::<true>(&cols) as f64], &[det3(m3)], Tol::Rel($tol));
 
                     // mat3_inverse: M * M^-1 ≈ I (first 3 lanes).
-                    let inv = V::mat3_inverse(&cols).expect(concat!($bl, " [mat3_inverse] returned None"));
-                    let prod = V::mat3_product::<true>(&cols, &inv);
-                    for k in 0..3 {
-                        let want_id: [f64; 3] = core::array::from_fn(|j| if j == k { 1.0 } else { 0.0 });
-                        harness::assert_lanes_eq(concat!($bl, " [M*M^-1 == I (3x3)]"), &[], &rd(prod[k])[..3], &want_id, Tol::Rel($tol));
+                    for fast in [false, true] {
+                        let inv = if fast {
+                            V::mat3_inverse::<true>(&cols)
+                        } else {
+                            V::mat3_inverse::<false>(&cols)
+                        }
+                        .expect(concat!($bl, " [mat3_inverse] returned None"));
+
+                        let prod = V::mat3_product::<true>(&cols, &inv);
+                        for k in 0..3 {
+                            let want_id: [f64; 3] = core::array::from_fn(|j| if j == k { 1.0 } else { 0.0 });
+                            harness::assert_lanes_eq(concat!($bl, " [M*M^-1 == I (3x3)]"), &[], &rd(prod[k])[..3], &want_id, Tol::Rel($tol));
+                        }
                     }
 
-                    // mat3_normal::<true> == transpose(inverse): the inverse-transpose.
+                    let inv = V::mat3_inverse::<false>(&cols).expect(concat!($bl, " [mat3_inverse] returned None"));
+
+                    // mat3_normal::<true, _> == transpose(inverse): the inverse-transpose.
                     let want_n = V::mat3_transpose(&inv);
-                    let got_n = V::mat3_normal::<true>(&cols);
-                    // mat3_normal::<false> is the un-divided cofactor == inverse-transpose * det.
-                    let cof = V::mat3_normal::<false>(&cols);
-                    let detf = V::mat3_det(&cols) as f64;
-                    for k in 0..3 {
-                        harness::assert_lanes_eq(concat!($bl, " [mat3_normal<true>]"), &[], &rd(got_n[k])[..3], &rd(want_n[k])[..3], Tol::Rel($tol));
-                        let want_cof: [f64; 3] = core::array::from_fn(|j| rd(want_n[k])[j] * detf);
-                        harness::assert_lanes_eq(concat!($bl, " [mat3_normal<false>]"), &[], &rd(cof[k])[..3], &want_cof, Tol::Rel($tol));
+                    let detf = V::mat3_det::<false>(&cols) as f64;
+                    for (lbl_n, lbl_c, got_n, cof) in [
+                        (
+                            concat!($bl, " [mat3_normal<true>]"),
+                            concat!($bl, " [mat3_normal<false>]"),
+                            V::mat3_normal::<true, false>(&cols),
+                            V::mat3_normal::<false, false>(&cols),
+                        ),
+                        (
+                            concat!($bl, " [mat3_normal<true> fast]"),
+                            concat!($bl, " [mat3_normal<false> fast]"),
+                            V::mat3_normal::<true, true>(&cols),
+                            V::mat3_normal::<false, true>(&cols),
+                        ),
+                    ] {
+                        for k in 0..3 {
+                            harness::assert_lanes_eq(lbl_n, &[], &rd(got_n[k])[..3], &rd(want_n[k])[..3], Tol::Rel($tol));
+                            // The un-divided cofactor is the inverse-transpose * det.
+                            let want_cof: [f64; 3] = core::array::from_fn(|j| rd(want_n[k])[j] * detf);
+                            harness::assert_lanes_eq(lbl_c, &[], &rd(cof[k])[..3], &want_cof, Tol::Rel($tol));
+                        }
                     }
                 }
             }
@@ -370,15 +396,26 @@ macro_rules! linalg_ext_suite {
                     let (cols, mf) = rmat(&mut rng);
                     let want_det = det4(mf);
 
-                    // mat4_det
-                    harness::assert_lanes_eq(concat!($bl, " [mat4_det]"), &[], &[V::mat4_det(&cols) as f64], &[want_det], Tol::Rel($tol));
+                    // Both settings of `FAST` are accurate to the suite's
+                    // tolerance on a well-conditioned matrix. They part company
+                    // only at the edge cases `mat4_singular_columns` covers.
+                    harness::assert_lanes_eq(concat!($bl, " [mat4_det]"), &[], &[V::mat4_det::<false>(&cols) as f64], &[want_det], Tol::Rel($tol));
+                    harness::assert_lanes_eq(concat!($bl, " [mat4_det fast]"), &[], &[V::mat4_det::<true>(&cols) as f64], &[want_det], Tol::Rel($tol));
 
                     // full inverse: M * M^-1 ≈ I.
-                    let inv = V::mat4_inverse(&cols).expect(concat!($bl, " [mat4_inverse] returned None"));
-                    let prod = V::mat4_product::<true>(&cols, &inv);
-                    for k in 0..4 {
-                        let want_id: [f64; 4] = core::array::from_fn(|j| if j == k { 1.0 } else { 0.0 });
-                        harness::assert_lanes_eq(concat!($bl, " [M*M^-1 == I]"), &[], &rd(prod[k]), &want_id, Tol::Rel($tol));
+                    for fast in [false, true] {
+                        let inv = if fast {
+                            V::mat4_inverse::<true>(&cols)
+                        } else {
+                            V::mat4_inverse::<false>(&cols)
+                        }
+                        .expect(concat!($bl, " [mat4_inverse] returned None"));
+
+                        let prod = V::mat4_product::<true>(&cols, &inv);
+                        for k in 0..4 {
+                            let want_id: [f64; 4] = core::array::from_fn(|j| if j == k { 1.0 } else { 0.0 });
+                            harness::assert_lanes_eq(concat!($bl, " [M*M^-1 == I]"), &[], &rd(prod[k]), &want_id, Tol::Rel($tol));
+                        }
                     }
                 }
             }
@@ -391,11 +428,44 @@ macro_rules! linalg_ext_suite {
                 let mut cols: [V; 4] = core::array::from_fn(|_| rv(&mut rng).1);
                 cols[3] = V::ZERO;
 
-                assert!(V::mat4_inverse(&cols).is_none(), concat!($bl, " [mat4_inverse] should be None for singular"));
+                // A zero column zeroes every product it takes part in, so both
+                // settings of `FAST` see 0 - 0 and agree exactly.
+                assert!(V::mat4_inverse::<false>(&cols).is_none(), concat!($bl, " [mat4_inverse] should be None for singular"));
+                assert!(V::mat4_inverse::<true>(&cols).is_none(), concat!($bl, " [mat4_inverse fast] should be None for singular"));
 
                 let mut tmp = cols;
-                let det = V::mat4_inverse_inplace(&mut tmp);
+                let det = V::mat4_inverse_inplace::<false>(&mut tmp);
                 assert_eq!(det, 0.0 as $e, concat!($bl, " [inverse_inplace] singular det should be exactly 0"));
+
+                let mut tmp = cols;
+                let det = V::mat4_inverse_inplace::<true>(&mut tmp);
+                assert_eq!(det, 0.0 as $e, concat!($bl, " [inverse_inplace fast] singular det should be exactly 0"));
+            }
+
+            /// Two EQUAL columns: a rank-deficient matrix whose determinant is
+            /// zero in exact arithmetic, under both settings of `FAST`.
+            ///
+            /// Deliberately an ENVELOPE assertion, not `== 0`. Compensating the
+            /// difference-of-products makes each 2x2 MINOR exact, but not the
+            /// determinant, because `dot4` still sums four separately
+            /// rounded cofactor products that cancel only in exact arithmetic. The
+            /// first draft of this test asserted `== 0` and failed on `scalar_f64`,
+            /// which has no FMA and no compensation to blame. The residual is the
+            /// cofactor sum, not the lowering. Do not re-tighten it.
+            #[test]
+            fn mat4_singular_equal_columns() {
+                let mut rng = harness::rng();
+                for _ in 0..TRIALS {
+                    let mut cols: [V; 4] = core::array::from_fn(|_| rv(&mut rng).1);
+                    cols[2] = cols[1];
+
+                    for (name, got) in [
+                        (concat!($bl, " [mat4_det] equal columns"), V::mat4_det::<false>(&cols) as f64),
+                        (concat!($bl, " [mat4_det fast] equal columns"), V::mat4_det::<true>(&cols) as f64),
+                    ] {
+                        assert!(got.abs() <= $tol, "{}: {:e} exceeds {:e}", name, got, $tol);
+                    }
+                }
             }
         }
     };
