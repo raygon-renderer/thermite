@@ -418,7 +418,14 @@ fn f32_precision_policy_also_tightens_the_endpoint_envelope() {
     // `ps.rs` opts f32 into Reinsch through its own override, separate from `pd.rs`, so a
     // lost override here is invisible to the f64 test. Measured on the grid above, f32
     // gains 2.6x to 13.5x across the four kinds, the same order as f64, not the ~1% an
-    // f64 grid appears to show. The bound is deliberately well inside the measured margin.
+    // f64 grid appears to show.
+    //
+    // The margin depends on how the scalar backend lowers `mul_adde`: without a baseline
+    // FMA (x86 default) the worst kind still gains 2.78x, but where HAS_TRUE_FMA fuses it
+    // (aarch64, x86 with -C target-feature=+fma) the single fused rounding helps Clenshaw's
+    // `2x*b + (c - b_2)` step more than it helps Reinsch, and K=1 narrows to 1.72x. Both
+    // lowerings are deterministic, so 1.5x sits inside both measured margins. A lost
+    // REINSCH override reads as ratio 1.0 and is caught by the `differ > 0` assert anyway.
     let mut c = [0.0; N];
     for (k, slot) in c.iter_mut().enumerate() {
         *slot = if k % 2 == 0 { 1.0 } else { -1.0 };
@@ -448,7 +455,7 @@ fn f32_precision_policy_also_tightens_the_endpoint_envelope() {
                 $k
             );
             assert!(
-                worst_best * 2.0 < worst_fast,
+                worst_best * 1.5 < worst_fast,
                 "K={}: f32 Reinsch envelope {worst_best:e} should clearly beat Clenshaw's {worst_fast:e}",
                 $k
             );
