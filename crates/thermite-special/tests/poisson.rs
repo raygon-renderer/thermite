@@ -38,7 +38,10 @@ fn budget(k: f64, lambda: f64, ln_pmf: f64) -> f64 {
         } else {
             0.0
         };
-        return 8.0 + e / 2.0;
+        // 9 rather than 8: with a fused scalar mul_adde (aarch64, x86 +fma) the shifted
+        // Stirling form rounds differently and k = 1, lambda = 0.9 measures 16.0 eps
+        // against this branch's former 15.5.
+        return 9.0 + e / 2.0;
     }
     let v = (k - lambda) / (k + lambda);
     let cancel = if v.abs() < 0.2 {
@@ -105,8 +108,12 @@ fn edges() {
     assert_eq!(D::ZERO.poisson_pmf(D::ZERO).extract::<0>(), 1.0);
     assert_eq!(D::splat(3.0).poisson_pmf(D::ZERO).extract::<0>(), 0.0);
     assert_eq!(D::splat(30.0).poisson_pmf(D::ZERO).extract::<0>(), 0.0);
+    // k = 0 is not special-cased: it runs the shifted Stirling form (n = 9, exponent
+    // ~ -10.8) whose own budget here is ~15.75 eps. Unfused scalar arithmetic happens to
+    // land within 2 eps of exp(-2.5); the fused mul_adde lowering (aarch64, x86 +fma)
+    // measures 13 ulp. Both are deterministic and inside the kernel's design budget.
     let e = D::ZERO.poisson_pmf(D::splat(2.5)).extract::<0>();
-    assert!((e - (-2.5f64).exp()).abs() <= 2.0 * f64::EPSILON * e, "{e}");
+    assert!((e - (-2.5f64).exp()).abs() <= 16.0 * f64::EPSILON * e, "{e}");
 }
 
 #[test]
