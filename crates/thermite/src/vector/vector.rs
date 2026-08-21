@@ -312,6 +312,7 @@ impl<R: Register> GenericVector for Vector<R> {
 
     fn extract<const I: usize>(self) -> Self::Element { R::extract::<I>(self.0) }
     fn extractv(self, idx: usize) -> Self::Element { R::as_slice(&self.0)[idx] }
+    fn last_element(self) -> Self::Element { R::last_element(self.0) }
 
     fn insert<const I: usize>(self, value: Self::Element) -> Self { Vector(R::insert::<I>(self.0, value)) }
 

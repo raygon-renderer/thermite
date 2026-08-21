@@ -1389,12 +1389,12 @@ impl<V: DualFloatVector, const N: usize> NumericVector for Dual<V, N> {
 
     #[inline(always)]
     fn reverse_prefix_min(self) -> Self {
-        thermite::scan_ladder!(reverse, self, self.reverse().broadcast::<0>(), Self::min)
+        thermite::scan_ladder!(reverse, self, Self::splat(self.last_element()), Self::min)
     }
 
     #[inline(always)]
     fn reverse_prefix_max(self) -> Self {
-        thermite::scan_ladder!(reverse, self, self.reverse().broadcast::<0>(), Self::max)
+        thermite::scan_ladder!(reverse, self, Self::splat(self.last_element()), Self::max)
     }
 
     // Product is *not* linear (the per-lane derivatives cross-multiply), so it

@@ -1439,10 +1439,10 @@ macro_rules! impl_native_radix3 {
 /// sorting-network polyfills. Invoke inside `impl NumericRegister for <Reg>`,
 /// passing the register's LANE COUNT: `sort_via_network!(8);`
 ///
-/// Only 2, 4 and 8 have networks. Wider registers keep the trait defaults (a
-/// scalar compare-and-swap walk), which is correct but quadratic - so a register
-/// that grows a network later must be added here, and one that is missing here
-/// is silently slow rather than wrong.
+/// Only 2 and 4 have dedicated arms. Everything else falls through to the trait
+/// defaults, which are a real `sort_lanes` network up to 16 lanes (scalar walk
+/// only past that). See the paragraph below and the note in the body for why
+/// the old `(8)` arm was removed.
 ///
 /// Both methods are emitted together on purpose. A cross-register merge needs
 /// `bitonic_clean` to be the cheap `log2(LANES)`-layer form; if a register had a

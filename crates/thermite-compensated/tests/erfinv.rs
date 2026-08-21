@@ -17,19 +17,31 @@ fn c(x: f64) -> C {
     C::new(V::splat(x))
 }
 
-/// Full double-double across both branches.
+/// Full double-double across both branches, at the DEFAULT policy.
 ///
-/// The Halley branch used to fall to 3.4e-27 as y approached 1, and the cause turned out
-/// to be upstream: it refines against `erfc`, and `erfc` was weakest exactly where erfinv
-/// leans on it hardest. In the series regime `erfc` came out as `1 - erf`, so at x = 2.751
-/// (which is erfinv(0.9999)) it cancelled down to 89 bits. Moving `erf_internal_p`'s
-/// regime split from 3 to 2 hands that band to the continued fraction, which computes
-/// `erfc` directly, at 101 bits, and erfinv's residual falls from 5.5e-30 to 1.8e-36.
+/// The Halley branch refines against `erfc`, so `erfc`'s error is `erfinv`'s error: the
+/// residual here is `erfc`'s relative error times about 0.13 at x = 1.821. Below
+/// `PrecisionPolicy::Best`, `erf_internal_p` splits at 2, so `erfc(1.821)` comes out of
+/// the series as `1 - erf` and loses log2(erf/erfc) = 6.63 bits. That is deliberate: the
+/// continued fraction that avoids the cancellation needs 338 double-double Lentz steps at
+/// x = 1.5 against the series' handful, and the default policy does not pay that
+/// uninvited. `erfinv_matches_mpmath_at_precision` below pins the accurate tier.
 ///
-/// That also explains why swapping the residual between `erf(x) - y` and
+/// This also explains why swapping the residual between `erf(x) - y` and
 /// `(1 - y) - erfc(x)` is bit-for-bit identical: while erfc *is* `1 - erf`, the two carry
 /// the same absolute error, so neither spelling can help. The fix has to be upstream.
-const TOL: f64 = 1e-30;
+///
+/// 2e-30 rather than 1e-30 because the worst point, y = 0.99, measures 1.157e-30 on every
+/// configuration. It used to measure 8.26e-31 without true FMA and 1.157e-30 with, and the
+/// old 1e-30 sat in that gap, which is what made this fail on aarch64 and under
+/// `-C target-cpu=x86-64-v3` while passing at x86 SSE2 baseline. Capping the Halley loop
+/// removed the wander that produced the lower number, so all configurations now agree.
+const TOL: f64 = 2e-30;
+
+/// The same table at `PrecisionPolicy::Best`, where `erf_internal_p` splits at 1.5 for
+/// f64 and the continued fraction computes `erfc(1.821)` directly. Worst point becomes
+/// y = -0.95 at 2.94e-31; y = 0.99 improves 13.7x, from 1.157e-30 to 8.46e-32.
+const TOL_PRECISE: f64 = 5e-31;
 
 fn dd_err(got: C, hi: f64, lo: f64) -> f64 {
     let value = got.value.extract::<0>();
@@ -58,6 +70,17 @@ fn erfinv_matches_mpmath() {
     for &(y, hi, lo) in ERFINV {
         let err = dd_err(c(y).erfinv(), hi, lo);
         assert!(err <= TOL, "erfinv({y}): rel err {err:e}");
+    }
+}
+
+#[test]
+fn erfinv_matches_mpmath_at_precision() {
+    use thermite::math::policy::policies::Precision;
+    use thermite_special::RealSpecialMathWithPolicy as _;
+
+    for &(y, hi, lo) in ERFINV {
+        let err = dd_err(c(y).erfinv_p::<Precision>(), hi, lo);
+        assert!(err <= TOL_PRECISE, "erfinv_p::<Precision>({y}): rel err {err:e}");
     }
 }
 

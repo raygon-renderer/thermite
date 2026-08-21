@@ -134,6 +134,14 @@ macro_rules! suite {
             check!(f64x2, thermite::simd::f64x2<$backend>, f64, 2);
             check!(f64x4, thermite::simd::f64x4<$backend>, f64, 4);
 
+            // Composite (ArrayRegister-backed) widths: exercise the per-chunk
+            // block scan with its broadcast carry, against the same oracle.
+            check!(u32x16, thermite::simd::u32x16<$backend>, u32, 16);
+            check!(i32x16, thermite::simd::i32x16<$backend>, i32, 16);
+            check!(f32x16, thermite::simd::f32x16<$backend>, f32, 16);
+            check!(f64x8, thermite::simd::f64x8<$backend>, f64, 8);
+            check!(u64x8, thermite::simd::u64x8<$backend>, u64, 8);
+
             /// The reason the ladder fills with a broadcast edge lane rather than
             /// `NumericRegister::MAX`/`MIN`: those are `f32::MAX`/`f32::MIN`, not
             /// `+/-inf`, so an infinite lane would be clamped to the finite bound.
@@ -184,6 +192,44 @@ macro_rules! suite {
                     ones.reverse_prefix_sum().into_array(),
                     [8i32, 7, 6, 5, 4, 3, 2, 1].into()
                 );
+            }
+
+            /// `first_element`/`last_element` across a native width, an
+            /// ArrayRegister-backed width, and a ReducedRegister-backed width -
+            /// on the reduced one `last_element` must read the last LIVE lane,
+            /// not the carrier's top (padding) lane. The splat composition is
+            /// what scan carries and ladder fills are written with.
+            #[test]
+            fn last_lane_primitives() {
+                {
+                    type V = thermite::simd::i32x8<$backend>;
+                    let mut d = [0i32; 8];
+                    for (i, v) in d.iter_mut().enumerate() {
+                        *v = (i as i32) * 3 - 5;
+                    }
+                    let v = V::new(d);
+                    assert_eq!(v.first_element(), d[0]);
+                    assert_eq!(v.last_element(), d[7]);
+                    assert_eq!(V::splat(v.last_element()).into_array(), [d[7]; 8].into());
+                }
+                {
+                    type V = thermite::simd::u32x16<$backend>;
+                    let mut d = [0u32; 16];
+                    for (i, v) in d.iter_mut().enumerate() {
+                        *v = (i as u32) * 7 + 3;
+                    }
+                    let v = V::new(d);
+                    assert_eq!(v.first_element(), d[0]);
+                    assert_eq!(v.last_element(), d[15]);
+                    assert_eq!(V::splat(v.last_element()).into_array(), [d[15]; 16].into());
+                }
+                {
+                    type V = thermite::simd::u32x2<$backend>;
+                    let v = V::new([11u32, 22]);
+                    assert_eq!(v.first_element(), 11);
+                    assert_eq!(v.last_element(), 22);
+                    assert_eq!(V::splat(v.last_element()).into_array(), [22u32; 2].into());
+                }
             }
         }
     };

@@ -77,6 +77,11 @@ macro_rules! int8_common {
         diff_unary!($label, $ut, $rf, trailing_zeros, Tol::Exact);
         diff_shift!($label, $ut, $rf, shl);
         diff_shift!($label, $ut, $rf, shr);
+        // x86 has no 8-bit shift at any level, so these are emulated by
+        // widening/narrowing, the code shape that saturated instead of
+        // truncating in fearless_simd #287/#289.
+        diff_varshift!($label, $ut, $rf, shlv);
+        diff_varshift!($label, $ut, $rf, shrv);
         diff_reduce!($label, $ut, $rf, sum_elements, Tol::Exact);
         diff_reduce!($label, $ut, $rf, prod_elements, Tol::Exact);
         diff_reduce!($label, $ut, $rf, min_element, Tol::Exact);
@@ -92,6 +97,7 @@ macro_rules! int8_tests {
             diff_unary!($label, $ut, $rf, neg, Tol::Exact);
             diff_unary!($label, $ut, $rf, abs, Tol::Exact);
             diff_shift!($label, $ut, $rf, sra); // arithmetic (sign-extending) shift
+            diff_varshift!($label, $ut, $rf, srav);
         }
     };
     ($modname:ident, $ut:ty, $rf:ty, $label:expr, unsigned) => {

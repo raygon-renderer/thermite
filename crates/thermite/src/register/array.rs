@@ -436,6 +436,10 @@ where
         Self(mask.0.map(|mask_reg| R::blendv(mask_reg, R::EMPTY, e)))
     }
 
+    fn last_element(value: Storage<Self>) -> Self::Element {
+        R::last_element(value.0[N - 1])
+    }
+
     fn broadcastv(mut value: Storage<Self>, idx: usize) -> Storage<Self> {
         let e = R::splat(Self::as_slice(&value)[idx]);
         value.0.fill(e);
@@ -1057,6 +1061,72 @@ where
     #[conditional] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Self(array_zip2(lhs.0, rhs.0, R::min)) }
     #[conditional] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> { Self(array_zip2(lhs.0, rhs.0, R::max)) }
     #[conditional] fn square(lhs: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn scale(value: Storage<Self>, scalar: Self::Element) -> Storage<Self> {}
+
+    // Block scans: per-chunk native scan plus a broadcast carry (the previous
+    // chunk's last lane forward, the next chunk's first lane reverse).
+    // ArrayRegister has no native align, so the trait default would walk every
+    // lane sequentially at the composite width. The forward carry is
+    // extract-then-splat: LLVM folds it to one broadcast (bin/lastlane_probe).
+    fn prefix_sum(value: Storage<Self>) -> Storage<Self> {
+        let mut out = value;
+        out.0[0] = R::prefix_sum(out.0[0]);
+        for i in 1..N {
+            let carry = R::splat(R::last_element(out.0[i - 1]));
+            out.0[i] = R::add(R::prefix_sum(out.0[i]), carry);
+        }
+        out
+    }
+
+    fn prefix_min(value: Storage<Self>) -> Storage<Self> {
+        let mut out = value;
+        out.0[0] = R::prefix_min(out.0[0]);
+        for i in 1..N {
+            let carry = R::splat(R::last_element(out.0[i - 1]));
+            out.0[i] = R::min(R::prefix_min(out.0[i]), carry);
+        }
+        out
+    }
+
+    fn prefix_max(value: Storage<Self>) -> Storage<Self> {
+        let mut out = value;
+        out.0[0] = R::prefix_max(out.0[0]);
+        for i in 1..N {
+            let carry = R::splat(R::last_element(out.0[i - 1]));
+            out.0[i] = R::max(R::prefix_max(out.0[i]), carry);
+        }
+        out
+    }
+
+    fn reverse_prefix_sum(value: Storage<Self>) -> Storage<Self> {
+        let mut out = value;
+        out.0[N - 1] = R::reverse_prefix_sum(out.0[N - 1]);
+        for i in (0..N - 1).rev() {
+            let carry = R::broadcast::<0>(out.0[i + 1]);
+            out.0[i] = R::add(R::reverse_prefix_sum(out.0[i]), carry);
+        }
+        out
+    }
+
+    fn reverse_prefix_min(value: Storage<Self>) -> Storage<Self> {
+        let mut out = value;
+        out.0[N - 1] = R::reverse_prefix_min(out.0[N - 1]);
+        for i in (0..N - 1).rev() {
+            let carry = R::broadcast::<0>(out.0[i + 1]);
+            out.0[i] = R::min(R::reverse_prefix_min(out.0[i]), carry);
+        }
+        out
+    }
+
+    fn reverse_prefix_max(value: Storage<Self>) -> Storage<Self> {
+        let mut out = value;
+        out.0[N - 1] = R::reverse_prefix_max(out.0[N - 1]);
+        for i in (0..N - 1).rev() {
+            let carry = R::broadcast::<0>(out.0[i + 1]);
+            out.0[i] = R::max(R::reverse_prefix_max(out.0[i]), carry);
+        }
+        out
+    }
 
     /// Sort all `N * R::LANES` elements into one ascending run (not N sorted
     /// chunks, not sorted columns).
@@ -1270,7 +1340,35 @@ where
     #[conditional] fn ilog2p1(value: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn next_power_of_two_m1(value: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn parity(value: Storage<Self>) -> Storage<Self> {}
+    fn avg(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {}
+    fn abs_diff(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {}
     fn is_power_of_two(value: Storage<Self>) -> Storage<Self::Mask> {}
+
+    // Hand-written: the [Storage<Self>; D] shapes are not splittable by
+    // array_impl. Per-chunk delegation reaches the per-backend fast paths
+    // (CLMUL/PDEP) the cascade default would bypass.
+    fn morton<const D: usize>(values: [Storage<Self>; D]) -> Storage<Self> {
+        let mut out = Self::ZERO;
+        for i in 0..N {
+            let mut chunk = [R::ZERO; D];
+            for k in 0..D {
+                chunk[k] = values[k].0[i];
+            }
+            out.0[i] = R::morton(chunk);
+        }
+        out
+    }
+
+    fn reverse_morton<const D: usize>(code: Storage<Self>) -> [Storage<Self>; D] {
+        let mut out = [Self::ZERO; D];
+        for i in 0..N {
+            let coords = R::reverse_morton::<D>(code.0[i]);
+            for k in 0..D {
+                out[k].0[i] = coords[k];
+            }
+        }
+        out
+    }
 }
 
 #[rustfmt::skip] #[thermite_macros::array_impl]
@@ -1281,6 +1379,9 @@ where
     #[conditional] fn sra(value: Storage<Self>, shift: u32) -> Storage<Self> {}
     #[conditional] fn srai<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn srav(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
+    fn avg_floor(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {}
+    fn avg_ceil(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {}
+    fn mulhrs(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {}
 }
 
 #[rustfmt::skip] #[thermite_macros::array_impl]
@@ -1364,6 +1465,44 @@ where
     #[conditional] fn mul_sign(value: Storage<Self>, sign: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn next_down(value: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn next_up(value: Storage<Self>) -> Storage<Self> {}
+
+    fn addsub(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
+        if const { <R::Lanes as Unsigned>::USIZE % 2 == 0 } {
+            let mut out = a;
+            for i in 0..N {
+                out.0[i] = R::addsub(out.0[i], b.0[i]);
+            }
+            out
+        } else {
+            Self::add(a, Self::bitxor(b, Self::ALT_NEG))
+        }
+    }
+
+    fn fmaddsub(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
+        if const { <R::Lanes as Unsigned>::USIZE % 2 == 0 } {
+            let mut out = a;
+            for i in 0..N {
+                out.0[i] = R::fmaddsub(out.0[i], b.0[i], c.0[i]);
+            }
+            out
+        } else {
+            Self::mul_adde(a, b, Self::bitxor(c, Self::ALT_NEG))
+        }
+    }
+
+    fn fmsubadd(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {
+        if const { <R::Lanes as Unsigned>::USIZE % 2 == 0 } {
+            let mut out = a;
+            for i in 0..N {
+                out.0[i] = R::fmsubadd(out.0[i], b.0[i], c.0[i]);
+            }
+            out
+        } else {
+            Self::mul_adde(a, b, Self::bitxor(c, Self::ALT_POS))
+        }
+    }
+
+    fn mix(a: Storage<Self>, b: Storage<Self>, t: Storage<Self>) -> Storage<Self> {}
 }
 
 #[rustfmt::skip] #[thermite_macros::array_impl]

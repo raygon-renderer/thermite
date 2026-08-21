@@ -928,6 +928,13 @@ macro_rules! neon_bitshift {
                     }
                 }
 
+                // Counts are passed straight through: `vshlq_*` reads the low 8
+                // bits of each lane as a signed value, so an out-of-range count
+                // produces an unspecified result (a count of 256 reads as 0 and
+                // leaves the value unshifted, and a count whose low byte is negative
+                // shifts the other way). Clamping would cost a splat and a
+                // `vmin` on every shift to tidy up input the contract does not
+                // promise anything about (see `BitshiftVector::shrv`).
                 fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
                     unsafe { arch::[<vshlq_ $s>](value, arch::$to_c(shifts)) }
                 }

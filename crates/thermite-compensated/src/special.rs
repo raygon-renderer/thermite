@@ -1,5 +1,6 @@
 use super::{Compensated, CompensatedFloatVector};
 
+use thermite::math::policy::PrecisionPolicy;
 use thermite::math::{RealMathWithPolicy, TranscendentalMathWithPolicy};
 use thermite::prelude::*;
 
@@ -30,21 +31,39 @@ where
         let x = self;
         let abs_x = x.abs();
 
-        // Series below this, continued fraction above.
+        // Series below the split, continued fraction at or above it.
         //
-        // 2 rather than 3, because the series computes *erf* and erfc comes out of it as
-        // 1 - erf: the cancellation in that subtraction is what sets erfc's accuracy, and
-        // it grows with erf. erf(2) = 0.9953 costs ~8 bits, erf(3) = 0.99998 costs ~16 -
-        // and erfc at 2.751 measured 89 bits against the 104 it holds below 1. Handing
-        // [2, 3) to the continued fraction, which computes erfc directly, brings that to
-        // 101 and erf with it (102 -> 111, since erf = 1 - erfc barely cancels when erfc
-        // is the small one). Nothing below 2 or above 3 changes.
+        // The series computes *erf* and erfc comes out of it as 1 - erf: the cancellation
+        // in that subtraction is what sets erfc's accuracy, and it grows with erf.
+        // erf(2) = 0.9953 costs ~8 bits, erf(3) = 0.99998 costs ~16. The continued
+        // fraction computes erfc directly with no cancellation, but its Lentz iteration
+        // count climbs as |x| falls: measured 338 double-double steps at 1.5, 202 at 2.0,
+        // 101 at 3.0, and those steps are real (the value is not final until step 316 at
+        // 1.5, so this is not a stopping-test artifact). Lowering the split buys accuracy
+        // with time, and there is no value that gets both.
+        //
+        // So the split is BOTH per type and policy-gated:
+        //
+        // - `Best` and above take `ERF_CF_SPLIT`, which is 1.5 for f64 double-double and
+        //   2 for f32 double-single. The two widths genuinely disagree: at f64 width the
+        //   continued fraction holds a flat ~2-7e-31 relative from 1.5 up, against the
+        //   series' 6.9e-31 at 1.5 and 7.2e-30 at 1.821. At f32 width the continued
+        //   fraction floor is ~1.4-2.4e-12 (400-700 ulp) and the series beats it at every
+        //   point from 1.25 to 2.25.
+        // - Below `Best`, both widths use 2. The accuracy is the historical accuracy and
+        //   nothing pays the continued fraction's iteration count uninvited.
         //
         // This matters beyond erf: `erfinv` refines against erfc, and needs it most
         // exactly where it was weakest, since large x corresponds to y near 1.
-        let use_series: V::Mask = abs_x
-            .value()
-            .cmp_lt(V::splat(<V::Element as FloatElement>::ConstInt::<2>::VALUE));
+        // erfinv(0.99) lands on x = 1.821, and at f64/`Best` it improves 13.7x, from
+        // 1.16e-30 to 8.5e-32, while costing ~27,500 ns against ~4,800.
+        let split = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+            V::ERF_CF_SPLIT
+        } else {
+            V::splat(<V::Element as FloatElement>::ConstInt::<2>::VALUE)
+        };
+
+        let use_series: V::Mask = abs_x.value().cmp_lt(split);
 
         let use_only_series = use_series.all();
         let use_only_cf = use_series.none();
@@ -309,34 +328,48 @@ where
         let is_zero = abs_y_value.cmp_eq(V::ZERO);
         let is_one = abs_y_value.cmp_eq(V::ONE);
 
-        // 1. Initial guess: the inner vector's own `erfinv`, which is already correct to
-        //    the element's full width (~53 bits for f64).
+        // 1. Initial guess: the inner vector's own `erfinv`. Measured at y = 0.99 it
+        //    carries a relative 1.9e-8, about 27 bits, not the element's full 53, since
+        //    the inner kernel is tuned as an approximation rather than as a seed.
         //
-        //    This used to be Winitzki's approximation, good to a relative 3.5e-4 - about
-        //    11 bits. Halley is cubic, so 11 bits needs three passes to clear 106 and 53
-        //    bits needs one, and every pass costs a compensated `erf` *and* a compensated
+        //    This used to be Winitzki's approximation, good to a relative 3.5e-4, about
+        //    11 bits. Halley is cubic, so 11 bits needs three passes to clear 106 and 27
+        //    needs two, and every pass costs a compensated `erf` *and* a compensated
         //    `exp` to form f and f'. Seeding from the cheaper, far better starting point
-        //    trades a scalar `erfinv` for two of each. The loop below is unchanged and
-        //    still exits on its own convergence test, so a seed that ever disappoints
-        //    simply iterates again rather than returning something wrong.
+        //    trades a scalar `erfinv` for one of each.
         let mut x = Self::new(abs_y_value.erfinv_p::<P>());
 
         // 2. Halley's Method Iterations (Cubic Convergence)
         // x_{n+1} = x_n - u / (1 + x_n * u) where u = f(x_n) / f'(x_n)
         let skip = is_zero | is_one; // cannot be solved as roots
 
-        for _ in 0..P::POLICY.max_iterations {
+        // Halley is cubic and the seed above already carries ~27 bits, so 27 -> 81 -> 243
+        // clears double-double (106 bits for f64, 48 for f32) in two passes, and three holds
+        // even under a policy whose scalar `erfinv` seed is only the ~11-bit Winitzki
+        // value.
+        //
+        // The cap is a cost guard rather than an accuracy knob. The equality test below
+        // cannot fire when the last bit of the correction oscillates, and that measured as
+        // the full 10,000-iteration policy budget (~12 ms against ~2 us, a 2000x cliff)
+        // on roughly 40% of arguments in [0.05, 1), every one of which had already reached
+        // its final value within three passes.
+        const MAX_HALLEY: usize = 3;
+
+        for _ in 0..P::POLICY.max_iterations.min(MAX_HALLEY) {
             let prev_x = x;
             // f = erf(x) - y, routed through erf = 1 - erfc so that near y = 1 the two
             // quantities being subtracted are both *small* rather than both near 1.
             //
             // Measured, this changes nothing: erfinv(0.9999) sits at 3.43e-27 either way,
             // bit for bit. The cancellation it avoids is not the one that limits this -
-            // f -> 0 at the root by definition, so some cancellation is unavoidable, and
-            // the compensated erfc was already exact at these arguments. Kept because it
-            // is the better-conditioned spelling and costs nothing (the kernel computes
-            // erf and erfc together), but the y -> 1 shortfall has a different cause that
-            // is not yet identified.
+            // f -> 0 at the root by definition, so some cancellation is unavoidable. Kept
+            // because it is the better-conditioned spelling and costs nothing (the kernel
+            // computes erf and erfc together).
+            //
+            // The y -> 1 shortfall was erfc's, not this subtraction's: the residual here
+            // tracks erfc's own relative error times x / (2 * erfc(x) * exp(x^2) / sqrt(pi)),
+            // which at x = 1.821 is about 0.13. erfc measured 7.2e-30 there and this
+            // measured 1.16e-30. Moving `erf_internal_p`'s regime split to 1.5 fixed both.
             let f = (Self::ONE - abs_y) - x.erfc_p::<P>();
 
             // f / f'(x) = f * (sqrt(pi)/2) * exp(x^2)

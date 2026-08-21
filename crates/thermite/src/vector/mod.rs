@@ -863,7 +863,9 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     ///
     /// # SAFETY
     /// The caller must ensure that the pointer is valid, aligned, and points to a memory region
-    /// that is at least `Self::Lanes` elements long (or at least as long as the number of `true` lanes in the mask).
+    /// that is at least `Self::Lanes` elements long. The mask does NOT shrink this requirement:
+    /// some lowerings form a full-width access even for masked-off lanes, so a region shorter
+    /// than `Self::Lanes` elements is undefined behavior regardless of the mask.
     unsafe fn store_masked(self, mask: Self::Mask, ptr: *mut Self::Element);
 
     /// Store the vector to an **unaligned** pointer to its elements.
@@ -1167,8 +1169,20 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     ///
     /// Equivalent to `self.extract::<0>()`, and lowered identically.
     #[inline(always)]
-    fn first(self) -> Self::Element {
+    fn first_element(self) -> Self::Element {
         self.extract::<0>()
+    }
+
+    /// Extract the last lane (`LANES - 1`),
+    /// [`first_element`](Self::first_element)'s counterpart at the other end.
+    ///
+    /// `LANES - 1` is not expressible as a const-generic argument on stable, so
+    /// this cannot be written `extract::<{ LANES - 1 }>`. The constant index
+    /// still folds the [`extractv`](Self::extractv) dispatch to a single arm.
+    /// The same scalar/SIMD boundary cost as `first_element` applies.
+    #[inline(always)]
+    fn last_element(self) -> Self::Element {
+        self.extractv(Self::LANES - 1)
     }
 
     /// Extract a single element from the vector at the runtime index `idx`.
@@ -1620,9 +1634,28 @@ pub trait BitshiftVector:
     #[conditional] fn shri<const I: i32>(self) -> Self;
 
     /// For each lane in the vector, shift left by the given value.
+    ///
+    /// The count must be less than the element bit width. See
+    /// [`shrv`](BitshiftVector::shrv) for what happens if it is not.
     #[conditional] fn shlv(self, counts: Self::Unsigned) -> Self;
 
-    /// For each lane in the vector, shift right by the given value.
+    /// For each lane in the vector, shift right by the given value (logical,
+    /// zero-filling).
+    ///
+    /// # Out-of-range counts
+    ///
+    /// A count `>=` the element bit width yields an **unspecified value** in
+    /// that lane. This is not undefined behaviour (the result is always some
+    /// value, never a fault), but which value depends on the backend, and no
+    /// guarantee is made that two backends agree. Rust's scalar `<<`/`>>` are a
+    /// third behaviour again: they panic under overflow checks and otherwise
+    /// mask the count.
+    ///
+    /// Pinning one answer would mean masking or clamping the count on every
+    /// variable shift, including the native instructions that already behave
+    /// sensibly, putting a permanent cost on the fastest paths to tidy up input
+    /// callers are not supposed to supply. If you need a defined result for an
+    /// arbitrary count, mask it yourself first.
     #[conditional] fn shrv(self, counts: Self::Unsigned) -> Self;
 
     /// For each element in the vector, rotate the bits to the left by the given
@@ -2414,6 +2447,10 @@ pub trait SignedIntegerVector: SignedVector + IntegerVector<Element: crate::elem
     /// For each lane in the vector, right shift in sign bits by the given value.
     #[conditional] fn sra(self, count: u32) -> Self;
     /// For each lane in the vector, right shift in sign bits by the corresponding lane in the shifts vector.
+    ///
+    /// The count must be less than the element bit width. Out of range, the lane
+    /// takes an unspecified value, as for
+    /// [`BitshiftVector::shrv`](crate::vector::BitshiftVector::shrv).
     #[conditional] fn srav(self, counts: Self::Unsigned) -> Self;
 
     /// Floor average: `(a + b) >> 1` rounded toward -∞, computed without overflow.

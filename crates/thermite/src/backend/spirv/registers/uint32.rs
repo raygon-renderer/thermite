@@ -309,6 +309,10 @@ macro_rules! decl_u32xN {
                 unsafe { arch::op_opshiftrightlogical::<Self, Self>(value, shifts) }
             }
             // Variable shifts: shift amounts already in Self (U32xN) form.
+            // Out-of-range counts: SPIR-V leaves `OpShiftLeftLogical` and
+            // friends undefined past the operand width. That is within the
+            // unspecified-value contract on `BitshiftRegister`, so nothing is
+            // clamped here, same reasoning as every other backend.
             fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
                 unsafe { arch::op_opshiftleftlogical::<Self, Self>(value, shifts) }
             }

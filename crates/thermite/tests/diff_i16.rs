@@ -74,6 +74,10 @@ macro_rules! int16_common {
         diff_unary!($label, $ut, $rf, trailing_zeros, Tol::Exact);
         diff_shift!($label, $ut, $rf, shl);
         diff_shift!($label, $ut, $rf, shr);
+        // x86 has no variable 16-bit shift before AVX-512BW+VL. These exercise
+        // the `_mm*_s{ll,rl}v_epi16x_*` polyfills.
+        diff_varshift!($label, $ut, $rf, shlv);
+        diff_varshift!($label, $ut, $rf, shrv);
         diff_reduce!($label, $ut, $rf, sum_elements, Tol::Exact);
         diff_reduce!($label, $ut, $rf, prod_elements, Tol::Exact);
         diff_reduce!($label, $ut, $rf, min_element, Tol::Exact);
@@ -92,6 +96,7 @@ macro_rules! int16_tests {
             diff_unary!($label, UT, RF, abs, Tol::Exact);
             diff_binary!($label, UT, RF, mulhrs, Tol::Exact); // native PMULHRSW vs scalar polyfill
             diff_shift!($label, UT, RF, sra); // arithmetic (sign-extending) shift
+            diff_varshift!($label, UT, RF, srav);
         }
     };
     ($modname:ident, $backend:ty, $reg:ident, $label:expr, unsigned) => {

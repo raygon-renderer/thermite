@@ -220,6 +220,12 @@ impl BitshiftRegister for U8x16Wasm {
     fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         arch::u8x16_shr(value, IMM8 as u32)
     }
+    fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
+        arch::wasm_shlv_i8x16(value, shifts)
+    }
+    fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
+        arch::wasm_shrv_u8x16(value, shifts) // logical
+    }
 }
 
 #[rustfmt::skip] #[thermite_macros::inline_always]

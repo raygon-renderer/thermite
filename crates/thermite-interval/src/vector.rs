@@ -888,12 +888,12 @@ impl<V: IntervalFloatVector, W: WideningPolicy> NumericVector for Interval<V, W>
 
     #[inline(always)]
     fn reverse_prefix_min(self) -> Self {
-        thermite::scan_ladder!(reverse, self, self.reverse().broadcast::<0>(), NumericVector::min)
+        thermite::scan_ladder!(reverse, self, Self::splat(self.last_element()), NumericVector::min)
     }
 
     #[inline(always)]
     fn reverse_prefix_max(self) -> Self {
-        thermite::scan_ladder!(reverse, self, self.reverse().broadcast::<0>(), NumericVector::max)
+        thermite::scan_ladder!(reverse, self, Self::splat(self.last_element()), NumericVector::max)
     }
 
     #[inline(always)]

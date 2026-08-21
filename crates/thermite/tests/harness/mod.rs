@@ -399,6 +399,64 @@ macro_rules! diff_reduce {
     }};
 }
 
+/// Stamp a differential test for a **per-lane variable shift** (`shlv`/`shrv`/
+/// `srav`), where the shift amount is itself a vector, one count per lane.
+///
+/// Distinct from [`diff_shift!`]-style uniform-amount coverage in two ways that
+/// each hide a real bug class:
+///
+/// - On SSE the 64-bit forms have no native instruction and are polyfilled, and a
+///   lane-swap in that polyfill (v1/v2) silently transposes lanes, which a
+///   uniform amount cannot see.
+/// - The 8-bit forms have no native x86 instruction at any level and must be
+///   emulated by widening, shifting, and narrowing. Narrowing with a saturating
+///   pack instead of a truncating one is the defect fearless_simd shipped in
+///   their `shl` (their #287/#289); the variable-amount path is the same shape.
+///
+/// Amounts are drawn per lane from `[0, bits)` ONLY.
+///
+/// Counts `>= bits` are deliberately excluded: the shift traits define the
+/// result there as unspecified, so the backends legitimately disagree (x86
+/// flushes to zero, NEON reads the low 8 bits of the count as signed, the
+/// emulated paths wrap) and a differential against the scalar oracle would be
+/// asserting a guarantee that was explicitly not made. Widening this range
+/// tests the docs, not the code.
+
+#[macro_export]
+macro_rules! diff_varshift {
+    ($label:expr, $ut:ty, $rf:ty, $method:ident) => {{
+        use ::rand::RngExt as _;
+        type E = <$ut as ::thermite::register::Register>::Element;
+        type UUT = <$ut as ::thermite::register::Register>::Unsigned;
+        type URF = <$rf as ::thermite::register::Register>::Unsigned;
+        type UE = <UUT as ::thermite::register::Register>::Element;
+        let mut rng = $crate::harness::rng();
+        let lanes = <<$ut as ::thermite::register::CoreRegister>::Lanes as ::generic_array::typenum::Unsigned>::USIZE;
+        let bits = (core::mem::size_of::<E>() * 8) as UE;
+        for input in $crate::harness::corpus::<E>(lanes, &mut rng) {
+            // Distinct per-lane shift amounts so a lane transposition is visible.
+            let sh: Vec<UE> = (0..lanes).map(|_| rng.random::<UE>() % bits).collect();
+            let ut_sh = $crate::harness::make_array::<UUT>(&sh);
+            let rf_sh = $crate::harness::make_array::<URF>(&sh);
+            let got = $crate::harness::read::<$ut>(&<$ut>::$method(
+                $crate::harness::make_array::<$ut>(&input),
+                ut_sh,
+            ));
+            let want = $crate::harness::read::<$rf>(&<$rf>::$method(
+                $crate::harness::make_array::<$rf>(&input),
+                rf_sh,
+            ));
+            $crate::harness::assert_lanes_eq(
+                concat!($label, " [", stringify!($method), "]"),
+                &[input.as_slice()],
+                &got,
+                &want,
+                $crate::harness::Tol::Exact,
+            );
+        }
+    }};
+}
+
 /// Like [`diff_binary!`], but skips any input array containing a non-finite
 /// element. Used for `min`/`max`, whose `NaN`/`Inf` behaviour is explicitly
 /// non-IEEE and configurable via the `strict_ieee754` feature.

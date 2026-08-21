@@ -245,6 +245,12 @@ impl BitshiftRegister for U16x8V3 {
     fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_srli_epi16(value, IMM8) }
     }
+    fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm_sllv_epi16_widex_v3(value, shifts) }
+    }
+    fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm_srlv_epi16_widex_v3(value, shifts) }
+    }
 }
 
 #[thermite_macros::inline_always]

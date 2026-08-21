@@ -31,7 +31,13 @@ pub unsafe fn _mm_srlv_epi32x_v1(value: __m128i, shifts: __m128i) -> __m128i {
     let mut value: [u32; 4] = core::mem::transmute(value);
 
     for (value, shift) in value.iter_mut().zip(shifts) {
-        *value >>= shift;
+        // `wrapping_shr` rather than `>>`: an out-of-range count yields an
+        // unspecified value either way, but `>>` *panics* under overflow
+        // checks, which would make a debug build fault on a lane value a
+        // release build shifts. `unbounded_shr` would pin the result to zero,
+        // but costs a compare and a select per lane to tidy up input nothing
+        // promises anything about.
+        *value = value.wrapping_shr(shift);
     }
 
     core::mem::transmute(value)
@@ -56,7 +62,8 @@ pub unsafe fn _mm_sllv_epi32x_v1(value: __m128i, shifts: __m128i) -> __m128i {
     let mut value: [u32; 4] = core::mem::transmute(value);
 
     for (value, shift) in value.iter_mut().zip(shifts) {
-        *value <<= shift;
+        // See `_mm_srlv_epi32x_v1` on `wrapping_` vs `>>`.
+        *value = value.wrapping_shl(shift);
     }
 
     core::mem::transmute(value)
@@ -78,7 +85,8 @@ pub unsafe fn _mm_srav_epi32x_v1(value: __m128i, shifts: __m128i) -> __m128i {
     let mut value: [i32; 4] = core::mem::transmute(value);
 
     for (value, shift) in value.iter_mut().zip(shifts) {
-        *value >>= shift;
+        // See `_mm_srlv_epi32x_v1` on `wrapping_` vs `>>`.
+        *value = value.wrapping_shr(shift);
     }
 
     core::mem::transmute(value)
@@ -170,8 +178,8 @@ pub unsafe fn _mm_zeroupper_mask_epi32<Z: ZeroUpper>() -> __m128i {
 // 8-bit (byte) lane polyfills. x86 has no native 8-bit shift or multiply, so
 // these emulate them with 16-bit ops + masking. They use only SSE2 intrinsics,
 // so v2/v3 inherit them through the polyfill re-export chain. All shift counts
-// are assumed to be in `0..8` (the byte element width), matching the scalar
-// contract where shifting by >= the bit width is undefined.
+// are assumed to be in `0..8` (the byte element width); the *variable*-count
+// forms below handle out-of-range counts explicitly.
 // ===========================================================================
 
 /// POLYFILL: logical left shift of each byte lane by a compile-time count.
@@ -218,6 +226,109 @@ pub unsafe fn _mm_sra_epi8x_v1(v: __m128i, shift: u32) -> __m128i {
     let logical = _mm_srl_epi8x_v1(v, shift);
     let m = _mm_set1_epi8(((0x80u32 >> shift.min(31)) as u8) as i8);
     _mm_sub_epi8(_mm_xor_si128(logical, m), m)
+}
+
+// ---------------------------------------------------------------------------
+// Per-lane variable shifts for 8- and 16-bit lanes.
+//
+// x86 has no variable shift below 32-bit lanes at any level before
+// AVX-512BW+VL (`vpsllvw`), and none at all for bytes. These walk the low bits
+// of the per-lane count and conditionally apply a *constant* shift for each,
+// staying in registers throughout instead of round-tripping through memory.
+//
+// Only bits `0..log2(width)` of the count are ever examined, so a count of `s`
+// behaves as `s & (width - 1)`. That is not an accident to be tidied up later:
+// it matches the scalar oracle, because Rust's `<<`/`>>` mask the shift amount
+// (`3u8 << 8 == 3`). Hardware `vpsllvd` instead flushes to zero for
+// out-of-range counts, so the two conventions genuinely differ. Masking is the
+// one the differential suite compares against, and here it costs nothing.
+//
+// Composition is exact for all three shift kinds: `(x << a) << b == x << (a+b)`,
+// and likewise for logical and arithmetic right shifts, so applying the
+// power-of-two steps in sequence yields the full shift.
+// ---------------------------------------------------------------------------
+
+/// Conditionally apply `$shift` to `$x` on the lanes where bit `$bit` of
+/// `$shifts` is set, using `$cmpeq` to broadcast that bit to a full lane mask.
+///
+/// Blend is `x ^ ((x ^ shifted) & m)`: three ops, versus four for
+/// and/andnot/or, and no `pblendvb` so it stays SSE2-clean.
+macro_rules! varshift_step {
+    ($x:ident, $shifts:ident, $set1:ident, $cmpeq:ident, $bit:expr, $shifted:expr) => {{
+        let sel = $set1($bit);
+        let m = $cmpeq(_mm_and_si128($shifts, sel), sel);
+        $x = _mm_xor_si128($x, _mm_and_si128(_mm_xor_si128($x, $shifted), m));
+    }};
+}
+
+/// POLYFILL: per-lane variable logical left shift of 16-bit lanes (`vpsllvw`).
+#[inline(always)]
+pub unsafe fn _mm_sllv_epi16x_v1(value: __m128i, shifts: __m128i) -> __m128i {
+    let mut x = value;
+    varshift_step!(x, shifts, _mm_set1_epi16, _mm_cmpeq_epi16, 1, _mm_slli_epi16(x, 1));
+    varshift_step!(x, shifts, _mm_set1_epi16, _mm_cmpeq_epi16, 2, _mm_slli_epi16(x, 2));
+    varshift_step!(x, shifts, _mm_set1_epi16, _mm_cmpeq_epi16, 4, _mm_slli_epi16(x, 4));
+    varshift_step!(x, shifts, _mm_set1_epi16, _mm_cmpeq_epi16, 8, _mm_slli_epi16(x, 8));
+    x
+}
+
+/// POLYFILL: per-lane variable logical right shift of 16-bit lanes (`vpsrlvw`).
+#[inline(always)]
+pub unsafe fn _mm_srlv_epi16x_v1(value: __m128i, shifts: __m128i) -> __m128i {
+    let mut x = value;
+    varshift_step!(x, shifts, _mm_set1_epi16, _mm_cmpeq_epi16, 1, _mm_srli_epi16(x, 1));
+    varshift_step!(x, shifts, _mm_set1_epi16, _mm_cmpeq_epi16, 2, _mm_srli_epi16(x, 2));
+    varshift_step!(x, shifts, _mm_set1_epi16, _mm_cmpeq_epi16, 4, _mm_srli_epi16(x, 4));
+    varshift_step!(x, shifts, _mm_set1_epi16, _mm_cmpeq_epi16, 8, _mm_srli_epi16(x, 8));
+    x
+}
+
+/// POLYFILL: per-lane variable arithmetic right shift of `i16` lanes (`vpsravw`).
+///
+/// SSE2 *does* have `psraw` with a constant count, so unlike the 8-bit case
+/// this needs no sign-extension fixup: the steps sign-fill on their own.
+#[inline(always)]
+pub unsafe fn _mm_srav_epi16x_v1(value: __m128i, shifts: __m128i) -> __m128i {
+    let mut x = value;
+    varshift_step!(x, shifts, _mm_set1_epi16, _mm_cmpeq_epi16, 1, _mm_srai_epi16(x, 1));
+    varshift_step!(x, shifts, _mm_set1_epi16, _mm_cmpeq_epi16, 2, _mm_srai_epi16(x, 2));
+    varshift_step!(x, shifts, _mm_set1_epi16, _mm_cmpeq_epi16, 4, _mm_srai_epi16(x, 4));
+    varshift_step!(x, shifts, _mm_set1_epi16, _mm_cmpeq_epi16, 8, _mm_srai_epi16(x, 8));
+    x
+}
+
+/// POLYFILL: per-lane variable logical left shift of byte lanes.
+///
+/// Each step reuses the constant-count byte shift, which already masks off the
+/// bits that bled across the byte boundary during the 16-bit shift it is built
+/// from, so the truncation is applied per step and cannot accumulate.
+#[inline(always)]
+pub unsafe fn _mm_sllv_epi8x_v1(value: __m128i, shifts: __m128i) -> __m128i {
+    let mut x = value;
+    varshift_step!(x, shifts, _mm_set1_epi8, _mm_cmpeq_epi8, 1, _mm_slli_epi8x_v1::<1>(x));
+    varshift_step!(x, shifts, _mm_set1_epi8, _mm_cmpeq_epi8, 2, _mm_slli_epi8x_v1::<2>(x));
+    varshift_step!(x, shifts, _mm_set1_epi8, _mm_cmpeq_epi8, 4, _mm_slli_epi8x_v1::<4>(x));
+    x
+}
+
+/// POLYFILL: per-lane variable logical right shift of byte lanes.
+#[inline(always)]
+pub unsafe fn _mm_srlv_epi8x_v1(value: __m128i, shifts: __m128i) -> __m128i {
+    let mut x = value;
+    varshift_step!(x, shifts, _mm_set1_epi8, _mm_cmpeq_epi8, 1, _mm_srli_epi8x_v1::<1>(x));
+    varshift_step!(x, shifts, _mm_set1_epi8, _mm_cmpeq_epi8, 2, _mm_srli_epi8x_v1::<2>(x));
+    varshift_step!(x, shifts, _mm_set1_epi8, _mm_cmpeq_epi8, 4, _mm_srli_epi8x_v1::<4>(x));
+    x
+}
+
+/// POLYFILL: per-lane variable arithmetic right shift of `i8` lanes.
+#[inline(always)]
+pub unsafe fn _mm_srav_epi8x_v1(value: __m128i, shifts: __m128i) -> __m128i {
+    let mut x = value;
+    varshift_step!(x, shifts, _mm_set1_epi8, _mm_cmpeq_epi8, 1, _mm_srai_epi8x_v1::<1>(x));
+    varshift_step!(x, shifts, _mm_set1_epi8, _mm_cmpeq_epi8, 2, _mm_srai_epi8x_v1::<2>(x));
+    varshift_step!(x, shifts, _mm_set1_epi8, _mm_cmpeq_epi8, 4, _mm_srai_epi8x_v1::<4>(x));
+    x
 }
 
 /// POLYFILL: low 8 bits of each byte product (`a[i].wrapping_mul(b[i])`).

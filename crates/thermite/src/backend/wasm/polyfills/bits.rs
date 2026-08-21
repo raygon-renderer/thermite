@@ -141,3 +141,88 @@ pub fn wasm_morton2_compress_epu32x(v: v128) -> v128 {
     let c = v128_and(v128_or(n, u32x4_shr(n, 4)), u32x4_splat(0x00FF_00FF));
     v128_and(v128_or(c, u32x4_shr(c, 8)), u32x4_splat(0x0000_FFFF))
 }
+
+// ---------------------------------------------------------------------------
+// Per-lane variable shifts for 8- and 16-bit lanes.
+//
+// SIMD128 has no variable shift at any width (`i16x8.shl` and friends take a
+// single scalar count for the whole vector), so these walk the low bits of the
+// per-lane count and conditionally apply a constant shift for each. Cheaper
+// here than the x86 equivalents on two counts: wasm has genuine 8-bit uniform
+// shifts (no widen-and-mask), and `v128.bitselect` blends in one instruction.
+//
+// Only bits `0..log2(width)` of the count are examined, so a count of `s`
+// behaves as `s & (width - 1)`, matching the scalar oracle (Rust's `<<`/`>>`
+// mask the shift amount).
+// ---------------------------------------------------------------------------
+
+macro_rules! wasm_varshift_step {
+    ($x:ident, $shifts:ident, $splat:ident, $eq:ident, $bit:expr, $shifted:expr) => {{
+        let sel = $splat($bit);
+        let m = $eq(v128_and($shifts, sel), sel);
+        $x = v128_bitselect($shifted, $x, m);
+    }};
+}
+
+/// POLYFILL: per-lane variable logical left shift of 16-bit lanes.
+#[inline(always)]
+pub fn wasm_shlv_i16x8(value: v128, shifts: v128) -> v128 {
+    let mut x = value;
+    wasm_varshift_step!(x, shifts, i16x8_splat, i16x8_eq, 1, i16x8_shl(x, 1));
+    wasm_varshift_step!(x, shifts, i16x8_splat, i16x8_eq, 2, i16x8_shl(x, 2));
+    wasm_varshift_step!(x, shifts, i16x8_splat, i16x8_eq, 4, i16x8_shl(x, 4));
+    wasm_varshift_step!(x, shifts, i16x8_splat, i16x8_eq, 8, i16x8_shl(x, 8));
+    x
+}
+
+/// POLYFILL: per-lane variable logical right shift of 16-bit lanes.
+#[inline(always)]
+pub fn wasm_shrv_u16x8(value: v128, shifts: v128) -> v128 {
+    let mut x = value;
+    wasm_varshift_step!(x, shifts, i16x8_splat, i16x8_eq, 1, u16x8_shr(x, 1));
+    wasm_varshift_step!(x, shifts, i16x8_splat, i16x8_eq, 2, u16x8_shr(x, 2));
+    wasm_varshift_step!(x, shifts, i16x8_splat, i16x8_eq, 4, u16x8_shr(x, 4));
+    wasm_varshift_step!(x, shifts, i16x8_splat, i16x8_eq, 8, u16x8_shr(x, 8));
+    x
+}
+
+/// POLYFILL: per-lane variable arithmetic right shift of `i16` lanes.
+#[inline(always)]
+pub fn wasm_shrv_i16x8(value: v128, shifts: v128) -> v128 {
+    let mut x = value;
+    wasm_varshift_step!(x, shifts, i16x8_splat, i16x8_eq, 1, i16x8_shr(x, 1));
+    wasm_varshift_step!(x, shifts, i16x8_splat, i16x8_eq, 2, i16x8_shr(x, 2));
+    wasm_varshift_step!(x, shifts, i16x8_splat, i16x8_eq, 4, i16x8_shr(x, 4));
+    wasm_varshift_step!(x, shifts, i16x8_splat, i16x8_eq, 8, i16x8_shr(x, 8));
+    x
+}
+
+/// POLYFILL: per-lane variable logical left shift of byte lanes.
+#[inline(always)]
+pub fn wasm_shlv_i8x16(value: v128, shifts: v128) -> v128 {
+    let mut x = value;
+    wasm_varshift_step!(x, shifts, i8x16_splat, i8x16_eq, 1, i8x16_shl(x, 1));
+    wasm_varshift_step!(x, shifts, i8x16_splat, i8x16_eq, 2, i8x16_shl(x, 2));
+    wasm_varshift_step!(x, shifts, i8x16_splat, i8x16_eq, 4, i8x16_shl(x, 4));
+    x
+}
+
+/// POLYFILL: per-lane variable logical right shift of byte lanes.
+#[inline(always)]
+pub fn wasm_shrv_u8x16(value: v128, shifts: v128) -> v128 {
+    let mut x = value;
+    wasm_varshift_step!(x, shifts, i8x16_splat, i8x16_eq, 1, u8x16_shr(x, 1));
+    wasm_varshift_step!(x, shifts, i8x16_splat, i8x16_eq, 2, u8x16_shr(x, 2));
+    wasm_varshift_step!(x, shifts, i8x16_splat, i8x16_eq, 4, u8x16_shr(x, 4));
+    x
+}
+
+/// POLYFILL: per-lane variable arithmetic right shift of `i8` lanes.
+#[inline(always)]
+pub fn wasm_shrv_i8x16(value: v128, shifts: v128) -> v128 {
+    let mut x = value;
+    wasm_varshift_step!(x, shifts, i8x16_splat, i8x16_eq, 1, i8x16_shr(x, 1));
+    wasm_varshift_step!(x, shifts, i8x16_splat, i8x16_eq, 2, i8x16_shr(x, 2));
+    wasm_varshift_step!(x, shifts, i8x16_splat, i8x16_eq, 4, i8x16_shr(x, 4));
+    x
+}

@@ -1242,12 +1242,12 @@ impl<V: RealFloatVector> NumericVector for Complex<V> {
 
     #[inline(always)]
     fn reverse_prefix_min(self) -> Self {
-        thermite::scan_ladder!(reverse, self, self.reverse().broadcast::<0>(), Self::min)
+        thermite::scan_ladder!(reverse, self, Self::splat(self.last_element()), Self::min)
     }
 
     #[inline(always)]
     fn reverse_prefix_max(self) -> Self {
-        thermite::scan_ladder!(reverse, self, self.reverse().broadcast::<0>(), Self::max)
+        thermite::scan_ladder!(reverse, self, Self::splat(self.last_element()), Self::max)
     }
 
     // Product is not componentwise (the parts cross-multiply) and needs complex

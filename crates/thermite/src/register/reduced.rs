@@ -405,6 +405,9 @@ impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reduc
         Self(R::broadcast_z::<I>(mask.0, value.0), PhantomData)
     }
 
+    // Last LIVE lane, not the carrier's top (padding) lane.
+    #[inline(always)] fn last_element(value: Storage<Self>) -> Self::Element { R::as_slice(&value.0)[Self::Lanes::USIZE - 1] }
+
     #[inline(always)] fn broadcastv(value: Storage<Self>, idx: usize) -> Storage<Self> { Self(R::broadcastv(value.0, Self::min_idx(idx)), PhantomData) }
     #[inline(always)] fn broadcastv_c(mask: Storage<Self::Mask>, value: Storage<Self>, idx: usize) -> Storage<Self> { Self(R::broadcastv_c(mask.0, value.0, Self::min_idx(idx)), PhantomData) }
     #[inline(always)] fn broadcastv_m(src: Storage<Self>, mask: Storage<Self::Mask>, value: Storage<Self>, idx: usize) -> Storage<Self> { Self(R::broadcastv_m(src.0, mask.0, value.0, Self::min_idx(idx)), PhantomData) }
@@ -691,6 +694,9 @@ impl<R: BitshiftRegister, N: Unsigned> BitshiftRegister for ReducedRegister<R, N
 
     #[conditional] fn rolv(value: Storage<Self>, count: Storage<Self::Unsigned>) -> Storage<Self> {}
     #[conditional] fn rorv(value: Storage<Self>, count: Storage<Self::Unsigned>) -> Storage<Self> {}
+
+    // Per-lane bit reversal: padding-lane junk stays in its own lanes.
+    #[conditional] fn reverse_bits(value: Storage<Self>) -> Storage<Self> {}
 }
 
 #[thermite_macros::inline_always]
@@ -808,6 +814,7 @@ impl<R: PartialOrdRegister, N: Unsigned> PartialOrdRegister for ReducedRegister<
     fn lt(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> {}
     fn ge(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> {}
     fn le(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> {}
+    fn ne(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self::Mask> {}
 }
 
 // pub trait SpecReducibleNumRegister: NumericRegister {
@@ -836,6 +843,7 @@ impl<R: NumericRegister, N: Unsigned> NumericRegister for ReducedRegister<R, N> 
     #[conditional] fn div(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn rem(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn square(value: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn scale(value: Storage<Self>, scalar: Self::Element) -> Storage<Self> {}
 
     #[conditional] fn min(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn max(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {}
@@ -995,7 +1003,28 @@ where
     #[conditional] fn next_power_of_two_m1(value: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn parity(value: Storage<Self>) -> Storage<Self> {}
 
+    fn avg(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {}
+    fn abs_diff(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {}
     fn is_power_of_two(value: Storage<Self>) -> Storage<Self::Mask> {}
+
+    // Hand-written: [Storage<Self>; D] is not splittable by reduced_impl.
+    // Per-lane bit ops, so padding-lane junk stays in its own lanes.
+    fn morton<const D: usize>(values: [Storage<Self>; D]) -> Storage<Self> {
+        let mut inner = [R::ZERO; D];
+        for k in 0..D {
+            inner[k] = values[k].0;
+        }
+        Self(R::morton(inner), PhantomData)
+    }
+
+    fn reverse_morton<const D: usize>(code: Storage<Self>) -> [Storage<Self>; D] {
+        let coords = R::reverse_morton::<D>(code.0);
+        let mut out = [Self::ZERO; D];
+        for k in 0..D {
+            out[k] = Self(coords[k], PhantomData);
+        }
+        out
+    }
 }
 
 #[rustfmt::skip] #[thermite_macros::reduced_impl]
@@ -1003,6 +1032,9 @@ impl<R: SignedIntegerRegister, N: Unsigned> SignedIntegerRegister for ReducedReg
     #[conditional] fn sra(value: Storage<Self>, shift: u32) -> Storage<Self> {}
     #[conditional] fn srai<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn srav(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {}
+    fn avg_floor(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {}
+    fn avg_ceil(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {}
+    fn mulhrs(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {}
 }
 
 #[rustfmt::skip] #[thermite_macros::reduced_impl]
@@ -1110,6 +1142,12 @@ where
     #[conditional] fn signed_zero(value: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn next_up(value: Storage<Self>) -> Storage<Self> {}
     #[conditional] fn next_down(value: Storage<Self>) -> Storage<Self> {}
+
+    fn mix(a: Storage<Self>, b: Storage<Self>, t: Storage<Self>) -> Storage<Self> {}
+    // Live lanes are the LOW lanes of R, so R's even/odd parity matches.
+    #[conditional] fn addsub(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn fmaddsub(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {}
+    #[conditional] fn fmsubadd(a: Storage<Self>, b: Storage<Self>, c: Storage<Self>) -> Storage<Self> {}
 }
 
 impl<R: LinAlg3Register, N: Unsigned> LinAlg3Register for ReducedRegister<R, N>

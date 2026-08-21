@@ -304,6 +304,206 @@ pub unsafe fn _mm256_sra_epi8x_v3(v: __m256i, shift: u32) -> __m256i {
     _mm256_sub_epi8(_mm256_xor_si256(logical, m), m)
 }
 
+// ---------------------------------------------------------------------------
+// Per-lane variable shifts for 8- and 16-bit lanes, 256-bit.
+//
+// AVX2's `vpsllvd`/`vpsllvq` stop at 32-bit lanes; `vpsllvw` needs
+// AVX-512BW+VL. Same conditional-constant-shift decomposition as the v1
+// 128-bit forms, but blending with `vpblendvb` (one instruction instead of the
+// SSE2 xor/and/xor triple). The mask is uniform across each lane, so
+// byte-granular blending is exact for 16-bit lanes too.
+//
+// As at v1, only bits `0..log2(width)` of the count are examined, so counts
+// behave as `s & (width - 1)`, matching the scalar oracle.
+// ---------------------------------------------------------------------------
+
+macro_rules! varshift256_step {
+    ($x:ident, $shifts:ident, $set1:ident, $cmpeq:ident, $bit:expr, $shifted:expr) => {{
+        let sel = $set1($bit);
+        let m = $cmpeq(_mm256_and_si256($shifts, sel), sel);
+        $x = _mm256_blendv_epi8($x, $shifted, m);
+    }};
+}
+
+/// POLYFILL: per-lane variable logical left shift of 16-bit lanes (`vpsllvw`).
+#[inline(always)]
+pub unsafe fn _mm256_sllv_epi16x_v3(value: __m256i, shifts: __m256i) -> __m256i {
+    let mut x = value;
+    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 1, _mm256_slli_epi16(x, 1));
+    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 2, _mm256_slli_epi16(x, 2));
+    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 4, _mm256_slli_epi16(x, 4));
+    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 8, _mm256_slli_epi16(x, 8));
+    x
+}
+
+/// POLYFILL: per-lane variable logical right shift of 16-bit lanes (`vpsrlvw`).
+#[inline(always)]
+pub unsafe fn _mm256_srlv_epi16x_v3(value: __m256i, shifts: __m256i) -> __m256i {
+    let mut x = value;
+    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 1, _mm256_srli_epi16(x, 1));
+    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 2, _mm256_srli_epi16(x, 2));
+    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 4, _mm256_srli_epi16(x, 4));
+    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 8, _mm256_srli_epi16(x, 8));
+    x
+}
+
+/// POLYFILL: per-lane variable arithmetic right shift of `i16` lanes (`vpsravw`).
+#[inline(always)]
+pub unsafe fn _mm256_srav_epi16x_v3(value: __m256i, shifts: __m256i) -> __m256i {
+    let mut x = value;
+    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 1, _mm256_srai_epi16(x, 1));
+    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 2, _mm256_srai_epi16(x, 2));
+    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 4, _mm256_srai_epi16(x, 4));
+    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 8, _mm256_srai_epi16(x, 8));
+    x
+}
+
+/// POLYFILL: per-lane variable logical left shift of byte lanes.
+#[inline(always)]
+pub unsafe fn _mm256_sllv_epi8x_v3(value: __m256i, shifts: __m256i) -> __m256i {
+    let mut x = value;
+    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 1, _mm256_slli_epi8x_v3::<1>(x));
+    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 2, _mm256_slli_epi8x_v3::<2>(x));
+    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 4, _mm256_slli_epi8x_v3::<4>(x));
+    x
+}
+
+/// POLYFILL: per-lane variable logical right shift of byte lanes.
+#[inline(always)]
+pub unsafe fn _mm256_srlv_epi8x_v3(value: __m256i, shifts: __m256i) -> __m256i {
+    let mut x = value;
+    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 1, _mm256_srli_epi8x_v3::<1>(x));
+    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 2, _mm256_srli_epi8x_v3::<2>(x));
+    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 4, _mm256_srli_epi8x_v3::<4>(x));
+    x
+}
+
+/// POLYFILL: per-lane variable arithmetic right shift of `i8` lanes.
+#[inline(always)]
+pub unsafe fn _mm256_srav_epi8x_v3(value: __m256i, shifts: __m256i) -> __m256i {
+    let mut x = value;
+    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 1, _mm256_srai_epi8x_v3::<1>(x));
+    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 2, _mm256_srai_epi8x_v3::<2>(x));
+    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 4, _mm256_srai_epi8x_v3::<4>(x));
+    x
+}
+
+// ---------------------------------------------------------------------------
+// 16-bit variable shifts, second lowering: widen to 32-bit lanes and use the
+// native `vpsllvd`/`vpsrlvd`/`vpsravd`, then narrow back.
+//
+// Only worth it at 16-bit: the widening is 2x, so one 256-bit vector becomes
+// two, and AVX2 unpack *and* pack both operate within 128-bit halves, so the
+// permutation cancels and the round trip needs no `vperm2i128`/`vpermq` fixup.
+// At 8-bit the widening would be 4x and the extract/pack overhead swamps the
+// win, which is why the byte forms keep the decomposition.
+//
+// Two hazards, both load-bearing:
+//
+// 1. The count must be reduced mod 16 explicitly. Widening hands `vpsllvd` a
+//    32-bit lane, so a count of 16..=31 would shift for real instead of
+//    wrapping, and a count >= 32 would flush to zero. Neither matches the
+//    scalar oracle. The decomposition got this for free. Here it costs an AND.
+// 2. `vpackusdw` SATURATES. A left shift that pushes bits above 16 must be
+//    masked to 0xFFFF before packing or the lane clamps to 0xFFFF instead of
+//    truncating, which is exactly fearless_simd #287, in its original habitat.
+//    The signed form needs `vpackssdw` for the same reason in the other
+//    direction: `vpackusdw` would clamp negatives to zero.
+// ---------------------------------------------------------------------------
+
+/// POLYFILL: `vpsllvw` via 32-bit widening. See [`_mm256_sllv_epi16x_v3`] for
+/// the alternative lowering.
+#[inline(always)]
+pub unsafe fn _mm256_sllv_epi16_widex_v3(value: __m256i, shifts: __m256i) -> __m256i {
+    let z = _mm256_setzero_si256();
+    // Masked, not clamped: widening would otherwise let a count of 16..=31
+    // shift for real in a 32-bit lane and then saturate through the pack. The
+    // AND is one op and keeps an out-of-range result merely unspecified rather
+    // than wild. See `BitshiftVector::shrv`.
+    let s = _mm256_and_si256(shifts, _mm256_set1_epi16(15));
+    let lo = _mm256_sllv_epi32(_mm256_unpacklo_epi16(value, z), _mm256_unpacklo_epi16(s, z));
+    let hi = _mm256_sllv_epi32(_mm256_unpackhi_epi16(value, z), _mm256_unpackhi_epi16(s, z));
+    let m = _mm256_set1_epi32(0xFFFF);
+    _mm256_packus_epi32(_mm256_and_si256(lo, m), _mm256_and_si256(hi, m))
+}
+
+/// POLYFILL: `vpsrlvw` via 32-bit widening. No post-shift mask needed: the
+/// lanes were zero-extended and a logical right shift keeps them in range.
+#[inline(always)]
+pub unsafe fn _mm256_srlv_epi16_widex_v3(value: __m256i, shifts: __m256i) -> __m256i {
+    let z = _mm256_setzero_si256();
+    // Masked, not clamped: widening would otherwise let a count of 16..=31
+    // shift for real in a 32-bit lane and then saturate through the pack. The
+    // AND is one op and keeps an out-of-range result merely unspecified rather
+    // than wild. See `BitshiftVector::shrv`.
+    let s = _mm256_and_si256(shifts, _mm256_set1_epi16(15));
+    let lo = _mm256_srlv_epi32(_mm256_unpacklo_epi16(value, z), _mm256_unpacklo_epi16(s, z));
+    let hi = _mm256_srlv_epi32(_mm256_unpackhi_epi16(value, z), _mm256_unpackhi_epi16(s, z));
+    _mm256_packus_epi32(lo, hi)
+}
+
+/// POLYFILL: `vpsravw` via 32-bit widening. Sign-extends by duplicating each
+/// word into a dword and arithmetic-shifting it back down.
+#[inline(always)]
+pub unsafe fn _mm256_srav_epi16_widex_v3(value: __m256i, shifts: __m256i) -> __m256i {
+    let z = _mm256_setzero_si256();
+    // Masked, not clamped: widening would otherwise let a count of 16..=31
+    // shift for real in a 32-bit lane and then saturate through the pack. The
+    // AND is one op and keeps an out-of-range result merely unspecified rather
+    // than wild. See `BitshiftVector::shrv`.
+    let s = _mm256_and_si256(shifts, _mm256_set1_epi16(15));
+    let lo = _mm256_srav_epi32(
+        _mm256_srai_epi32(_mm256_unpacklo_epi16(value, value), 16),
+        _mm256_unpacklo_epi16(s, z),
+    );
+    let hi = _mm256_srav_epi32(
+        _mm256_srai_epi32(_mm256_unpackhi_epi16(value, value), 16),
+        _mm256_unpackhi_epi16(s, z),
+    );
+    _mm256_packs_epi32(lo, hi)
+}
+
+/// POLYFILL: 128-bit `vpsllvw` via 32-bit widening (AVX2 supplies the 128-bit
+/// `vpsllvd` too, so v3's 128-bit registers get the same treatment).
+#[inline(always)]
+pub unsafe fn _mm_sllv_epi16_widex_v3(value: __m128i, shifts: __m128i) -> __m128i {
+    let z = _mm_setzero_si128();
+    // See the 256-bit form: masked, not clamped.
+    let s = _mm_and_si128(shifts, _mm_set1_epi16(15));
+    let lo = _mm_sllv_epi32(_mm_unpacklo_epi16(value, z), _mm_unpacklo_epi16(s, z));
+    let hi = _mm_sllv_epi32(_mm_unpackhi_epi16(value, z), _mm_unpackhi_epi16(s, z));
+    let m = _mm_set1_epi32(0xFFFF);
+    _mm_packus_epi32(_mm_and_si128(lo, m), _mm_and_si128(hi, m))
+}
+
+/// POLYFILL: 128-bit `vpsrlvw` via 32-bit widening.
+#[inline(always)]
+pub unsafe fn _mm_srlv_epi16_widex_v3(value: __m128i, shifts: __m128i) -> __m128i {
+    let z = _mm_setzero_si128();
+    // See the 256-bit form: masked, not clamped.
+    let s = _mm_and_si128(shifts, _mm_set1_epi16(15));
+    let lo = _mm_srlv_epi32(_mm_unpacklo_epi16(value, z), _mm_unpacklo_epi16(s, z));
+    let hi = _mm_srlv_epi32(_mm_unpackhi_epi16(value, z), _mm_unpackhi_epi16(s, z));
+    _mm_packus_epi32(lo, hi)
+}
+
+/// POLYFILL: 128-bit `vpsravw` via 32-bit widening.
+#[inline(always)]
+pub unsafe fn _mm_srav_epi16_widex_v3(value: __m128i, shifts: __m128i) -> __m128i {
+    let z = _mm_setzero_si128();
+    // See the 256-bit form: masked, not clamped.
+    let s = _mm_and_si128(shifts, _mm_set1_epi16(15));
+    let lo = _mm_srav_epi32(
+        _mm_srai_epi32(_mm_unpacklo_epi16(value, value), 16),
+        _mm_unpacklo_epi16(s, z),
+    );
+    let hi = _mm_srav_epi32(
+        _mm_srai_epi32(_mm_unpackhi_epi16(value, value), 16),
+        _mm_unpackhi_epi16(s, z),
+    );
+    _mm_packs_epi32(lo, hi)
+}
+
 /// POLYFILL: low 8 bits of each byte product (`a[i].wrapping_mul(b[i])`).
 #[inline(always)]
 pub unsafe fn _mm256_mullo_epi8x_v3(a: __m256i, b: __m256i) -> __m256i {

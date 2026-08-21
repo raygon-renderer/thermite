@@ -102,6 +102,16 @@ mod x86 {
     morton_suite!(v1_u64x2, <X86V1 as Simd>::u64x2, u64, "v1 u64x2");
     morton_suite!(v1_u32x4, <X86V1 as Simd>::u32x4, u32, "v1 u32x4");
     morton_suite!(v1_u16x8, <X86V1 as Simd>::u16x8, u16, "v1 u16x8");
+
+    // Composite widths: ArrayRegister chunk-delegates into the native fast
+    // paths (u64 CLMUL, u16/u32 pshufb LUT); reduced (half) registers
+    // wide-delegate into them.
+    use thermite::register::array::ArrayRegister;
+    morton_suite!(v3_u64x4_array2, ArrayRegister<<X86V3 as Simd>::u64x4, 2>, u64, "v3 ArrayRegister<u64x4, 2>");
+    morton_suite!(v3_u32x8_array2, ArrayRegister<<X86V3 as Simd>::u32x8, 2>, u32, "v3 ArrayRegister<u32x8, 2>");
+    morton_suite!(v3_u32x2_reduced, <X86V3 as Simd>::u32x2, u32, "v3 u32x2 (reduced)");
+    morton_suite!(v3_u16x4_reduced, <X86V3 as Simd>::u16x4, u16, "v3 u16x4 (reduced)");
+    morton_suite!(v2_u32x2_reduced, <X86V2 as Simd>::u32x2, u32, "v2 u32x2 (reduced)");
 }
 
 #[cfg(target_arch = "wasm32")]

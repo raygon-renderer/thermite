@@ -77,6 +77,27 @@ pub trait ScalarValue:
     /// crate feature is enabled, for the `erf_inv` function.
     const MAX_ERFINV_SERIES: Self;
 
+    /// `|x|` at which `erf`/`erfc` hand over from the erf series to the erfc
+    /// continued fraction, when the policy asks for precision.
+    ///
+    /// The series computes `erf` and gets `erfc` as `1 - erf`, so `erfc` inherits
+    /// `erf`'s ABSOLUTE error and loses `log2(erf/erfc)` bits of relative accuracy.
+    /// The continued fraction computes `erfc` directly, with no cancellation, but
+    /// needs far more iterations the smaller `|x|` gets: a measured 338 double-double
+    /// Lentz steps at 1.5 against 202 at 2.0. Lowering this constant buys accuracy
+    /// with time.
+    ///
+    /// **Per type, because the two widths disagree about where the trade pays.** For
+    /// f64 double-double the continued fraction holds a flat ~2-7e-31 relative from 1.5
+    /// upward, comfortably better than the series' 6.9e-31 at 1.5 and 7.2e-30 at 1.821,
+    /// so 1.5 wins. For f32 double-single the continued fraction has a much worse
+    /// floor (a measured ~1.4-2.4e-12, roughly 400-700 ulp), and the series beats it
+    /// at every point from 1.25 to 2.25, so f32 keeps the historical 2.
+    ///
+    /// Only consulted when `PrecisionPolicy` is `Best` or above. Below that both types
+    /// use 2 regardless. See `erf_internal_p`.
+    const ERF_CF_SPLIT: Self;
+
     /// Returns the value truncated to its integer component.
     ///
     /// Named this way to avoid conflicts. Required for the `Rem` implementation.
@@ -223,6 +244,9 @@ impl ScalarValue for f32 {
     const SCALAR_ZERO: Self = 0.0;
     const SCALAR_ONE: Self = 1.0;
     const MAX_ERFINV_SERIES: Self = 0.75;
+    // The continued fraction is worse than the series everywhere below ~2.25 at this
+    // width, so f32 keeps the historical split and gains nothing from the policy gate.
+    const ERF_CF_SPLIT: Self = 2.0;
 
     #[inline(always)]
     #[allow(
@@ -260,6 +284,7 @@ impl ScalarValue for f64 {
     const SCALAR_ZERO: Self = 0.0;
     const SCALAR_ONE: Self = 1.0;
     const MAX_ERFINV_SERIES: Self = 0.545;
+    const ERF_CF_SPLIT: Self = 1.5;
 
     #[inline(always)]
     #[allow(
@@ -357,6 +382,13 @@ impl<E: ScalarValue> SplatConst<E> for MaxErfinvSeriesValue<E> {
     const VALUE: E = <E as ScalarValue>::MAX_ERFINV_SERIES;
 }
 
+/// `SplatConst` carrier for [`ScalarValue::ERF_CF_SPLIT`]. See [`SplitterValue`].
+struct ErfCfSplitValue<E>(core::marker::PhantomData<E>);
+
+impl<E: ScalarValue> SplatConst<E> for ErfCfSplitValue<E> {
+    const VALUE: E = <E as ScalarValue>::ERF_CF_SPLIT;
+}
+
 /// Cold half of [`ScalarValue::rebalance_for_split`] for vectors.
 ///
 /// Outlined so the hot path neither blends nor spills. The rebalance is per lane, so one
@@ -393,6 +425,7 @@ where
     const SCALAR_ZERO: Self = Self::ZERO;
     const SCALAR_ONE: Self = Self::ONE;
     const MAX_ERFINV_SERIES: Self = const_splat::<Self, MaxErfinvSeriesValue<R::Element>>();
+    const ERF_CF_SPLIT: Self = const_splat::<Self, ErfCfSplitValue<R::Element>>();
 
     // Operands this large are rare, so the packet takes one predictable branch rather
     // than four blends on every call. Below SSE4.1 there is no `blendv` and each select
@@ -2357,12 +2390,12 @@ impl<V: CompensatedFloatVector> NumericVector for Compensated<V> {
 
     #[inline(always)]
     fn reverse_prefix_min(self) -> Self {
-        thermite::scan_ladder!(reverse, self, self.reverse().broadcast::<0>(), Self::min)
+        thermite::scan_ladder!(reverse, self, Self::splat(self.last_element()), Self::min)
     }
 
     #[inline(always)]
     fn reverse_prefix_max(self) -> Self {
-        thermite::scan_ladder!(reverse, self, self.reverse().broadcast::<0>(), Self::max)
+        thermite::scan_ladder!(reverse, self, Self::splat(self.last_element()), Self::max)
     }
 
     #[inline(always)]

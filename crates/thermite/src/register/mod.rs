@@ -815,7 +815,7 @@ pub trait Register:
 
     /// # Safety
     ///
-    /// The pointer must be valid, align, and point to a memory location where, when the mask is true,
+    /// The pointer must be valid, aligned, and point to a memory location where, when the mask is true,
     /// is valid for writing a value of type `Self::Element`.
     ///
     /// The memory locations where the mask is false are not accessed.
@@ -1359,6 +1359,10 @@ pub trait Register:
         }
 
         Self::as_slice(&value)[I]
+    }
+
+    fn last_element(value: Storage<Self>) -> Self::Element {
+        Self::as_slice(&value)[Self::lanes() - 1]
     }
 
     fn insert<const I: usize>(mut value: Storage<Self>, element: Self::Element) -> Storage<Self> {
@@ -2145,27 +2149,58 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
     /// requires a scalar fallback.
     const HAS_TRUE_SHIFTV: bool;
 
+    // ## Out-of-range shift counts
+    //
+    // A lane whose count is `>= the element bit width` produces an
+    // **unspecified value**. Not undefined behaviour (it is always some
+    // value, never a fault or a memory-safety problem), but which value
+    // depends on the backend, and nothing here promises to make them agree.
+    //
+    // That is deliberate. Pinning a single answer would mean masking or
+    // clamping the count on every variable shift, including the native ones
+    // that already do something sensible on their own, so the cost would land
+    // permanently on the fastest paths in order to tidy up input that callers
+    // are not supposed to supply. Each backend therefore does whatever its
+    // hardware does for free: x86 flushes to zero (sign fill for `srav`), NEON
+    // reads the low 8 bits of the count as a signed value, and the emulated
+    // paths generally wrap the count.
+    //
+    // The one thing that IS guaranteed is that no path panics, which is why
+    // the fallbacks below use `wrapping_*` rather than plain `<<`/`>>`.
+
     #[conditional] fn shrv(mut value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
         // Scalar fallback. `shrv` is a *logical* (zero-fill) shift, so use
         // `unsigned_shr`: a plain `>>` on a signed element arithmetic-shifts, which
         // is `srav`, not `shrv`. (Backends with a hardware variable shift override this.)
+        //
+        // `logical_shr` is a plain `>>`, which PANICS under overflow checks for
+        // an out-of-range count, a debug-only fault on a lane value that a
+        // release build shifts happily. The count is masked first so the result
+        // is merely unspecified, which is all this promises, rather than a
+        // crash that only shows up in one profile.
+        let mask: <Self::Element as Element>::Unsigned =
+            Element::from_u16((core::mem::size_of::<Self::Element>() * 8 - 1) as u16);
+
         for (r, s) in Self::as_mut_slice(&mut value)
             .iter_mut()
             .zip(<Self::Unsigned as Register>::as_slice(&shifts))
         {
-            *r = r.logical_shr(*s);
+            *r = r.logical_shr(*s & mask);
         }
 
         value
     }
 
     #[conditional] fn shlv(mut value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
-        // Scalar fallback
+        // Scalar fallback. See `shrv` for why the count is masked.
+        let mask: <Self::Element as Element>::Unsigned =
+            Element::from_u16((core::mem::size_of::<Self::Element>() * 8 - 1) as u16);
+
         for (r, s) in Self::as_mut_slice(&mut value)
             .iter_mut()
             .zip(<Self::Unsigned as Register>::as_slice(&shifts))
         {
-            *r = *r << *s;
+            *r = *r << (*s & mask);
         }
 
         value
@@ -2188,7 +2223,7 @@ pub trait BitshiftRegister: Register<Element: IntegerElement> {
 
     /// Rotate bits right
     ///
-    /// The amount is reduced modulo the element bit width; see [`Self::rol`].
+    /// The amount is reduced modulo the element bit width (see [`Self::rol`]).
     #[conditional] fn ror(value: Storage<Self>, shift: u32) -> Storage<Self> {
         let width = (core::mem::size_of::<Self::Element>() * 8) as u32;
         let shift = shift & (width - 1);
@@ -2871,12 +2906,17 @@ pub trait SignedIntegerRegister:
 
     #[conditional]
     fn srav(mut value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
-        // Scalar fallback
+        // Scalar fallback. The count is masked so an out-of-range one cannot
+        // panic under overflow checks; see `BitshiftRegister::shrv`.
+        let mask: <Self::Element as Element>::Unsigned =
+            Element::from_u16((core::mem::size_of::<Self::Element>() * 8 - 1) as u16);
+
         for (r, s) in Self::as_mut_slice(&mut value)
             .iter_mut()
             .zip(<Self::Unsigned as Register>::as_slice(&shifts))
         {
-            *r = *r >> *s; // r in this context is signed, so this is an arithmetic shift
+            // r in this context is signed, so `>>` is an arithmetic shift
+            *r = *r >> (*s & mask);
         }
 
         value

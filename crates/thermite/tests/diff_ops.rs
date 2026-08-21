@@ -49,41 +49,8 @@ macro_rules! diff_shift {
     }};
 }
 
-// ---------------------------------------------------------------------------
-// Per-lane variable shift (`shlv`/`shrv`/`srav`): the shift amount is itself a
-// vector, one count per lane. On SSE the 64-bit forms have no native
-// instruction and are polyfilled. A lane-swap bug in the 64-bit polyfill (used
-// by v1 and v2) silently transposes lanes, and `diff_shift!` only covers the
-// uniform scalar-amount form, so it would not see one. Differential vs the
-// scalar backend over per-lane random shift amounts in `[0, bits)`.
-// ---------------------------------------------------------------------------
-macro_rules! diff_varshift {
-    ($label:expr, $ut:ty, $rf:ty, $method:ident) => {{
-        use rand::RngExt as _;
-        type E = <$ut as thermite::register::Register>::Element;
-        type UUT = <$ut as thermite::register::Register>::Unsigned;
-        type URF = <$rf as thermite::register::Register>::Unsigned;
-        type UE = <UUT as thermite::register::Register>::Element;
-        let mut rng = harness::rng();
-        let lanes = <<$ut as thermite::register::CoreRegister>::Lanes as generic_array::typenum::Unsigned>::USIZE;
-        let bits = (core::mem::size_of::<E>() * 8) as UE;
-        for input in harness::corpus::<E>(lanes, &mut rng) {
-            // Distinct per-lane shift amounts so a lane transposition is visible.
-            let sh: Vec<UE> = (0..lanes).map(|_| rng.random::<UE>() % bits).collect();
-            let ut_sh = harness::make_array::<UUT>(&sh);
-            let rf_sh = harness::make_array::<URF>(&sh);
-            let got = harness::read::<$ut>(&<$ut>::$method(harness::make_array::<$ut>(&input), ut_sh));
-            let want = harness::read::<$rf>(&<$rf>::$method(harness::make_array::<$rf>(&input), rf_sh));
-            harness::assert_lanes_eq(
-                concat!($label, " [", stringify!($method), "]"),
-                &[input.as_slice()],
-                &got,
-                &want,
-                Tol::Exact,
-            );
-        }
-    }};
-}
+// Per-lane variable shift coverage now comes from the shared `diff_varshift!`
+// stamper in the harness, so the 8-bit suites can use it too.
 
 // ---------------------------------------------------------------------------
 // Float register suite: one #[test] per (backend, width).

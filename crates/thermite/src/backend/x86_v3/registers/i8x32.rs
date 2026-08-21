@@ -297,6 +297,12 @@ impl BitshiftRegister for I8x32V3 {
     fn shri<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_srli_epi8x_v3::<IMM8>(value) }
     }
+    fn shlv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm256_sllv_epi8x_v3(value, shifts) }
+    }
+    fn shrv(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm256_srlv_epi8x_v3(value, shifts) }
+    }
 }
 
 #[thermite_macros::inline_always]
@@ -446,5 +452,8 @@ impl SignedIntegerRegister for I8x32V3 {
     }
     fn sra(value: Storage<Self>, shift: u32) -> Storage<Self> {
         unsafe { arch::_mm256_sra_epi8x_v3(value, shift) }
+    }
+    fn srav(value: Storage<Self>, shifts: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm256_srav_epi8x_v3(value, shifts) }
     }
 }
