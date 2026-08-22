@@ -1,5 +1,6 @@
 #![doc = include_str!("../README.md")]
 //
+#![recursion_limit = "256"]
 #![allow(unexpected_cfgs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
