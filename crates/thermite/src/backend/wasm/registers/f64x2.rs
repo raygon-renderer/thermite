@@ -21,7 +21,6 @@ pub struct F64x2Wasm;
 
 #[thermite_macros::inline_always]
 impl CoreRegister for F64x2Wasm {
-    type NativeIsa = crate::backend::wasm::Wasm;
     type Lanes = typenum::U2;
     type Storage = arch::v128;
     type Mask = Self;
@@ -405,22 +404,25 @@ impl FloatRegister for F64x2Wasm {
 
     const EXP_MASK: Storage<Self::Bits> = arch::u64x2(0x7FF0_0000_0000_0000, 0x7FF0_0000_0000_0000);
 
-    // These MUST use a polyfill implementation to ensure consistent behavior across platforms
+    // Correctly rounded (bit-identical to hardware FMA) on every engine: the
+    // relaxed madd instruction when a one-time canary proves it is a genuine
+    // fused FMA (single instruction), else the BM 2008 round-to-odd emulation.
+    // Both branches produce identical bits, see `f64x2_fmadd_auto`.
 
     fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        arch::f64x2_maddx(lhs, rhs, acc)
+        arch::f64x2_fmadd_auto(lhs, rhs, acc)
     }
 
     fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        arch::f64x2_maddx(lhs, rhs, arch::f64x2_neg(acc))
+        arch::f64x2_fmadd_auto(lhs, rhs, arch::f64x2_neg(acc))
     }
 
     fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        arch::f64x2_maddx(arch::f64x2_neg(lhs), rhs, acc)
+        arch::f64x2_fnmadd_auto(lhs, rhs, acc)
     }
 
     fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        arch::f64x2_maddx(arch::f64x2_neg(lhs), rhs, arch::f64x2_neg(acc))
+        arch::f64x2_fnmadd_auto(lhs, rhs, arch::f64x2_neg(acc))
     }
 
     // These, however, can use the native relaxed FMA instructions, which

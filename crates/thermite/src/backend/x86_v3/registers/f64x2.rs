@@ -24,7 +24,6 @@ pub struct F64x2V3;
 
 #[thermite_macros::inline_always]
 impl CoreRegister for F64x2V3 {
-    type NativeIsa = crate::backend::x86_v3::X86V3;
     type Lanes = typenum::U2;
     type Storage = arch::__m128d;
     type Mask = Self;

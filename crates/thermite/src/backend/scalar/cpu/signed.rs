@@ -15,7 +15,6 @@ macro_rules! decl_signed_scalar { ($i:ty: $u:ty: $ei:ty => $width:literal) => {p
 
 #[thermite_macros::inline_always]
 impl CoreRegister for [<i $width>] {
-    type NativeIsa = crate::backend::scalar::Scalar;
     type Lanes = typenum::U1;
     type Storage = $i;
     type Mask = bool;

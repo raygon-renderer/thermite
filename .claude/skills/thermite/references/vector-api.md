@@ -243,8 +243,8 @@ a.mul_adde(b, c)   // a*b + c   <- PREFER the `e` (estimating) forms by default
 a.mul_sube(b, c)   // a*b - c
 a.nmul_adde(b, c)  // c - a*b
 a.nmul_sube(b, c)  // -a*b - c
-a.mul_add(b, c)    // a*b + c, always single-rounded: real FMA, else vectorized compensated
-                   // emulation (scalar libm::fma only under disable_fast_fma). See math.md.
+a.mul_add(b, c)    // a*b + c, always single-rounded: real FMA, else a vectorized
+                   // correctly-rounded emulation (bit-identical to FMA). See math.md.
 ```
 
 See [performance.md](performance.md) for which FMA variant to use - this is the

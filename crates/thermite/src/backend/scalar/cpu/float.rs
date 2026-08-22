@@ -18,7 +18,6 @@ macro_rules! decl_float_scalar { ($f:ty $(: $s:ident)? => $width:literal) => {pa
 
 #[thermite_macros::inline_always]
 impl CoreRegister for [<f $width>] {
-    type NativeIsa = crate::backend::scalar::Scalar;
     type Lanes = typenum::U1;
     type Storage = [<f $width>];
     type Mask = bool;

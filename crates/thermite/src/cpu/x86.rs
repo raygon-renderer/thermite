@@ -25,19 +25,23 @@
 use super::{CacheInfo, CacheKind, CoreType, CpuInfo};
 
 /// How much of AVX-512 the CPU implements, in the rungs this crate's
-/// `avx512-tier1..4` crate features and `backend::x86::avx512f::tiers` intrinsic
+/// `avx512-tier1..3` crate features and `backend::x86::avx512f::tiers` intrinsic
 /// modules are cut at. Each tier implies every lower one.
 ///
 /// The ladder is this crate's, not Intel's, as there is no official "tier"
 /// concept, so [`Features::avx512_tier`] only reports which rung the hardware
 /// reaches.
+///
+/// The floor is deliberately **F + CD + BW + DQ + VL**, not bare F: the only
+/// silicon that ever shipped F without the other four was Knights Landing/Mill
+/// (discontinued 2018-2019), and without VL there are no EVEX encodings at
+/// 128/256-bit, and without BW no 8/16-bit lanes or 32/64-bit opmasks. A
+/// backend for that shape would be a parallel implementation for extinct hardware.
+/// F+CD-only parts report `None` and run the AVX2 backend.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Avx512Tier {
-    /// F + CD. Exactly the Knights Landing feature set (which also had the
-    /// long-dead ER and PF). 512-bit only: no EVEX encodings at 128/256-bit.
-    Tier1,
-    /// Tier 1 + BW + DQ + **VL**. The Skylake-SP set, which introduced all
-    /// three together, and what most people mean by "has AVX-512".
+    /// F + CD + BW + DQ + **VL**. The Skylake-SP set, which introduced all of
+    /// them together, and what everyone means by "has AVX-512".
     ///
     /// VL is the one that matters most to this crate: it is not new operations
     /// but an orthogonal capability letting the EVEX encodings apply to XMM/YMM:
@@ -45,12 +49,15 @@ pub enum Avx512Tier {
     /// 128/256-bit. That is what turns the `_c`/`_m`/`_z` variants into single
     /// masked instructions on the *existing* `f32x4`/`f32x8` register widths,
     /// rather than only on new 512-bit ones.
-    Tier2,
-    /// Tier 2 + VBMI, VBMI2, VNNI, BITALG, VPOPCNTDQ, IFMA, GFNI, VAES,
+    Tier1,
+    /// Tier 1 + VBMI, VBMI2, VNNI, BITALG, VPOPCNTDQ, IFMA, GFNI, VAES,
     /// VPCLMULQDQ (Ice Lake and later).
+    Tier2,
+    /// Tier 2 + BF16 (Sapphire Rapids, Zen 4+).
+    ///
+    /// Cooper Lake has BF16 _without_ the tier-2 set, so it reports
+    /// [`Avx512Tier::Tier1`], the one part the linear ladder cannot place.
     Tier3,
-    /// Tier 3 + BF16 (Cooper Lake, Sapphire Rapids, Zen 4+).
-    Tier4,
 }
 
 /// AVX10 converged-vector-ISA version, from leaf `0x24`.
@@ -60,7 +67,7 @@ pub enum Avx512Tier {
 /// and there are no optional sub-features to enumerate. AVX10.1 is
 /// architecturally defined as the complete Granite Rapids AVX-512 feature set
 /// (every `avx512*` flag in [`Features`], including FP16) at 128/256/512-bit
-/// vector lengths, so [`Features::avx512_tier`] reports [`Avx512Tier::Tier4`]
+/// vector lengths, so [`Features::avx512_tier`] reports [`Avx512Tier::Tier3`]
 /// on any AVX10 part.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Avx10Version {
@@ -402,7 +409,7 @@ pub struct Features {
     pub avx512dq: bool,
     /// Vector Length Extensions: the EVEX encodings (masking, zero-masking,
     /// embedded broadcast, registers 16-31) applied to XMM/YMM rather than ZMM
-    /// only. Required from [`Avx512Tier::Tier2`] up.
+    /// only. Required by every rung of [`Avx512Tier`]: it is part of the floor.
     pub avx512vl: bool,
     pub avx512vbmi: bool,
     pub avx512vbmi2: bool,
@@ -437,26 +444,25 @@ pub struct Features {
 }
 
 impl Features {
-    /// The highest AVX-512 tier this CPU satisfies, matching the `avx512-tier1..4`
+    /// The highest AVX-512 tier this CPU satisfies, matching the `avx512-tier1..3`
     /// crate features and the `arch::tiers::tierN` intrinsic modules in
     /// `backend/x86.rs` **exactly** -- the tier ladder is defined there, and this
     /// only reports which rung the hardware reaches.
     ///
-    /// An AVX10 part always reports [`Avx512Tier::Tier4`]: AVX10.1 subsumes the
+    /// F+CD-only hardware (Knights Landing) reports `None`, below the ladder's
+    /// floor. See [`Avx512Tier`].
+    ///
+    /// An AVX10 part always reports [`Avx512Tier::Tier3`]: AVX10.1 subsumes the
     /// whole ladder, and [`features`] folds that guarantee into the individual
     /// flags this reads.
     pub fn avx512_tier(&self) -> Option<Avx512Tier> {
-        // tier1: F + CD
-        if !(self.avx512f && self.avx512cd) {
+        // tier1: F + CD + BW + DQ + VL (Skylake-SP shipped them together, no CPU
+        // has BW/DQ without VL, and only Knights Landing had F without the rest).
+        if !(self.avx512f && self.avx512cd && self.avx512bw && self.avx512dq && self.avx512vl) {
             return None;
         }
-        // tier2: + BW + DQ + VL (Skylake-SP shipped the three together, and no
-        // CPU has BW/DQ without VL, and only Knights Landing lacked all three).
-        if !(self.avx512bw && self.avx512dq && self.avx512vl) {
-            return Some(Avx512Tier::Tier1);
-        }
-        // tier3: + VBMI, VBMI2, VNNI, BITALG, VPOPCNTDQ, IFMA, GFNI, VAES, VPCLMULQDQ
-        let tier3 = self.avx512vbmi
+        // tier2: + VBMI, VBMI2, VNNI, BITALG, VPOPCNTDQ, IFMA, GFNI, VAES, VPCLMULQDQ
+        let tier2 = self.avx512vbmi
             && self.avx512vbmi2
             && self.avx512vnni
             && self.avx512bitalg
@@ -465,14 +471,14 @@ impl Features {
             && self.gfni
             && self.vaes
             && self.vpclmulqdq;
-        if !tier3 {
+        if !tier2 {
+            return Some(Avx512Tier::Tier1);
+        }
+        // tier3: + BF16
+        if !self.avx512bf16 {
             return Some(Avx512Tier::Tier2);
         }
-        // tier4: + BF16
-        if !self.avx512bf16 {
-            return Some(Avx512Tier::Tier3);
-        }
-        Some(Avx512Tier::Tier4)
+        Some(Avx512Tier::Tier3)
     }
 
     /// The AVX10 version this CPU implements, if any.

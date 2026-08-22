@@ -788,15 +788,18 @@ workflow deploys docs (KaTeX header) for the `rewrite` branch.
   the same thing. Same discipline elsewhere: `compress_via_table!` /
   `compress_via_wide!` emit `compress` *and* `expand` together so a backend cannot
   take a fast one and a scalar other.
-- **A new register states `type NativeIsa`, not `const ISA`.** `CoreRegister::ISA`
-  defaults to `<Self::NativeIsa as HasIsa>::ISA`, so a register names the backend
-  that owns it (`type NativeIsa = crate::backend::x86_v3::X86V3;`) and the ISA
-  follows. Backend types themselves are the exception: they implement `HasIsa`
-  directly with `type Native = Self`, so they must still spell `const ISA` or the
-  default would recurse. (The register-layer name is `NativeIsa` and the
-  vector-layer one on `HasIsa` is `Native` -- `Vector<R>` bridges them with
-  `type Native = R::NativeIsa`.) Emulated wrappers forward
-  (`ArrayRegister`/`ReducedRegister` use `R::NativeIsa`), which is
+- **A new register gets `HasIsa` via `impl_has_isa!`, not `const ISA`.**
+  `CoreRegister` requires `HasIsa` as a supertrait (this is what lets
+  `#[thermite::dispatch(R)]` work over bare register types), and `HasIsa::ISA`
+  defaults to `<Self::Native as HasIsa>::ISA`, so a register names the backend
+  that owns it once. Hand-written backends list their registers in one
+  `impl_has_isa!(X86V3: F32x4V3, ...)` invocation in `registers/mod.rs`
+  (`backend/macros.rs`); macro-stamped families (neon, scalar via
+  `impl_has_isa!` in `scalar/mod.rs`, spirv, the v4 kmasks) emit or invoke it
+  next to their `CoreRegister` stamp. Backend types themselves are the
+  exception: they implement `HasIsa` directly with `type Native = Self`, so
+  they must still spell `const ISA` or the default would recurse. Emulated
+  wrappers forward (`ArrayRegister`/`ReducedRegister` use `R::Native`), which is
   why `f32x16<X86V1>` correctly reports `X86V1` while the scalar-lane
   `ArrayRegister<i16, 2>` shared by every backend reports `Scalar`.
   `tests/native_isa.rs` asserts both the mapping and that `ISA` agrees with
@@ -812,21 +815,25 @@ workflow deploys docs (KaTeX header) for the `rewrite` branch.
 - **FMA in kernels -- know the non-`e` fallback.** Estimating `mul_adde` is the
   default (real FMA where present, else `mul`+`add`). Always-fused `mul_add`
   does **not** drop straight to scalar `libm::fma` on non-FMA backends: by
-  default it lowers to a **vectorized emulated FMA** -- a Dekker/Veltkamp
-  compensated split (see `_mm_fmadd_pdx_v1` in
-  `backend/x86_v1/polyfills/math.rs`, `2^27+1` splitter) -- slower than true
-  FMA, **not bit-identical** to it (about 1 in 173,000 differ for f64, 1 in
-  3,000,000 for f32, worst relative error 2.0e-15), but still SIMD and far
-  cheaper than `libm`. Note the split needs an overflow guard above 1.34e300 --
-  see `rebalance_for_split`. Only `disable_fast_fma` (implied by
-  `strict_ieee754`) swaps in exact-but-very-slow scalar `libm::fma`. So
-  `mul_add` is a legitimate *accuracy* choice without hardware FMA; gate behind
+  default it lowers to a **vectorized, correctly rounded emulated FMA** --
+  **bit-identical to a true hardware FMA for every input** -- via the
+  Boldo-Melquiond 2008 round-to-odd polyfills (`fmadd_ro` for f64,
+  `fmadd_widen_ro` for f32, in `backend/generic/polyfills/math.rs`; Coq-proved
+  algorithm, verified against the hardware FMA instruction in
+  `tests/fma_exact.rs`). The f64 path routes rare packets (subnormal-scale
+  products via a pre-gate; overflow/inf/NaN via an `is_finite` post-check) to a
+  fully VECTORIZED rescue -- no scalar loop, no libm, anywhere; the f32 path is
+  branch-free. This is unconditional: the historical `disable_fast_fma`
+  feature was REMOVED (there was nothing left to trade, and the libm f32 chain
+  it selected carries a known subnormal bug). So `mul_add` is a full
+  *accuracy* guarantee without hardware FMA; gate behind
   `if const { V::HAS_TRUE_FMA }` only to avoid the *emulation* cost. The `cbrt`
   kernel uses always-fused `mul_add` inside the FMA-gated branch and estimating
   `mul_adde` for the final unconditional step
   ([performance.md](performance.md) secs 1-2). For genuine double-double
   precision, `thermite-compensated` is often cleaner than leaning on emulated
-  FMA.
+  FMA. (The old Dekker/Veltkamp polyfills `_mm_fmadd_p[sd]x_v1` were deleted
+  2026-08-22; their ~1-in-173k divergence is historical, bodies in git history.)
 - **Rule zero: `#[dispatch]` on the boundary, `#[inline(always)]` on the
   interior.** A generic-over-`S` body with no `#[dispatch]` above it (and no
   `#[dispatch]` ancestor inlining it) is compiled without the target features,

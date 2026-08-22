@@ -98,10 +98,10 @@ scalar lanes on every backend, so they report `Scalar` even on an AVX2 host -
 correct for that vector, wrong if you wanted the machine's register budget.
 Emulated *wide* slots are fine (`f32x16<X86V1>` is four `F32x4V1`s, so it
 reports `X86V1`). Tuning that is about the machine should still read the
-dispatched `S`. Registers carry the same thing one layer down, spelled
-`CoreRegister::NativeIsa`, and `CoreRegister::ISA` defaults to
-`<Self::NativeIsa as HasIsa>::ISA`, so a backend states its ISA once.
-`Vector<R>` bridges the two names (`type Native = R::NativeIsa`).
+dispatched `S`. Registers implement `HasIsa` directly (`CoreRegister` requires
+it as a supertrait, so `#[dispatch(R)]` works over bare register types), and
+`HasIsa::ISA` defaults to `<Self::Native as HasIsa>::ISA`, so a backend states
+its ISA once. `Vector<R>` forwards its register's (`type Native = R::Native`).
 
 `NativeIsa` also carries the whole-CPU knobs, each defaulting to
 unsupported/no-op: `disable_denormals`/`enable_denormals` (+ the

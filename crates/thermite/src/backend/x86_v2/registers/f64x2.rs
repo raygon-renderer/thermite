@@ -49,7 +49,6 @@ impl ExtendRegister<f64> for F64x2V2 {
 
 #[thermite_macros::inline_always]
 impl CoreRegister for F64x2V2 {
-    type NativeIsa = crate::backend::x86_v2::X86V2;
     type Lanes = typenum::U2;
     type Storage = arch::__m128d;
     type Mask = Self;
@@ -432,24 +431,22 @@ impl FloatRegister for F64x2V2 {
 
     const EXP_MASK: crate::register::Storage<Self::Bits> = reg::<Self::Bits, 2>([0x7FF0_0000_0000_0000; 2]);
 
-    #[cfg(not(feature = "disable_fast_fma"))]
+    // Correctly rounded (bit-identical to hardware FMA): BM 2008 round-to-odd,
+    // see `fmadd_ro`. Negations are exact, so the three variants compose from it.
     fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_fmadd_pdx_v1(lhs, rhs, acc) }
+        arch::fmadd_ro::<Self>(lhs, rhs, acc)
     }
 
-    #[cfg(not(feature = "disable_fast_fma"))]
     fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_fmadd_pdx_v1(lhs, rhs, Self::neg(acc)) }
+        arch::fmadd_ro::<Self>(lhs, rhs, Self::neg(acc))
     }
 
-    #[cfg(not(feature = "disable_fast_fma"))]
     fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_fmadd_pdx_v1(Self::neg(lhs), rhs, acc) }
+        arch::fmadd_ro::<Self>(Self::neg(lhs), rhs, acc)
     }
 
-    #[cfg(not(feature = "disable_fast_fma"))]
     fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_fmadd_pdx_v1(Self::neg(lhs), rhs, Self::neg(acc)) }
+        arch::fmadd_ro::<Self>(Self::neg(lhs), rhs, Self::neg(acc))
     }
 
     // SSE3 native alternating add/sub; no packed FMA, so the fused variants are a

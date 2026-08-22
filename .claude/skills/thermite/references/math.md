@@ -94,15 +94,13 @@ Two families, four signs each:
 
 - **Estimating (`*e`)**: real FMA if hardware has it, else separate `mul`+`add`.
   Default choice -- fast everywhere.
-- **FMA-quality (no `e`)**: real FMA if available -- then genuinely single-rounded.
-  Otherwise **by default** a *vectorized emulated FMA* (compensated split --
-  slower than true FMA but still SIMD and far cheaper than `libm`, and **not**
-  bit-identical to one: measured, about 1 in 173,000 differ for f64 and 1 in
-  3,000,000 for f32, worst relative error 2.0e-15). Only `disable_fast_fma` (implied by
-  `strict_ieee754`) makes the fallback the exact scalar `libm::fma`, *dozens of
-  times slower*. So non-`e` forms are a valid **accuracy** choice even without
-  hardware FMA; gate on `V::HAS_TRUE_FMA` to avoid the *emulation* cost, not
-  merely to avoid `libm`.
+- **True FMA (no `e`)**: real FMA if available; otherwise a *vectorized,
+  correctly rounded emulated FMA* (Boldo-Melquiond round-to-odd) that is
+  **bit-identical to a hardware FMA for every input** -- unconditionally, no
+  feature changes it, never scalar, never `libm`. Slower than the `e` forms
+  (roughly 2-4x a plain multiply-add). So non-`e` forms are a full **accuracy
+  guarantee** even without hardware FMA; gate on `V::HAS_TRUE_FMA` only to
+  avoid the *emulation cost*.
 
 Detail and ILP techniques: [performance.md](performance.md).
 
@@ -189,7 +187,7 @@ These power the inverse-smoothstep and special-function kernels.
 ## Denormal configuration is a *behaviour* switch, not just a dial
 
 `thermite::features` exposes const bools -- `PRESERVE_DENORMALS`, `IGNORE_DENORMALS`,
-`STRICT_IEEE754`, `DISABLE_FAST_FMA`, `ALGEBRAIC_SCALAR` -- usable in `if const`.
+`STRICT_IEEE754`, `ALGEBRAIC_SCALAR` -- usable in `if const`.
 Reach for them when a formula's *degenerate case moves* between configurations:
 
 ```rust

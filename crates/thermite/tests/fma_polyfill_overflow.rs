@@ -1,9 +1,15 @@
 //! Regression: the non-FMA x86 backends must not return NaN for a finite product.
 //!
-//! `_mm_fmadd_pdx_v1` emulates FMA with Veltkamp/Dekker splitting, which computes
-//! `x * (2^27 + 1)`. That overflows to infinity above 2^996, and `inf - inf` is NaN, so
-//! without a guard `mul_add` returns NaN for operands whose true result is an ordinary
-//! finite number. Measured unguarded: 26639 NaNs in 1747713 random triples.
+//! Historically `_mm_fmadd_pdx_v1` (Veltkamp/Dekker splitting) computed
+//! `x * (2^27 + 1)`, which overflows to infinity above 2^996, and `inf - inf` is NaN,
+//! so without a guard `mul_add` returned NaN for operands whose true result is an
+//! ordinary finite number. Measured unguarded: 26639 NaNs in 1747713 random triples.
+//!
+//! `mul_add` now lowers to the round-to-odd emulation (`fmadd_ro`), whose integer-add
+//! split cannot overflow and whose `is_finite` post-check routes genuine overflow to
+//! the vectorized rescue. These inputs stay pinned anyway: they are exactly the shapes
+//! that caught the original bug. (`fma_exact.rs` covers the stronger bit-exactness
+//! contract.)
 //!
 //! Only backends WITHOUT hardware FMA take this path, so x86_v1 (SSE2) and x86_v2
 //! (SSE4.2) are what these pin.

@@ -28,24 +28,15 @@ bitvec = ["dep:bitvec", "generic-array/bitvec"]
 
 document_registers = [] # Whether to document individual register abstractions
 
-# Disable the emulated FMA on backends without hardware FMA, using the exact scalar
-# `libm::fma` instead - which is very, very slow. Set this only if you need bitwise
-# identical results with a true FMA.
-#
-# The emulated FMA is close but NOT bitwise identical. Measured against `f64::mul_add` /
-# `f32::mul_add` on the x86_v1 (SSE2) backend, over uniformly random bit patterns:
-#
-#   f64 (Dekker/Veltkamp compensated split): 81 of 13,977,417 differ, about 1 in 173,000.
-#     Worst relative error 2.0e-15. Same-sign normal results are never more than 1 ulp out;
-#     19 of the 81 are results in the subnormal/zero range, where the split underflows.
-#   f32 (widen to f64, operate, narrow): 23 of 69,088,068 differ, about 1 in 3,000,000,
-#     never more than 1 ulp. This one double-rounds - the f64 add rounds, then the narrowing
-#     rounds again - which a round-to-odd intermediate would fix, though it has not been.
-#
-# So the f64 path is the one that actually motivates this feature; it disagrees roughly 17x
-# more often than the f32 path. Neither is affected on hardware WITH FMA, where both paths
-# are bypassed entirely.
-disable_fast_fma = []
+# NOTE: the historical `disable_fast_fma` feature was REMOVED once the emulated FMA
+# became correctly rounded. On backends without hardware FMA, `mul_add` and family
+# now lower to a round-to-odd emulation (Boldo-Melquiond 2008; `fmadd_ro` /
+# `fmadd_widen_ro` in backend/generic/polyfills/math.rs) that is bit-identical to a
+# true fused multiply-add for EVERY input, including subnormals, at every lane -
+# fully vectorized, with no libm involvement. There is nothing left for the feature
+# to trade: the fallback IS an FMA. (It was also strictly worse for f32, where the
+# libm chain it selected carries a known subnormal-halfway double-rounding bug -
+# rust-lang/compiler-builtins#1262.)
 
 # Disable all static dispatch on the SIMD ISA, instead opting for an #[inline(always)] signatures.
 # This will bloat code, and if you do not guarantee that the function will be inlined, it will be very slow.
@@ -55,6 +46,12 @@ disable_dispatch = []
 # Ignore denormal values by default. There is a very slight overhead in checking and fixing them,
 # but it's usually much less than the penalty of executing operations on denormal values. Only
 # enable if you know your data is well-formed or the target arch automatically flushes to zero.
+#
+# Also compiles the subnormal machinery out of the emulated FMA on non-FMA backends
+# (~20% faster mul_add there): normal-range results stay bit-identical to hardware FMA,
+# but subnormal-scale products/results become faithfully rounded instead of exact -
+# which is moot anyway on hardware actually running FTZ/DAZ, the usual reason to
+# enable this. Ignored when `preserve_denormals` (or `strict_ieee754`) is enabled.
 ignore_denormals = []
 
 # Preserve denormal values, which can be very slow to operate on, but are required for strict IEEE-754 compliance.
@@ -66,9 +63,11 @@ preserve_denormals = []
 # Many SIMD instructions intentionally ignore parts of the spec,
 # and this will attempt to abide by the spec wherever possible.
 #
-# Unfortunately requires preserving all denormal inputs, and disabling fast emulated FMA,
-# so this mode will be significantly slower in some workloads.
-strict_ieee754 = ["preserve_denormals", "disable_fast_fma"]
+# Unfortunately requires preserving all denormal inputs, so this mode will be
+# significantly slower in some workloads. (The emulated FMA needs no special
+# handling here: it is correctly rounded - bit-identical to hardware FMA -
+# unconditionally.)
+strict_ieee754 = ["preserve_denormals"]
 
 # Unlock autovectorization on the scalar backend: the 1-lane `f32`/`f64` registers
 # (and therefore every emulated `ArrayRegister` lane built on them) use LLVM's
@@ -139,19 +138,22 @@ avx2-pclmul = ["thermite-macros/avx2-pclmul"]
 # Uses wasm32 or wasm64 backend, where wasm64 is only available on nightly (with "nightly" feature)
 wasm = []
 
-# RESERVED - NOT YET IMPLEMENTED. The x86-v4 backend is currently the
-# `Avx512Features` tier ladder and register stubs, with no register
-# implementations, so these flags select nothing and enabling them changes no
-# codegen. They are kept so the tier names are stable when the backend lands.
+# UNDER CONSTRUCTION. Select which AVX-512 tier the x86-v4 backend compiles to.
+# Exactly one v4 backend exists per build: the features chain, cargo feature
+# unification resolves to the highest requested tier, and `DefaultAvx512`
+# (backend/x86_v4/mod.rs) is assigned from it. Hardware below the compiled tier
+# falls back to the x86-v3 (AVX2) backend at runtime dispatch.
 #
-# AVX-512 hardware is fully supported today, it just runs the x86-v3 (AVX2)
-# backend: `InstructionSet::get()` reports `X86V4`, and the dispatch table maps
-# that rung onto `backend::x86_v3::X86V3` (see thermite-macros/src/dispatch.rs).
-# That is the widest working backend until v4 exists.
-avx512-tier1 = []               # RESERVED: oldest AVX512 CPUs (Knights Landing)
-avx512-tier2 = ["avx512-tier1"] # RESERVED: common AVX512 CPUs (Skylake-SP, Cascade Lake)
-avx512-tier3 = ["avx512-tier2"] # RESERVED: modern AVX512 CPUs (Ice Lake, Zen 4)
-avx512-tier4 = ["avx512-tier3"] # RESERVED: cutting-edge AVX512 CPUs (Sapphire Rapids, Zen 5)
+# The backend has no registers yet, so today these compile the module skeleton
+# and nothing selects it: `InstructionSet::get()` reports `X86V4` and the
+# dispatch table still maps that rung onto `backend::x86_v3::X86V3` (see
+# thermite-macros/src/dispatch.rs) - the widest working backend until v4 lands.
+#
+# There is no KNL (F+CD-only) tier: BW/DQ/VL are the ladder's floor, and
+# F+CD-only hardware runs the AVX2 backend.
+avx512-tier1 = ["thermite-macros/avx512-tier1"]                 # baseline AVX512 (Skylake-SP+): F+CD+BW+DQ+VL
+avx512-tier2 = ["avx512-tier1", "thermite-macros/avx512-tier2"] # modern AVX512 (Ice Lake+): +VBMI/VBMI2/VNNI/BITALG/VPOPCNTDQ/IFMA/GFNI/VAES/VPCLMULQDQ
+avx512-tier3 = ["avx512-tier2", "thermite-macros/avx512-tier3"] # cutting-edge AVX512 (Sapphire Rapids, Zen 4/5): +BF16
 
 # EXPERIMENTAL, INCOMPLETE, and a HARD COMPILE ERROR in released versions.
 #

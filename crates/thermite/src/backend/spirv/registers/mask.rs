@@ -15,9 +15,12 @@ macro_rules! decl_MxN {
             $(pub $f: bool,)*
         }
 
+        impl crate::simd::HasIsa for $name {
+            type Native = crate::backend::spirv::SPIRV;
+        }
+
         #[thermite_macros::inline_always]
         impl CoreRegister for $name {
-            type NativeIsa = crate::backend::spirv::SPIRV;
             type Lanes = typenum::[<U $N>];
             type Storage = Self;
             type Mask = Self;

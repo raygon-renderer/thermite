@@ -80,23 +80,22 @@ Rules of thumb:
 | Variant | Meaning | Use when |
 |---|---|---|
 | `mul_adde` / `mul_sube` / `nmul_adde` / `nmul_sube` | **Estimating**: real FMA if HW has it, else `mul`+`add`. | **Default. Almost everything.** |
-| `mul_add` / `mul_sub` / `nmul_add` / `nmul_sub` | **FMA-quality**: real FMA if HW has it (then genuinely single-rounded); else a *vectorized emulated FMA* (compensated split) by default -- very close but **not** bit-identical -- or exact scalar `libm::fma` under `disable_fast_fma`. | When you want FMA-quality accuracy even on non-FMA hardware and can accept the emulation cost. |
+| `mul_add` / `mul_sub` / `nmul_add` / `nmul_sub` | **True FMA**: real FMA if HW has it; else a *vectorized, correctly rounded emulated FMA* (round-to-odd) that is bit-identical to a hardware FMA for every input. | When you want true-FMA accuracy even on non-FMA hardware and can accept the emulation cost. |
 
 Signs: `mul_adde(a,b,c)=a*b+c`, `mul_sube=a*b-c`, `nmul_adde=c-a*b`, `nmul_sube=-a*b-c`.
 
 On a non-FMA backend (pre-Haswell x86, much of WASM) the `e` variants are just
-`mul`+`add` (two roundings, fastest). The non-`e` variants do **not** fall straight to
-`libm::fma`: by default they lower to a SIMD **emulated FMA** (a Dekker/Veltkamp
-compensated split) that is slower than true FMA but far cheaper than `libm`, and
-**not bit-identical** to true FMA -- measured, it disagrees about 1 in 173,000 for f64
-and 1 in 3,000,000 for f32, worst relative error 2.0e-15 (see `disable_fast_fma` in
-thermite's `Cargo.toml` for the full breakdown). Only the `disable_fast_fma`
-feature (implied by `strict_ieee754`) swaps in the exact scalar `libm::fma`, which *is*
-dozens of times slower. So: **reach for the `e` variants by default for speed**, but
-`mul_add` is a legitimate *accuracy* choice on non-FMA hardware when a modest slowdown is
-fine -- you don't have to gate it behind `HAS_TRUE_FMA` just to dodge `libm`. Gate it only
-to avoid the emulation cost. If you truly need extra precision, pulling in
-`thermite-compensated` directly is often cleaner than relying on emulated FMA.
+`mul`+`add` (two roundings, fastest). The non-`e` variants never touch `libm`: they
+lower to a SIMD **correctly rounded emulated FMA** (Boldo-Melquiond round-to-odd;
+`fmadd_ro`/`fmadd_widen_ro` in `backend/generic/polyfills/math.rs`) that is
+**bit-identical to a true hardware FMA for every input**, subnormals and specials
+included, at roughly 2-4x the cost of a plain multiply-add (llvm-mca znver3:
+~19-24 cycles rthr per 128-bit vector vs ~5-9 for the old faithful-only Dekker
+path, since deleted -- bodies in git history). So: **reach for
+the `e` variants by default for speed**; `mul_add` is a full accuracy guarantee on
+every backend, gated behind `HAS_TRUE_FMA` only when you want to dodge the
+emulation *cost*. If you truly need extra precision, pulling in
+`thermite-compensated` directly is often cleaner than leaning on FMA alone.
 
 There is one more reason to gate an *`e`-form* fold, and it is about op count, not
 accuracy: if the plain spelling would **share** the product you are folding

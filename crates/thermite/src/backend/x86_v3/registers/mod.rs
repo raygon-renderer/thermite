@@ -65,6 +65,11 @@ impl_newregister!(
     I16x8V3, U16x8V3, I16x16V3, U16x16V3, I8x16V3, U8x16V3, I8x32V3, U8x32V3
 );
 
+impl_has_isa!(
+    X86V3: F32x4V3, F32x8V3, F64x2V3, F64x4V3, I32x4V3, I32x8V3, I64x2V3, I64x4V3, U32x4V3, U32x8V3, U64x2V3,
+    U64x4V3, I16x8V3, U16x8V3, I16x16V3, U16x16V3, I8x16V3, U8x16V3, I8x32V3, U8x32V3
+);
+
 use crate::{
     element::FindUSize,
     isa::InstructionSet,

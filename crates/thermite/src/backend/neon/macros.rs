@@ -175,9 +175,12 @@ macro_rules! neon_mask_core {
         truthy: $truthy:expr, from_u: $from_u:ident
     ) => {
         paste::paste! {
+            impl crate::simd::HasIsa for $reg {
+                type Native = crate::backend::neon::Neon;
+            }
+
             #[thermite_macros::inline_always]
             impl CoreRegister for $reg {
-                type NativeIsa = crate::backend::neon::Neon;
                 type Lanes = $lt;
                 type Storage = arch::$st;
                 type Mask = Self;

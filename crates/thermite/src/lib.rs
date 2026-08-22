@@ -51,14 +51,36 @@ fn spirv_readiness_check() {
     );
 }
 
+/// Pre-`main` initializer for the wasm backend's relaxed-FMA detection: the
+/// linker collects `.init_array` entries into `__wasm_call_ctors`, which
+/// wasi-libc's `_start`/`_initialize` runs before user code. Running the
+/// canaries here (instead of lazily on first use) keeps the flag read path
+/// call-free, so the load is loop-invariant and hoistable out of hot loops.
+///
+/// Embedders that never invoke `__wasm_call_ctors` simply leave the flags
+/// zeroed: `mul_add` then takes the (bit-identical, slower) emulation on
+/// every call.
+#[cfg(all(feature = "wasm", any(target_arch = "wasm32", target_arch = "wasm64")))]
+#[used]
+#[unsafe(link_section = ".init_array")]
+static INIT_WASM_RELAXED_FMA: extern "C" fn() = {
+    extern "C" fn init() {
+        crate::backend::wasm::polyfills::math::detect_relaxed_fma();
+    }
+    init
+};
+
 /// Inventory of the crate features Thermite was built with, so that downstream
 /// crates and algorithms can vary behavior based on them.
 pub mod features {
     /// Whether the `strict_ieee754` feature is enabled: follow IEEE-754 exactly
     /// even where SIMD instructions intentionally do not, at a significant cost.
     ///
-    /// Implies [`PRESERVE_DENORMALS`] and [`DISABLE_FAST_FMA`], and turns off the
-    /// approximate reciprocal/rsqrt estimates on backends that have them.
+    /// Implies [`PRESERVE_DENORMALS`], and turns off the approximate
+    /// reciprocal/rsqrt estimates on backends that have them. (The emulated FMA
+    /// needs no strict-mode override: on backends without hardware FMA,
+    /// `mul_add` and family are correctly rounded, bit-identical to a true
+    /// fused multiply-add, unconditionally.)
     pub const STRICT_IEEE754: bool = cfg!(feature = "strict_ieee754");
 
     /// Whether the `preserve_denormals` feature is enabled, making every default
@@ -73,15 +95,6 @@ pub mod features {
     ///
     /// Ignored when [`PRESERVE_DENORMALS`] is also enabled.
     pub const IGNORE_DENORMALS: bool = cfg!(feature = "ignore_denormals") && !PRESERVE_DENORMALS;
-
-    /// Whether the `disable_fast_fma` feature is enabled, replacing the accurate
-    /// emulated (compensated) FMA with scalar `libm::fma` on backends without a
-    /// hardware FMA.
-    ///
-    /// Bitwise-identical to a scalar `fma`, and very much slower. When this is
-    /// `false`, `mul_add` is still correctly rounded to within the emulation's
-    /// accuracy guarantee, just not bit-for-bit equal to `libm`.
-    pub const DISABLE_FAST_FMA: bool = cfg!(feature = "disable_fast_fma") || STRICT_IEEE754;
 
     /// Whether the `algebraic-scalar` feature is enabled, i.e. whether scalar-backend
     /// float arithmetic is reassociable rather than strict IEEE-754.

@@ -82,18 +82,20 @@ impl<R: CoreRegister, const N: usize> ArrayRegister<R, N> {
     }
 }
 
+impl<R: CoreRegister, const N: usize> crate::simd::HasIsa for ArrayRegister<R, N> {
+    type Native = R::Native;
+}
+
 #[rustfmt::skip] #[thermite_macros::array_impl]
 impl<R: CoreRegister, const N: usize> CoreRegister for ArrayRegister<R, N>
 where
     Const<N>: ToUInt<Output: ArrayLength + Mul<R::Lanes, Output: Lanes>>,
 {
-    type NativeIsa = R::NativeIsa;
     type Lanes = Prod<typenum::U<N>, R::Lanes>;
     type Storage = Self;
     type Mask = ArrayRegister<R::Mask, N>;
 
     const IS_EMULATED: bool = true;
-    const ISA: InstructionSet = R::ISA;
 
     const EMPTY: Storage<Self> = Self([R::EMPTY; N]);
     const HAS_EQUAL_SIZE_MASK: bool = R::HAS_EQUAL_SIZE_MASK;

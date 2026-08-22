@@ -10,9 +10,10 @@
 //!    `ArrayRegister<i16, 2>` shared by every backend. A slot that silently
 //!    forwarded the wrong one would hand callers a plausible-but-wrong
 //!    register budget and alignment.
-//! 2. **`ISA` and `Native::ISA` agree.** `CoreRegister::ISA` defaults to
-//!    `<Self::NativeIsa as HasIsa>::ISA`, so a register that overrides one but
-//!    not the other would drift without any test noticing.
+//! 2. **`ISA` and `Native::ISA` agree.** `HasIsa::ISA` (a supertrait of
+//!    `CoreRegister`) defaults to `<Self::Native as HasIsa>::ISA`, so a type
+//!    that overrides one but not the other would drift without any test
+//!    noticing.
 
 use thermite::backend::scalar::Scalar;
 use thermite::prelude::*;

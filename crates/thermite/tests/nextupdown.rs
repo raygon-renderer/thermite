@@ -1,11 +1,15 @@
 //! Differential tests for `FloatRegister::next_up` / `next_down`.
 //!
-//! Three distinct implementations exist, and all are checked bit-exactly
+//! Two distinct implementations exist here, and both are checked bit-exactly
 //! against Rust's `f32/f64::next_up`/`next_down`:
-//!   - the generic bit-twiddling default in `register/mod.rs` (used by X86V2
-//!     and the wide `ArrayRegister` types via lane delegation),
-//!   - the x86-v1 SSE2 polyfills (`_mm_nextup{ps,pd}_v1`, bitwise blendv),
-//!   - the x86-v3 AVX2 polyfills (`_mm256_nextup{ps,pd}_v3`).
+//!   - the generic bit-twiddling default in `register/mod.rs` (every CPU
+//!     backend, X86V1/V2/V3 included, plus the wide `ArrayRegister` types via
+//!     lane delegation; the hand-written v1/v3 polyfills were deleted in
+//!     favor of it),
+//!   - the scalar element seed (`FloatElement::next_up`/`next_down`).
+//!
+//! A third, the x86-v4 k-mask polyfills, only compiles under an
+//! `avx512-tier*` feature and is not exercised by this suite.
 //!
 //! Beyond the random/edge corpus, `regions` walks every interesting area of
 //! the IEEE-754 domain explicitly: NaNs (payloads and signs), both infinities,

@@ -1,5 +1,176 @@
 use super::*;
 
+// ---------------------------------------------------------------------------
+// Runtime detection: are the relaxed madd instructions true fused FMAs?
+//
+// `f32x4/f64x2_relaxed_madd`/`_nmadd` are allowed to be either a fused
+// multiply-add or a separate multiply-then-add, chosen by the engine. The
+// relaxed-simd spec resolves that nondeterminism at module instantiation (the
+// `fpenv` model): a given relaxed instruction behaves as one fixed function
+// for the lifetime of the instance, so a one-time canary check is sound.
+//
+// When the engine fuses (any host whose CPU has hardware FMA, so the common
+// case), a fused relaxed madd is simply a hardware FMA: `mul_add` can be a single
+// instruction, bit-identical to the round-to-odd emulation it replaces. Both
+// branches produce the same bits, so this dispatch trades only speed, never
+// results or reproducibility.
+//
+// The canaries force runtime evaluation with `black_box` (a constant-folded
+// relaxed op could resolve to either semantic at compile time) and also
+// require subnormal inputs/outputs to survive, so an engine that flushes
+// denormals in its relaxed ops is conservatively treated as unfused.
+// ---------------------------------------------------------------------------
+
+const RELAXED_CHECKED: u8 = 1;
+const RELAXED_F64_MADD_FUSED: u8 = 2;
+const RELAXED_F64_NMADD_FUSED: u8 = 4;
+const RELAXED_F32_MADD_FUSED: u8 = 8;
+const RELAXED_F32_NMADD_FUSED: u8 = 16;
+
+/// Written exactly once, by [`detect_relaxed_fma`] from the pre-`main` ctor
+/// (single-threaded by construction: wasm threads can only be spawned after
+/// `_start`, so every read happens-after the sole write, no data race). A
+/// plain (non-atomic) static because LICM refuses to hoist even relaxed
+/// atomic loads out of loops, while the plain load is loop-invariant-hoistable.
+static mut RELAXED_FMA: u8 = 0;
+
+/// Runs the canaries and caches the flags. Invoked from the `.init_array`
+/// ctor in lib.rs (before `main`, via `__wasm_call_ctors`), not lazily from
+/// the read path: a detect call on the read path would sit inside callers'
+/// loops and block LICM from hoisting the flag load (its store to
+/// `RELAXED_FMA` defeats the aliasing analysis, measured on a Horner loop).
+/// Embedders that skip `__wasm_call_ctors` leave the flags at 0 and take the
+/// (bit-identical, slower) emulation on every call.
+pub(crate) fn detect_relaxed_fma() -> u8 {
+    use core::hint::black_box;
+
+    let mut flags = RELAXED_CHECKED;
+
+    // f64: a * b = 1 - 2^-54 exactly, the midpoint between 1 - 2^-53 and 1.
+    // Fused: (a*b) - 1 = -2^-54 exactly. Unfused: RN(a*b) = 1 (ties-even),
+    // then 1 - 1 = 0.
+    let a = black_box(f64x2_splat(1.0 + 2.0_f64.powi(-27)));
+    let b = black_box(f64x2_splat(1.0 - 2.0_f64.powi(-27)));
+    let fused_64 = f64x2_extract_lane::<0>(f64x2_relaxed_madd(a, b, f64x2_splat(-1.0)))
+        == -(2.0_f64.powi(-54));
+    let nfused_64 = f64x2_extract_lane::<0>(f64x2_relaxed_nmadd(a, b, f64x2_splat(1.0)))
+        == 2.0_f64.powi(-54);
+
+    // Subnormal guards: inputs must not be DAZed, subnormal results must not
+    // be FTZed, or the "fused" answer is not a true FMA.
+    let min_sub = black_box(f64x2_splat(f64::from_bits(1)));
+    let tiny = black_box(f64x2_splat(2.0_f64.powi(-537)));
+    let sub_in = f64x2_extract_lane::<0>(f64x2_relaxed_madd(min_sub, black_box(f64x2_splat(1.0)), f64x2_splat(0.0)))
+        == f64::from_bits(1);
+    let sub_out = f64x2_extract_lane::<0>(f64x2_relaxed_madd(tiny, tiny, f64x2_splat(0.0)))
+        == 2.0_f64.powi(-1074);
+    let nsub_in = f64x2_extract_lane::<0>(f64x2_relaxed_nmadd(min_sub, black_box(f64x2_splat(-1.0)), f64x2_splat(0.0)))
+        == f64::from_bits(1);
+
+    if fused_64 && sub_in && sub_out {
+        flags |= RELAXED_F64_MADD_FUSED;
+    }
+    if nfused_64 && nsub_in && sub_out {
+        flags |= RELAXED_F64_NMADD_FUSED;
+    }
+
+    // f32 analogue: a * b = 1 - 2^-24 exactly, the midpoint at 24 bits.
+    let a = black_box(f32x4_splat(1.0 + 2.0_f32.powi(-12)));
+    let b = black_box(f32x4_splat(1.0 - 2.0_f32.powi(-12)));
+    let fused_32 = f32x4_extract_lane::<0>(f32x4_relaxed_madd(a, b, f32x4_splat(-1.0)))
+        == -(2.0_f32.powi(-24));
+    let nfused_32 = f32x4_extract_lane::<0>(f32x4_relaxed_nmadd(a, b, f32x4_splat(1.0)))
+        == 2.0_f32.powi(-24);
+
+    let min_sub = black_box(f32x4_splat(f32::from_bits(1)));
+    let tiny_a = black_box(f32x4_splat(2.0_f32.powi(-75)));
+    let tiny_b = black_box(f32x4_splat(2.0_f32.powi(-74)));
+    let sub_in = f32x4_extract_lane::<0>(f32x4_relaxed_madd(min_sub, black_box(f32x4_splat(1.0)), f32x4_splat(0.0)))
+        == f32::from_bits(1);
+    let sub_out = f32x4_extract_lane::<0>(f32x4_relaxed_madd(tiny_a, tiny_b, f32x4_splat(0.0)))
+        == 2.0_f32.powi(-149);
+    let nsub_in = f32x4_extract_lane::<0>(f32x4_relaxed_nmadd(min_sub, black_box(f32x4_splat(-1.0)), f32x4_splat(0.0)))
+        == f32::from_bits(1);
+
+    if fused_32 && sub_in && sub_out {
+        flags |= RELAXED_F32_MADD_FUSED;
+    }
+    if nfused_32 && nsub_in && sub_out {
+        flags |= RELAXED_F32_NMADD_FUSED;
+    }
+
+    // SAFETY: sole write, pre-main, single-threaded (see RELAXED_FMA).
+    unsafe { *(&raw mut RELAXED_FMA) = flags };
+    flags
+}
+
+/// Cached relaxed-FMA capability flags, written once by the pre-main ctor.
+/// Call-free and non-atomic by design so the load is loop-invariant and
+/// hoistable (see `RELAXED_FMA`).
+#[inline(always)]
+fn relaxed_fma_flags() -> u8 {
+    // SAFETY: read-only after the single pre-main write (see RELAXED_FMA).
+    unsafe { *(&raw const RELAXED_FMA) }
+}
+
+// The emulation arms are outlined with `#[inline(never)]` (simd128 is baseline
+// on this target, so no target_feature is lost and the rule-zero trap does not
+// apply here): inlined, they bloated a Horner loop to ~1000 wasm lines around
+// what should be a load + branch + relaxed_madd body, which hurts the JIT.
+
+#[inline(never)]
+fn f64x2_fmadd_emulated(x: v128, m: v128, a: v128) -> v128 {
+    crate::backend::generic::polyfills::fmadd_ro::<crate::backend::wasm::registers::F64x2Wasm>(x, m, a)
+}
+
+#[inline(never)]
+fn f32x4_fmadd_emulated(x: v128, m: v128, a: v128) -> v128 {
+    crate::backend::generic::polyfills::fmadd_widen_ro::<crate::backend::wasm::registers::F32x4Wasm>(x, m, a)
+}
+
+/// `x*m + a` with a true single rounding: the engine's relaxed madd when it is
+/// a genuine fused FMA (single instruction), else the round-to-odd emulation.
+/// Both branches are bit-identical for every input, so which one runs only
+/// affects speed.
+#[inline(always)]
+pub fn f64x2_fmadd_auto(x: v128, m: v128, a: v128) -> v128 {
+    if relaxed_fma_flags() & RELAXED_F64_MADD_FUSED != 0 {
+        f64x2_relaxed_madd(x, m, a)
+    } else {
+        f64x2_fmadd_emulated(x, m, a)
+    }
+}
+
+/// `-(x*m) + a`, single-rounded, see [`f64x2_fmadd_auto`].
+#[inline(always)]
+pub fn f64x2_fnmadd_auto(x: v128, m: v128, a: v128) -> v128 {
+    if relaxed_fma_flags() & RELAXED_F64_NMADD_FUSED != 0 {
+        f64x2_relaxed_nmadd(x, m, a)
+    } else {
+        f64x2_fmadd_emulated(f64x2_neg(x), m, a)
+    }
+}
+
+/// `x*m + a` with a true single rounding, see [`f64x2_fmadd_auto`].
+#[inline(always)]
+pub fn f32x4_fmadd_auto(x: v128, m: v128, a: v128) -> v128 {
+    if relaxed_fma_flags() & RELAXED_F32_MADD_FUSED != 0 {
+        f32x4_relaxed_madd(x, m, a)
+    } else {
+        f32x4_fmadd_emulated(x, m, a)
+    }
+}
+
+/// `-(x*m) + a`, single-rounded, see [`f64x2_fmadd_auto`].
+#[inline(always)]
+pub fn f32x4_fnmadd_auto(x: v128, m: v128, a: v128) -> v128 {
+    if relaxed_fma_flags() & RELAXED_F32_NMADD_FUSED != 0 {
+        f32x4_relaxed_nmadd(x, m, a)
+    } else {
+        f32x4_fmadd_emulated(f32x4_neg(x), m, a)
+    }
+}
+
 #[inline(always)]
 pub fn f32x4_maddx(x: v128, m: v128, a: v128) -> v128 {
     // 1. Split 128-bit packed float (4 lanes) into two sets of doubles (2 lanes each)

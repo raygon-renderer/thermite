@@ -22,7 +22,6 @@ pub struct F32x4V3;
 
 #[thermite_macros::inline_always]
 impl CoreRegister for F32x4V3 {
-    type NativeIsa = crate::backend::x86_v3::X86V3;
     type Lanes = typenum::U4;
     type Storage = arch::__m128;
     type Mask = Self;

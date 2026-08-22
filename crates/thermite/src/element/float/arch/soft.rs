@@ -1,10 +1,23 @@
 //! Fallback rung: whatever the rungs above could not prove is a single instruction.
 //!
-//! `sqrt` and `fma` go to `libm` (with `std`, to the standard library, which lowers them
-//! to generic LLVM intrinsics, which ARE selected with the enclosing function's target
+//! `sqrt` and (with `std`) `fma` go to the standard library, which lowers them to
+//! generic LLVM intrinsics, which are selected with the enclosing function's target
 //! features, so inside a `#[thermite::dispatch]` trampoline they can still become one
-//! instruction where a `cfg!`-driven rung would have emitted a call). Both are real
-//! numerical work, not bit tricks, so there is nothing to gain by reimplementing them.
+//! instruction where a `cfg!`-driven rung would have emitted a call. `sqrt` without
+//! `std` goes to `libm`.
+//!
+//! `fma` without `std` does not: it calls the round-to-odd emulation ([`fmadd_ro`] /
+//! [`fmadd_widen_ro`]) on the 1-lane scalar registers instead, which is correctly
+//! rounded (bit-identical to a hardware FMA) for every input. `libm`'s f32 chain
+//! carries a live subnormal-rounding bug (compiler-builtins#1262) and its f64 path is
+//! unverified against hardware, while the emulation is proven and hardware-tested
+//! (`tests/fma_exact.rs`), so `libm` is out of the FMA family entirely. Enabling
+//! `std` can therefore change the scalar `mul_add` lowering on non-FMA hosts. That
+//! is an accepted cost: `mul_add` through `llvm.fma` is the only dispatch-aware
+//! scalar FMA available on stable, and the `nightly` rung cannot be required.
+//!
+//! [`fmadd_ro`]: crate::backend::generic::polyfills::fmadd_ro
+//! [`fmadd_widen_ro`]: crate::backend::generic::polyfills::fmadd_widen_ro
 //!
 //! The four rounding operations are different: they are pure bit manipulation, and
 //! `libm`'s versions are unreachable for the optimizer. Its *generic* inner functions are
@@ -33,7 +46,7 @@ use core::cfg_select;
 
 macro_rules! impl_fallback {
     ($t:ty, $bits:ty, $ibits:ty, $sqrt:ident, $floor:ident, $ceil:ident, $trunc:ident,
-     $round:ident, $fma:ident, [$l_sqrt:ident, $l_fma:ident]) => {
+     $round:ident, $fma:ident, [$l_sqrt:ident, $ro_fma:ident]) => {
         /// Bits of significand.
         const SIG_BITS: u32 = <$t>::MANTISSA_DIGITS - 1;
         const SIG_MASK: $bits = (1 << SIG_BITS) - 1;
@@ -55,7 +68,10 @@ macro_rules! impl_fallback {
 
         #[inline(always)]
         pub fn $fma(x: $t, y: $t, z: $t) -> $t {
-            cfg_select! { feature = "std" => <$t>::mul_add(x, y, z), _ => libm::$l_fma(x, y, z) }
+            cfg_select! {
+                feature = "std" => <$t>::mul_add(x, y, z),
+                _ => crate::backend::generic::polyfills::$ro_fma::<$t>(x, y, z),
+            }
         }
 
         #[cfg_attr(not(feature = "outline_scalar_math"), inline(always))]
@@ -160,12 +176,12 @@ macro_rules! impl_fallback {
 
 mod f64_impl {
     use super::*;
-    impl_fallback!(f64, u64, i64, sqrt, floor, ceil, trunc, round, fma, [sqrt, fma]);
+    impl_fallback!(f64, u64, i64, sqrt, floor, ceil, trunc, round, fma, [sqrt, fmadd_ro]);
 }
 
 mod f32_impl {
     use super::*;
-    impl_fallback!(f32, u32, i32, sqrtf, floorf, ceilf, truncf, roundf, fmaf, [sqrtf, fmaf]);
+    impl_fallback!(f32, u32, i32, sqrtf, floorf, ceilf, truncf, roundf, fmaf, [sqrtf, fmadd_widen_ro]);
 }
 
 pub use f32_impl::{ceilf, floorf, fmaf, roundf, sqrtf, truncf};

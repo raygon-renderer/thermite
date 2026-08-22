@@ -269,15 +269,14 @@ impl<R: CoreRegister> ZeroUpper for OwnLanes<R> {
 
 /// Core data types for a given register. These are simple types
 /// without any intertwining trait bounds.
-pub trait CoreRegister: 'static + Sized {
-    /// The backend that owns this register. Emulated registers forward the
-    /// register they are built from, so `ArrayRegister<F32x4V1, 2>` reports
-    /// `X86V1` while `ArrayRegister<i16, 2>` reports `Scalar`.
-    ///
-    /// See [`HasIsa::Native`](crate::simd::HasIsa::Native), which this feeds
-    /// through [`Vector`](crate::Vector).
-    type NativeIsa: crate::simd::NativeIsa;
-
+///
+/// Every register advertises its owning backend via the [`HasIsa`](crate::simd::HasIsa)
+/// supertrait (`impl HasIsa for MyReg { type Native = X86V3; }`, usually via the
+/// `impl_has_isa!` macro). Emulated registers forward the register they are built
+/// from, so `ArrayRegister<F32x4V1, 2>` reports `X86V1` while `ArrayRegister<i16, 2>`
+/// reports `Scalar`. This is what lets `#[thermite::dispatch(R)]` work over bare
+/// register types.
+pub trait CoreRegister: 'static + Sized + crate::simd::HasIsa {
     type Lanes: Lanes;
     type Storage: Sized + Copy + core::fmt::Debug;
     type Mask: MaskRegister<Lanes = Self::Lanes>;
@@ -294,10 +293,6 @@ pub trait CoreRegister: 'static + Sized {
 
     /// Indicates if the register is emulated in software.
     const IS_EMULATED: bool;
-
-    /// Defaults to the ISA of [`NativeIsa`](Self::NativeIsa); a register should
-    /// not need to state both.
-    const ISA: InstructionSet = <Self::NativeIsa as crate::simd::HasIsa>::ISA;
 
     /// If the associated mask type is equal in size to this register, which also implies it is
     /// trivially convertible to this register.

@@ -224,7 +224,7 @@ where
 }
 
 impl<R: Register> crate::simd::HasIsa for Vector<R> {
-    type Native = R::NativeIsa;
+    type Native = R::Native;
 
     const ISA: InstructionSet = R::ISA;
 }

@@ -123,18 +123,20 @@ where
     }
 }
 
+impl<R: CoreRegister, N: 'static> crate::simd::HasIsa for ReducedRegister<R, N> {
+    type Native = R::Native;
+}
+
 impl<R: CoreRegister, N: Unsigned> CoreRegister for ReducedRegister<R, N>
 where
     R: CoreReducible<N>,
 {
-    type NativeIsa = R::NativeIsa;
     type Lanes = Diff<R::Lanes, N>;
     type Storage = Self;
     type Mask = ReducedRegister<R::Mask, N>;
 
     const IS_EMULATED: bool = R::IS_EMULATED;
 
-    const ISA: InstructionSet = R::ISA;
     const EMPTY: Storage<Self> = Self(R::EMPTY, PhantomData);
     const HAS_EQUAL_SIZE_MASK: bool = R::HAS_EQUAL_SIZE_MASK;
 

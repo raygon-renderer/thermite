@@ -213,6 +213,8 @@ macro_rules! impl_extends {
 
 impl_extends!(f32, i32, u32, f64, i64, u64, i8, i16, u8, u16);
 
+impl_has_isa!(Scalar: f32, f64, i8, i16, i32, i64, u8, u16, u32, u64, bool);
+
 impl_newregister!(f32, i32, u32, f64, i64, u64);
 
 impl_newregister!(u8, u16, i8, i16); // extra integers

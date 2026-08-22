@@ -308,20 +308,12 @@ pub mod avx512f {
     pub mod tiers {
         pub(super) use super::*;
 
-        /// Oldest AVX512 CPUs
+        /// Every real AVX-512 CPU (Skylake-SP and later)
         ///
-        /// F + CD: exactly the Knights Landing set. 512-bit only -- without VL
-        /// (tier 2) there are no EVEX encodings at 128/256-bit, so nothing here
-        /// can accelerate the existing `f32x4`/`f32x8` registers.
-        pub mod tier1 {
-            pub use super::*;
-            pub use super::avx512cd::*;
-        }
-
-        /// Common AVX512 CPUs
-        ///
-        /// Tier 1 + BW + DQ + **VL**. Skylake-SP introduced the three together
-        /// and no CPU has BW/DQ without VL, so they form one rung.
+        /// F + CD + BW + DQ + **VL**, the ladder's floor. Skylake-SP
+        /// introduced them together and no CPU has BW/DQ without VL, so they
+        /// form one rung. The F+CD-only shape (Knights Landing) is deliberately
+        /// below the floor: extinct hardware, 512-bit-or-nothing.
         ///
         /// VL contributes no module of its own: it is not new operations but the
         /// EVEX encodings (masking, zero-masking, embedded broadcast, registers
@@ -334,16 +326,17 @@ pub mod avx512f {
         /// This is the rung that matters most for this crate: it is what turns
         /// the `_c`/`_m`/`_z` variants into single masked instructions at the
         /// register widths thermite already uses.
-        pub mod tier2 {
-            pub use super::tier1::*;
+        pub mod tier1 {
+            pub use super::*;
+            pub use super::avx512cd::*;
 
             pub use super::avx512bw::*;
             pub use super::avx512dq::*;
         }
 
-        /// Very modern CPUs
-        pub mod tier3 {
-            pub use super::tier2::*;
+        /// Very modern CPUs (Ice Lake, Tiger Lake and later)
+        pub mod tier2 {
+            pub use super::tier1::*;
 
             pub use super::avx512vbmi::*;
             pub use super::avx512vbmi2::*;
@@ -356,9 +349,9 @@ pub mod avx512f {
             pub use super::vpclmulqdq::*;
         }
 
-        /// Cutting-edge
-        pub mod tier4 {
-            pub use super::tier3::*;
+        /// Cutting-edge (Sapphire Rapids, Zen 4+)
+        pub mod tier3 {
+            pub use super::tier2::*;
 
             pub use super::bf16::*;
         }

@@ -19,7 +19,6 @@ macro_rules! decl_spirv_unsigned_scalar { ($u:ty => $width:literal) => { paste::
 
 #[thermite_macros::inline_always]
 impl CoreRegister for [<u $width>] {
-    type NativeIsa = crate::backend::scalar::Scalar;
     type Lanes   = typenum::U1;
     type Storage = $u;
     type Mask    = bool;

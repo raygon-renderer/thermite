@@ -1235,6 +1235,17 @@ macro_rules! impl_concat_bool_register2 {
     };
 }
 
+/// Implement [`HasIsa`](crate::simd::HasIsa) for a backend's registers, naming
+/// the backend that owns them. Required by the `CoreRegister` supertrait bound,
+/// and what lets `#[thermite::dispatch(R)]` work over bare register types.
+macro_rules! impl_has_isa {
+    ($isa:ty: $($r:ty),* $(,)?) => {$(
+        impl $crate::simd::HasIsa for $r {
+            type Native = $isa;
+        }
+    )*};
+}
+
 macro_rules! impl_newregister {
     ($($r:ty),*) => {$(
         impl $crate::register::NewRegister<

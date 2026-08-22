@@ -37,6 +37,10 @@ impl_newregister!(
     F32x4V1, I32x4V1, U32x4V1, F64x2V1, I64x2V1, U64x2V1, I16x8V1, U16x8V1, I8x16V1, U8x16V1
 );
 
+impl_has_isa!(
+    X86V1: F32x4V1, I32x4V1, U32x4V1, F64x2V1, I64x2V1, U64x2V1, I16x8V1, U16x8V1, I8x16V1, U8x16V1
+);
+
 use crate::{
     element::FindUSize,
     isa::InstructionSet,

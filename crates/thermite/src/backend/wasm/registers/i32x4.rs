@@ -20,7 +20,6 @@ pub struct I32x4Wasm;
 
 #[thermite_macros::inline_always]
 impl CoreRegister for I32x4Wasm {
-    type NativeIsa = crate::backend::wasm::Wasm;
     type Lanes = typenum::U4;
     type Storage = arch::v128;
     type Mask = Self;

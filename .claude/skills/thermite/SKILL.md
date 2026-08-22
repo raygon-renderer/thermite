@@ -66,15 +66,15 @@ Defaults: `document_registers`, `bitvec`, `avx2-f16c`, `avx2-pclmul`.
 | `avx2-f16c` | **on** | Assume `f16c` w/ AVX2 (all AVX2 CPUs have it); enables f16 conv, no runtime check. x86. |
 | `avx2-pclmul` | **on** | Assume `pclmulqdq` w/ AVX2; CLMUL 2D-Morton fast path on u64 lanes. x86. |
 | `partial-ord` | off | `PartialOrd` for `Vector` (only when all lanes share order). |
-| `strict_ieee754` | off | Spec-exact denormals/NaN/min-max; implies `preserve_denormals`+`disable_fast_fma`. Much slower. |
+| `strict_ieee754` | off | Spec-exact denormals/NaN/min-max; implies `preserve_denormals`. Much slower. |
 | `preserve_denormals` | off | Keep denormals (required for strict IEEE-754); slower on denormal-heavy data. |
-| `ignore_denormals` | off | Flush denormals by default. |
-| `disable_fast_fma` | off | Exact but very slow scalar `libm::fma` instead of the emulated FMA on non-FMA backends. The emulation is close, not bit-identical (~1 in 173k for f64). |
+| `ignore_denormals` | off | Flush denormals by default. Also compiles the subnormal machinery out of the emulated FMA (~20% faster non-FMA `mul_add`; subnormal-scale results become faithful, normal-range stays bit-exact). Ignored under `preserve_denormals`/`strict_ieee754`. |
+| ~~`disable_fast_fma`~~ | REMOVED | Historical. The emulated FMA is now correctly rounded (bit-identical to hardware FMA) unconditionally, so there was nothing left to trade. |
 | `algebraic-scalar` | off | Scalar (1-lane) backend uses LLVM `algebraic_*` ops so loops written against it can autovectorize. Costs exact cancellation: `thermite-compensated` rejects it at compile time. `strict_ieee754` overrides it. Needs `nightly` until 1.98. |
 | `disable_dispatch` | off | Replace runtime dispatch with `#[inline(always)]`. Bloats/slows unless all inlines. Advanced. |
 | `nightly` | off | Nightly-only paths (requires nightly compiler). |
 | `wasm` | off | wasm32/wasm64 SIMD128 backend. |
-| `avx512-tier1..4` | off | **RESERVED, no-op.** The x86-v4 backend has no registers; these select nothing. AVX-512 CPUs run the x86-v3 (AVX2) backend, which dispatch maps `X86V4` onto. |
+| `avx512-tier1..3` | off | **UNDER CONSTRUCTION.** Select which AVX-512 tier the x86-v4 backend compiles to (one per build, highest requested wins; tier 1 = Skylake-SP F+CD+BW+DQ+VL floor, no KNL tier). No registers yet, so today they compile the module skeleton only; AVX-512 CPUs run the x86-v3 (AVX2) backend, which dispatch maps `X86V4` onto. |
 | `spirv` | off | **HARD COMPILE ERROR in released versions.** Incomplete: no `impl Simd` (so no vector type aliases, not a dispatch target), f32/i32/u32 only, nothing off `target_arch = "spirv"`. Needs a git dep plus `RUSTFLAGS='--cfg thermite_unstable_spirv'`. |
 
 **No `neon` feature**: NEON/AdvSIMD is mandatory in AArch64, so the backend is
@@ -197,7 +197,7 @@ separate library step.
 - **Bare `f32`/`f64` don't impl `FloatVector`.** Wrap: `x.as_vector()` (`Element` method, in the prelude) / `Vector::<f64>::splat(x)` / `Vector(x)`, or use `ScalarMath` `scalar_`-prefixed methods (`x.scalar_sin()`).
 - **Masked variants take the mask FIRST**: `a.add_c(mask, b)`, `v.sqrt_c(mask)`, `a.add_m(src, mask, b)` (merge: `src` then `mask`). Old `add_c(b, mask)` order is wrong.
 - **Math trait names are `use`d anonymously by the prelude** (`as _`): methods work, but to write `<V: TranscendentalMath>` you must `use thermite::math::TranscendentalMath;`.
-- **Prefer `mul_adde` (estimating FMA) over `mul_add` for speed.** On non-FMA backends `mul_add` lowers to vectorized emulated FMA (FMA-quality, still SIMD, but *not* bit-identical to a true FMA -- ~1 in 173k differ for f64, worst relative error 2.0e-15) by default -- only becomes slow scalar `libm::fma` under `disable_fast_fma`/`strict_ieee754`. So `mul_add` is a valid accuracy choice, just not an exact one.
+- **Prefer `mul_adde` (estimating FMA) over `mul_add` for speed.** On non-FMA backends `mul_add` lowers to a vectorized emulated FMA that is **correctly rounded -- bit-identical to a true hardware FMA for every input** (Boldo-Melquiond round-to-odd, `fmadd_ro`/`fmadd_widen_ro` in `backend/generic/polyfills/math.rs`), unconditionally -- no feature changes this, and it never goes scalar or touches libm. On wasm, a one-time canary detects whether the engine's relaxed madd is a true FMA and then uses that single instruction instead (bit-identical either way). So `mul_add` is a full accuracy guarantee everywhere; gate on `HAS_TRUE_FMA` only to avoid the emulation *cost* (~2-4x a plain multiply-add; free on fusing wasm engines).
 - **`>>` is LOGICAL even on signed vectors.** Use `srai`/`sra`/`srav` for sign-filling shifts.
 - **`bitandnot` differs by layer**: `a.bitandnot(b)` on `Vector`/`Mask` = `a & !b`, but the register layer `R::bitandnot(lhs, rhs)` = `!lhs & rhs` (x86 convention) -- the vector impls swap operands when delegating.
 - **`V::load` is an ALIGNED load.** Loading a table from a plain `Box`/`Vec` faults nondeterministically; use `load_unaligned` or an aligned container.

@@ -101,7 +101,7 @@ slices, compute, store back.
 
 ```toml
 [dependencies]
-thermite = "0.2.0"
+thermite = "0.3"
 ```
 
 Thermite builds on **stable Rust**, with an MSRV of **1.95** and edition 2024. The crate is
@@ -115,8 +115,7 @@ Five of the feature flags matter in practice:
   proposal an engine may not have enabled. There is no `neon` feature at all, since
   NEON is mandatory on AArch64 and the backend is always compiled there.
 - **`strict_ieee754`** gives spec-exact denormals, NaNs, and min/max. It implies
-  `preserve_denormals` and `disable_fast_fma`, and is much slower. Turn it on knowing
-  what you're buying.
+  `preserve_denormals`, and is much slower. Turn it on knowing what you're buying.
 - **`disable_dispatch`** replaces runtime dispatch with `#[inline(always)]`. It is an
   advanced option that bloats or slows most builds, and is not the way to make dispatch
   cheaper.
@@ -799,9 +798,10 @@ want the instruction wherever it exists. If you're unsure, take `mul_adde`, then
 accuracy-critical path on `V::HAS_TRUE_FMA` behind an `if const` if measurement says it
 matters.
 
-The one configuration where `mul_add` becomes a real trap is `disable_fast_fma` or
-`strict_ieee754`, which swap the emulated fallback for scalar `libm::fma`. That result is
-exact and very slow.
+On hardware without FMA, `mul_add` and family lower to a vectorized round-to-odd
+emulation that is correctly rounded (bit-identical to a true fused multiply-add for
+every input, subnormals included) at a few times the cost of `mul_adde`'s plain
+multiply-add. There is no configuration that makes it scalar or inexact.
 
 ### One-off scalar math
 
@@ -1382,12 +1382,12 @@ infer one layer's behavior from the other.
 **Masked variants take the mask first**, except `_m`, which takes `src` first and then the
 mask. The generated documentation carries the exact signature for every method.
 
-**`mul_add` is not the slow one by default.** Without hardware FMA it lowers to a
-vectorized compensated emulation, not to `libm`. Only `disable_fast_fma` or
-`strict_ieee754` make it truly expensive.
+**`mul_add` never goes scalar.** Without hardware FMA it lowers to a vectorized
+round-to-odd emulation that is bit-identical to a true FMA. More expensive than
+`mul_adde`, but never `libm` and never approximate.
 
-**`strict_ieee754` costs real performance.** It implies both `preserve_denormals` and
-`disable_fast_fma`. Turn it on knowing what you're buying.
+**`strict_ieee754` costs real performance.** It implies `preserve_denormals`. Turn it
+on knowing what you're buying.
 
 **`PartialOrd` on vectors is feature-gated** behind `partial-ord`, but it's only meaningful
 when every lane agrees on the ordering.

@@ -32,7 +32,6 @@ fn transpose_4x4_f64(i: [arch::__m256d; 4]) -> [arch::__m256d; 4] {
 
 #[thermite_macros::inline_always]
 impl CoreRegister for F64x4V3 {
-    type NativeIsa = crate::backend::x86_v3::X86V3;
     type Lanes = typenum::U4;
     type Storage = arch::__m256d;
     type Mask = Self;
@@ -687,14 +686,6 @@ impl FloatRegister for F64x4V3 {
 
     fn trunc(value: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_round_pd(value, arch::_MM_FROUND_TO_ZERO | arch::_MM_FROUND_NO_EXC) }
-    }
-
-    fn next_up(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_nextuppd_v3(value) }
-    }
-
-    fn next_down(value: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_nextdownpd_v3(value) }
     }
 
     const NATIVE_CAP: NativeCapability = NativeCapability::NONE;

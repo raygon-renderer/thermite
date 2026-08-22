@@ -121,6 +121,15 @@ fn float_element_f32_rounding_exhaustive() {
 /// `mul_add` must stay single-rounding no matter which rung supplied it.
 #[test]
 fn mul_add_is_single_rounding() {
+    // The fused-vs-unfused discriminator: a * b lands exactly on a rounding
+    // midpoint, so a double-rounded lowering answers 0 instead of -2^-54.
+    let a = 1.0 + 2.0_f64.powi(-27);
+    let b = 1.0 - 2.0_f64.powi(-27);
+    assert!(same_f64(MulAddExt::mul_add(a, b, -1.0), -(2.0_f64.powi(-54))), "f64 midpoint");
+    let a = 1.0 + 2.0_f32.powi(-12);
+    let b = 1.0 - 2.0_f32.powi(-12);
+    assert!(same_f32(MulAddExt::mul_add(a, b, -1.0), -(2.0_f32.powi(-24))), "f32 midpoint");
+
     let mut state = 0x9E37_79B9_7F4A_7C15u64;
     for _ in 0..200_000 {
         state ^= state << 13;

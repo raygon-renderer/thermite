@@ -40,3 +40,11 @@ avx2-f16c = []
 # AVX2-capable CPU has it. Adds `pclmulqdq` to the `#[target_feature(enable = ...)]` set
 # emitted for the AVX2 backend, enabling the CLMUL-based 2D Morton fast path.
 avx2-pclmul = []
+
+# AVX-512 tier the x86-v4 backend compiles to; forwarded from thermite's
+# `avx512-tier*` features. Selects the `#[target_feature]` string the dispatch
+# macros emit for the X86V4 backend entry. The features chain so cargo feature
+# unification resolves to the highest requested tier.
+avx512-tier1 = []
+avx512-tier2 = ["avx512-tier1"]
+avx512-tier3 = ["avx512-tier2"]

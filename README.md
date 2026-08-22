@@ -173,9 +173,10 @@ single binary carries all of them and `dispatch_dyn!` picks between them at
 runtime. 32-bit ARM isn't supported, since its NEON intrinsics are still
 unstable and ARMv7 NEON has no `f64` lanes. RISC-V V hasn't been started.
 
-The `avx512-tier1` through `avx512-tier4` features are reserved names that
-select nothing today. They exist so the tier names stay stable when the backend
-lands.
+The `avx512-tier1` through `avx512-tier3` features select which AVX-512 tier
+the in-progress x86-v4 backend compiles to (tier 1 is the Skylake-SP set, the
+floor - there is no Knights Landing tier). The backend has no registers yet,
+so today they change no codegen and AVX-512 hardware runs the AVX2 backend.
 
 ## The crates
 
@@ -332,7 +333,7 @@ Optional features add complex special functions including the Faddeeva function
 
 ## Status
 
-Core `thermite` is `0.2.0` and the API is settling. The five other published
+Core `thermite` is `0.2.1` and the API is settling. The seven other publishable
 crates move in lockstep on the same version. The vector-trait surfaces are
 complete across all of them, but a handful of special functions still `todo!()`
 rather than compute, mostly in the gamma family and on the composite types, so

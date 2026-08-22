@@ -11,7 +11,7 @@ to write a function once (with generics) and evaluate it on any supported backen
 
 ```toml
 [dependencies]
-thermite = "0.2.0"
+thermite = "0.3"
 ```
 
 ```rust
@@ -124,10 +124,9 @@ These change the numbers coming out, not just the speed.
 
 | Feature | Effect |
 |---|---|
-| `strict_ieee754` | Follow the spec exactly where SIMD instructions intentionally do not. Implies `preserve_denormals` and `disable_fast_fma`, and turns off the approximate `rcp` / `rsqrt` estimates on backends that have them. Significantly slower |
+| `strict_ieee754` | Follow the spec exactly where SIMD instructions intentionally do not. Implies `preserve_denormals`, and turns off the approximate `rcp` / `rsqrt` estimates on backends that have them. Significantly slower |
 | `preserve_denormals` | Every default math policy keeps denormal inputs instead of flushing them. Slow on denormal-heavy data, and required for strict IEEE-754 |
-| `ignore_denormals` | The opposite assumption: the hardware already flushes, so skip the checks. Ignored when `preserve_denormals` is also on |
-| `disable_fast_fma` | On backends with no hardware FMA, use scalar `libm::fma` instead of the vectorized compensated emulation. Bitwise identical to a scalar `fma`, and very much slower. Left off, `mul_add` is still accurate to the emulation's guarantee, just not bit-for-bit equal to libm |
+| `ignore_denormals` | The opposite assumption: the hardware already flushes, so skip the checks. Also drops the subnormal machinery from the emulated FMA on non-FMA backends (~20% faster `mul_add` there, and normal-range results stay bit-identical to hardware FMA while subnormal-scale ones become faithful). Ignored when `preserve_denormals` is also on |
 | `algebraic-scalar` | The 1-lane scalar backend uses LLVM's `algebraic_*` float ops instead of strict `+ - * /`, which is what lets a loop written against the scalar backend autovectorize at all. Costs exact cancellation, so `thermite-compensated` is incompatible and rejects the combination at compile time. Needs `nightly` for now |
 
 Combinations resolve rather than conflict, which matters because Cargo unifies
@@ -170,15 +169,17 @@ and ARMv7 NEON has no f64 lanes.
 enabled:
 
 ```toml
-thermite = { version = "0.2.0", default-features = false, features = ["wasm"] }
+thermite = { version = "0.3", default-features = false, features = ["wasm"] }
 ```
 
 `wasm32` works on stable. `wasm64` additionally needs `nightly`.
 
-**AVX-512** has no backend yet. The `avx512-tier1` through `avx512-tier4`
-features are reserved names that select nothing today, kept so the tier names
-stay stable when the backend lands. Enabling them changes no codegen, and
-AVX-512 hardware runs the AVX2 backend in the meantime.
+**AVX-512** has no registers yet. The `avx512-tier1` through `avx512-tier3`
+features select which tier the in-progress x86-v4 backend compiles to, exactly
+one per build, resolved to the highest requested. Tier 1 is the Skylake-SP set
+(F+CD+BW+DQ+VL), the floor, and there is no Knights Landing tier. Today they
+compile the module skeleton only, change no codegen, and AVX-512 hardware runs
+the AVX2 backend in the meantime.
 
 **SPIR-V** is unfinished, and enabling the `spirv` feature on a released version
 is a hard compile error. Work on it continues and the code stays in the repository.

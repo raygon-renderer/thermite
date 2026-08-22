@@ -4,7 +4,6 @@ use generic_array::GenericArray;
 
 #[thermite_macros::inline_always]
 impl CoreRegister for bool {
-    type NativeIsa = crate::backend::scalar::Scalar;
     type Lanes = generic_array::typenum::U1;
     type Mask = Self;
     type Storage = Self;

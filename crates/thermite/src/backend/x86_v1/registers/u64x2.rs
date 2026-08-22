@@ -23,7 +23,6 @@ pub struct U64x2V1;
 
 #[thermite_macros::inline_always]
 impl CoreRegister for U64x2V1 {
-    type NativeIsa = crate::backend::x86_v1::X86V1;
     type Lanes = typenum::U2;
     type Storage = arch::__m128i;
     type Mask = Self;

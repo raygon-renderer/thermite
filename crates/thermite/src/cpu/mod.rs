@@ -528,30 +528,32 @@ mod tests {
 
         // Synthesise each rung and check it reports exactly that rung: this pins
         // the ladder itself, on any host, including CI without AVX-512.
+        // The Knights Landing shape (F + CD and nothing else) is below the
+        // ladder's floor: without BW/DQ/VL there is nothing the backend wants.
         let mut synthetic = Features {
             avx512f: true,
             avx512cd: true,
             ..Default::default()
         };
-        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier1));
+        assert_eq!(synthetic.avx512_tier(), None, "KNL shape is not a tier");
 
-        // BW + DQ alone is not tier 2: VL is required with them. (No real CPU
-        // is shaped like this, Skylake-SP having brought all three at once, but it
-        // pins that VL actually gates the rung.)
+        // BW + DQ alone is still not tier 1: VL is required with them. (No real
+        // CPU is shaped like this, Skylake-SP having brought all three at once,
+        // but it pins that VL actually gates the floor.)
         synthetic.avx512bw = true;
         synthetic.avx512dq = true;
-        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier1), "promoted without VL");
+        assert_eq!(synthetic.avx512_tier(), None, "promoted without VL");
 
         synthetic.avx512vl = true;
-        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier2));
+        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier1));
 
-        // Tier 3 needs all nine, so check it does not promote on a partial set.
+        // Tier 2 needs all nine, so check it does not promote on a partial set.
         synthetic.avx512vbmi = true;
         synthetic.avx512vnni = true;
         assert_eq!(
             synthetic.avx512_tier(),
-            Some(Avx512Tier::Tier2),
-            "promoted on a partial tier 3"
+            Some(Avx512Tier::Tier1),
+            "promoted on a partial tier 2"
         );
 
         synthetic.avx512vbmi2 = true;
@@ -561,38 +563,42 @@ mod tests {
         synthetic.gfni = true;
         synthetic.vaes = true;
         synthetic.vpclmulqdq = true;
-        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier3));
+        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier2));
 
         synthetic.avx512bf16 = true;
-        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier4));
+        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier3));
 
-        // Dropping VL from a full-featured part falls all the way back to
-        // tier 1: without it there are no 128/256-bit EVEX encodings, which is
-        // most of what this crate would want from AVX-512.
+        // Dropping VL from a full-featured part falls below the ladder
+        // entirely: without it there are no 128/256-bit EVEX encodings, which
+        // is most of what this crate wants from AVX-512. (Also the Cooper Lake
+        // pin, inverted: BF16 without the tier-2 set stays tier 1.)
         let mut no_vl = synthetic;
         no_vl.avx512vl = false;
-        assert_eq!(
-            no_vl.avx512_tier(),
-            Some(Avx512Tier::Tier1),
-            "VL must gate tier 2 and up"
-        );
+        assert_eq!(no_vl.avx512_tier(), None, "VL is part of the floor");
 
-        // The Knights Landing shape: F + CD and nothing else.
-        let knl = Features {
+        let cooper_lake = Features {
             avx512f: true,
             avx512cd: true,
-            ..Default::default()
+            avx512bw: true,
+            avx512dq: true,
+            avx512vl: true,
+            avx512bf16: true,
+            ..Default::default() // no tier-2 set
         };
-        assert_eq!(knl.avx512_tier(), Some(Avx512Tier::Tier1));
+        assert_eq!(
+            cooper_lake.avx512_tier(),
+            Some(Avx512Tier::Tier1),
+            "BF16 without the tier-2 set must not promote"
+        );
 
-        // F alone is not a tier: tier1 requires CD too.
+        // F alone is below the floor too.
         let f_only = Features {
             avx512f: true,
             ..Default::default()
         };
         assert_eq!(f_only.avx512_tier(), None);
 
-        assert!(Avx512Tier::Tier1 < Avx512Tier::Tier4, "tiers must order");
+        assert!(Avx512Tier::Tier1 < Avx512Tier::Tier3, "tiers must order");
     }
 
     /// AVX10 is a version number, not a feature alphabet: `features()` must
@@ -608,7 +614,7 @@ mod tests {
         // On real AVX10 hardware the fold must have landed: the whole ladder,
         // plus the pieces no tier requires (FP16).
         if f.avx10().is_some() {
-            assert_eq!(f.avx512_tier(), Some(Avx512Tier::Tier4));
+            assert_eq!(f.avx512_tier(), Some(Avx512Tier::Tier3));
             assert!(f.avx512fp16 && f.avx512vl && f.gfni && f.vaes && f.vpclmulqdq);
         }
 

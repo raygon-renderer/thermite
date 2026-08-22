@@ -49,6 +49,10 @@ impl_newregister!(
     F32x4Wasm, I32x4Wasm, U32x4Wasm, F64x2Wasm, I64x2Wasm, U64x2Wasm, I16x8Wasm, U16x8Wasm, I8x16Wasm, U8x16Wasm
 );
 
+impl_has_isa!(
+    Wasm: F32x4Wasm, I32x4Wasm, U32x4Wasm, F64x2Wasm, I64x2Wasm, U64x2Wasm, I16x8Wasm, U16x8Wasm, I8x16Wasm, U8x16Wasm
+);
+
 // The other seven natives carry hand-written element-extend impls in their own
 // register files; these three did not, and the x2 halves need them to reach the
 // scalar rung. `single` is `f32x4(v, 0, 0, 0)` and `extract` is a native

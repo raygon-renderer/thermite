@@ -15,7 +15,7 @@
 //! |---|---|---|
 //! | [`nightly`] - `core::intrinsics` | `nightly` feature | **yes** |
 //! | [`x86`] / [`neon`] / [`wasm`] - explicit intrinsics | baseline has the instruction | no |
-//! | [`soft`] - std methods, else `libm` | everything else | only with `std` |
+//! | [`soft`] - std methods, else `libm` (`fma`: the round-to-odd emulation) | everything else | only with `std` |
 //!
 //! The middle rungs read `cfg!(target_feature = ...)`, which sees the target spec
 //! defaults plus `-C target-cpu` / `-C target-feature` but **not** a function-level

@@ -106,7 +106,9 @@ pub struct Align64;
 ///
 /// Implementors include the per-tier x86 types (`X86V1`/`X86V2`/`X86V3`),
 /// the `Scalar` fallback backend, `SPIRV`, and the WASM backend, but also
-/// every [`Vector`] and composite vector type ([`GenericVector`] requires
+/// every register ([`CoreRegister`](crate::register::CoreRegister) requires
+/// `HasIsa`, so `#[thermite::dispatch(R)]` works over bare register types)
+/// and every [`Vector`] and composite vector type ([`GenericVector`] requires
 /// `HasIsa`). The `dispatch!` macro reads [`ISA`](Self::ISA) to pick the
 /// right specialization at runtime.
 ///
