@@ -67,6 +67,12 @@ macro_rules! region_values {
             <$e>::NAN,
             <$e>::from_bits(<$e>::NAN.to_bits() | 1), // payload NaN
             -<$e>::NAN,
+            // All-ones-mantissa NaNs: the inputs where a broken NaN guard
+            // wraps the increment out of NaN-space entirely (0x7F..F + 1 =
+            // sign bit = -0.0; 0xFF..F + 1 = 0 = +0.0). Caught a real v3 bug:
+            // its `is_nan` used `_CMP_NEQ_OQ`, which is constant-false.
+            <$e>::from_bits(<$bits>::MAX >> 1),
+            <$e>::from_bits(<$bits>::MAX),
             // infinities and the largest finite values
             <$e>::INFINITY,
             <$e>::NEG_INFINITY,

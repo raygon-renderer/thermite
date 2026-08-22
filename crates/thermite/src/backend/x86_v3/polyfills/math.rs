@@ -89,7 +89,7 @@ pub unsafe fn _mm256_mullo_epi64x_v3(lhs: __m256i, rhs: __m256i) -> __m256i {
 
 #[inline(always)]
 pub unsafe fn _mm256_nextupps_v3(value: __m256) -> __m256 {
-    let is_nan = _mm256_castps_si256(_mm256_cmp_ps(value, value, _CMP_NEQ_OQ));
+    let is_nan = _mm256_castps_si256(_mm256_cmp_ps(value, value, _CMP_NEQ_UQ));
 
     let bits = _mm256_castps_si256(value); // switching to integer ops may add latency here
     let abs = _mm256_andnot_si256(_mm256_set1_epu32x(0x8000_0000), bits);
@@ -115,7 +115,7 @@ pub unsafe fn _mm256_nextupps_v3(value: __m256) -> __m256 {
 
 #[inline(always)]
 pub unsafe fn _mm256_nextdownps_v3(value: __m256) -> __m256 {
-    let is_nan = _mm256_castps_si256(_mm256_cmp_ps(value, value, _CMP_NEQ_OQ));
+    let is_nan = _mm256_castps_si256(_mm256_cmp_ps(value, value, _CMP_NEQ_UQ));
 
     let bits = _mm256_castps_si256(value); // switching to integer ops may add latency here
     let abs = _mm256_andnot_si256(_mm256_set1_epu32x(0x8000_0000u32), bits);
@@ -139,7 +139,7 @@ pub unsafe fn _mm256_nextdownps_v3(value: __m256) -> __m256 {
 
 #[inline(always)]
 pub unsafe fn _mm256_nextuppd_v3(value: __m256d) -> __m256d {
-    let is_nan = _mm256_castpd_si256(_mm256_cmp_pd(value, value, _CMP_NEQ_OQ));
+    let is_nan = _mm256_castpd_si256(_mm256_cmp_pd(value, value, _CMP_NEQ_UQ));
 
     let bits = _mm256_castpd_si256(value); // switching to integer ops may add latency here
     let abs = _mm256_andnot_si256(_mm256_set1_epu64x(0x8000_0000_0000_0000), bits);
@@ -164,7 +164,7 @@ pub unsafe fn _mm256_nextuppd_v3(value: __m256d) -> __m256d {
 
 #[inline(always)]
 pub unsafe fn _mm256_nextdownpd_v3(value: __m256d) -> __m256d {
-    let is_nan = _mm256_castpd_si256(_mm256_cmp_pd(value, value, _CMP_NEQ_OQ));
+    let is_nan = _mm256_castpd_si256(_mm256_cmp_pd(value, value, _CMP_NEQ_UQ));
 
     let bits = _mm256_castpd_si256(value); // switching to integer ops may add latency here
     let abs = _mm256_andnot_si256(_mm256_set1_epu64x(0x8000_0000_0000_0000), bits);
