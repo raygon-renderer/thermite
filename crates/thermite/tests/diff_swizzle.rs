@@ -2,12 +2,12 @@
 //! `scalar_swizzle` / `scalar_permutev` ground truth.
 //!
 //! Two halves:
-//!  - **Constant-index** paths (`swizzle_const` / `permute_const`, reached via
+//!  - **Constant-index** paths (`swizzle_const` / `permutev_const`, reached via
 //!    the public `swizzle!` macro) across native (`__m128`/`__m256`/`__m256d`)
 //!    and emulated registers on every backend. The 4-lane batteries deliberately
 //!    include the exact index patterns `impl_mat4_inverse!` relies on.
-//!  - **Runtime** paths (`R::permutev` / `R::swizzle` with variable
-//!    `GenericArray` indices), with exhaustive O(N^2) single-lane routing and
+//!  - **Runtime** paths (`R::permutev` / `R::swizzle` with live index
+//!    registers), with exhaustive O(N^2) single-lane routing and
 //!    random fuzzing, the coverage formerly in `array_swizzle.rs`, broadened
 //!    here from V3-emulated-only to native registers across v1/v2/v3.
 #![cfg(any(
@@ -26,11 +26,23 @@ use thermite::register::{NumericRegister, Register, Storage};
 use thermite::backend::scalar::Scalar;
 use thermite::simd::{NativeSimd, Simd};
 
-/// `permute_const` (single-register, indices `0..LANES`) vs `scalar_permutev`.
+/// Build the live index register `permutev`/`swizzle` consume from a `u32`
+/// index array (the test-side mirror of the crate's internal converter).
+fn idx_reg<R: Register>(idxs: &GenericArray<u32, R::Lanes>) -> Storage<R::Unsigned> {
+    use thermite::element::Element;
+
+    let mut arr: GenericArray<<R::Unsigned as Register>::Element, R::Lanes> = GenericArray::default();
+    for i in 0..<R::Lanes as Unsigned>::USIZE {
+        arr[i] = Element::from_u16(idxs[i] as u16);
+    }
+    <R::Unsigned as Register>::new(arr)
+}
+
+/// `permutev_const` (single-register, indices `0..LANES`) vs `scalar_permutev`.
 macro_rules! perm {
     ($R:ty, $a:expr, [$($i:literal),* $(,)?]) => {{
         let got = thermite::swizzle!(Vector::<$R>($a), [$($i),*]).0;
-        let want = <$R>::scalar_permutev($a, arr![$($i as u32),*]);
+        let want = <$R>::scalar_permutev($a, idx_reg::<$R>(&arr![$($i as u32),*]));
         assert_eq!(
             <$R>::as_slice(&got), <$R>::as_slice(&want),
             "permute_const{:?} mismatch", [$($i),*]
@@ -42,7 +54,7 @@ macro_rules! perm {
 macro_rules! swz {
     ($R:ty, $a:expr, $b:expr, [$($i:literal),* $(,)?]) => {{
         let got = thermite::swizzle!(Vector::<$R>($a), Vector::<$R>($b), [$($i),*]).0;
-        let want = <$R>::scalar_swizzle($a, $b, arr![$($i as u32),*]);
+        let want = <$R>::scalar_swizzle($a, $b, idx_reg::<$R>(&arr![$($i as u32),*]));
         assert_eq!(
             <$R>::as_slice(&got), <$R>::as_slice(&want),
             "swizzle_const{:?} mismatch", [$($i),*]
@@ -185,10 +197,10 @@ mod neon_const {
 // Runtime swizzle / permute coverage (ported from the former array_swizzle.rs).
 //
 // The `swizzle!` batteries above only reach the *const-index* paths. These drive
-// the runtime `R::permutev` / `R::swizzle` (variable `GenericArray` indices)
-// against each register's own `scalar_*` ground truth, with exhaustive
-// single-lane routing and random fuzzing. The impl masks indices to the lane
-// count (power-of-two widths), so out-of-range values wrap rather than panic.
+// the runtime `R::permutev` / `R::swizzle` (live index registers) against each
+// register's own `scalar_*` ground truth, with exhaustive single-lane routing
+// and random fuzzing. Out-of-range indices produce UNSPECIFIED lane values
+// (backend-dependent), so every index generated here stays in range.
 //
 // Broadened beyond the original (which was V3 + emulated `ArrayRegister` only)
 // to native 128-/256-bit registers across v1/v2/v3, so the hardware permute
@@ -199,8 +211,9 @@ fn rt_permutev<R: Register>(input: Storage<R>, idxs: &GenericArray<u32, R::Lanes
 where
     R::Element: PartialEq + core::fmt::Debug,
 {
-    let want = R::scalar_permutev(input, idxs.clone());
-    let got = R::permutev(input, idxs.clone());
+    let ir = idx_reg::<R>(idxs);
+    let want = R::scalar_permutev(input, ir);
+    let got = R::permutev(input, ir);
     // Compare via black-boxed slices, not a direct array `assert_eq!`. For integer
     // element types at -O3 the wasm backend can't select the vectorized all-lanes-
     // equal reduction that array equality lowers to (LLVM "Cannot select ... setcc
@@ -218,8 +231,9 @@ fn rt_swizzle<R: Register>(a: Storage<R>, b: Storage<R>, idxs: &GenericArray<u32
 where
     R::Element: PartialEq + core::fmt::Debug,
 {
-    let want = R::scalar_swizzle(a, b, idxs.clone());
-    let got = R::swizzle(a, b, idxs.clone());
+    let ir = idx_reg::<R>(idxs);
+    let want = R::scalar_swizzle(a, b, ir);
+    let got = R::swizzle(a, b, ir);
     // See rt_permutev: black-boxed slice compare avoids the int -O3 wasm "Cannot select".
     let (wa, ga) = (R::as_slice(&want), R::as_slice(&got));
     assert_eq!(
@@ -327,6 +341,10 @@ mod x86_rt {
     rt!(rt_v2_u64x2, <X86V2 as Simd>::u64x2);
     rt!(rt_v2_i32x4, <X86V2 as Simd>::i32x4);
     rt!(rt_v2_f32x8, <X86V2 as Simd>::f32x8); // ArrayRegister-emulated on v2
+    // Chunked 2x4 integer forms: the cross-chunk blend path that thermite-bvh's
+    // unmasked-index bug slipped through (2026-08-23), so keep these covered.
+    rt!(rt_v2_u32x8, <X86V2 as Simd>::u32x8);
+    rt!(rt_v2_i32x8, <X86V2 as Simd>::i32x8);
     rt!(rt_v1_f32x4, <X86V1 as Simd>::f32x4);
     rt!(rt_v1_f32x8, <X86V1 as Simd>::f32x8);
 

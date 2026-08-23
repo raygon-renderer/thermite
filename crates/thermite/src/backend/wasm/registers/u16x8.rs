@@ -145,6 +145,10 @@ impl Register for U16x8Wasm {
     type Signed = super::I16x8Wasm;
     type Unsigned = super::U16x8Wasm;
 
+    // Hardware extend ladder for the compress/expand byte index rows, plus a
+    // direct `i8x16.swizzle` by the raw row.
+    impl_widen_index_bytes_wasm!(x8);
+
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::ne(value, Self::ZERO)
     }
@@ -189,7 +193,7 @@ impl Register for U16x8Wasm {
 
     impl_wasm_align_shuffle!();
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         super::I16x8Wasm::permutev(value, idxs)
     }
 

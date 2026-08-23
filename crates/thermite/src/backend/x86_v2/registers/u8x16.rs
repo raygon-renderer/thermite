@@ -212,9 +212,16 @@ impl Register for U8x16V2 {
 
     const HAS_PERMUTEV: bool = true;
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         // Lane permutation is bit-pattern identical for signed/unsigned (same storage).
         super::I8x16V2::permutev(value, idxs)
+    }
+
+    // pshufb table lookup for 16/32/48/64-entry byte tables, relying on `lookup`'s
+    // in-range contract (bit 7 clear), so indices are not clamped. Other lengths
+    // fall back to the scalar loop inside the polyfill.
+    unsafe fn lookup(values: &[Self::Element], indices: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm_lookup_epi8x_v2(values.as_ptr().cast(), values.len(), indices) }
     }
 
     compress_via_wide!();

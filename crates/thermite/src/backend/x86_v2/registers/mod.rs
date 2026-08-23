@@ -489,11 +489,3 @@ macro_rules! impl_extend_same {
 impl_extend_same!(
     F32x4V2, I32x4V2, U32x4V2, F64x2V2, I64x2V2, U64x2V2, I16x8V2, U16x8V2, I8x16V2, U8x16V2
 );
-
-// `WidenIndexRegister` for the table-path registers: SSE4.1 `pmovzxbd`. The
-// 8-lane 16-bit registers use the two-halves form (no AVX2 at this tier).
-impl_widen_indices_x86! {
-    F32x4V2 => x4, I32x4V2 => x4, U32x4V2 => x4,
-    F64x2V2 => x2, I64x2V2 => x2, U64x2V2 => x2,
-    I16x8V2 => x8h, U16x8V2 => x8h,
-}

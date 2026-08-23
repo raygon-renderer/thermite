@@ -137,6 +137,9 @@ impl Register for U32x4V3 {
     type Signed = super::I32x4V3;
     type Unsigned = super::U32x4V3;
 
+    // One hardware widening load for the compress/expand byte index rows.
+    impl_widen_index_bytes_x86!(u32x4);
+
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::ne(value, Self::ZERO)
     }
@@ -218,13 +221,8 @@ impl Register for U32x4V3 {
 
     impl_byte_align_alignr!();
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe {
-            arch::_mm_castps_si128(arch::_mm_permutevar_ps(
-                arch::_mm_castsi128_ps(value),
-                core::mem::transmute(idxs),
-            ))
-        }
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm_castps_si128(arch::_mm_permutevar_ps(arch::_mm_castsi128_ps(value), idxs)) }
     }
 
     //

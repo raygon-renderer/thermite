@@ -156,6 +156,10 @@ impl Register for I64x2Wasm {
     type Signed = super::I64x2Wasm;
     type Unsigned = super::U64x2Wasm;
 
+    // Hardware extend ladder for the compress/expand byte index rows, plus a
+    // direct `i8x16.swizzle` by the raw row.
+    impl_widen_index_bytes_wasm!(x2);
+
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::ne(value, Self::ZERO)
     }
@@ -214,11 +218,8 @@ impl Register for I64x2Wasm {
 
     impl_wasm_align_shuffle!();
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        arch::u8x16_relaxed_swizzle(
-            value,
-            arch::wasm_lane_table_dyn::<2>(unsafe { core::mem::transmute(idxs) }),
-        )
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+        arch::u8x16_relaxed_swizzle(value, arch::wasm_ctrl_x2(idxs))
     }
 
     fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {

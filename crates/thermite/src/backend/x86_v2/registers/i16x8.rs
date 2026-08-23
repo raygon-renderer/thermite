@@ -173,6 +173,9 @@ impl Register for I16x8V2 {
     type Signed = super::I16x8V2;
     type Unsigned = super::U16x8V2;
 
+    // One hardware widening load for the compress/expand byte index rows.
+    impl_widen_index_bytes_x86!(u16x8);
+
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::ne(value, Self::ZERO)
     }
@@ -241,11 +244,8 @@ impl Register for I16x8V2 {
 
     impl_byte_align_alignr!();
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe {
-            let p = idxs.as_ptr() as *const arch::__m128i;
-            arch::_mm_permutev_epi16x_v2(value, arch::_mm_loadu_si128(p), arch::_mm_loadu_si128(p.add(1)))
-        }
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm_permutev_epi16x_v2(value, idxs) }
     }
 
     compress_via_table!();

@@ -650,3 +650,68 @@ pub unsafe fn _mm256_count_mask_ps_v3<const N: usize>(values: [__m256; N]) -> us
 
     _mm256_count_mask_epi32x_v3(ints)
 }
+
+// ---------------------------------------------------------------------------
+// VPSHUFB byte-table lookup (`Register::lookup` on the 256-bit byte registers).
+// ---------------------------------------------------------------------------
+
+/// Scalar fallback for [`_mm256_lookup_epi8x_v3`]: bounds-checked, same as the
+/// `Register::lookup` trait default.
+#[inline(always)]
+unsafe fn _mm256_lookup_scalar_epi8x_v3(values: *const u8, len: usize, idxs: __m256i) -> __m256i {
+    let table = core::slice::from_raw_parts(values, len);
+
+    let mut sel = [0u8; 32];
+    _mm256_storeu_si256(sel.as_mut_ptr() as *mut __m256i, idxs);
+
+    let mut out = [0u8; 32];
+    let mut i = 0;
+    while i < 32 {
+        out[i] = table[sel[i] as usize];
+        i += 1;
+    }
+
+    _mm256_loadu_si256(out.as_ptr() as *const __m256i)
+}
+
+/// Byte-table lookup: `result[i] = values[idx[i]]`, for tables of exactly
+/// 16/32/48/64 entries.
+///
+/// - 16: `vpshufb` is per-128-bit-lane, so broadcasting the table gives both
+///   lanes the same 16 entries, two instructions.
+/// - 32: one [`_mm256_permutev_epi8x_v3`] over the loaded table (the
+///   swapped-halves + bit-4 select idiom, since `vpermb` is AVX-512).
+/// - 48/64: the 32-entry block plus a second block (broadcast 16 or a second
+///   full permute), selected by bit 5 of the index.
+///
+/// `Register::lookup`'s safety contract requires every index to be in range, so
+/// bit 7 of each control byte is always clear and `idx & 15` is the within-block
+/// offset, and indices are deliberately NOT clamped or masked. (Divergence note, as
+/// on NEON's `vqtbl` overrides: an out-of-range index shuffles rather than
+/// panicking like the scalar default, which the `unsafe fn` contract permits.)
+///
+/// `_mm256_slli_epi16::<2>` lifts bit 5 of each index byte into that byte's MSB,
+/// the only bit `vpblendvb` inspects.
+///
+/// Any other length falls back to the scalar bounds-checked loop.
+#[inline(always)]
+pub unsafe fn _mm256_lookup_epi8x_v3(values: *const u8, len: usize, idxs: __m256i) -> __m256i {
+    let p16 = values as *const __m128i;
+    let p32 = values as *const __m256i;
+
+    match len {
+        16 => _mm256_shuffle_epi8(_mm256_broadcastsi128_si256(_mm_loadu_si128(p16)), idxs),
+        32 => _mm256_permutev_epi8x_v3(_mm256_loadu_si256(p32), idxs),
+        48 => {
+            let lo = _mm256_permutev_epi8x_v3(_mm256_loadu_si256(p32), idxs);
+            let hi = _mm256_shuffle_epi8(_mm256_broadcastsi128_si256(_mm_loadu_si128(p16.add(2))), idxs);
+            _mm256_blendv_epi8(lo, hi, _mm256_slli_epi16::<2>(idxs))
+        }
+        64 => {
+            let lo = _mm256_permutev_epi8x_v3(_mm256_loadu_si256(p32), idxs);
+            let hi = _mm256_permutev_epi8x_v3(_mm256_loadu_si256(p32.add(1)), idxs);
+            _mm256_blendv_epi8(lo, hi, _mm256_slli_epi16::<2>(idxs))
+        }
+        _ => _mm256_lookup_scalar_epi8x_v3(values, len, idxs),
+    }
+}

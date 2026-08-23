@@ -375,7 +375,7 @@ where
     S: PairStage<V::Lanes>,
     K: SortKey<V>,
 {
-    let partner = v.permute_const::<S::Indices>();
+    let partner = v.permutev_const::<S::Indices>();
 
     let (m_first, m_last) = if const { O::IS_ASCENDING } {
         (K::key_lt(partner, v), K::key_lt(v, partner))

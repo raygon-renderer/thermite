@@ -35,19 +35,6 @@ use crate::{Interval, IntervalFloatVector};
 
 impl<V: IntervalFloatVector, W: WideningPolicy> Swizzle<V::Lanes> for Interval<V, W> {
     #[inline(always)]
-    fn swizzle(self, other: Self, indices: GenericArray<u32, V::Lanes>) -> Self {
-        Self::from_bounds_unchecked(
-            self.lo.swizzle(other.lo, indices.clone()),
-            self.hi.swizzle(other.hi, indices),
-        )
-    }
-
-    #[inline(always)]
-    fn permute(self, indices: GenericArray<u32, V::Lanes>) -> Self {
-        Self::from_bounds_unchecked(self.lo.permute(indices.clone()), self.hi.permute(indices))
-    }
-
-    #[inline(always)]
     fn swizzle_const<I: SwizzleIndices<V::Lanes>>(self, other: Self) -> Self {
         Self::from_bounds_unchecked(
             self.lo.swizzle_const::<I>(other.lo),
@@ -56,8 +43,8 @@ impl<V: IntervalFloatVector, W: WideningPolicy> Swizzle<V::Lanes> for Interval<V
     }
 
     #[inline(always)]
-    fn permute_const<I: SwizzleIndices<V::Lanes>>(self) -> Self {
-        Self::from_bounds_unchecked(self.lo.permute_const::<I>(), self.hi.permute_const::<I>())
+    fn permutev_const<I: SwizzleIndices<V::Lanes>>(self) -> Self {
+        Self::from_bounds_unchecked(self.lo.permutev_const::<I>(), self.hi.permutev_const::<I>())
     }
 }
 
@@ -427,6 +414,21 @@ impl<V: IntervalFloatVector, W: WideningPolicy> GenericVector for Interval<V, W>
     type Signed = V::Signed;
 
     type Mask = V::Mask;
+
+    // Both bounds move through the same permutation, so a permuted interval
+    // vector is still per-lane [lo, hi] pairs.
+    #[inline(always)]
+    fn permutev(self, indices: Self::Unsigned) -> Self {
+        Self::from_bounds_unchecked(self.lo.permutev(indices), self.hi.permutev(indices))
+    }
+
+    #[inline(always)]
+    fn swizzle(self, other: Self, indices: Self::Unsigned) -> Self {
+        Self::from_bounds_unchecked(
+            self.lo.swizzle(other.lo, indices),
+            self.hi.swizzle(other.hi, indices),
+        )
+    }
 
     #[inline(always)]
     fn new<const N: usize>(value: [Self::Element; N]) -> Self

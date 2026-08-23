@@ -197,3 +197,75 @@ pub unsafe fn _mm_morton2_compress_epu32x_v2(v: __m128i) -> __m128i {
     let c = _mm_and_si128(_mm_or_si128(n, _mm_srli_epi32(n, 4)), _mm_set1_epi32(0x00FF_00FF));
     _mm_and_si128(_mm_or_si128(c, _mm_srli_epi32(c, 8)), _mm_set1_epi32(0x0000_FFFF))
 }
+
+// ---------------------------------------------------------------------------
+// PSHUFB byte-table lookup (`Register::lookup` on the 128-bit byte registers).
+// ---------------------------------------------------------------------------
+
+/// Scalar fallback for [`_mm_lookup_epi8x_v2`]: bounds-checked, same as the
+/// `Register::lookup` trait default.
+#[inline(always)]
+unsafe fn _mm_lookup_scalar_epi8x_v2(values: *const u8, len: usize, idxs: __m128i) -> __m128i {
+    let table = core::slice::from_raw_parts(values, len);
+
+    let mut sel = [0u8; 16];
+    _mm_storeu_si128(sel.as_mut_ptr() as *mut __m128i, idxs);
+
+    let mut out = [0u8; 16];
+    let mut i = 0;
+    while i < 16 {
+        out[i] = table[sel[i] as usize];
+        i += 1;
+    }
+
+    _mm_loadu_si128(out.as_ptr() as *const __m128i)
+}
+
+/// Byte-table lookup: `result[i] = values[idx[i]]`, for tables of exactly
+/// 16/32/48/64 entries (one `pshufb` per 16-entry block plus a select tree).
+///
+/// `pshufb` reads `block[ctrl & 15]` and zeroes any lane whose control byte has
+/// bit 7 set. `Register::lookup`'s safety contract already requires every index
+/// to be in range, so for these sizes bit 7 is always clear and `idx & 15` is
+/// exactly the within-block offset. Indices are deliberately NOT clamped or
+/// masked here. (Divergence note, same as the NEON `vqtbl` overrides: an
+/// out-of-range index yields a shuffle result rather than the scalar default's
+/// panic, which the `unsafe fn` contract permits.)
+///
+/// Which block a lane wants is bit 4 (32/48/64 entries) and bit 5 (48/64).
+/// `_mm_slli_epi16::<3>` / `::<2>` move those into each byte's MSB, the only bit
+/// `pblendvb` inspects. The bits that cross the byte boundary land below bit 7
+/// of the neighbour and are therefore harmless.
+///
+/// Any other length falls back to the scalar bounds-checked loop.
+#[inline(always)]
+pub unsafe fn _mm_lookup_epi8x_v2(values: *const u8, len: usize, idxs: __m128i) -> __m128i {
+    let p = values as *const __m128i;
+
+    match len {
+        16 => _mm_shuffle_epi8(_mm_loadu_si128(p), idxs),
+        32 => {
+            let t0 = _mm_shuffle_epi8(_mm_loadu_si128(p), idxs);
+            let t1 = _mm_shuffle_epi8(_mm_loadu_si128(p.add(1)), idxs);
+            _mm_blendv_epi8(t0, t1, _mm_slli_epi16::<3>(idxs))
+        }
+        48 => {
+            let t0 = _mm_shuffle_epi8(_mm_loadu_si128(p), idxs);
+            let t1 = _mm_shuffle_epi8(_mm_loadu_si128(p.add(1)), idxs);
+            let t2 = _mm_shuffle_epi8(_mm_loadu_si128(p.add(2)), idxs);
+            let lo = _mm_blendv_epi8(t0, t1, _mm_slli_epi16::<3>(idxs));
+            _mm_blendv_epi8(lo, t2, _mm_slli_epi16::<2>(idxs))
+        }
+        64 => {
+            let bit4 = _mm_slli_epi16::<3>(idxs);
+            let t0 = _mm_shuffle_epi8(_mm_loadu_si128(p), idxs);
+            let t1 = _mm_shuffle_epi8(_mm_loadu_si128(p.add(1)), idxs);
+            let t2 = _mm_shuffle_epi8(_mm_loadu_si128(p.add(2)), idxs);
+            let t3 = _mm_shuffle_epi8(_mm_loadu_si128(p.add(3)), idxs);
+            let lo = _mm_blendv_epi8(t0, t1, bit4);
+            let hi = _mm_blendv_epi8(t2, t3, bit4);
+            _mm_blendv_epi8(lo, hi, _mm_slli_epi16::<2>(idxs))
+        }
+        _ => _mm_lookup_scalar_epi8x_v2(values, len, idxs),
+    }
+}

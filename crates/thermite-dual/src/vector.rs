@@ -66,40 +66,9 @@ impl<V> DualFloatVector for V where V: DualValue + FloatVector<Element: DualValu
 
 // Lane swizzles apply to every component: the primal and each derivative move
 // through the same permutation, so a swizzled dual is the dual of the
-// swizzled inputs.
+// swizzled inputs. (The dynamic forms live on `GenericVector`, this impl is
+// the const-index surface.)
 impl<V: DualFloatVector, const N: usize> Swizzle<V::Lanes> for Dual<V, N> {
-    #[inline(always)]
-    fn swizzle(self, other: Self, indices: GenericArray<u32, V::Lanes>) -> Self {
-        let mut out = Self {
-            re: self.re.swizzle(other.re, indices.clone()),
-            dual: [V::ZERO; N],
-        };
-        let mut i = 0;
-        while i < N {
-            out.dual[i] = self.dual[i].swizzle(other.dual[i], indices.clone());
-            i += 1;
-        }
-        out
-    }
-
-    #[inline(always)]
-    fn permute(self, indices: GenericArray<u32, V::Lanes>) -> Self {
-        let mut out = Self {
-            re: self.re.permute(indices.clone()),
-            dual: [V::ZERO; N],
-        };
-        let mut i = 0;
-        while i < N {
-            out.dual[i] = self.dual[i].permute(indices.clone());
-            i += 1;
-        }
-        out
-    }
-
-    // The `_const` forms must forward per component rather than take the trait
-    // defaults: the defaults route through the runtime-index methods, losing
-    // the immediate-encoded shuffles the component vectors' own `_const`
-    // overrides produce.
     #[inline(always)]
     fn swizzle_const<I: SwizzleIndices<V::Lanes>>(self, other: Self) -> Self {
         let mut out = Self {
@@ -115,14 +84,14 @@ impl<V: DualFloatVector, const N: usize> Swizzle<V::Lanes> for Dual<V, N> {
     }
 
     #[inline(always)]
-    fn permute_const<I: SwizzleIndices<V::Lanes>>(self) -> Self {
+    fn permutev_const<I: SwizzleIndices<V::Lanes>>(self) -> Self {
         let mut out = Self {
-            re: self.re.permute_const::<I>(),
+            re: self.re.permutev_const::<I>(),
             dual: [V::ZERO; N],
         };
         let mut i = 0;
         while i < N {
-            out.dual[i] = self.dual[i].permute_const::<I>();
+            out.dual[i] = self.dual[i].permutev_const::<I>();
             i += 1;
         }
         out
@@ -441,6 +410,36 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
     type Unsigned = V::Unsigned;
     type Signed = V::Signed;
     type Mask = V::Mask;
+
+    // The primal and each derivative move through the same permutation, so a
+    // permuted dual is the dual of the permuted inputs.
+    #[inline(always)]
+    fn permutev(self, indices: Self::Unsigned) -> Self {
+        let mut out = Self {
+            re: self.re.permutev(indices),
+            dual: [V::ZERO; N],
+        };
+        let mut i = 0;
+        while i < N {
+            out.dual[i] = self.dual[i].permutev(indices);
+            i += 1;
+        }
+        out
+    }
+
+    #[inline(always)]
+    fn swizzle(self, other: Self, indices: Self::Unsigned) -> Self {
+        let mut out = Self {
+            re: self.re.swizzle(other.re, indices),
+            dual: [V::ZERO; N],
+        };
+        let mut i = 0;
+        while i < N {
+            out.dual[i] = self.dual[i].swizzle(other.dual[i], indices);
+            i += 1;
+        }
+        out
+    }
 
     #[inline(always)]
     fn new<const M: usize>(value: [Self::Element; M]) -> Self

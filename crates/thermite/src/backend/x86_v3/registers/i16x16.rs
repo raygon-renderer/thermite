@@ -235,14 +235,17 @@ impl Register for I16x16V3 {
 
     const HAS_PERMUTEV: bool = true;
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe {
-            let p = idxs.as_ptr() as *const arch::__m256i;
-            arch::_mm256_permutev_epi16x_v3(value, arch::_mm256_loadu_si256(p), arch::_mm256_loadu_si256(p.add(1)))
-        }
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm256_permutev_epi16x_v3(value, idxs) }
     }
 
     compress_via_wide!();
+
+    // One hardware widening load instead of the default's per-lane
+    // movzx/pinsrw chain, which bounds the grouped compress_z's index assembly.
+    fn widen_index_bytes(bytes: &GenericArray<u8, Self::Lanes>) -> Storage<Self::Unsigned> {
+        unsafe { arch::_mm256_cvtepu8_epi16(arch::_mm_loadu_si128(bytes.as_slice().as_ptr() as *const _)) }
+    }
 
     impl_byte_align_alignr256!();
 }

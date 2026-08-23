@@ -163,6 +163,9 @@ impl Register for I32x8V3 {
     type Signed = super::I32x8V3;
     type Unsigned = super::U32x8V3;
 
+    // One hardware widening load for the compress/expand byte index rows.
+    impl_widen_index_bytes_x86!(u32x8);
+
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::ne(value, Self::ZERO)
     }
@@ -250,11 +253,11 @@ impl Register for I32x8V3 {
 
     const HAS_PERMUTEV: bool = true;
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         // `_mm256_permutevar_ps` only permutes *within* each 128-bit lane, so it
         // cannot express cross-lane routing (e.g. a full 8-lane reverse). Use the
         // true cross-lane `_mm256_permutevar8x32_epi32` (result[i] = value[idx[i] & 7]).
-        unsafe { arch::_mm256_permutevar8x32_epi32(value, core::mem::transmute(idxs)) }
+        unsafe { arch::_mm256_permutevar8x32_epi32(value, idxs) }
     }
 
     // Square transposes via the shared 256-bit family bodies (see `polyfills::transpose256`).

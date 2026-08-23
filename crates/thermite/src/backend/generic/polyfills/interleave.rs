@@ -212,13 +212,16 @@ fn gather_deinterleaved<R: Register>(group: &[Storage<R>], off: usize, j: usize,
     let lanes = R::lanes();
 
     let local: GenericArray<u32, R::Lanes> = GenericArray::generate(|l| ((l * p + j) % lanes) as u32);
+    // `p` (and post-unroll `j`) are compile-time constants at every call site,
+    // so the index register folds to a literal, exactly like the array did.
+    let local = crate::register::index_register::<R>(&local);
 
     let first = j / lanes;
     let last = ((lanes - 1) * p + j) / lanes;
 
     // SAFETY: the caller's window covers `off .. off + p`, and
     // `first <= last < p` (lane `LANES-1` reads the highest source).
-    let mut acc = R::permutev(unsafe { *group.get_unchecked(off + first) }, local.clone());
+    let mut acc = R::permutev(unsafe { *group.get_unchecked(off + first) }, local);
 
     let mut k = first + 1;
     while k <= last {
@@ -234,7 +237,7 @@ fn gather_deinterleaved<R: Register>(group: &[Storage<R>], off: usize, j: usize,
             acc = R::blendv(
                 mask,
                 acc,
-                R::permutev(unsafe { *group.get_unchecked(off + k) }, local.clone()),
+                R::permutev(unsafe { *group.get_unchecked(off + k) }, local),
             );
         }
         k += 1;
@@ -267,11 +270,13 @@ fn gather_interleaved<R: Register>(
     let lanes = R::lanes();
 
     let local: GenericArray<u32, R::Lanes> = GenericArray::generate(|l| ((t * lanes + l) / p) as u32);
+    // Compile-time-constant at every call site (see `gather_deinterleaved`).
+    let local = crate::register::index_register::<R>(&local);
 
     let r0 = (t * lanes) % p;
 
     // SAFETY: `r * sub + i < p * sub == size`, within the caller's block.
-    let mut acc = R::permutev(unsafe { *block.get_unchecked(base + r0 * sub + i) }, local.clone());
+    let mut acc = R::permutev(unsafe { *block.get_unchecked(base + r0 * sub + i) }, local);
 
     let mut dr = 1;
     while dr < p && dr < lanes {
@@ -284,7 +289,7 @@ fn gather_interleaved<R: Register>(
         acc = R::blendv(
             mask,
             acc,
-            R::permutev(unsafe { *block.get_unchecked(base + r * sub + i) }, local.clone()),
+            R::permutev(unsafe { *block.get_unchecked(base + r * sub + i) }, local),
         );
 
         dr += 1;

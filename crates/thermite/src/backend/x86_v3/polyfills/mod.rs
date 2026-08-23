@@ -59,6 +59,28 @@ pub unsafe fn _mm256_srav_epi64x_v3(value: __m256i, shifts: __m256i) -> __m256i 
     _mm256_sub_epi64(_mm256_xor_si256(_mm256_srlv_epi64(value, shifts), m), m)
 }
 
+/// Variable cross-lane permute of 4x64-bit lanes: `result[i] = value[idx[i] & 3]`.
+///
+/// AVX2 has no variable 64-bit cross-lane permute (`vpermq` takes an immediate), but
+/// `vpermd` with each 64-bit index expanded to its dword pair `(2i, 2i+1)` is a single
+/// shuffle. The expansion is three ops in-register: double the qword indices, duplicate
+/// the low dword of each qword (`vpshufd` `[0,0,2,2]` per 128-bit lane), then add `0/1`.
+///
+/// Out-of-range indices are undefined per the `permutev` contract and are not masked.
+#[inline(always)]
+pub unsafe fn _mm256_permutevarx_epi64x_v3(value: __m256i, idxs: __m256i) -> __m256i {
+    let doubled = _mm256_slli_epi64(idxs, 1); // [2i, ...] per qword
+    let dup = _mm256_shuffle_epi32(doubled, 0b10_10_00_00); // low dword of each qword, twice
+    let ctrl = _mm256_add_epi32(dup, _mm256_setr_epi32(0, 1, 0, 1, 0, 1, 0, 1));
+    _mm256_permutevar8x32_epi32(value, ctrl)
+}
+
+/// [`_mm256_permutevarx_epi64x_v3`] through the `pd` reinterpretation (free casts).
+#[inline(always)]
+pub unsafe fn _mm256_permutevar4x64_pdx_v3(value: __m256d, idxs: __m256i) -> __m256d {
+    _mm256_castsi256_pd(_mm256_permutevarx_epi64x_v3(_mm256_castpd_si256(value), idxs))
+}
+
 /// Variable within-register permute of 16x16-bit lanes: `result[i] = value[idx[i] & 15]`.
 ///
 /// AVX2 has no 16-bit cross-lane permute (`vpermw` is AVX-512). `pshufb` only shuffles within
@@ -66,19 +88,13 @@ pub unsafe fn _mm256_srav_epi64x_v3(value: __m256i, shifts: __m256i) -> __m256i 
 /// two 128-bit halves swapped, exposing the "other lane" as a source. A per-lane blend then
 /// picks the half that actually holds the requested word (`bit3(idx) XOR bit3(position)`).
 ///
-/// `idx0`/`idx1` are the 16 lane indices as two `u32x8` registers (low and high eight of a
-/// `GenericArray<u32, 16>`).
+/// `widx` is the `u16x16` index register.
 ///
 /// Out-of-range indices are undefined per the `permutev` contract and are not masked here
 /// (only the functional `& 7` / `& 8` bit extractions remain); `pshufb`/`blendv` keep an OOB
 /// lane memory-safe but unspecified.
 #[inline(always)]
-pub unsafe fn _mm256_permutev_epi16x_v3(value: __m256i, idx0: __m256i, idx1: __m256i) -> __m256i {
-    // Narrow the 16 u32 indices to 16 u16, in lane order 0..15.
-    // packus interleaves the 128-bit lanes: [i0..3, i8..11, i4..7, i12..15]; permute fixes it.
-    let packed = _mm256_packus_epi32(idx0, idx1);
-    let widx = _mm256_permute4x64_epi64(packed, 0b11_01_10_00); // 16x u16
-
+pub unsafe fn _mm256_permutev_epi16x_v3(value: __m256i, widx: __m256i) -> __m256i {
     // Byte-shuffle mask: bytes [2w, 2w+1] per lane. No `& 7` on the within-lane word index is
     // needed - `pshufb` masks each byte index to its 128-bit lane (`& 15`), so for w in 8..15
     // the byte `2w` (16..30) folds to `2(w & 7)`, exactly the intended within-lane word.
@@ -108,17 +124,11 @@ pub unsafe fn _mm256_permutev_epi16x_v3(value: __m256i, idx0: __m256i, idx1: __m
 /// whether the requested source lives in the same or the other 128-bit half. For 32 byte lanes
 /// the "which half" bit is bit 4 (`idx & 16`), not bit 3.
 ///
-/// `i0..i3` are the 32 lane indices as four `u32x8` registers. They are narrowed to 32 `u8` via
-/// a `packus` chain; the chain interleaves 128-bit lanes, so a single `vpermd` (`[0,4,1,5,2,6,
-/// 3,7]`) restores lane order 0..31.
+/// `ctrl` is the `u8x32` index register. For 8-bit lanes the index *is* the byte index.
 ///
 /// Out-of-range indices are undefined per the `permutev` contract and are not masked.
 #[inline(always)]
-pub unsafe fn _mm256_permutev_epi8x_v3(value: __m256i, i0: __m256i, i1: __m256i, i2: __m256i, i3: __m256i) -> __m256i {
-    // Narrow 32 u32 -> 32 u8. packus interleaves the 128-bit lanes; vpermd restores 0..31 order.
-    let packed = _mm256_packus_epi16(_mm256_packus_epi32(i0, i1), _mm256_packus_epi32(i2, i3));
-    let ctrl = _mm256_permutevar8x32_epi32(packed, _mm256_setr_epi32(0, 4, 1, 5, 2, 6, 3, 7));
-
+pub unsafe fn _mm256_permutev_epi8x_v3(value: __m256i, ctrl: __m256i) -> __m256i {
     let swapped = _mm256_permute2x128_si256(value, value, 0x01); // swap the two 128-bit halves
     let from_same = _mm256_shuffle_epi8(value, ctrl);
     let from_other = _mm256_shuffle_epi8(swapped, ctrl);

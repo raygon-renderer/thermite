@@ -98,12 +98,12 @@ impl Register for [<f $width>] {
 
     const HAS_PERMUTEV: bool = false;
 
-    fn permutev(value: Storage<Self>, _idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn permutev(value: Storage<Self>, _idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         value
     }
 
-    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        if idxs[0] & 0b1 == 0 { a } else { b }
+    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+        if idxs & 0b1 == 0 { a } else { b }
     }
 }
 

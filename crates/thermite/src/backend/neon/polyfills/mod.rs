@@ -103,84 +103,72 @@ const fn lane_offset_pattern(elem: usize) -> [u8; 16] {
     o
 }
 
-/// Runtime companion to [`neon_lane_table`]: the same `tbl` byte-index table,
-/// built with SIMD instead of a scalar loop.
-///
-/// [`neon_lane_table`] is a `const fn`, which is exactly right for callers that
-/// can evaluate it at compile time - `swizzle_const` and the `IMM8` shuffle
-/// family, where it folds to a literal (measured: a 4-lane `swizzle_const` is 5
-/// instructions, and LLVM often recognises the pattern and skips `tbl`
-/// entirely). But const-evaluable code has no SIMD, so on the two *runtime*
-/// callers - `permutev` and `swizzle` - it lowered verbatim to ~80 scalar
-/// instructions: a saturating `cmp`/`csel` clamp plus a `mov v0.b[i]` insert for
-/// every one of the 16 output bytes. Measured on a 4-lane runtime permute:
-/// 83 instructions (plus a stack frame) before, 17 after.
-///
-/// The mapping `byte[j] = idx[j / elem] * elem + (j % elem)` is pure lane work:
-///
-/// 1. saturating-narrow the `u32` indices to bytes,
-/// 2. clamp to `AVAIL` (see below) so an out-of-range lane index lands exactly
-///    on the first byte the table lookup cannot address, which it zeroes -
-///    preserving [`neon_lane_table`]'s documented out-of-range semantics,
-/// 3. replicate each index across its `elem` byte slots (one `tbl` with a
-///    constant pattern),
-/// 4. scale by `elem` and add the intra-lane offsets (both constants).
-///
-/// `AVAIL` is the number of lanes the consuming `tbl` can actually address, and
-/// is what step 2 clamps to: `N` for the single-register [`permutev`] form, but
-/// `2 * N` for the two-register `swizzle` form, whose `tbl2` addresses 32 bytes
-/// and for which indices in `N..2*N` are *valid* selections from the second
-/// register. Clamping to `AVAIL` puts an out-of-range index on byte
-/// `AVAIL * elem` (16 or 32 respectively), which the corresponding `tbl` zeroes.
-///
-/// Shapes outside `{2, 4, 8, 16}` lanes (`elem` would not divide 16) fall back
-/// to the scalar builder, which is still correct.
+// ---------------------------------------------------------------------------
+// Runtime `tbl` control from a LIVE index register (`neon_ctrl_x{16,8,4,2}`).
+//
+// `Register::permutev`/`swizzle` take the indices as a same-lane-count unsigned
+// register, so the whole control build stays in registers, with no memory round
+// trip and no scalar byte inserts.
+//
+// The mapping is `byte[i * elem + b] = idx[i] * elem + b`. Replicating a
+// sub-256 value into every byte of its lane is one multiply by `0x01..01` in
+// that lane width, so:
+//
+//   ctrl = ((idx << log2(elem)) * 0x01..01) + lane_offset_pattern(elem)
+//
+// three instructions (shift, multiply, byte add) plus a constant load, for
+// every width except bytes, where the index register already IS the control.
+//
+// No clamp is needed. An index one past the addressable range scales to byte
+// `AVAIL * elem` (16 for `tbl`, 32 for `tbl2`, `16 * M` for the multi-register
+// forms), which the consuming table lookup zeroes. A wildly out-of-range index
+// produces some other unspecified byte pattern, which the `permutev` contract
+// explicitly permits. Every result is a byte shuffle, so all of it is
+// memory-safe by construction.
+// ---------------------------------------------------------------------------
+
+/// 16 byte lanes: the index register is the `tbl` control already.
 #[inline(always)]
-pub unsafe fn neon_lane_table_dyn<const N: usize, const AVAIL: usize>(idxs: [u32; N]) -> uint8x16_t {
+pub fn neon_ctrl_x16(idxs: uint8x16_t) -> uint8x16_t {
+    idxs
+}
+
+/// 8 lanes of 16 bits: `(idx << 1) * 0x0101` puts `2i` in both bytes of the
+/// lane, and the byte offsets turn them into `(2i, 2i + 1)`.
+#[inline(always)]
+pub fn neon_ctrl_x8(idxs: uint16x8_t) -> uint8x16_t {
     unsafe {
-        if const { !(N == 2 || N == 4 || N == 8 || N == 16) } {
-            return neon_lane_table::<N>(16 / N, idxs);
-        }
-
-        let p = idxs.as_ptr();
-
-        // 1. Saturating narrow to bytes. Saturation keeps a wildly out-of-range
-        //    index out of range rather than aliasing a valid lane.
-        let bytes: uint8x16_t = if const { N == 16 } {
-            let lo = vqmovn_u16(vcombine_u16(vqmovn_u32(vld1q_u32(p)), vqmovn_u32(vld1q_u32(p.add(4)))));
-            let hi = vqmovn_u16(vcombine_u16(
-                vqmovn_u32(vld1q_u32(p.add(8))),
-                vqmovn_u32(vld1q_u32(p.add(12))),
-            ));
-            vcombine_u8(lo, hi)
-        } else if const { N == 8 } {
-            let b = vqmovn_u16(vcombine_u16(vqmovn_u32(vld1q_u32(p)), vqmovn_u32(vld1q_u32(p.add(4)))));
-            vcombine_u8(b, b)
-        } else if const { N == 4 } {
-            let b = vqmovn_u16(vcombine_u16(vqmovn_u32(vld1q_u32(p)), vdup_n_u16(0)));
-            vcombine_u8(b, b)
-        } else {
-            // N == 2: only a 64-bit load is in bounds.
-            let v = vcombine_u32(vld1_u32(p), vdup_n_u32(0));
-            let b = vqmovn_u16(vcombine_u16(vqmovn_u32(v), vdup_n_u16(0)));
-            vcombine_u8(b, b)
-        };
-
-        // 2. Clamp: index AVAIL scales to byte AVAIL*elem (16 for tbl, 32 for
-        //    tbl2), which the consuming table lookup treats as out of range.
-        let clamped = vminq_u8(bytes, vdupq_n_u8(const { AVAIL as u8 }));
-
-        // 3-4. Byte registers need no replication, scaling, or offsetting.
-        if const { N == 16 } {
-            return clamped;
-        }
-
-        neon_lane_expand::<N>(clamped)
+        let rep = vmulq_u16(vshlq_n_u16::<1>(idxs), vdupq_n_u16(0x0101));
+        vaddq_u8(vreinterpretq_u8_u16(rep), const { cu8x16(lane_offset_pattern(2)) })
     }
 }
 
-/// Steps 3-4 of [`neon_lane_table_dyn`], on already-clamped byte lane indices:
-/// replicate each index across its `elem` byte slots, scale, offset.
+/// 4 lanes of 32 bits: `(idx << 2) * 0x01010101`, then the byte offsets.
+#[inline(always)]
+pub fn neon_ctrl_x4(idxs: uint32x4_t) -> uint8x16_t {
+    unsafe {
+        let rep = vmulq_u32(vshlq_n_u32::<2>(idxs), vdupq_n_u32(0x0101_0101));
+        vaddq_u8(vreinterpretq_u8_u32(rep), const { cu8x16(lane_offset_pattern(4)) })
+    }
+}
+
+/// 2 lanes of 64 bits. NEON has no 64-bit multiply, so the replication runs in
+/// `u32` lanes instead: the reinterpret gives `[lo0, hi0, lo1, hi1]` and only
+/// the low word of each pair carries an in-range index, so scaling and
+/// replicating those two words and copying each over its own high word (`TRN1`)
+/// fills all 8 bytes of the lane. One instruction more than the other widths.
+#[inline(always)]
+pub fn neon_ctrl_x2(idxs: uint64x2_t) -> uint8x16_t {
+    unsafe {
+        let lo = vmulq_u32(vshlq_n_u32::<3>(vreinterpretq_u32_u64(idxs)), vdupq_n_u32(0x0101_0101));
+        let rep = vtrn1q_u32(lo, lo);
+        vaddq_u8(vreinterpretq_u8_u32(rep), const { cu8x16(lane_offset_pattern(8)) })
+    }
+}
+
+/// Replicate/scale/offset tail used by the byte-row path: on already-narrowed,
+/// in-range byte lane indices, replicate each index across its `elem` byte
+/// slots, scale, offset.
 #[inline(always)]
 unsafe fn neon_lane_expand<const N: usize>(clamped: uint8x16_t) -> uint8x16_t {
     unsafe {
@@ -203,10 +191,11 @@ unsafe fn neon_lane_expand<const N: usize>(clamped: uint8x16_t) -> uint8x16_t {
 ///
 /// A `COMPRESS8`/`EXPAND8` row is already byte-sized lane indices, and its first
 /// `LANES` entries are always `< LANES` (the padding lanes sort past them), so
-/// neither the saturating narrow nor the clamp that [`neon_lane_table_dyn`]
-/// needs applies here - the row goes straight into the replicate/scale/offset
-/// tail. That removes the `u8 -> u32 -> u8` round trip those paths would
-/// otherwise make through `widen_indices` and back.
+/// no narrow and no clamp apply here. The row goes straight into the
+/// replicate/scale/offset tail. That removes the `u8 -> u32 -> u8` round trip
+/// those paths would otherwise make through
+/// [`Register::widen_index_bytes`](crate::register::Register::widen_index_bytes)
+/// and back.
 ///
 /// # Safety
 ///

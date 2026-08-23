@@ -171,6 +171,9 @@ impl Register for F64x2V2 {
     type Signed = super::I64x2V2;
     type Unsigned = super::U64x2V2;
 
+    // One hardware widening load for the compress/expand byte index rows.
+    impl_widen_index_bytes_x86!(u64x2);
+
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         unsafe {
             // value != 0.0
@@ -250,13 +253,9 @@ impl Register for F64x2V2 {
 
     impl_float_align_via_bits!(super::U64x2V2);
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         // As `I64x2V2::permutev`, through the pd wrapper.
-        unsafe {
-            let idxs = arch::_mm_setr_epu32x(idxs[0], idxs[1], 0, 0);
-            let idxs = arch::_mm_cvtepu32_epi64(idxs);
-            arch::_mm_permutevar_pd_v2(value, idxs)
-        }
+        unsafe { arch::_mm_permutevar_pd_v2(value, idxs) }
     }
 
     compress_via_table!();

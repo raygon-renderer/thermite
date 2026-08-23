@@ -300,6 +300,7 @@ macro_rules! impl_native_extend_from_scalar {
 macro_rules! impl_native_extract {
     // ===== 128-bit integer =====
     (@epi64x2) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 2, "Index out of bounds for register lane extraction");
@@ -313,6 +314,7 @@ macro_rules! impl_native_extract {
         }
     };
     (@epi32x4) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 4, "Index out of bounds for register lane extraction");
@@ -328,6 +330,7 @@ macro_rules! impl_native_extract {
         }
     };
     (@epi16x8) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 8, "Index out of bounds for register lane extraction");
@@ -347,6 +350,7 @@ macro_rules! impl_native_extract {
         }
     };
     (@epi8x16) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 16, "Index out of bounds for register lane extraction");
@@ -379,6 +383,7 @@ macro_rules! impl_native_extract {
     // element) and every other lane with one shuffle/unpack first. `@epi16x8` and `@pd128`
     // are already SSE2-legal, so v1 uses those arms directly rather than getting `_v1` twins.
     (@epi64x2_v1) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 2, "Index out of bounds for register lane extraction");
@@ -394,6 +399,7 @@ macro_rules! impl_native_extract {
         }
     };
     (@epi32x4_v1) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 4, "Index out of bounds for register lane extraction");
@@ -417,6 +423,7 @@ macro_rules! impl_native_extract {
     // Byte `I` is the low half of word `I / 2` when `I` is even, the high half when odd.
     // The `as u8` before `as _` makes this bit-preserving for a signed OR unsigned element.
     (@epi8x16_v1) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 16, "Index out of bounds for register lane extraction");
@@ -437,6 +444,7 @@ macro_rules! impl_native_extract {
         }
     };
     (@ps128_v1) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 4, "Index out of bounds for register lane extraction");
@@ -457,6 +465,7 @@ macro_rules! impl_native_extract {
     };
     // ===== 256-bit integer: extract the 128-bit lane, then the element =====
     (@epi64x4) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 4, "Index out of bounds for register lane extraction");
@@ -480,6 +489,7 @@ macro_rules! impl_native_extract {
         }
     };
     (@epi32x8) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 8, "Index out of bounds for register lane extraction");
@@ -503,6 +513,7 @@ macro_rules! impl_native_extract {
         }
     };
     (@epi16x16) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 16, "Index out of bounds for register lane extraction");
@@ -534,6 +545,7 @@ macro_rules! impl_native_extract {
         }
     };
     (@epi8x32) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 32, "Index out of bounds for register lane extraction");
@@ -582,6 +594,7 @@ macro_rules! impl_native_extract {
     };
     // ===== floats: lane 0 stays in xmm via cvt; other lanes via extract_ps/unpackhi =====
     (@ps128) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 4, "Index out of bounds for register lane extraction");
@@ -597,6 +610,7 @@ macro_rules! impl_native_extract {
         }
     };
     (@ps256) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 8, "Index out of bounds for register lane extraction");
@@ -620,6 +634,7 @@ macro_rules! impl_native_extract {
         }
     };
     (@pd128) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 2, "Index out of bounds for register lane extraction");
@@ -633,6 +648,7 @@ macro_rules! impl_native_extract {
         }
     };
     (@pd256) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: $crate::register::Storage<Self>) -> Self::Element {
             const {
                 assert!(I < 4, "Index out of bounds for register lane extraction");
@@ -669,6 +685,7 @@ macro_rules! impl_byte_align_alignr {
     () => {
         const HAS_NATIVE_ALIGN: bool = true;
 
+        #[inline(always)]
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             match const { OFFSET * core::mem::size_of::<Self::Element>() } {
                 0 => unsafe { arch::_mm_alignr_epi8::<0>(b, a) },
@@ -707,6 +724,7 @@ macro_rules! impl_byte_align_alignr256 {
     () => {
         const HAS_NATIVE_ALIGN: bool = true;
 
+        #[inline(always)]
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             let mid = unsafe { arch::_mm256_permute2x128_si256::<0x21>(a, b) };
             match OFFSET * core::mem::size_of::<Self::Element>() {
@@ -765,6 +783,7 @@ macro_rules! impl_byteshift_align {
     () => {
         const HAS_NATIVE_ALIGN: bool = true;
 
+        #[inline(always)]
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             match const { OFFSET * core::mem::size_of::<Self::Element>() } {
                 0 => Self::bitor(Self::bshri::<0>(a), Self::bshli::<16>(b)),
@@ -810,6 +829,7 @@ macro_rules! impl_float_align_via_bits {
         // inherited, not asserted: this is only as native as the register it routes to
         const HAS_NATIVE_ALIGN: bool = <$bits as $crate::register::Register>::HAS_NATIVE_ALIGN;
 
+        #[inline(always)]
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             <Self as $crate::register::BitCastRegister<$bits>>::from_bits(
                 <$bits as $crate::register::Register>::align::<OFFSET>(
@@ -821,57 +841,56 @@ macro_rules! impl_float_align_via_bits {
     };
 }
 
-/// Stamp [`WidenIndexRegister`](crate::register::WidenIndexRegister) for x86
-/// registers: widen a `u8` compress/expand table row into the `u32` permute
-/// control with the `pmovzxbd` family.
+/// Emit an x86 override of
+/// [`Register::widen_index_bytes`](crate::register::Register::widen_index_bytes):
+/// widen the register's `LANES`-byte index array into its own unsigned index
+/// register with the `pmovzxb*` family.
 ///
-/// The shape tag is the register's **lane count**, not its width - the control
-/// array follows `LANES` (`f64x4` and `f32x4` both want four `u32`s). `x8h`
-/// ("halves") is the SSE4.1-only form for 8-lane registers on a tier without
-/// `_mm256_cvtepu8_epi32`, which widens in two 128-bit steps.
+/// The shape tag names the *unsigned index register* the widening must produce,
+/// meaning its lane width and total width, since `permutev` consumes
+/// `Storage<Self::Unsigned>` (`f64x4` wants four `u64`s, `f32x4` four `u32`s).
 ///
-/// Invoke once per backend in its `registers/mod.rs`, where `arch` is in scope.
-macro_rules! impl_widen_indices_x86 {
-    ($($reg:ty => $shape:ident),* $(,)?) => {
-        $(
-            #[thermite_macros::inline_always]
-            impl $crate::register::WidenIndexRegister for $reg {
-                fn widen_indices(
-                    idxs: &generic_array::GenericArray<u8, generic_array::typenum::U8>,
-                ) -> generic_array::GenericArray<u32, <Self as $crate::register::CoreRegister>::Lanes> {
-                    unsafe { impl_widen_indices_x86!(@body idxs, $shape) }
-                }
-            }
-        )*
+/// Invoke inside the register's own `impl Register` block, where `arch` is in
+/// scope. Each body loads EXACTLY `LANES` bytes, since the argument is only
+/// that wide. The `#[inline(always)]` is spelled here rather than left to the
+/// surrounding `#[thermite_macros::inline_always]`, which never sees a method
+/// still wrapped in a `macro_rules!` invocation. Without it the widen stays
+/// out-of-line and the table row loses its memory operand.
+macro_rules! impl_widen_index_bytes_x86 {
+    ($shape:ident) => {
+        #[inline(always)]
+        fn widen_index_bytes(
+            bytes: &generic_array::GenericArray<u8, <Self as $crate::register::CoreRegister>::Lanes>,
+        ) -> $crate::register::Storage<<Self as $crate::register::Register>::Unsigned> {
+            unsafe { impl_widen_index_bytes_x86!(@body bytes, $shape) }
+        }
     };
 
-    // 2 lanes (8 bytes of control): widen four and keep the low half.
-    (@body $idxs:ident, x2) => {{
-        let q = arch::_mm_cvtepu8_epi32(arch::_mm_cvtsi32_si128(
+    // 2x u64 (128-bit): two bytes widened with `pmovzxbq`.
+    (@body $idxs:ident, u64x2) => {{
+        arch::_mm_cvtepu8_epi64(arch::_mm_cvtsi32_si128(
+            core::ptr::read_unaligned($idxs.as_ptr() as *const u16) as i32,
+        ))
+    }};
+    // 4x u32 (128-bit): exactly one `pmovzxbd` off a 32-bit load.
+    (@body $idxs:ident, u32x4) => {{
+        arch::_mm_cvtepu8_epi32(arch::_mm_cvtsi32_si128(
             core::ptr::read_unaligned($idxs.as_ptr() as *const i32),
-        ));
-        core::mem::transmute_copy(&q)
+        ))
     }};
-    // 4 lanes (16 bytes): exactly one `pmovzxbd`.
-    (@body $idxs:ident, x4) => {{
-        let q = arch::_mm_cvtepu8_epi32(arch::_mm_cvtsi32_si128(
+    // 4x u64 (256-bit, AVX2): one `vpmovzxbq` off a 32-bit load.
+    (@body $idxs:ident, u64x4) => {{
+        arch::_mm256_cvtepu8_epi64(arch::_mm_cvtsi32_si128(
             core::ptr::read_unaligned($idxs.as_ptr() as *const i32),
-        ));
-        core::mem::transmute_copy(&q)
+        ))
     }};
-    // 8 lanes (32 bytes) with AVX2: one `vpmovzxbd` off a 64-bit load.
-    (@body $idxs:ident, x8) => {{
-        let o = arch::_mm256_cvtepu8_epi32(arch::_mm_loadl_epi64($idxs.as_ptr() as *const arch::__m128i));
-        core::mem::transmute_copy(&o)
+    // 8x u32 (256-bit, AVX2): one `vpmovzxbd` off a 64-bit load.
+    (@body $idxs:ident, u32x8) => {{
+        arch::_mm256_cvtepu8_epi32(arch::_mm_loadl_epi64($idxs.as_ptr() as *const arch::__m128i))
     }};
-    // 8 lanes without AVX2: two 128-bit widenings.
-    (@body $idxs:ident, x8h) => {{
-        let p = $idxs.as_ptr();
-        let lo = arch::_mm_cvtepu8_epi32(arch::_mm_cvtsi32_si128(core::ptr::read_unaligned(p as *const i32)));
-        let hi = arch::_mm_cvtepu8_epi32(arch::_mm_cvtsi32_si128(core::ptr::read_unaligned(
-            p.add(4) as *const i32,
-        )));
-        core::mem::transmute_copy(&[lo, hi])
+    // 8x u16 (128-bit): one `pmovzxbw` off a 64-bit load.
+    (@body $idxs:ident, u16x8) => {{
+        arch::_mm_cvtepu8_epi16(arch::_mm_loadl_epi64($idxs.as_ptr() as *const arch::__m128i))
     }};
 }
 
@@ -1327,11 +1346,28 @@ macro_rules! compress_via_table {
 }
 
 /// Add `Register::compress` + `compress_z` + `expand` + `expand_z` overrides
-/// that delegate to the wide polyfills ([`compress_permute_wide`] /
-/// [`expand_permute_wide`]). Invoke inside `impl Register for <Reg> { ... }`
-/// for any `Register` whose lane count is a multiple of 8 in `8..=64` (the
-/// 16/32-lane byte and short vectors). Emits both directions, same as
-/// [`compress_via_table!`].
+/// that delegate to the *grouped* single-register polyfills. Invoke inside
+/// `impl Register for <Reg> { ... }` for any `Register` whose lane count is a
+/// multiple of 8 in `16..=64` (the 16/32-lane byte and short vectors). Emits
+/// both directions, same as [`compress_via_table!`].
+///
+/// All four arms are now grouped-kernel based, so branchless, table-fed, and
+/// free of the per-lane gather-index scatter:
+///
+/// - `compress_z` -> [`compress_z_grouped`] (grouped rows + `log2` merges),
+///   `expand_z` -> [`expand_z_grouped`] (`log2` unmerges + grouped rows). Each
+///   reconstructs only the selected lanes and folds its own zeroing in
+///   (`compress_z` zeroes before, `expand_z` after).
+/// - `compress` -> [`compress_grouped`], `expand` -> [`expand_grouped`]. A
+///   non-zeroing form must also route the *unselected* lanes, which is the same
+///   kernel run a second time under the complement bitmask. The two results are
+///   offset by one `swizzle` against [`EMPTY`](crate::register::CoreRegister::EMPTY)
+///   and combined with a single `bitor` (exact, because each operand is all-zero
+///   bits exactly where the other is live). Both trees share one `movemask`.
+///
+/// The older per-lane scatters [`compress_permute_wide`] /
+/// [`expand_permute_wide`] remain for the `ArrayRegister` routing, which has no
+/// single-register permute to build the grouped kernels on.
 macro_rules! compress_via_wide {
     () => {
         #[inline(always)]
@@ -1339,7 +1375,9 @@ macro_rules! compress_via_wide {
             value: $crate::register::Storage<Self>,
             mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
         ) -> $crate::register::Storage<Self> {
-            $crate::backend::generic::polyfills::compress_permute_wide::<Self>(value, mask)
+            // Two `compress_z_grouped` trees (selected + complement) shifted
+            // together by one swizzle-with-EMPTY and OR'd. Shares one movemask.
+            $crate::backend::generic::polyfills::compress_grouped::<Self>(value, mask)
         }
 
         #[inline(always)]
@@ -1347,10 +1385,9 @@ macro_rules! compress_via_wide {
             value: $crate::register::Storage<Self>,
             mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
         ) -> $crate::register::Storage<Self> {
-            $crate::backend::generic::polyfills::compress_permute_wide::<Self>(
-                <Self as $crate::register::CoreRegister>::zz(mask, value),
-                mask,
-            )
+            // The grouped-rows + log2-merges kernel zeroes internally (it needs
+            // the zeroed pad for its merge sentinel), so no `zz` composition here.
+            $crate::backend::generic::polyfills::compress_z_grouped::<Self>(value, mask)
         }
 
         #[inline(always)]
@@ -1358,7 +1395,10 @@ macro_rules! compress_via_wide {
             value: $crate::register::Storage<Self>,
             mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
         ) -> $crate::register::Storage<Self> {
-            $crate::backend::generic::polyfills::expand_permute_wide::<Self>(value, mask)
+            // Two `expand_z_grouped` trees (selected + complement, the latter
+            // fed the input shifted down past the packed front) OR'd together.
+            // Shares one movemask.
+            $crate::backend::generic::polyfills::expand_grouped::<Self>(value, mask)
         }
 
         #[inline(always)]
@@ -1366,10 +1406,9 @@ macro_rules! compress_via_wide {
             value: $crate::register::Storage<Self>,
             mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
         ) -> $crate::register::Storage<Self> {
-            <Self as $crate::register::CoreRegister>::zz(
-                mask,
-                $crate::backend::generic::polyfills::expand_permute_wide::<Self>(value, mask),
-            )
+            // The unmerge-passes + grouped-rows kernel does its own zeroing
+            // (it composes the `zz` internally, after the permutes).
+            $crate::backend::generic::polyfills::expand_z_grouped::<Self>(value, mask)
         }
     };
 }

@@ -228,11 +228,17 @@ impl Register for U16x16V3 {
 
     const HAS_PERMUTEV: bool = <super::I16x16V3 as Register>::HAS_PERMUTEV;
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         super::I16x16V3::permutev(value, idxs)
     }
 
     compress_via_wide!();
+
+    // One hardware widening load instead of the default's per-lane
+    // movzx/pinsrw chain, which bounds the grouped compress_z's index assembly.
+    fn widen_index_bytes(bytes: &GenericArray<u8, Self::Lanes>) -> Storage<Self::Unsigned> {
+        unsafe { arch::_mm256_cvtepu8_epi16(arch::_mm_loadu_si128(bytes.as_slice().as_ptr() as *const _)) }
+    }
 
     // Byte-identical to the signed register (both raw `__m256i`); reuse it.
     // hand-written body below, so the flag is set here rather than by an

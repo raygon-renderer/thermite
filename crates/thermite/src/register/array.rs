@@ -375,6 +375,26 @@ macro_rules! chunk_align {
     };
 }
 
+/// One rung of the literal-`N` merge-tree ladder for `compress_z`: when `N`
+/// equals the literal, cast the chunk/mask arrays to their literal-size
+/// twins, run the merge, and return. Same identity-reinterpret pattern as
+/// `sort_arm!` below, where dead arms of other instantiations monomorphise but
+/// never execute.
+macro_rules! compress_z_merge_arm {
+    ($n:literal, $f:ident, $value:ident, $mask:ident) => {
+        if const { N == $n } {
+            // SAFETY: `N == $n` per the guard, so the `[_; N]` and `[_; $n]`
+            // array types are identical.
+            unsafe {
+                let chunks = *(&$value.0 as *const [Storage<R>; N] as *const [Storage<R>; $n]);
+                let masks = *(&$mask.0 as *const [Storage<R::Mask>; N] as *const [Storage<R::Mask>; $n]);
+                let merged = crate::backend::generic::polyfills::$f::<R>(chunks, masks);
+                return Self(*(&merged as *const [Storage<R>; $n] as *const [Storage<R>; N]));
+            }
+        }
+    };
+}
+
 #[rustfmt::skip] #[thermite_macros::array_impl]
 impl<R: Register, const N: usize> Register for ArrayRegister<R, N>
 where
@@ -885,10 +905,23 @@ where
     ///
     /// A blanket impl cannot add the `Lanes: CompressTable` bound to a single
     /// method, so applicability is an `if const` guard on the raw polyfill.
+    /// Above 8 lanes a second guarded arm takes
+    /// [`compress_permute_wide_raw`](crate::backend::generic::polyfills::compress_permute_wide_raw),
+    /// leaving the branchy scalar default only for shapes neither covers.
     fn compress(value: Storage<Self>, mask: Storage<Self::Mask>) -> Storage<Self> {
         if const { Self::Lanes::USIZE <= 8 && Self::HAS_PERMUTEV } {
             // SAFETY: `Lanes <= 8` per the guard above.
             return unsafe { crate::backend::generic::polyfills::compress_permute8_raw::<Self>(value, mask) };
+        }
+
+        // 16..=64 lanes: the branchless wide scatter (per-8-lane table rows
+        // assembled into one global gather index + one permute) instead of the
+        // data-dependent branchy scalar default. The merge tree is zeroing-only,
+        // so the non-zeroing form takes the scatter.
+        if const { Self::HAS_PERMUTEV && Self::Lanes::USIZE % 8 == 0 && Self::Lanes::USIZE >= 16 && Self::Lanes::USIZE <= 64 }
+        {
+            // SAFETY: the guard is exactly `compress_permute_wide`'s contract.
+            return unsafe { crate::backend::generic::polyfills::compress_permute_wide_raw::<Self>(value, mask) };
         }
 
         crate::backend::generic::polyfills::compress_default::<Self>(value, mask)
@@ -900,6 +933,23 @@ where
             return Self::compress(Self::zz(mask, value), mask);
         }
 
+        // Above 8 lanes, take the branchless merge tree wherever the chunk
+        // shape has control tables: per-chunk native `compress_z` +
+        // count-indexed cross-chunk merges. Replaces the scalar
+        // stable-partition default (a data-dependent branchy loop) for every
+        // supported emulated-wide register on every backend.
+        if const {
+            Self::HAS_PERMUTEV
+                && crate::backend::generic::polyfills::merge_ctrl_supported(
+                    <R::Lanes as typenum::Unsigned>::USIZE,
+                    N,
+                )
+        } {
+            compress_z_merge_arm!(2, compress_z_merge2, value, mask);
+            compress_z_merge_arm!(4, compress_z_merge4, value, mask);
+            compress_z_merge_arm!(8, compress_z_merge8, value, mask);
+        }
+
         crate::backend::generic::polyfills::compress_z_default::<Self>(value, mask)
     }
 
@@ -907,6 +957,13 @@ where
         if const { Self::Lanes::USIZE <= 8 && Self::HAS_PERMUTEV } {
             // SAFETY: `Lanes <= 8` per the guard above.
             return unsafe { crate::backend::generic::polyfills::expand_permute8_raw::<Self>(value, mask) };
+        }
+
+        // 16..=64 lanes: the branchless wide scatter, mirroring `compress`.
+        if const { Self::HAS_PERMUTEV && Self::Lanes::USIZE % 8 == 0 && Self::Lanes::USIZE >= 16 && Self::Lanes::USIZE <= 64 }
+        {
+            // SAFETY: the guard is exactly `expand_permute_wide`'s contract.
+            return unsafe { crate::backend::generic::polyfills::expand_permute_wide_raw::<Self>(value, mask) };
         }
 
         crate::backend::generic::polyfills::expand_default::<Self>(value, mask)
@@ -918,46 +975,85 @@ where
             return Self::zz(mask, Self::expand(value, mask));
         }
 
+        // 16..=64 lanes: the plain wide expand is a full permutation, so the
+        // zeroing form is one `zz` after it. The unselected lanes hold the
+        // tail, which zeroing discards. (Same composition `compress_via_wide!`
+        // used for `expand_z` before the grouped kernel.)
+        if const { Self::HAS_PERMUTEV && Self::Lanes::USIZE % 8 == 0 && Self::Lanes::USIZE >= 16 && Self::Lanes::USIZE <= 64 }
+        {
+            // SAFETY: the guard is exactly `expand_permute_wide`'s contract.
+            let expanded = unsafe { crate::backend::generic::polyfills::expand_permute_wide_raw::<Self>(value, mask) };
+            return Self::zz(mask, expanded);
+        }
+
         crate::backend::generic::polyfills::expand_z_default::<Self>(value, mask)
     }
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    // Per-chunk forwarding rather than the trait's portable per-lane loop:
+    // chunk `k` widens its own `R::Lanes`-byte slice through `R`, so emulated
+    // widths inherit whatever hardware widening load the inner register has.
+    fn widen_index_bytes(bytes: &GenericArray<u8, Self::Lanes>) -> Storage<Self::Unsigned> {
+        let src = bytes.as_slice();
+
+        let mut chunks = [R::Unsigned::EMPTY; N];
+
+        let mut k = 0;
+        while k < N {
+            let mut chunk: GenericArray<u8, R::Lanes> = GenericArray::default();
+
+            let base = k * R::Lanes::USIZE;
+            let dst = chunk.as_mut_slice();
+
+            let mut i = 0;
+            while i < R::Lanes::USIZE {
+                dst[i] = src[base + i];
+                i += 1;
+            }
+
+            chunks[k] = R::widen_index_bytes(&chunk);
+            k += 1;
+        }
+
+        ArrayRegister(chunks)
+    }
+
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         if const { !Self::HAS_PERMUTEV } {
             return Self::scalar_permutev(value, idxs);
         }
 
         // Delegate the cross-chunk routing to the inner register, which can
         // override it with a faster per-register sequence.
-        Self(R::array_permutev::<N>(value.0, idxs.as_slice()))
+        Self(R::array_permutev::<N>(value.0, idxs.0))
     }
 
-    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         if const { !Self::HAS_PERMUTEV } {
             return Self::scalar_swizzle(a, b, idxs);
         }
 
-        Self(R::array_swizzle::<N>(a.0, b.0, idxs.as_slice()))
+        Self(R::array_swizzle::<N>(a.0, b.0, idxs.0))
     }
 
     fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
         if const { !Self::HAS_PERMUTEV } {
             // Forward the compile-time indices to the scalar fallback
-            return Self::scalar_swizzle(a, b, I::INDICES);
+            return Self::scalar_swizzle(a, b, crate::register::index_register::<Self>(&I::INDICES));
         }
 
-        // Same delegation as the runtime path, but with compile-time indices:
-        // `array_swizzle` is `#[inline(always)]`, so the constant indices fold
-        // the local/chunk split and blend selectors into immediates.
-        Self(R::array_swizzle::<N>(a.0, b.0, I::INDICES.as_slice()))
+        // Compile-time indices take the `&[u32]` companion: `array_swizzle_indices`
+        // is `#[inline(always)]`, so the constant indices fold the local/chunk
+        // split and blend selectors into immediates.
+        Self(R::array_swizzle_indices::<N>(a.0, b.0, I::INDICES.as_slice()))
     }
 
     fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {
         if const { !Self::HAS_PERMUTEV } {
             // Forward the compile-time indices to the scalar fallback
-            return Self::scalar_permutev(value, I::INDICES);
+            return Self::scalar_permutev(value, crate::register::index_register::<Self>(&I::INDICES));
         }
 
-        Self(R::array_permutev::<N>(value.0, I::INDICES.as_slice()))
+        Self(R::array_permutev_indices::<N>(value.0, I::INDICES.as_slice()))
     }
 
     // The per-chunk `R::align` below is the whole implementation, so this width is
@@ -985,22 +1081,6 @@ where
             c += 1;
         }
         Self(result)
-    }
-}
-
-/// Emulated widths take the portable widening: there is no single native
-/// instruction spanning the chunks. Spelled out rather than defaulted on the
-/// trait, so a native register can never silently land on this body.
-impl<R: Register, const N: usize> WidenIndexRegister for ArrayRegister<R, N>
-where
-    Const<N>: ToUInt<Output: ArrayLength + Mul<R::Lanes, Output: Lanes>>,
-    ArrayRegister<R, N>: Register,
-{
-    #[inline(always)]
-    fn widen_indices(
-        idxs: &GenericArray<u8, generic_array::typenum::U8>,
-    ) -> GenericArray<u32, <Self as CoreRegister>::Lanes> {
-        crate::backend::generic::polyfills::widen_row::<<Self as CoreRegister>::Lanes>(idxs)
     }
 }
 
@@ -1870,6 +1950,7 @@ macro_rules! impl_indexable {
                     + Mul<<ArrayRegister<R, $b> as CoreRegister>::Lanes, Output: Lanes>
                     + Mul<R::Lanes, Output = <ArrayRegister<IDX, $b> as CoreRegister>::Lanes>,
             {
+                #[inline(always)]
                 unsafe fn gather(ptr: *const Self::Element, indices: Storage<ArrayRegister<IDX, $b>>) -> Storage<Self> {
                     let [lo_idx, hi_idx] = unsafe { generic_array::const_transmute(indices) };
                     let lo_val = unsafe { <ArrayRegister<R, $b> as IndexableRegister<ArrayRegister<IDX, $a>>>::gather(ptr, lo_idx) };
@@ -1886,6 +1967,7 @@ macro_rules! impl_indexable {
                 typenum::[<U $b>]: Mul<R::Lanes, Output: Lanes> + Mul<IDX::Lanes, Output: Lanes>,
                 typenum::[<U $c>]: Mul<R::Lanes, Output: Lanes> + Mul<IDX::Lanes, Output: Lanes>,
             {
+                #[inline(always)]
                 unsafe fn gather(ptr: *const Self::Element, indices: Storage<ArrayRegister<IDX, $c>>) -> Storage<Self> {
                     let [lo_idx, hi_idx] = unsafe { generic_array::const_transmute(indices) };
                     let lo_val = unsafe { <ArrayRegister<R, $a> as IndexableRegister<ArrayRegister<IDX, $b>>>::gather(ptr, lo_idx) };
@@ -1908,6 +1990,7 @@ macro_rules! impl_indexable {
                 + Mul<<ArrayRegister<R, 2> as CoreRegister>::Lanes, Output: Lanes>
                 + Mul<R::Lanes, Output = <ArrayRegister<IDX, 2> as CoreRegister>::Lanes>,
         {
+            #[inline(always)]
             unsafe fn gather(ptr: *const Self::Element, indices: Storage<ArrayRegister<IDX, 2>>) -> Storage<Self> {
                 let [lo_idx, hi_idx] = unsafe { generic_array::const_transmute(indices) };
                 let lo_val = unsafe { <ArrayRegister<R, 2> as IndexableRegister<IDX>>::gather(ptr, lo_idx) };
@@ -1924,6 +2007,7 @@ macro_rules! impl_indexable {
             typenum::U2: Mul<R::Lanes, Output: Lanes> + Mul<IDX::Lanes, Output: Lanes>,
             typenum::U4: Mul<R::Lanes, Output: Lanes> + Mul<IDX::Lanes, Output: Lanes>,
         {
+            #[inline(always)]
             unsafe fn gather(ptr: *const Self::Element, indices: Storage<ArrayRegister<IDX, 4>>) -> Storage<Self> {
                 let [lo_idx, hi_idx] = unsafe { generic_array::const_transmute(indices) };
                 let lo_val = unsafe { <R as IndexableRegister<ArrayRegister<IDX, 2>>>::gather(ptr, lo_idx) };

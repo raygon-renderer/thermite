@@ -152,6 +152,9 @@ impl Register for U64x4V3 {
     type Signed = super::I64x4V3;
     type Unsigned = super::U64x4V3;
 
+    // One hardware widening load for the compress/expand byte index rows.
+    impl_widen_index_bytes_x86!(u64x4);
+
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::ne(value, Self::ZERO)
     }
@@ -256,7 +259,7 @@ impl Register for U64x4V3 {
         }
     }
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         // Byte-identical to `I64x4V3::permutev` (both raw `__m256i`); see the
         // note there - `compress` sits on this, and the generic scalar
         // fallback it replaces was 6.9x per partition pass.

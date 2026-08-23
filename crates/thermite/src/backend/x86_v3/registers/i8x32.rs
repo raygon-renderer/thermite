@@ -220,17 +220,15 @@ impl Register for I8x32V3 {
 
     const HAS_PERMUTEV: bool = true;
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe {
-            let p = idxs.as_ptr() as *const arch::__m256i;
-            arch::_mm256_permutev_epi8x_v3(
-                value,
-                arch::_mm256_loadu_si256(p),
-                arch::_mm256_loadu_si256(p.add(1)),
-                arch::_mm256_loadu_si256(p.add(2)),
-                arch::_mm256_loadu_si256(p.add(3)),
-            )
-        }
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm256_permutev_epi8x_v3(value, idxs) }
+    }
+
+    // vpshufb table lookup for 16/32/48/64-entry byte tables, relying on `lookup`'s
+    // in-range contract (bit 7 clear), so indices are not clamped. Other lengths
+    // fall back to the scalar loop inside the polyfill.
+    unsafe fn lookup(values: &[Self::Element], indices: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm256_lookup_epi8x_v3(values.as_ptr().cast(), values.len(), indices) }
     }
 
     compress_via_wide!();

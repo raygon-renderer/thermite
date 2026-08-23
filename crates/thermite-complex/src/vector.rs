@@ -48,25 +48,6 @@ impl<V> RealFloatVector for V where
 // inputs.
 impl<V: RealFloatVector> Swizzle<V::Lanes> for Complex<V> {
     #[inline(always)]
-    fn swizzle(self, other: Self, indices: GenericArray<u32, V::Lanes>) -> Self {
-        Self {
-            re: self.re.swizzle(other.re, indices.clone()),
-            im: self.im.swizzle(other.im, indices),
-        }
-    }
-
-    #[inline(always)]
-    fn permute(self, indices: GenericArray<u32, V::Lanes>) -> Self {
-        Self {
-            re: self.re.permute(indices.clone()),
-            im: self.im.permute(indices),
-        }
-    }
-
-    // Forward the `_const` forms per component - the trait defaults route
-    // through the runtime-index methods and lose the immediate-encoded
-    // shuffles.
-    #[inline(always)]
     fn swizzle_const<I: SwizzleIndices<V::Lanes>>(self, other: Self) -> Self {
         Self {
             re: self.re.swizzle_const::<I>(other.re),
@@ -75,10 +56,10 @@ impl<V: RealFloatVector> Swizzle<V::Lanes> for Complex<V> {
     }
 
     #[inline(always)]
-    fn permute_const<I: SwizzleIndices<V::Lanes>>(self) -> Self {
+    fn permutev_const<I: SwizzleIndices<V::Lanes>>(self) -> Self {
         Self {
-            re: self.re.permute_const::<I>(),
-            im: self.im.permute_const::<I>(),
+            re: self.re.permutev_const::<I>(),
+            im: self.im.permutev_const::<I>(),
         }
     }
 }
@@ -427,6 +408,24 @@ impl<V: RealFloatVector> GenericVector for Complex<V> {
     type Unsigned = V::Unsigned;
     type Signed = V::Signed;
     type Mask = V::Mask;
+
+    // re and im move through the same permutation, so a permuted complex
+    // vector is the complex of the permuted inputs.
+    #[inline(always)]
+    fn permutev(self, indices: Self::Unsigned) -> Self {
+        Self {
+            re: self.re.permutev(indices),
+            im: self.im.permutev(indices),
+        }
+    }
+
+    #[inline(always)]
+    fn swizzle(self, other: Self, indices: Self::Unsigned) -> Self {
+        Self {
+            re: self.re.swizzle(other.re, indices),
+            im: self.im.swizzle(other.im, indices),
+        }
+    }
 
     #[inline(always)]
     fn new<const N: usize>(value: [Self::Element; N]) -> Self

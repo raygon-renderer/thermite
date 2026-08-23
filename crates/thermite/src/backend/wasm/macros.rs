@@ -59,6 +59,7 @@ macro_rules! impl_wasm_align_shuffle {
     () => {
         const HAS_NATIVE_ALIGN: bool = true;
 
+        #[inline(always)]
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             match const { OFFSET * core::mem::size_of::<Self::Element>() } {
                 0 => a,
@@ -84,52 +85,59 @@ macro_rules! impl_wasm_align_shuffle {
     };
 }
 
-/// Stamp [`WidenIndexRegister`](crate::register::WidenIndexRegister) for wasm
-/// registers: widen a `u8` compress/expand table row to the `u32` permute
-/// control with the SIMD128 extend ladder (`u8 -> u16 -> u32`), since wasm has
-/// no single-step `pmovzxbd` equivalent.
+/// Emit the wasm overrides of
+/// [`Register::widen_index_bytes`](crate::register::Register::widen_index_bytes)
+/// and [`Register::permutev_row`](crate::register::Register::permutev_row):
+/// widen the register's `LANES`-byte index array into the unsigned index
+/// register with the SIMD128 extend ladder (`u8 -> u16 -> u32 -> u64`), stopping
+/// at the register's own lane width, since wasm has no single-step `pmovzxbd`
+/// equivalent. The ladder already produces a `v128`, so nothing is stored back
+/// out.
 ///
-/// Shape tag is the lane count; `x8` needs both halves of the intermediate
-/// `u16` vector because the control array is then 32 bytes (two `v128`s).
+/// Shape tag is the lane count. Invoke inside the register's own `impl Register`
+/// block, where `arch` is in scope. Each `@body` load is exactly `LANES` bytes
+/// wide, since the argument is only that wide, while `@row` keeps the 8-byte
+/// table row it is handed.
 #[rustfmt::skip]
-macro_rules! impl_widen_indices_wasm {
-    ($($reg:ty => $shape:ident),* $(,)?) => {
-        $(
-            #[thermite_macros::inline_always]
-            impl $crate::register::WidenIndexRegister for $reg {
-                fn widen_indices(
-                    idxs: &generic_array::GenericArray<u8, generic_array::typenum::U8>,
-                ) -> generic_array::GenericArray<u32, <Self as $crate::register::CoreRegister>::Lanes> {
-                    unsafe { impl_widen_indices_wasm!(@body idxs, $shape) }
-                }
+macro_rules! impl_widen_index_bytes_wasm {
+    ($shape:ident) => {
+        #[inline(always)]
+        fn widen_index_bytes(
+            bytes: &generic_array::GenericArray<u8, <Self as $crate::register::CoreRegister>::Lanes>,
+        ) -> $crate::register::Storage<<Self as $crate::register::Register>::Unsigned> {
+            unsafe { impl_widen_index_bytes_wasm!(@body bytes, $shape) }
+        }
 
-                // Straight from the byte row: no widen, no narrow, no clamp.
-                fn permutev_row(
-                    value: $crate::register::Storage<Self>,
-                    row: &generic_array::GenericArray<u8, generic_array::typenum::U8>,
-                ) -> $crate::register::Storage<Self> {
-                    arch::u8x16_relaxed_swizzle(value, unsafe { impl_widen_indices_wasm!(@row row, $shape) })
-                }
-            }
-        )*
+        // Straight from the byte row: no widen, no narrow, no clamp.
+        #[inline(always)]
+        fn permutev_row(
+            value: $crate::register::Storage<Self>,
+            row: &generic_array::GenericArray<u8, generic_array::typenum::U8>,
+        ) -> $crate::register::Storage<Self> {
+            arch::u8x16_relaxed_swizzle(value, unsafe { impl_widen_index_bytes_wasm!(@row row, $shape) })
+        }
     };
 
     (@row $row:ident, x2) => { arch::wasm_lane_table_row::<2>($row.as_ptr()) };
     (@row $row:ident, x4) => { arch::wasm_lane_table_row::<4>($row.as_ptr()) };
     (@row $row:ident, x8) => { arch::wasm_lane_table_row::<8>($row.as_ptr()) };
 
-    (@body $idxs:ident, x2) => {{ impl_widen_indices_wasm!(@low $idxs) }};
-    (@body $idxs:ident, x4) => {{ impl_widen_indices_wasm!(@low $idxs) }};
+    // 8 lanes of u16: one extend off the 8-byte index array.
     (@body $idxs:ident, x8) => {{
-        let w16 = arch::u16x8_extend_low_u8x16(arch::v128_load64_zero($idxs.as_ptr() as *const u64));
-        let lo = arch::u32x4_extend_low_u16x8(w16);
-        let hi = arch::u32x4_extend_high_u16x8(w16);
-        core::mem::transmute_copy(&[lo, hi])
+        arch::u16x8_extend_low_u8x16(arch::v128_load64_zero($idxs.as_ptr() as *const u64))
     }};
 
-    // 16 bytes of control: the low four indices. `x2` takes the low half of it.
-    (@low $idxs:ident) => {{
-        let w16 = arch::u16x8_extend_low_u8x16(arch::v128_load64_zero($idxs.as_ptr() as *const u64));
-        core::mem::transmute_copy(&arch::u32x4_extend_low_u16x8(w16))
+    // 4 lanes of u32: two rungs, off a 4-byte load.
+    (@body $idxs:ident, x4) => {{
+        let w16 = arch::u16x8_extend_low_u8x16(arch::v128_load32_zero($idxs.as_ptr() as *const u32));
+        arch::u32x4_extend_low_u16x8(w16)
+    }};
+
+    // 2 lanes of u64: three rungs. Only two bytes are readable, so they ride in
+    // on a `u32` splat, and the upper halves are dropped by the first extend.
+    (@body $idxs:ident, x2) => {{
+        let lo = arch::u32x4_splat(core::ptr::read_unaligned($idxs.as_ptr() as *const u16) as u32);
+        let w16 = arch::u16x8_extend_low_u8x16(lo);
+        arch::u64x2_extend_low_u32x4(arch::u32x4_extend_low_u16x8(w16))
     }};
 }

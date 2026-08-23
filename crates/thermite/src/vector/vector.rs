@@ -321,6 +321,9 @@ impl<R: Register> GenericVector for Vector<R> {
         self
     }
 
+    fn permutev(self, indices: Self::Unsigned) -> Self { Vector(R::permutev(self.0, indices.0)) }
+    fn swizzle(self, other: Self, indices: Self::Unsigned) -> Self { Vector(R::swizzle(self.0, other.0, indices.0)) }
+
     unsafe fn lookup_unchecked(values: &[Self::Element], indices: Self::Unsigned) -> Self {
         unsafe { Self(R::lookup(values, indices.0)) }
     }

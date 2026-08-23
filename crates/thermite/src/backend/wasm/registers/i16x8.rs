@@ -149,6 +149,10 @@ impl Register for I16x8Wasm {
     type Signed = super::I16x8Wasm;
     type Unsigned = super::U16x8Wasm;
 
+    // Hardware extend ladder for the compress/expand byte index rows, plus a
+    // direct `i8x16.swizzle` by the raw row.
+    impl_widen_index_bytes_wasm!(x8);
+
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::ne(value, Self::ZERO)
     }
@@ -193,15 +197,9 @@ impl Register for I16x8Wasm {
 
     impl_wasm_align_shuffle!();
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        // Per-byte swizzle control: lane w -> bytes [2w, 2w+1]. Note this also
-        // fixes an out-of-range difference from the other backends: the old
-        // `wrapping_mul(2)` build aliased a valid lane for large indices where
-        // the clamping builder zeroes, matching `neon_lane_table`/x86.
-        arch::u8x16_relaxed_swizzle(
-            value,
-            arch::wasm_lane_table_dyn::<8>(unsafe { core::mem::transmute(idxs) }),
-        )
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+        // Per-byte swizzle control: lane w -> bytes [2w, 2w+1].
+        arch::u8x16_relaxed_swizzle(value, arch::wasm_ctrl_x8(idxs))
     }
 
     compress_via_table!();

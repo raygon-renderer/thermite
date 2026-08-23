@@ -75,46 +75,39 @@ pub const fn double_swizzle<const N: usize>(indices: [u32; N]) -> (i32, i32, i32
 }
 */
 
-/// Trait for swizzling and permuting vector types. Use the [`swizzle!`](crate::swizzle!) macro for convenient usage.
+/// Compile-time lane swizzles: the `_const` surface over a [`SwizzleIndices`]
+/// implementor, where backends pattern-match immediate-encoded shuffles.
+/// Use the [`swizzle!`](crate::swizzle!) macro for convenient usage.
+///
+/// This trait is exclusively the const-index entry point. Dynamic (live index
+/// vector) permutes are ordinary vector methods:
+/// [`GenericVector::permutev`](crate::vector::GenericVector::permutev) and
+/// [`GenericVector::swizzle`](crate::vector::GenericVector::swizzle), taking
+/// the vector's own `Unsigned` type as indices.
+///
+/// # Index range
+///
+/// `permutev_const` indices select from `0..LANES`, and `swizzle_const` indices
+/// from `0..2*LANES` (the second vector's lanes follow the first's). An
+/// out-of-range index yields an UNSPECIFIED value in that lane, memory-safe and
+/// never UB, but backend-dependent. No release-mode range checks are
+/// performed.
 pub trait Swizzle<N: ArrayLength>: Sized {
-    /// Swizzle lanes from two vectors according to the given indices.
-    fn swizzle(self, other: Self, indices: GenericArray<u32, N>) -> Self;
+    /// Swizzle lanes from two vectors according to compile-time indices.
+    fn swizzle_const<I: SwizzleIndices<N>>(self, other: Self) -> Self;
 
-    #[inline(always)]
-    fn swizzle_const<I: SwizzleIndices<N>>(self, other: Self) -> Self {
-        Self::swizzle(self, other, I::INDICES)
-    }
-
-    /// Permute lanes from a single vector according to the given indices.
-    fn permute(self, indices: GenericArray<u32, N>) -> Self;
-
-    #[inline(always)]
-    fn permute_const<I: SwizzleIndices<N>>(self) -> Self {
-        Self::permute(self, I::INDICES)
-    }
+    /// Permute lanes of a single vector according to compile-time indices.
+    fn permutev_const<I: SwizzleIndices<N>>(self) -> Self;
 }
 
-impl<R: Register> Swizzle<R::Lanes> for Vector<R>
-where
-    R: Register,
-{
-    #[inline(always)]
-    fn swizzle(self, other: Self, indices: GenericArray<u32, R::Lanes>) -> Self {
-        Vector(R::swizzle(self.0, other.0, indices))
-    }
-
+impl<R: Register> Swizzle<R::Lanes> for Vector<R> {
     #[inline(always)]
     fn swizzle_const<I: SwizzleIndices<R::Lanes>>(self, other: Self) -> Self {
         Vector(R::swizzle_const::<I>(self.0, other.0))
     }
 
     #[inline(always)]
-    fn permute(self, indices: GenericArray<u32, R::Lanes>) -> Self {
-        Vector(R::permutev(self.0, indices))
-    }
-
-    #[inline(always)]
-    fn permute_const<I: SwizzleIndices<R::Lanes>>(self) -> Self {
+    fn permutev_const<I: SwizzleIndices<R::Lanes>>(self) -> Self {
         Vector(R::permutev_const::<I>(self.0))
     }
 }
@@ -126,17 +119,18 @@ where
 ///
 /// This works for any type that implements the [`Swizzle`] trait, such as [`Vector`].
 ///
-/// The indices can either be given as a constant literal array, or an expression that evaluates to
-/// a `GenericArray<u32, R::Lanes>` for dynamic shuffling. Either way the number of indices must
-/// equal the lane count (this is checked at compile time).
+/// The indices can either be given as a constant literal array (lowered through [`Swizzle`]'s
+/// `_const` machinery), or an expression that evaluates to the type's live index vector
+/// (its [`GenericVector::Unsigned`](crate::vector::GenericVector::Unsigned) type) for dynamic
+/// shuffling. Either way the number of indices must equal the lane count (checked at compile
+/// time for the literal form).
 ///
 /// # Index range
 ///
 /// Each index selects a source lane: `0..LANES` for the single-vector form, and `0..2*LANES` for
-/// the two-vector form (the second vector's lanes follow the first's). **Indices outside that range
-/// are undefined behavior** - the resulting lane is unspecified and differs by backend (some mask
-/// the index to the valid range, some do not). This is not checked, since the macro is intended for
-/// fixed, known-good index sets; keep every index in range.
+/// the two-vector form (the second vector's lanes follow the first's). **An index outside that
+/// range yields an UNSPECIFIED value in that lane**, memory-safe and never UB, but backend-dependent
+/// (some wrap, some zero, some clamp). This is not checked, so keep every index in range.
 #[macro_export]
 macro_rules! swizzle {
     ($a:expr, $b:expr, [$($i:expr),* $(,)?]) => {{
@@ -175,12 +169,12 @@ macro_rules! swizzle {
                 };
             }
 
-            a.permute_const::<Indices::<N>>()
+            a.permutev_const::<Indices::<N>>()
         }
 
         __do_swizzle1($a)
     }};
 
-    ($a:expr, $b:expr, $idxs:expr) => { $crate::swizzle::Swizzle::swizzle($a, $b, $idxs) };
-    ($a:expr, $idxs:expr) => { $crate::swizzle::Swizzle::permute($a, $idxs) };
+    ($a:expr, $b:expr, $idxs:expr) => { $crate::vector::GenericVector::swizzle($a, $b, $idxs) };
+    ($a:expr, $idxs:expr) => { $crate::vector::GenericVector::permutev($a, $idxs) };
 }

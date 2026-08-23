@@ -516,11 +516,3 @@ macro_rules! impl_extend_same {
 impl_extend_same!(
     F32x4Neon, I32x4Neon, U32x4Neon, F64x2Neon, I64x2Neon, U64x2Neon, I16x8Neon, U16x8Neon, I8x16Neon, U8x16Neon
 );
-
-// `WidenIndexRegister` for the table-path registers (`compress: table` in each
-// register's stamping invocation).
-impl_widen_indices_neon! {
-    F32x4Neon => (x4, f32), I32x4Neon => (x4, s32), U32x4Neon => (x4, u32),
-    F64x2Neon => (x2, f64), I64x2Neon => (x2, s64), U64x2Neon => (x2, u64),
-    I16x8Neon => (x8, s16), U16x8Neon => (x8, u16),
-}

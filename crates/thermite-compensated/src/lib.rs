@@ -504,25 +504,6 @@ impl<V> CompensatedFloatVector for V where
 // (value, error) pair.
 impl<V: CompensatedFloatVector> Swizzle<V::Lanes> for Compensated<V> {
     #[inline(always)]
-    fn swizzle(self, other: Self, indices: GenericArray<u32, V::Lanes>) -> Self {
-        Self {
-            value: self.value.swizzle(other.value, indices.clone()),
-            error: self.error.swizzle(other.error, indices),
-        }
-    }
-
-    #[inline(always)]
-    fn permute(self, indices: GenericArray<u32, V::Lanes>) -> Self {
-        Self {
-            value: self.value.permute(indices.clone()),
-            error: self.error.permute(indices),
-        }
-    }
-
-    // Forward the `_const` forms per component, since the trait defaults route
-    // through the runtime-index methods and lose the immediate-encoded
-    // shuffles.
-    #[inline(always)]
     fn swizzle_const<I: SwizzleIndices<V::Lanes>>(self, other: Self) -> Self {
         Self {
             value: self.value.swizzle_const::<I>(other.value),
@@ -531,10 +512,10 @@ impl<V: CompensatedFloatVector> Swizzle<V::Lanes> for Compensated<V> {
     }
 
     #[inline(always)]
-    fn permute_const<I: SwizzleIndices<V::Lanes>>(self) -> Self {
+    fn permutev_const<I: SwizzleIndices<V::Lanes>>(self) -> Self {
         Self {
-            value: self.value.permute_const::<I>(),
-            error: self.error.permute_const::<I>(),
+            value: self.value.permutev_const::<I>(),
+            error: self.error.permutev_const::<I>(),
         }
     }
 }
@@ -1646,6 +1627,24 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
     type Signed = V::Signed;
 
     type Mask = V::Mask;
+
+    // value and error move through the same permutation, so a permuted
+    // compensated number stays a valid (value, error) pair.
+    #[inline(always)]
+    fn permutev(self, indices: Self::Unsigned) -> Self {
+        Self {
+            value: self.value.permutev(indices),
+            error: self.error.permutev(indices),
+        }
+    }
+
+    #[inline(always)]
+    fn swizzle(self, other: Self, indices: Self::Unsigned) -> Self {
+        Self {
+            value: self.value.swizzle(other.value, indices),
+            error: self.error.swizzle(other.error, indices),
+        }
+    }
 
     #[inline(always)]
     fn new<const N: usize>(value: [Self::Element; N]) -> Self

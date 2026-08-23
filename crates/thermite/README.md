@@ -207,6 +207,21 @@ policy system and performance work. It ships with the crate and renders as the
 
 Stable Rust, MSRV 1.95, edition 2024. `no_std` by default.
 
+### If you write a blanket impl over `S: Simd`
+
+Proving `S: Simd3A` or `S: Simd3` for a *generic* `S` walks a deep enough chain
+of `ReducedRegister` goals to exhaust the default `recursion_limit` of 128.
+Thermite sets `#![recursion_limit = "256"]` for itself, but the limit is
+per-crate and does not propagate, so add the same attribute to your crate root:
+
+```rust,ignore
+#![recursion_limit = "256"]
+```
+
+You only need it for a blanket `impl<S: Simd> YourTrait for S` that names the
+3-lane associated types. Writing `S: Simd3A` as an ordinary bound, or using a
+concrete backend, stays well under the limit and needs nothing.
+
 ## License
 
 MIT or Apache-2.0, at your option.

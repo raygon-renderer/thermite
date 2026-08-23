@@ -151,6 +151,9 @@ impl Register for U16x8V2 {
     type Signed = super::I16x8V2;
     type Unsigned = super::U16x8V2;
 
+    // One hardware widening load for the compress/expand byte index rows.
+    impl_widen_index_bytes_x86!(u16x8);
+
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::ne(value, Self::ZERO)
     }
@@ -218,7 +221,7 @@ impl Register for U16x8V2 {
 
     impl_byte_align_alignr!();
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         // Lane permutation is bit-pattern identical for signed/unsigned (same storage).
         super::I16x8V2::permutev(value, idxs)
     }

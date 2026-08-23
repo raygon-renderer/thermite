@@ -1552,20 +1552,27 @@ pub trait Register:
 
     const HAS_PERMUTEV: bool;
 
-    fn scalar_permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    /// Scalar reference lowering for [`permutev`](Self::permutev): a per-lane
+    /// walk over the index register. Out-of-range indices wrap (power-of-two
+    /// lane counts) or clamp, one legal instance of the "unspecified lane
+    /// value" contract, kept branch-cheap and memory-safe.
+    fn scalar_permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         let mut result = Self::EMPTY;
 
         let value_array = Self::as_slice(&value);
+        let idxs_array = <Self::Unsigned as Register>::as_slice(&idxs);
         let result_array = Self::as_mut_slice(&mut result);
 
-        let mask = Self::Lanes::U32 - 1;
+        let mask = (Self::Lanes::USIZE - 1) as usize;
 
-        for (&idx, dst) in idxs.iter().zip(result_array.iter_mut()) {
+        for (&idx, dst) in idxs_array.iter().zip(result_array.iter_mut()) {
+            let idx: usize = idx.try_into().unwrap_or(usize::MAX);
+
             let idx = if const { is_power_of_2(Self::Lanes::U32) } {
                 idx & mask // we can AND with the mask if power-of-two lane count
             } else {
                 idx.min(mask) // otherwise clamp to the max index
-            } as usize;
+            };
 
             unsafe { core::hint::assert_unchecked(idx < value_array.len()) };
 
@@ -1602,31 +1609,123 @@ pub trait Register:
         crate::backend::generic::polyfills::deinterleave_by_default::<Self, GROUP>(a, b)
     }
 
+    /// Permute the lanes of `value` by a live index register: lane `i` of the
+    /// result is `value[idxs[i]]`.
+    ///
+    /// Indices must be in `0..LANES`. An out-of-range index produces an
+    /// UNSPECIFIED value in that lane, never a fault or UB, but backends
+    /// differ (`vpermd` wraps, NEON `tbl` zeroes, the scalar walk wraps or
+    /// clamps). Do not write code against any particular out-of-range result.
+    /// No release-mode range checks are performed.
     #[masked]
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         Self::scalar_permutev(value, idxs)
     }
 
+    /// [`permutev`](Self::permutev) with compile-time indices. The index
+    /// register construction constant-folds, and backends with immediate-operand
+    /// shuffles override this (or `swizzle_const`) to pattern-match `I`.
     fn permutev_const<I: SwizzleIndices<Self::Lanes>>(value: Storage<Self>) -> Storage<Self> {
-        Self::permutev(value, I::INDICES)
+        Self::permutev(value, index_register::<Self>(&I::INDICES))
     }
 
-    fn scalar_swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    /// Widen a `LANES`-byte index array into the unsigned index register
+    /// [`permutev`](Self::permutev) consumes: lane `i` is `bytes[i]`
+    /// zero-extended to the index element width. For byte-element registers
+    /// this is the identity load.
+    ///
+    /// This portable default does NOT contract into a widening load. LLVM
+    /// emits a `movzx` + insert chain per lane instead (measured at
+    /// `GenericArray` and `[u8; 8]` shapes, 128- and 256-bit, costing ~8
+    /// instructions per compress/expand with every correctness test still
+    /// green). Backends with a hardware widening load (`vpmovzxb*`, NEON
+    /// `vmovl`, wasm extends) override it, and with a real widening load the
+    /// byte rows are one instruction cheaper than `u32` rows at 256-bit
+    /// (`mov`/`vpmovzxbd`/`vpermd` vs `mov`/`shl`/`vmovups`/`vpermps`) and on
+    /// the SSE4.2 `pshufb` path, and a tie at 128-bit AVX. The grouped
+    /// compress kernel's index assembly is bounded by this method on
+    /// 2-byte-and-wider elements.
+    fn widen_index_bytes(bytes: &GenericArray<u8, Self::Lanes>) -> Storage<Self::Unsigned> {
+        let mut idx: GenericArray<<Self::Unsigned as Register>::Element, Self::Lanes> = GenericArray::default();
+
+        let mut i = 0;
+        while i < Self::Lanes::USIZE {
+            idx[i] = Element::from_u16(bytes[i] as u16);
+            i += 1;
+        }
+
+        Self::Unsigned::new(idx)
+    }
+
+    /// Permute `value` directly by a compress/expand table row.
+    ///
+    /// Plumbing for the `<= 8`-lane compress/expand table paths
+    /// ([`polyfills::compress`](crate::backend::generic::polyfills::compress)
+    /// and [`polyfills::expand`](crate::backend::generic::polyfills::expand)),
+    /// whose gather indices are stored as `u8` (every index is in `0..8`),
+    /// keeping the two tables at ~4.6 KB of `.rodata` instead of ~18 KB. The
+    /// row is ALWAYS 8 wide regardless of `LANES`, and entries past `LANES` are
+    /// ignored, since a row's leading `LANES` entries are always `< LANES`.
+    ///
+    /// The default takes the leading `min(LANES, 8)` bytes through
+    /// [`widen_index_bytes`](Self::widen_index_bytes) and defers to
+    /// [`permutev`](Self::permutev), which is optimal where the permute
+    /// control matches the element width (x86 32-bit lanes: one `pmovzxbd`
+    /// feeding `vpermd`).
+    ///
+    /// Byte-shuffle backends override it: their `permutev` control wants raw
+    /// bytes, so the widen would be a round trip. Feeding the row in as bytes
+    /// skips it, and the clamp too.
+    fn permutev_row(value: Storage<Self>, row: &GenericArray<u8, generic_array::typenum::U8>) -> Storage<Self> {
+        if const { Self::Lanes::USIZE <= 8 } {
+            // Reinterpret the row's leading `LANES` bytes in place rather than
+            // staging a copy: the copy is a stack round trip LLVM does NOT
+            // elide, and it costs the widening load its table-row memory operand
+            // (measured 27 vs 11 instructions on a `f32x8` compress).
+            //
+            // SAFETY: `GenericArray<u8, N>` is exactly `N` bytes at align 1, so
+            // for `LANES <= 8` the row's prefix is a valid instance, and
+            // `widen_index_bytes` reads only those `LANES` bytes.
+            let bytes = unsafe { &*(row.as_slice().as_ptr() as *const GenericArray<u8, Self::Lanes>) };
+
+            return Self::permutev(value, Self::widen_index_bytes(bytes));
+        }
+
+        // No table path reaches this method above 8 lanes, so lanes past the
+        // row's 8 entries keep their zero fill.
+        let mut bytes: GenericArray<u8, Self::Lanes> = GenericArray::default();
+
+        let mut i = 0;
+        while i < 8 {
+            bytes[i] = row[i];
+            i += 1;
+        }
+
+        Self::permutev(value, Self::widen_index_bytes(&bytes))
+    }
+
+    /// Scalar reference lowering for [`swizzle`](Self::swizzle), with the same
+    /// wrap-or-clamp handling of out-of-range indices as
+    /// [`scalar_permutev`](Self::scalar_permutev), over the `2 * LANES` span.
+    fn scalar_swizzle(a: Storage<Self>, b: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         let mut result = Self::EMPTY;
 
         let a_array = Self::as_slice(&a);
         let b_array = Self::as_slice(&b);
+        let idxs_array = <Self::Unsigned as Register>::as_slice(&idxs);
         let result_array = Self::as_mut_slice(&mut result);
 
-        let mask = (<Self::Lanes as Unsigned>::U32 << 1) - 1;
+        let mask = (Self::Lanes::USIZE << 1) - 1;
 
-        for (&idx, dst) in idxs.iter().zip(result_array.iter_mut()) {
+        for (&idx, dst) in idxs_array.iter().zip(result_array.iter_mut()) {
+            let idx: usize = idx.try_into().unwrap_or(usize::MAX);
+
             // NOTE: If Self is power of two, so is 2 * Self
             let mut idx = if const { is_power_of_2(Self::Lanes::U32) } {
                 idx & mask // we can AND with the mask if power-of-two lane count
             } else {
                 idx.min(mask) // otherwise clamp to the max index
-            } as usize;
+            };
 
             *dst = if idx < Self::Lanes::USIZE {
                 unsafe { core::hint::assert_unchecked(idx < a_array.len()) };
@@ -1644,38 +1743,39 @@ pub trait Register:
         result
     }
 
+    /// Select lanes from the concatenation `[a, b]` by a live index register:
+    /// index `i < LANES` takes `a[i]`, `LANES <= i < 2*LANES` takes
+    /// `b[i - LANES]`. Same out-of-range contract as
+    /// [`permutev`](Self::permutev): unspecified lane value, never UB.
+    ///
+    /// The default is branchless: both sources are permuted by the raw
+    /// indices (`b` by `idxs - LANES`), and the compare-derived blend keeps
+    /// the lane whose source was actually addressed. The other permute's
+    /// lane held an unspecified value the blend discards.
     #[masked]
-    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        use typenum::Unsigned;
-
+    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         if const { !Self::HAS_PERMUTEV } {
             return Self::scalar_swizzle(a, b, idxs);
         }
 
-        let mut a_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
-        let mut b_idxs: GenericArray<u32, Self::Lanes> = GenericArray::default();
+        let lanes = Self::Unsigned::splat(Element::from_u16(<Self::Lanes as Unsigned>::U16));
 
-        let mut blend_mask = <Self::Mask as MaskRegister>::FALSY;
+        let from_b = Self::Unsigned::ge(idxs, lanes);
 
-        for (i, &idx) in idxs.iter().enumerate() {
-            if idx < Self::Lanes::U32 {
-                a_idxs[i] = idx;
-                b_idxs[i] = i as u32;
-            } else {
-                a_idxs[i] = i as u32;
-                b_idxs[i] = idx - Self::Lanes::U32;
-                blend_mask = <Self::Mask as MaskRegister>::set(blend_mask, i, true);
-            }
-        }
+        let tmp_a = Self::permutev(a, idxs);
+        let tmp_b = Self::permutev(b, Self::Unsigned::sub(idxs, lanes));
 
-        let tmp_a = Self::permutev(a, a_idxs);
-        let tmp_b = Self::permutev(b, b_idxs);
-
-        Self::blendv(blend_mask, tmp_a, tmp_b)
+        Self::blendv(
+            <Self::Mask as CastMaskRegister<<Self::Unsigned as CoreRegister>::Mask>>::mask_from(from_b),
+            tmp_a,
+            tmp_b,
+        )
     }
 
+    /// [`swizzle`](Self::swizzle) with compile-time indices, see
+    /// [`permutev_const`](Self::permutev_const).
     fn swizzle_const<I: SwizzleIndices<Self::Lanes>>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
-        Self::swizzle(a, b, I::INDICES)
+        Self::swizzle(a, b, index_register::<Self>(&I::INDICES))
     }
 
     /// Whether [`align`](Self::align) has a native cross-register implementation on
@@ -1714,20 +1814,55 @@ pub trait Register:
     }
 
     /// Runtime permute of an `N`-chunk [`ArrayRegister<Self, N>`](array::ArrayRegister)
-    /// by a full-width index slice (`idxs.len() == N * Self::LANES`).
+    /// by per-chunk live index registers (global indices in `0..N*LANES`).
     ///
     /// `ArrayRegister`'s `permutev` delegates here so a specific backend register
-    /// can override the cross-chunk routing with a faster sequence. The default
-    /// is branchless: for each output chunk it splits each global index into a
-    /// local index (`idx % LANES`) and a source-chunk id (`idx / LANES`), then
-    /// for each input chunk builds the blend mask with a single vector compare
-    /// (`chunk_id == j`) rather than per-lane mask inserts.
+    /// can override the cross-chunk routing with a faster sequence (NEON's
+    /// multi-register `tbl`). The default is branchless and entirely
+    /// in-register: for each (output chunk, source chunk `j`) pair,
+    /// `local = idx - j*LANES` wraps below zero, so `local < LANES` is exactly
+    /// "this lane addresses chunk `j`", so one sub, one compare, one permute
+    /// and one blend per pair. Lanes addressed to other chunks feed `permutev` an
+    /// out-of-range local index, whose unspecified result the blend discards.
     ///
-    /// `#[inline(always)]` so that when called with compile-time-constant indices
-    /// (via [`permutev_const`](Self::permutev_const)) the whole routing -
-    /// local/chunk split and blend selectors - constant-folds.
+    /// Same out-of-range contract as [`permutev`](Self::permutev): a global
+    /// index `>= N*LANES` yields an unspecified lane value (here: whatever the
+    /// last chunk's blend left), never UB.
     #[inline(always)]
-    fn array_permutev<const N: usize>(value: [Storage<Self>; N], idxs: &[u32]) -> [Storage<Self>; N] {
+    fn array_permutev<const N: usize>(
+        value: [Storage<Self>; N],
+        idxs: [Storage<Self::Unsigned>; N],
+    ) -> [Storage<Self>; N] {
+        let l = <Self::Lanes as Unsigned>::USIZE;
+
+        let mut result = [Self::EMPTY; N];
+
+        for i in 0..N {
+            let mut out = Self::EMPTY;
+
+            for j in 0..N {
+                let local = Self::Unsigned::sub(idxs[i], Self::Unsigned::splat(Element::from_u16((j * l) as u16)));
+                let here = Self::Unsigned::lt(local, Self::Unsigned::splat(Element::from_u16(l as u16)));
+
+                let blend = <Self::Mask as CastMaskRegister<<Self::Unsigned as CoreRegister>::Mask>>::mask_from(here);
+                let permuted = Self::permutev(value[j], local);
+
+                out = Self::blendv(blend, out, permuted);
+            }
+
+            result[i] = out;
+        }
+
+        result
+    }
+
+    /// Compile-time-index companion of [`array_permutev`](Self::array_permutev),
+    /// kept on the `&[u32]` form: the scalar local/chunk-id split below costs
+    /// nothing when `idxs` is constant (everything folds, including the blend
+    /// selectors), which is why `ArrayRegister::permutev_const` routes here
+    /// instead of materializing an index register.
+    #[inline(always)]
+    fn array_permutev_indices<const N: usize>(value: [Storage<Self>; N], idxs: &[u32]) -> [Storage<Self>; N] {
         let l = <Self::Lanes as Unsigned>::USIZE;
         let total = N * l;
 
@@ -1738,7 +1873,7 @@ pub trait Register:
 
             // Branchless split of this output chunk's indices into local offsets
             // (for the per-chunk permute) and source-chunk ids (for the blend).
-            let mut local: GenericArray<u32, Self::Lanes> = GenericArray::default();
+            let mut local: GenericArray<<Self::Unsigned as Register>::Element, Self::Lanes> = GenericArray::default();
             let mut chunk_ids: GenericArray<<Self::Unsigned as Register>::Element, Self::Lanes> = GenericArray::default();
 
             for lane in 0..l {
@@ -1748,10 +1883,11 @@ pub trait Register:
                 } else {
                     g.min(total - 1)
                 };
-                local[lane] = (g % l) as u32;
+                local[lane] = Element::from_u16((g % l) as u16);
                 chunk_ids[lane] = Element::from_u16((g / l) as u16);
             }
 
+            let local_reg = Self::Unsigned::new(local);
             let chunk_reg = Self::Unsigned::new(chunk_ids);
 
             let mut out = Self::EMPTY;
@@ -1759,7 +1895,7 @@ pub trait Register:
                 let j_splat = Self::Unsigned::splat(Element::from_u16(j as u16));
                 let eq = Self::Unsigned::eq(chunk_reg, j_splat);
                 let blend = <Self::Mask as CastMaskRegister<<Self::Unsigned as CoreRegister>::Mask>>::mask_from(eq);
-                let permuted = Self::permutev(value[j], local.clone());
+                let permuted = Self::permutev(value[j], local_reg);
                 out = Self::blendv(blend, out, permuted);
             }
 
@@ -1770,11 +1906,49 @@ pub trait Register:
     }
 
     /// Runtime swizzle of two `N`-chunk [`ArrayRegister<Self, N>`](array::ArrayRegister)
-    /// values by a full-width index slice selecting across all `2N` input chunks
-    /// (`a` then `b`). The two-source companion to [`array_permutev`](Self::array_permutev);
-    /// same branchless default, overridable per register.
+    /// values by per-chunk live index registers selecting across all `2N` input
+    /// chunks (`a` then `b`). The two-source companion to
+    /// [`array_permutev`](Self::array_permutev), with the same branchless
+    /// sub/compare per (output, source) pair and the same out-of-range contract.
     #[inline(always)]
-    fn array_swizzle<const N: usize>(a: [Storage<Self>; N], b: [Storage<Self>; N], idxs: &[u32]) -> [Storage<Self>; N] {
+    fn array_swizzle<const N: usize>(
+        a: [Storage<Self>; N],
+        b: [Storage<Self>; N],
+        idxs: [Storage<Self::Unsigned>; N],
+    ) -> [Storage<Self>; N] {
+        let l = <Self::Lanes as Unsigned>::USIZE;
+
+        let mut result = [Self::EMPTY; N];
+
+        for i in 0..N {
+            let mut out = Self::EMPTY;
+
+            for j in 0..(2 * N) {
+                let src = if j < N { a[j] } else { b[j - N] };
+
+                let local = Self::Unsigned::sub(idxs[i], Self::Unsigned::splat(Element::from_u16((j * l) as u16)));
+                let here = Self::Unsigned::lt(local, Self::Unsigned::splat(Element::from_u16(l as u16)));
+
+                let blend = <Self::Mask as CastMaskRegister<<Self::Unsigned as CoreRegister>::Mask>>::mask_from(here);
+                let permuted = Self::permutev(src, local);
+
+                out = Self::blendv(blend, out, permuted);
+            }
+
+            result[i] = out;
+        }
+
+        result
+    }
+
+    /// Compile-time-index companion of [`array_swizzle`](Self::array_swizzle),
+    /// see [`array_permutev_indices`](Self::array_permutev_indices).
+    #[inline(always)]
+    fn array_swizzle_indices<const N: usize>(
+        a: [Storage<Self>; N],
+        b: [Storage<Self>; N],
+        idxs: &[u32],
+    ) -> [Storage<Self>; N] {
         let l = <Self::Lanes as Unsigned>::USIZE;
         let total = N * l;
         let span = 2 * total;
@@ -1784,7 +1958,7 @@ pub trait Register:
         for i in 0..N {
             let base = i * l;
 
-            let mut local: GenericArray<u32, Self::Lanes> = GenericArray::default();
+            let mut local: GenericArray<<Self::Unsigned as Register>::Element, Self::Lanes> = GenericArray::default();
             let mut chunk_ids: GenericArray<<Self::Unsigned as Register>::Element, Self::Lanes> = GenericArray::default();
 
             for lane in 0..l {
@@ -1794,10 +1968,11 @@ pub trait Register:
                 } else {
                     g.min(span - 1)
                 };
-                local[lane] = (g % l) as u32;
+                local[lane] = Element::from_u16((g % l) as u16);
                 chunk_ids[lane] = Element::from_u16((g / l) as u16);
             }
 
+            let local_reg = Self::Unsigned::new(local);
             let chunk_reg = Self::Unsigned::new(chunk_ids);
 
             let mut out = Self::EMPTY;
@@ -1806,7 +1981,7 @@ pub trait Register:
                 let j_splat = Self::Unsigned::splat(Element::from_u16(j as u16));
                 let eq = Self::Unsigned::eq(chunk_reg, j_splat);
                 let blend = <Self::Mask as CastMaskRegister<<Self::Unsigned as CoreRegister>::Mask>>::mask_from(eq);
-                let permuted = Self::permutev(src, local.clone());
+                let permuted = Self::permutev(src, local_reg);
                 out = Self::blendv(blend, out, permuted);
             }
 
@@ -1819,6 +1994,27 @@ pub trait Register:
 
 const fn is_power_of_2(n: u32) -> bool {
     (n & (n - 1)) == 0
+}
+
+/// Build the unsigned index register [`permutev`](Register::permutev) consumes
+/// from a `u32` index array. With compile-time indices (the
+/// `permutev_const`/`swizzle_const` defaults) the whole construction
+/// constant-folds into a literal vector.
+///
+/// Indices are narrowed through `u16`, which every swizzle span fits
+/// (`2 * LANES <= 128`). Values above `u16::MAX` would be out of range anyway
+/// and land in the unspecified-lane contract.
+#[inline(always)]
+pub(crate) fn index_register<R: Register + ?Sized>(idxs: &GenericArray<u32, R::Lanes>) -> Storage<R::Unsigned> {
+    let mut out: GenericArray<<R::Unsigned as Register>::Element, R::Lanes> = GenericArray::default();
+
+    let mut i = 0;
+    while i < <R::Lanes as Unsigned>::USIZE {
+        out[i] = Element::from_u16(idxs[i] as u16);
+        i += 1;
+    }
+
+    R::Unsigned::new(out)
 }
 
 pub trait SwizzleIndices<N: ArrayLength> {
@@ -1969,48 +2165,6 @@ pub trait IndexableRegister<IDX: UnsignedIntegerRegister<Lanes = Self::Lanes>>: 
                 ptr.add(indices[i].try_into().unwrap_unchecked()).write(value[i]);
             }
         }
-    }
-}
-
-/// Widen a packed byte index row into the `u32` control array that
-/// [`permutev`](Register::permutev) consumes.
-///
-/// Plumbing for the `<= 8`-lane compress/expand table paths
-/// ([`polyfills::compress`](crate::backend::generic::polyfills::compress) and
-/// [`polyfills::expand`](crate::backend::generic::polyfills::expand)), whose
-/// gather indices are stored as `u8` (every index is in `0..8`), keeping the
-/// two tables at ~4.6 KB of `.rodata` instead of ~18 KB.
-///
-/// [`widen_indices`](Self::widen_indices) has no default on purpose: a portable
-/// widening loop does not vectorize - LLVM emits a `movzx` + `vpinsrd` chain
-/// instead of contracting it into a widening load (measured at `GenericArray`
-/// and `[u8; 8]` shapes, 128- and 256-bit), costing ~8 instructions per
-/// compress/expand with every correctness test still green. Requiring the
-/// method makes that a compile error instead.
-///
-/// With a real widening load the byte rows are one instruction cheaper than
-/// `u32` rows at 256-bit (`mov`/`vpmovzxbd`/`vpermd` vs
-/// `mov`/`shl`/`vmovups`/`vpermps`) and on the SSE4.2 `pshufb` path, and a tie
-/// at 128-bit AVX.
-pub trait WidenIndexRegister: Register {
-    /// Widen the leading `LANES` bytes of `idxs` into `u32` lanes. Bytes past
-    /// `LANES` are ignored (the table rows are always 8 wide).
-    fn widen_indices(idxs: &GenericArray<u8, generic_array::typenum::U8>) -> GenericArray<u32, Self::Lanes>;
-
-    /// Permute `value` directly by a compress/expand table row.
-    ///
-    /// The default widens the row and defers to
-    /// [`permutev`](Register::permutev), which is optimal where the permute
-    /// control *is* a `u32` vector (x86: one `pmovzxbd` feeding `vpermd`).
-    ///
-    /// Byte-shuffle backends override it: their `permutev` takes `u32` lane
-    /// indices but `tbl`/`i8x16.swizzle` want bytes, so the default would widen
-    /// `u8 -> u32` only to narrow it straight back. Feeding the row in as bytes
-    /// skips that round trip, and the clamp too, since a row's leading `LANES`
-    /// entries are always `< LANES`.
-    #[inline(always)]
-    fn permutev_row(value: Storage<Self>, row: &GenericArray<u8, generic_array::typenum::U8>) -> Storage<Self> {
-        Self::permutev(value, Self::widen_indices(row))
     }
 }
 

@@ -1141,6 +1141,26 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// otherwise this may panic or result in undefined behavior.
     unsafe fn lookup_unchecked(values: &[Self::Element], indices: Self::Unsigned) -> Self;
 
+    /// Permute lanes by a live index vector: lane `i` of the result is
+    /// `self[indices[i]]`.
+    ///
+    /// Indices must be in `0..LANES`. An out-of-range index produces an
+    /// UNSPECIFIED value in that lane, memory-safe and never UB, but
+    /// backend-dependent (some wrap, some zero, some clamp). No release-mode
+    /// range checks are performed. For compile-time index sets use
+    /// [`Swizzle::permutev_const`](crate::swizzle::Swizzle::permutev_const)
+    /// (or the [`swizzle!`](crate::swizzle!) macro), which can lower to
+    /// immediate-encoded shuffles.
+    fn permutev(self, indices: Self::Unsigned) -> Self;
+
+    /// Select lanes from the concatenation `[self, other]` by a live index
+    /// vector: index `i < LANES` takes `self[i]`, `LANES <= i < 2*LANES`
+    /// takes `other[i - LANES]`.
+    ///
+    /// Same out-of-range contract as [`permutev`](Self::permutev): an index
+    /// outside `0..2*LANES` yields an unspecified lane value, never UB.
+    fn swizzle(self, other: Self, indices: Self::Unsigned) -> Self;
+
     /// Broadcast the value of a single lane across all lanes of the vector.
     #[conditional] fn broadcast<const I: usize>(self) -> Self;
 
@@ -2913,6 +2933,7 @@ macro_rules! with_bits {
         {
             type Output = $ret;
 
+            #[inline(always)]
             fn with_bits<
                 $alias: FloatVectorWithBits<
                         Element = V::Element,
@@ -3209,7 +3230,7 @@ macro_rules! impl_swizzle4 {
                 };
             }
 
-            self.permute_const::<Indices>()
+            self.permutev_const::<Indices>()
         }
     }};
 
@@ -3251,7 +3272,7 @@ macro_rules! impl_swizzle3 {
                 };
             }
 
-            self.permute_const::<Indices>()
+            self.permutev_const::<Indices>()
         }
     }};
 

@@ -113,14 +113,6 @@ where
         }
     }
 
-    /// Consider f32x3: swizzle!(a, b, [0, 1, 3]) should be equivalent to swizzle!(a as f32x4, b as f32x4, [0, 1, 4]),
-    /// since with f32x3 index 3 would be the first element of b, but with f32x4 it's still the first element of b,
-    /// but we need to offset it by the difference in length, which is always N for this design.
-    #[inline(always)]
-    fn adjust_swizzle_idxs(idxs: GenericArray<u32, <Self as CoreRegister>::Lanes>) -> GenericArray<u32, R::Lanes> {
-        let reduced_lanes = <Self as CoreRegister>::Lanes::U32;
-        Self::pad_array(idxs.map(|idx| if idx >= reduced_lanes { idx + N::U32 } else { idx }))
-    }
 }
 
 impl<R: CoreRegister, N: 'static> crate::simd::HasIsa for ReducedRegister<R, N> {
@@ -495,9 +487,13 @@ impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reduc
 
     const HAS_PERMUTEV: bool = R::HAS_PERMUTEV;
 
+    // The index register passes straight through to the full-width `R`: live
+    // (reduced) lanes hold in-range indices by the caller's contract, and the
+    // dead upper lanes hold arbitrary values that only produce unspecified
+    // dead-lane results, exactly what the reduced representation permits.
     #[inline(always)]
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        Self(R::permutev(value.0, Self::pad_array(idxs)), PhantomData)
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+        Self(R::permutev(value.0, idxs.0), PhantomData)
     }
 
     #[inline(always)]
@@ -505,21 +501,18 @@ impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reduc
         src: Storage<Self>,
         mask: Storage<Self::Mask>,
         value: Storage<Self>,
-        idxs: GenericArray<u32, Self::Lanes>,
+        idxs: Storage<Self::Unsigned>,
     ) -> Storage<Self> {
-        Self(
-            R::permutev_m(src.0, mask.0, value.0, Self::pad_array(idxs)),
-            PhantomData,
-        )
+        Self(R::permutev_m(src.0, mask.0, value.0, idxs.0), PhantomData)
     }
 
     #[inline(always)]
     fn permutev_z(
         mask: Storage<Self::Mask>,
         value: Storage<Self>,
-        idxs: GenericArray<u32, Self::Lanes>,
+        idxs: Storage<Self::Unsigned>,
     ) -> Storage<Self> {
-        Self(R::permutev_z(mask.0, value.0, Self::pad_array(idxs)), PhantomData)
+        Self(R::permutev_z(mask.0, value.0, idxs.0), PhantomData)
     }
 
     #[inline(always)]
@@ -533,8 +526,11 @@ impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reduc
     }
 
     #[inline(always)]
-    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        Self(R::swizzle(a.0, b.0, Self::adjust_swizzle_idxs(idxs)), PhantomData)
+    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+        Self(
+            R::swizzle(a.0, b.0, bump_swizzle_idxs::<R::Unsigned>(idxs.0, Self::Lanes::U16, N::U16)),
+            PhantomData,
+        )
     }
 
     #[inline(always)]
@@ -543,10 +539,10 @@ impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reduc
         mask: Storage<Self::Mask>,
         a: Storage<Self>,
         b: Storage<Self>,
-        idxs: GenericArray<u32, Self::Lanes>,
+        idxs: Storage<Self::Unsigned>,
     ) -> Storage<Self> {
         Self(
-            R::swizzle_m(src.0, mask.0, a.0, b.0, Self::adjust_swizzle_idxs(idxs)),
+            R::swizzle_m(src.0, mask.0, a.0, b.0, bump_swizzle_idxs::<R::Unsigned>(idxs.0, Self::Lanes::U16, N::U16)),
             PhantomData,
         )
     }
@@ -556,10 +552,10 @@ impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reduc
         mask: Storage<Self::Mask>,
         a: Storage<Self>,
         b: Storage<Self>,
-        idxs: GenericArray<u32, Self::Lanes>,
+        idxs: Storage<Self::Unsigned>,
     ) -> Storage<Self> {
         Self(
-            R::swizzle_z(mask.0, a.0, b.0, Self::adjust_swizzle_idxs(idxs)),
+            R::swizzle_z(mask.0, a.0, b.0, bump_swizzle_idxs::<R::Unsigned>(idxs.0, Self::Lanes::U16, N::U16)),
             PhantomData,
         )
     }
@@ -571,6 +567,20 @@ impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reduc
             PhantomData,
         )
     }
+}
+
+/// In-register form of the reduced-width swizzle index adjustment (see
+/// [`AdjustedIndices`]): indices addressing `b` (`idx >= reduced_lanes`) shift
+/// up by `pad` so they land on the full-width register's `b` half. Dead upper
+/// lanes come along unadjusted, producing only unspecified dead-lane results.
+#[inline(always)]
+fn bump_swizzle_idxs<U: UnsignedIntegerRegister>(idxs: Storage<U>, reduced_lanes: u16, pad: u16) -> Storage<U> {
+    use crate::element::Element;
+
+    let rl = U::splat(<<U as Register>::Element as crate::element::Element>::from_u16(reduced_lanes));
+    let bumped = U::add(idxs, U::splat(<<U as Register>::Element as crate::element::Element>::from_u16(pad)));
+
+    U::blendv(U::ge(idxs, rl), idxs, bumped)
 }
 
 struct AdjustedIndices<N: Lanes, M: Lanes, I: SwizzleIndices<N>>(PhantomData<(N, M, I)>);

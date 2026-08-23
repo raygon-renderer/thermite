@@ -197,10 +197,9 @@ impl Register for I8x16Wasm {
 
     impl_wasm_align_shuffle!();
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        // For 8-bit lanes the index IS the byte index, so the builder only has
-        // to clamp and narrow.
-        arch::u8x16_relaxed_swizzle(value, arch::wasm_lane_table_dyn::<16>(unsafe { core::mem::transmute(idxs) }))
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+        // For 8-bit lanes the index register IS the swizzle control.
+        arch::u8x16_relaxed_swizzle(value, arch::wasm_ctrl_x16(idxs))
     }
 
     compress_via_wide!();

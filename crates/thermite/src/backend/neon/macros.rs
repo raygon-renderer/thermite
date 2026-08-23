@@ -12,6 +12,7 @@
 /// `match` (collapsed at monomorphization) bridges them.
 macro_rules! neon_lane_accessors {
     ($get:ident, $set:ident; 2) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: Storage<Self>) -> Self::Element {
             unsafe {
                 match I {
@@ -21,6 +22,7 @@ macro_rules! neon_lane_accessors {
             }
         }
 
+        #[inline(always)]
         fn insert<const I: usize>(value: Storage<Self>, element: Self::Element) -> Storage<Self> {
             unsafe {
                 match I {
@@ -31,6 +33,7 @@ macro_rules! neon_lane_accessors {
         }
     };
     ($get:ident, $set:ident; 4) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: Storage<Self>) -> Self::Element {
             unsafe {
                 match I {
@@ -42,6 +45,7 @@ macro_rules! neon_lane_accessors {
             }
         }
 
+        #[inline(always)]
         fn insert<const I: usize>(value: Storage<Self>, element: Self::Element) -> Storage<Self> {
             unsafe {
                 match I {
@@ -54,6 +58,7 @@ macro_rules! neon_lane_accessors {
         }
     };
     ($get:ident, $set:ident; 8) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: Storage<Self>) -> Self::Element {
             unsafe {
                 match I {
@@ -69,6 +74,7 @@ macro_rules! neon_lane_accessors {
             }
         }
 
+        #[inline(always)]
         fn insert<const I: usize>(value: Storage<Self>, element: Self::Element) -> Storage<Self> {
             unsafe {
                 match I {
@@ -85,6 +91,7 @@ macro_rules! neon_lane_accessors {
         }
     };
     ($get:ident, $set:ident; 16) => {
+        #[inline(always)]
         fn extract<const I: usize>(value: Storage<Self>) -> Self::Element {
             unsafe {
                 match I {
@@ -108,6 +115,7 @@ macro_rules! neon_lane_accessors {
             }
         }
 
+        #[inline(always)]
         fn insert<const I: usize>(value: Storage<Self>, element: Self::Element) -> Storage<Self> {
             unsafe {
                 match I {
@@ -372,17 +380,17 @@ macro_rules! neon_register {
 
                 const HAS_PERMUTEV: bool = true;
 
-                fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-                    let idxs: [u32; $n] = unsafe { core::mem::transmute(idxs) };
-                    arch::[<neon_tbl_ $s>](value, unsafe { arch::neon_lane_table_dyn::<$n, $n>(idxs) })
+                fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+                    arch::[<neon_tbl_ $s>](value, arch::[<neon_ctrl_x $n>](idxs))
                 }
 
                 // One TBL2 replaces the default's two-permute + blend lowering.
                 // Byte indices >= 32 (lane index >= 2 * LANES) yield zero, matching
-                // the permutev-based default's out-of-range behavior.
-                fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-                    let idxs: [u32; $n] = unsafe { core::mem::transmute(idxs) };
-                    arch::[<neon_tbl2_ $s>](a, b, unsafe { arch::neon_lane_table_dyn::<$n, { 2 * $n }>(idxs) })
+                // the permutev-based default's out-of-range behavior. The control
+                // build is width-scaled, not range-limited, so the same builder
+                // serves both forms.
+                fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+                    arch::[<neon_tbl2_ $s>](a, b, arch::[<neon_ctrl_x $n>](idxs))
                 }
 
                 fn swizzle_const<I: crate::swizzle::SwizzleIndices<Self::Lanes>>(
@@ -396,16 +404,68 @@ macro_rules! neon_register {
                     })
                 }
 
-                // Cross-chunk permute of an `ArrayRegister<Self, M>` in ONE `TBL`
-                // per output chunk (the M-chunk array IS a 16*M-byte table), vs
-                // the default's M permutes + M blends per chunk. TBL tables cap
-                // at 4 registers (64 bytes), so M > 4 keeps the scalar path.
+                // Cross-chunk permute by LIVE index registers, one `TBL` per
+                // output chunk (the M-chunk array IS a 16*M-byte table) against
+                // the default's M permutes + M blends per chunk. The global
+                // index scales to a global byte index by exactly the same
+                // `neon_ctrl_x*` recipe as `permutev` (`M * 16 <= 64` bytes
+                // keeps every in-range byte under 256), and an out-of-range
+                // index lands past the table, which `TBL` zeroes (a legal
+                // unspecified value). TBL tables cap at 4 registers, so M > 4
+                // keeps the scalar path, as it did before.
+                fn array_permutev<const M: usize>(
+                    value: [Storage<Self>; M],
+                    idxs: [Storage<Self::Unsigned>; M],
+                ) -> [Storage<Self>; M] {
+                    if const { M >= 1 && M <= 4 } {
+                        unsafe {
+                            let v = value.as_slice();
+                            let mut table = [arch::vdupq_n_u8(0); 4];
+                            let mut j = 0;
+                            while j < M {
+                                table[j] = arch::$to_b(v[j]);
+                                j += 1;
+                            }
+
+                            let mut out = [Self::EMPTY; M];
+                            let mut i = 0;
+                            while i < M {
+                                let ctrl = arch::[<neon_ctrl_x $n>](idxs[i]);
+                                out[i] = arch::$from_b(arch::neon_tbl_n_u8::<M>(table, ctrl));
+                                i += 1;
+                            }
+                            return out;
+                        }
+                    }
+
+                    // M > 4: no single TBL spans the table, so gather scalar-side.
+                    let l = $n;
+                    let total = M * l;
+
+                    let mut out = [Self::EMPTY; M];
+                    for i in 0..M {
+                        let mut arr: GenericArray<Self::Element, Self::Lanes> = GenericArray::default();
+                        let row = <Self::Unsigned as Register>::as_slice(&idxs[i]);
+                        for lane in 0..l {
+                            let g = usize::try_from(row[lane]).unwrap_or(usize::MAX);
+                            let g = if total.is_power_of_two() { g & (total - 1) } else { g.min(total - 1) };
+                            arr[lane] = Self::as_slice(&value[g / l])[g % l];
+                        }
+                        out[i] = Self::new(arr);
+                    }
+                    out
+                }
+
+                // Compile-time-index companion: the scalar table build folds
+                // away entirely when `idxs` is constant, and the runtime-row
+                // callers (the compress merge shapes) still get the whole
+                // cross-chunk permute in one TBL.
                 //
-                // Semantics: the default WRAPS an out-of-range index (`g &
-                // (total-1)` when total is a power of two), while TBL ZEROES an
-                // out-of-range byte - so indices are masked before building the
-                // table, reproducing the default exactly.
-                fn array_permutev<const M: usize>(value: [Storage<Self>; M], idxs: &[u32]) -> [Storage<Self>; M] {
+                // Semantics: the generic default WRAPS an out-of-range index
+                // (`g & (total-1)` when total is a power of two), while TBL
+                // ZEROES an out-of-range byte, so indices are masked before
+                // building the table, reproducing the default exactly.
+                fn array_permutev_indices<const M: usize>(value: [Storage<Self>; M], idxs: &[u32]) -> [Storage<Self>; M] {
                     const ES: usize = 16 / $n; // element size in bytes
                     let l = $n;
                     let total = M * l;
@@ -465,9 +525,63 @@ macro_rules! neon_register {
                     out
                 }
 
-                // Two-source companion: `a` then `b` is a 32*M-byte table, so it
-                // fits TBL for M <= 2 (2 or 4 q-registers).
+                // Two-source companion of `array_permutev`: `a` then `b` is a
+                // 32*M-byte table, so it fits TBL for M <= 2 (2 or 4 q-registers).
                 fn array_swizzle<const M: usize>(
+                    a: [Storage<Self>; M],
+                    b: [Storage<Self>; M],
+                    idxs: [Storage<Self::Unsigned>; M],
+                ) -> [Storage<Self>; M] {
+                    if const { M >= 1 && M <= 2 } {
+                        unsafe {
+                            let (av, bv) = (a.as_slice(), b.as_slice());
+                            let mut table = [arch::vdupq_n_u8(0); 4];
+                            let mut j = 0;
+                            while j < M {
+                                table[j] = arch::$to_b(av[j]);
+                                table[M + j] = arch::$to_b(bv[j]);
+                                j += 1;
+                            }
+
+                            let mut out = [Self::EMPTY; M];
+                            let mut i = 0;
+                            while i < M {
+                                let ctrl = arch::[<neon_ctrl_x $n>](idxs[i]);
+                                // `{ 2 * M }` in const-generic position needs
+                                // `generic_const_exprs`. M is 1 or 2 here, so
+                                // branch on it, `if const` folds the dead arm.
+                                out[i] = arch::$from_b(if const { M == 1 } {
+                                    arch::neon_tbl_n_u8::<2>(table, ctrl)
+                                } else {
+                                    arch::neon_tbl_n_u8::<4>(table, ctrl)
+                                });
+                                i += 1;
+                            }
+                            return out;
+                        }
+                    }
+
+                    let l = $n;
+                    let span = 2 * M * l;
+
+                    let mut out = [Self::EMPTY; M];
+                    for i in 0..M {
+                        let mut arr: GenericArray<Self::Element, Self::Lanes> = GenericArray::default();
+                        let row = <Self::Unsigned as Register>::as_slice(&idxs[i]);
+                        for lane in 0..l {
+                            let g = usize::try_from(row[lane]).unwrap_or(usize::MAX);
+                            let g = if span.is_power_of_two() { g & (span - 1) } else { g.min(span - 1) };
+                            let src = if g / l < M { &a[g / l] } else { &b[g / l - M] };
+                            arr[lane] = Self::as_slice(src)[g % l];
+                        }
+                        out[i] = Self::new(arr);
+                    }
+                    out
+                }
+
+                // Compile-time-index companion of `array_swizzle`, see
+                // `array_permutev_indices`.
+                fn array_swizzle_indices<const M: usize>(
                     a: [Storage<Self>; M],
                     b: [Storage<Self>; M],
                     idxs: &[u32],
@@ -511,8 +625,8 @@ macro_rules! neon_register {
                                 }
                                 let idxv = arch::vld1q_u8(bytes.as_ptr());
                                 // `{ 2 * M }` in const-generic position needs
-                                // `generic_const_exprs`; M is 1 or 2 here, so
-                                // branch on it - `if const` folds the dead arm.
+                                // `generic_const_exprs`. M is 1 or 2 here, so
+                                // branch on it, `if const` folds the dead arm.
                                 out[i] = arch::$from_b(if const { M == 1 } {
                                     arch::neon_tbl_n_u8::<2>(table, idxv)
                                 } else {
@@ -713,7 +827,7 @@ macro_rules! neon_register {
                     }
                 }
 
-                neon_compress_sel!($compress);
+                neon_compress_sel!($compress, $n, $s);
 
                 $($($extras)*)?
             }
@@ -721,11 +835,23 @@ macro_rules! neon_register {
     };
 }
 
+/// The `table` arm also carries the byte-row overrides: the table path is the
+/// only consumer of `widen_index_bytes`/`permutev_row`, so the two travel
+/// together rather than being listed separately per register.
 macro_rules! neon_compress_sel {
-    (table) => {
+    (table, 2, $s:ident) => {
         compress_via_table!();
+        impl_widen_index_bytes_neon!(x2, $s);
     };
-    (wide) => {
+    (table, 4, $s:ident) => {
+        compress_via_table!();
+        impl_widen_index_bytes_neon!(x4, $s);
+    };
+    (table, 8, $s:ident) => {
+        compress_via_table!();
+        impl_widen_index_bytes_neon!(x8, $s);
+    };
+    (wide, $n:tt, $s:ident) => {
         compress_via_wide!();
     };
 }
@@ -1587,6 +1713,7 @@ macro_rules! neon_concat_scalar2 {
 /// Match arms collapse at monomorphization.
 macro_rules! neon_broadcast_align {
     ($dup:ident, $ext:ident; 2) => {
+        #[inline(always)]
         fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> {
             unsafe {
                 match I {
@@ -1598,6 +1725,7 @@ macro_rules! neon_broadcast_align {
 
         const HAS_NATIVE_ALIGN: bool = true;
 
+        #[inline(always)]
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             unsafe {
                 match OFFSET {
@@ -1610,6 +1738,7 @@ macro_rules! neon_broadcast_align {
         }
     };
     ($dup:ident, $ext:ident; 4) => {
+        #[inline(always)]
         fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> {
             unsafe {
                 match I {
@@ -1623,6 +1752,7 @@ macro_rules! neon_broadcast_align {
 
         const HAS_NATIVE_ALIGN: bool = true;
 
+        #[inline(always)]
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             unsafe {
                 match OFFSET {
@@ -1637,6 +1767,7 @@ macro_rules! neon_broadcast_align {
         }
     };
     ($dup:ident, $ext:ident; 8) => {
+        #[inline(always)]
         fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> {
             unsafe {
                 match I {
@@ -1654,6 +1785,7 @@ macro_rules! neon_broadcast_align {
 
         const HAS_NATIVE_ALIGN: bool = true;
 
+        #[inline(always)]
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             unsafe {
                 match OFFSET {
@@ -1672,6 +1804,7 @@ macro_rules! neon_broadcast_align {
         }
     };
     ($dup:ident, $ext:ident; 16) => {
+        #[inline(always)]
         fn broadcast<const I: usize>(value: Storage<Self>) -> Storage<Self> {
             unsafe {
                 match I {
@@ -1697,6 +1830,7 @@ macro_rules! neon_broadcast_align {
 
         const HAS_NATIVE_ALIGN: bool = true;
 
+        #[inline(always)]
         fn align<const OFFSET: usize>(a: Storage<Self>, b: Storage<Self>) -> Storage<Self> {
             unsafe {
                 match OFFSET {
@@ -1749,6 +1883,7 @@ macro_rules! neon_approx_recip {
             const HAS_APPROX_RSQRT: bool = cfg!(not(feature = "strict_ieee754"));
 
             // `vrecpe`/`vrsqrte` + one fused Newton step (see polyfills/math.rs).
+            #[inline(always)]
             fn rcp(value: Storage<Self>) -> Storage<Self> {
                 cfg_select! {
                     feature = "strict_ieee754" => {
@@ -1758,6 +1893,7 @@ macro_rules! neon_approx_recip {
                 }
             }
 
+            #[inline(always)]
             fn rsqrt(value: Storage<Self>) -> Storage<Self> {
                 cfg_select! {
                     feature = "strict_ieee754" => {
@@ -1775,52 +1911,62 @@ macro_rules! neon_approx_recip {
     };
 }
 
-/// Stamp [`WidenIndexRegister`](crate::register::WidenIndexRegister) for NEON
-/// registers: widen a `u8` compress/expand table row to the `u32` permute
-/// control via the `vmovl` ladder (`u8 -> u16 -> u32`).
+/// Emit the NEON overrides of
+/// [`Register::widen_index_bytes`](crate::register::Register::widen_index_bytes)
+/// and [`Register::permutev_row`](crate::register::Register::permutev_row):
+/// widen the register's `LANES`-byte index array into the unsigned index
+/// register via the `vmovl` ladder (`u8 -> u16 -> u32 -> u64`), stopping at the
+/// register's own lane width. The ladder already produces a register, so
+/// nothing is stored back out.
 ///
-/// Shape tag is the lane count; `x8` needs both halves of the intermediate
-/// `uint16x8_t` because the control array is then 32 bytes.
+/// Shape tag is the lane count, `$sfx` the `neon_tbl_*` element suffix. Invoke
+/// inside the register's own `impl Register` block, where `arch` is in scope.
+/// Each `@body` load is exactly `LANES` bytes wide, since the argument is only
+/// that wide, while `@row` keeps the 8-byte table row it is handed.
 #[rustfmt::skip]
-macro_rules! impl_widen_indices_neon {
-    ($($reg:ty => ($shape:ident, $sfx:ident)),* $(,)?) => {
-        $(
-            #[thermite_macros::inline_always]
-            impl $crate::register::WidenIndexRegister for $reg {
-                fn widen_indices(
-                    idxs: &generic_array::GenericArray<u8, generic_array::typenum::U8>,
-                ) -> generic_array::GenericArray<u32, <Self as $crate::register::CoreRegister>::Lanes> {
-                    unsafe { impl_widen_indices_neon!(@body idxs, $shape) }
-                }
+macro_rules! impl_widen_index_bytes_neon {
+    ($shape:ident, $sfx:ident) => {
+        #[inline(always)]
+        fn widen_index_bytes(
+            bytes: &generic_array::GenericArray<u8, <Self as $crate::register::CoreRegister>::Lanes>,
+        ) -> $crate::register::Storage<<Self as $crate::register::Register>::Unsigned> {
+            unsafe { impl_widen_index_bytes_neon!(@body bytes, $shape) }
+        }
 
-                // Straight from the byte row: no widen, no narrow, no clamp.
-                fn permutev_row(
-                    value: $crate::register::Storage<Self>,
-                    row: &generic_array::GenericArray<u8, generic_array::typenum::U8>,
-                ) -> $crate::register::Storage<Self> {
-                    paste::paste! {
-                        unsafe { arch::[<neon_tbl_ $sfx>](value, impl_widen_indices_neon!(@row row, $shape)) }
-                    }
-                }
+        // Straight from the byte row: no widen, no narrow, no clamp.
+        #[inline(always)]
+        fn permutev_row(
+            value: $crate::register::Storage<Self>,
+            row: &generic_array::GenericArray<u8, generic_array::typenum::U8>,
+        ) -> $crate::register::Storage<Self> {
+            paste::paste! {
+                unsafe { arch::[<neon_tbl_ $sfx>](value, impl_widen_index_bytes_neon!(@row row, $shape)) }
             }
-        )*
+        }
     };
 
     (@row $row:ident, x2) => { arch::neon_lane_table_row::<2>($row.as_ptr()) };
     (@row $row:ident, x4) => { arch::neon_lane_table_row::<4>($row.as_ptr()) };
     (@row $row:ident, x8) => { arch::neon_lane_table_row::<8>($row.as_ptr()) };
 
-    (@body $idxs:ident, x2) => {{ impl_widen_indices_neon!(@low $idxs) }};
-    (@body $idxs:ident, x4) => {{ impl_widen_indices_neon!(@low $idxs) }};
+    // 8 lanes of u16: one `vmovl` off the 8-byte index array.
     (@body $idxs:ident, x8) => {{
-        let w16 = arch::vmovl_u8(arch::vld1_u8($idxs.as_ptr()));
-        let lo = arch::vmovl_u16(arch::vget_low_u16(w16));
-        let hi = arch::vmovl_high_u16(w16);
-        core::mem::transmute_copy(&[lo, hi])
+        arch::vmovl_u8(arch::vld1_u8($idxs.as_ptr()))
     }};
 
-    (@low $idxs:ident) => {{
-        let w16 = arch::vmovl_u8(arch::vld1_u8($idxs.as_ptr()));
-        core::mem::transmute_copy(&arch::vmovl_u16(arch::vget_low_u16(w16)))
+    // 4 lanes of u32: two rungs, taking the low half each time. Only four bytes
+    // are readable, so the `d` register is built from a scalar `u32` load.
+    (@body $idxs:ident, x4) => {{
+        let lo = core::ptr::read_unaligned($idxs.as_ptr() as *const u32) as u64;
+        let w16 = arch::vmovl_u8(arch::vreinterpret_u8_u32(arch::vcreate_u32(lo)));
+        arch::vmovl_u16(arch::vget_low_u16(w16))
+    }};
+
+    // 2 lanes of u64: three rungs, off a two-byte scalar load.
+    (@body $idxs:ident, x2) => {{
+        let lo = core::ptr::read_unaligned($idxs.as_ptr() as *const u16) as u64;
+        let w16 = arch::vmovl_u8(arch::vreinterpret_u8_u64(arch::vcreate_u64(lo)));
+        let w32 = arch::vmovl_u16(arch::vget_low_u16(w16));
+        arch::vmovl_u32(arch::vget_low_u32(w32))
     }};
 }

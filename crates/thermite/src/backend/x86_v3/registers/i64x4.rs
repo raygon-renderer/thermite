@@ -157,6 +157,9 @@ impl Register for I64x4V3 {
     type Signed = super::I64x4V3;
     type Unsigned = super::U64x4V3;
 
+    // One hardware widening load for the compress/expand byte index rows.
+    impl_widen_index_bytes_x86!(u64x4);
+
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         Self::ne(value, Self::ZERO)
     }
@@ -258,21 +261,12 @@ impl Register for I64x4V3 {
         }
     }
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        // Same doubled-index construction as `F64x4V3::permutev`: AVX2 has no
-        // variable 64-bit cross-lane permute, but `vpermd` with each 64-bit
-        // index expanded to its dword pair is a single shuffle. Without this
-        // override the generic scalar `permutev` runs - and `compress` sits
-        // on it, so every 64-bit partition step would pay a lane-by-lane
-        // stack round-trip (measured 6.9x slower per partition pass).
-        unsafe {
-            let idxs: arch::__m128i = core::mem::transmute(idxs); // [i0, i1, i2, i3]
-            let even = arch::_mm_slli_epi32(idxs, 1); // [2i0, 2i1, 2i2, 2i3]
-            let odd = arch::_mm_add_epi32(even, arch::_mm_set1_epi32(1)); // [2i0+1, ...]
-            // interleave -> [2i0,2i0+1, 2i1,2i1+1 | 2i2,2i2+1, 2i3,2i3+1]
-            let idx8 = arch::_mm256_set_m128i(arch::_mm_unpackhi_epi32(even, odd), arch::_mm_unpacklo_epi32(even, odd));
-            arch::_mm256_permutevar8x32_epi32(value, idx8)
-        }
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+        // The doubled-index `vpermd` construction lives in this backend's
+        // polyfills. Without this override the generic scalar `permutev` runs -
+        // and `compress` sits on it, so every 64-bit partition step would pay a
+        // lane-by-lane stack round-trip (measured 6.9x slower per partition pass).
+        unsafe { arch::_mm256_permutevarx_epi64x_v3(value, idxs) }
     }
 
     compress_via_table!();

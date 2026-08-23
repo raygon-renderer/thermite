@@ -186,6 +186,9 @@ impl Register for F32x8V3 {
     type Signed = super::I32x8V3;
     type Unsigned = super::U32x8V3;
 
+    // One hardware widening load for the compress/expand byte index rows.
+    impl_widen_index_bytes_x86!(u32x8);
+
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         unsafe {
             // value != 0.0
@@ -284,8 +287,8 @@ impl Register for F32x8V3 {
 
     impl_float_align_via_bits!(super::U32x8V3);
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe { arch::_mm256_permutevar8x32_ps(value, core::mem::transmute(idxs)) }
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm256_permutevar8x32_ps(value, idxs) }
     }
 
     fn interleave_by<const GROUP: usize>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
@@ -423,10 +426,8 @@ impl Register for F32x8V3 {
         }
     }
 
-    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         unsafe {
-            let idxs: arch::__m256i = core::mem::transmute(idxs);
-
             let blend = arch::_mm256_cmpgt_epi32(idxs, arch::_mm256_set1_epi32(7));
             let a_idxs = arch::_mm256_and_si256(idxs, arch::_mm256_set1_epi32(0b111));
             let b_idxs = arch::_mm256_sub_epi32(idxs, arch::_mm256_set1_epi32(8));

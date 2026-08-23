@@ -998,15 +998,28 @@ macro_rules! numx {
 
 /// Runtime `permute` (`Register::permutev`): result[i] = input[idx[i]],
 /// checked against a Rust oracle over a few index patterns.
+///
+/// Builds the live index vector (`Vector<R::Unsigned>`) from a `u32` pattern.
+fn reduced_idx_vec<R: thermite::register::Register>(p: &[u32]) -> Vector<R::Unsigned> {
+    use thermite::element::Element;
+
+    let mut arr: generic_array::GenericArray<<R::Unsigned as thermite::register::Register>::Element, R::Lanes> =
+        Default::default();
+    for i in 0..<R::Lanes as generic_array::typenum::Unsigned>::USIZE.min(p.len()) {
+        arr[i] = Element::from_u16(p[i] as u16);
+    }
+    Vector(<R::Unsigned as thermite::register::Register>::new(arr))
+}
+
 macro_rules! sw_permute {
     ($reg:ty, $e:ty, $l:expr) => {{
-        use thermite::swizzle::Swizzle;
+        use thermite::vector::GenericVector as _;
         type V = Vector<$reg>;
         let x = [10 as $e, 20 as $e, 30 as $e];
         let v = V::from_slice(&x);
         for p in [[2u32, 1, 0], [0, 0, 0], [1, 2, 0], [2, 0, 1]] {
-            let idx = generic_array::GenericArray::<u32, generic_array::typenum::U3>::from(p);
-            let got = v.permute(idx).into_array().as_slice()[..3].to_vec();
+            let idx = reduced_idx_vec::<$reg>(&p);
+            let got = v.permutev(idx).into_array().as_slice()[..3].to_vec();
             let want: Vec<$e> = (0..3).map(|i| x[p[i] as usize]).collect();
             assert_eq!(got, want, "{} permute {:?}", $l, p);
         }
@@ -1017,14 +1030,14 @@ macro_rules! sw_permute {
 /// scalar reduced register so the index contract is whatever the trait defines.
 macro_rules! sw_swizzle {
     ($reg_ut:ty, $reg_sc:ty, $e:ty, $l:expr) => {{
-        use thermite::swizzle::Swizzle;
+        use thermite::vector::GenericVector as _;
         type VU = Vector<$reg_ut>;
         type VS = Vector<$reg_sc>;
         let a = [10 as $e, 20 as $e, 30 as $e];
         let b = [40 as $e, 50 as $e, 60 as $e];
         for p in [[0u32, 3, 1], [3, 4, 5], [2, 5, 0], [0, 1, 2]] {
-            let iu = generic_array::GenericArray::<u32, generic_array::typenum::U3>::from(p);
-            let is = generic_array::GenericArray::<u32, generic_array::typenum::U3>::from(p);
+            let iu = reduced_idx_vec::<$reg_ut>(&p);
+            let is = reduced_idx_vec::<$reg_sc>(&p);
             let gu = VU::from_slice(&a).swizzle(VU::from_slice(&b), iu).into_array().as_slice()[..3].to_vec();
             let gs = VS::from_slice(&a).swizzle(VS::from_slice(&b), is).into_array().as_slice()[..3].to_vec();
             assert_eq!(gu, gs, "{} swizzle {:?}", $l, p);

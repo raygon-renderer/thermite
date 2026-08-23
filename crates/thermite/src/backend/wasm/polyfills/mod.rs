@@ -65,67 +65,68 @@ const fn lane_offset_pattern(elem: usize) -> [u8; 16] {
     o
 }
 
-/// Runtime companion to [`x4indices`]/[`x2indices`]: the same `u8x16_swizzle`
-/// byte-index control, built with SIMD instead of a scalar loop.
-///
-/// Those are `const fn`s, which is right for the callers that evaluate at
-/// compile time (the `reduce_*` macros, the `IMM8` shuffle family, the
-/// literal-index `reverse`) - there they fold to a constant. But const-evaluable
-/// code has no SIMD, so the *runtime* callers - every `permutev` - lowered to a
-/// scalar per-byte build. This replaced three separate scalar builders: the
-/// `xNindices` pair called with runtime arguments, and the hand-rolled `[u8; 16]`
-/// loops in the `i16x8` and `i8x16` registers.
-///
-/// `byte[j] = idx[j / elem] * elem + (j % elem)`, computed as: clamp in the
-/// `u32` domain, narrow to bytes, replicate each index across its `elem` slots
-/// with a constant swizzle, then scale and offset (both constants).
-///
-/// Clamping to `N` *before* narrowing is deliberate on two counts. It puts an
-/// out-of-range lane index on byte `N * elem == 16`, which `u8x16_swizzle`
-/// zeroes - matching the documented semantics - and it avoids the wrap-around
-/// aliasing the old `wrapping_mul(2)` builders had. It also sidesteps the
-/// narrowing ops being *signed*-input: an index above `i32::MAX` would saturate
-/// to 0 and alias lane 0 rather than zeroing.
+// ---------------------------------------------------------------------------
+// Runtime `swizzle` control from a LIVE index register
+// (`wasm_ctrl_x{16,8,4,2}`).
+//
+// `Register::permutev` takes the indices as a same-lane-count unsigned
+// register (and on wasm every register is a `v128`), so the control build
+// stays in registers, with no memory round trip and no scalar per-byte build.
+//
+// The mapping is `byte[i * elem + b] = idx[i] * elem + b`. Replicating a
+// sub-256 value into every byte of its lane is one multiply by `0x01..01` in
+// that lane width, so:
+//
+//   ctrl = ((idx << log2(elem)) * 0x01..01) + lane_offset_pattern(elem)
+//
+// three instructions plus a constant, for every width except bytes, where the
+// index register already IS the control.
+//
+// No clamp, and deliberately NO NARROWING: the shape
+// `u32x4_min` -> `u16x8_narrow_i32x4` / `u8x16_narrow_i16x8` that the previous
+// scalar-sourced builder used is suspected to miscompile on stable
+// (unsigned min feeding a signed-input narrow, see
+// `todo/WASM_SWIZZLE_NARROW_HAZARD.md`), and a bad fold there silently
+// corrupts every shuffle rather than producing a visibly wrong number. The
+// multiply/add recipe touches no signed-source instruction at all.
+//
+// An index one past the addressable range scales to byte `LANES * elem == 16`,
+// which `u8x16_swizzle` zeroes. Anything further out yields some other
+// unspecified byte pattern, which the `permutev` contract permits. Every
+// result is a byte shuffle, so all of it is memory-safe by construction.
+// ---------------------------------------------------------------------------
+
+/// 16 byte lanes: the index register is the swizzle control already.
 #[inline(always)]
-pub fn wasm_lane_table_dyn<const N: usize>(idxs: [u32; N]) -> v128 {
-    let p = idxs.as_ptr();
-    let lim = u32x4_splat(N as u32);
-
-    // SAFETY: each load reads only lanes that exist in `[u32; N]`.
-    let bytes = unsafe {
-        if const { N == 16 } {
-            let a = u32x4_min(v128_load(p as *const v128), lim);
-            let b = u32x4_min(v128_load(p.add(4) as *const v128), lim);
-            let c = u32x4_min(v128_load(p.add(8) as *const v128), lim);
-            let d = u32x4_min(v128_load(p.add(12) as *const v128), lim);
-            u8x16_narrow_i16x8(u16x8_narrow_i32x4(a, b), u16x8_narrow_i32x4(c, d))
-        } else if const { N == 8 } {
-            let a = u32x4_min(v128_load(p as *const v128), lim);
-            let b = u32x4_min(v128_load(p.add(4) as *const v128), lim);
-            let w = u16x8_narrow_i32x4(a, b);
-            u8x16_narrow_i16x8(w, w)
-        } else if const { N == 4 } {
-            let a = u32x4_min(v128_load(p as *const v128), lim);
-            let w = u16x8_narrow_i32x4(a, a);
-            u8x16_narrow_i16x8(w, w)
-        } else {
-            // N == 2: only a 64-bit load is in bounds.
-            let a = u32x4_min(v128_load64_zero(p as *const u64), lim);
-            let w = u16x8_narrow_i32x4(a, a);
-            u8x16_narrow_i16x8(w, w)
-        }
-    };
-
-    // Byte lanes: the index already IS the byte index.
-    if const { N == 16 } {
-        return bytes;
-    }
-
-    wasm_lane_expand::<N>(bytes)
+pub fn wasm_ctrl_x16(idxs: v128) -> v128 {
+    idxs
 }
 
-/// Replicate/scale/offset tail of [`wasm_lane_table_dyn`], on already-clamped
-/// byte lane indices.
+/// 8 lanes of 16 bits: `(idx << 1) * 0x0101` puts `2i` in both bytes of the
+/// lane, and the byte offsets turn them into `(2i, 2i + 1)`.
+#[inline(always)]
+pub fn wasm_ctrl_x8(idxs: v128) -> v128 {
+    let rep = i16x8_mul(i16x8_shl(idxs, 1), u16x8_splat(0x0101));
+    u8x16_add(rep, const { u8x16_from_bytes(lane_offset_pattern(2)) })
+}
+
+/// 4 lanes of 32 bits: `(idx << 2) * 0x01010101`, then the byte offsets.
+#[inline(always)]
+pub fn wasm_ctrl_x4(idxs: v128) -> v128 {
+    let rep = i32x4_mul(i32x4_shl(idxs, 2), u32x4_splat(0x0101_0101));
+    u8x16_add(rep, const { u8x16_from_bytes(lane_offset_pattern(4)) })
+}
+
+/// 2 lanes of 64 bits: `(idx << 3) * 0x0101010101010101`, then the byte
+/// offsets. Unlike NEON, wasm has a real `i64x2.mul`.
+#[inline(always)]
+pub fn wasm_ctrl_x2(idxs: v128) -> v128 {
+    let rep = i64x2_mul(i64x2_shl(idxs, 3), u64x2_splat(0x0101_0101_0101_0101));
+    u8x16_add(rep, const { u8x16_from_bytes(lane_offset_pattern(8)) })
+}
+
+/// Replicate/scale/offset tail used by the byte-row path, on in-range byte lane
+/// indices.
 #[inline(always)]
 fn wasm_lane_expand<const N: usize>(bytes: v128) -> v128 {
     if const { N == 16 } {
@@ -138,8 +139,9 @@ fn wasm_lane_expand<const N: usize>(bytes: v128) -> v128 {
     u8x16_add(scaled, const { u8x16_from_bytes(lane_offset_pattern(16 / N)) })
 }
 
-/// Byte-row entry point for the compress/expand table paths - see
-/// `neon_lane_table_row` for why the narrow and clamp are both unnecessary.
+/// Byte-row entry point for the compress/expand table paths. A table row's
+/// leading `LANES` entries are always `< LANES`, so neither a narrow nor a
+/// clamp applies, see `neon_lane_table_row`.
 ///
 /// # Safety
 ///

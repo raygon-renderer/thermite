@@ -164,6 +164,9 @@ impl Register for F32x4V2 {
     type Signed = super::I32x4V2;
     type Unsigned = super::U32x4V2;
 
+    // One hardware widening load for the compress/expand byte index rows.
+    impl_widen_index_bytes_x86!(u32x4);
+
     fn into_mask(value: Storage<Self>) -> Storage<Self::Mask> {
         unsafe {
             // value != 0.0
@@ -234,14 +237,12 @@ impl Register for F32x4V2 {
 
     impl_float_align_via_bits!(super::U32x4V2);
 
-    fn permutev(value: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
-        unsafe { arch::_mm_permutevar_ps_v2(value, core::mem::transmute(idxs)) }
+    fn permutev(value: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
+        unsafe { arch::_mm_permutevar_ps_v2(value, idxs) }
     }
 
-    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: GenericArray<u32, Self::Lanes>) -> Storage<Self> {
+    fn swizzle(a: Storage<Self>, b: Storage<Self>, idxs: Storage<Self::Unsigned>) -> Storage<Self> {
         unsafe {
-            let idxs: arch::__m128i = core::mem::transmute(idxs);
-
             let four = arch::_mm_set1_epi32(4);
 
             // NOTE: Because of lt, this is reversed
