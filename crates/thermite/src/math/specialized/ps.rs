@@ -1137,18 +1137,16 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
         if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
             let (a, b) = (x1, y1);
 
-            let n = swap_xy.select(b, a);
-            let d = swap_xy.select(a, b);
+            let n = swap_xy.select(a, b);
+            let d = swap_xy.select(b, a);
 
             let mut k = n / d;
 
             if const { P::POLICY.check_overflow } {
-                let b_eq_zero = b.cmp_eq(V::ZERO);
-                let ab_eq = a.cmp_eq(b);
-
-                k = ab_eq.select(V::ONE, k);
-                k = b_eq_zero.select(V::ZERO, k);
+                k = a.cmp_eq(b).select(V::ONE, k);
             }
+
+            k = d.cmp_eq(V::ZERO).select(V::ZERO, k);
 
             let s = k.flush_denormals::<P>();
 
