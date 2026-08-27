@@ -1870,7 +1870,8 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
                 k += 1;
             }
 
-            (t.mul_sube(xn1 * fx, y), (fpx * dt_dx * xn1).min(Self::HALF))
+            // NOTE: derivative does not need to be clamped here, since Newton is bracketed.
+            (t.mul_sube(xn1 * fx, y), fpx * dt_dx * xn1)
         });
 
         v
