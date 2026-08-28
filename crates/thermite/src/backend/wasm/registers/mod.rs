@@ -80,7 +80,6 @@ impl NativeIsa for Wasm {
     // lowering and `HAS_PREFETCH` stays false.
 }
 
-#[thermite_macros::inline_always]
 impl NativeSimd for Wasm {
     type f32xN = F32x4Wasm;
     type i32xN = I32x4Wasm;
@@ -221,15 +220,15 @@ impl_bit_casts_identity! {
 const _: () = {
     use crate::register::{Sad32Register, Sad64Register, UnsignedIntegerRegister};
 
-    #[thermite_macros::inline_always]
     impl Sad32Register<U32x4Wasm> for U16x8Wasm {
+        #[inline(always)]
         fn sad32(a: Storage<Self>, b: Storage<Self>) -> Storage<U32x4Wasm> {
             arch::u32x4_extadd_pairwise_u16x8(Self::abs_diff(a, b))
         }
     }
 
-    #[thermite_macros::inline_always]
     impl Sad64Register<U64x2Wasm> for U16x8Wasm {
+        #[inline(always)]
         fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<U64x2Wasm> {
             let x = arch::u32x4_extadd_pairwise_u16x8(Self::abs_diff(a, b));
             arch::v128_and(
@@ -253,22 +252,22 @@ impl_sad_u32!(@scalar U32x2Wasm => u64);
 const _: () = {
     use crate::register::{Sad16Register, Sad32Register, Sad64Register, UnsignedIntegerRegister};
 
-    #[thermite_macros::inline_always]
     impl Sad16Register<U16x8Wasm> for U8x16Wasm {
+        #[inline(always)]
         fn sad16(a: Storage<Self>, b: Storage<Self>) -> Storage<U16x8Wasm> {
             arch::u16x8_extadd_pairwise_u8x16(Self::abs_diff(a, b))
         }
     }
 
-    #[thermite_macros::inline_always]
     impl Sad32Register<U32x4Wasm> for U8x16Wasm {
+        #[inline(always)]
         fn sad32(a: Storage<Self>, b: Storage<Self>) -> Storage<U32x4Wasm> {
             arch::u32x4_extadd_pairwise_u16x8(arch::u16x8_extadd_pairwise_u8x16(Self::abs_diff(a, b)))
         }
     }
 
-    #[thermite_macros::inline_always]
     impl Sad64Register<U64x2Wasm> for U8x16Wasm {
+        #[inline(always)]
         fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<U64x2Wasm> {
             let x = arch::u32x4_extadd_pairwise_u16x8(arch::u16x8_extadd_pairwise_u8x16(Self::abs_diff(a, b)));
             // Each u64 lane now holds two independent u32 sums; add them and drop the
@@ -305,15 +304,15 @@ impl_concat_bool_register2!(i64, I64x2Wasm);
 macro_rules! impl_identity_casts {
     ($($from:ty as $to:ty),* $(,)?) => {
         const _: () = {$(
-            #[thermite_macros::inline_always]
             impl $crate::register::BitCastRegister<$from> for $to {
+                #[inline(always)]
                 fn from_bits(value: Storage<$from>) -> Storage<Self> {
                     value // all bit casts are no-ops in Wasm
                 }
             }
 
-            #[thermite_macros::inline_always]
             impl $crate::register::CastMaskRegister<$from> for $to {
+                #[inline(always)]
                 fn mask_from(value: Storage<$from>) -> Storage<Self> {
                     value // all mask casts are no-ops in Wasm
                 }
@@ -325,13 +324,14 @@ macro_rules! impl_identity_casts {
 macro_rules! impl_type_casts {
     ($($from:ty as $to:ty => $conv:ident $(| $fast:ident)?),* $(,)?) => {
         const _: () = {$(
-            #[thermite_macros::inline_always]
             impl $crate::register::CastRegister<$from> for $to {
+                #[inline(always)]
                 fn cast_from(value: Storage<$from>) -> Storage<Self> {
                     arch::$conv(value)
                 }
 
                 $(
+                    #[inline(always)]
                     fn fast_cast_from(value: Storage<$from>) -> Storage<Self> {
                         arch::$fast(value)
                     }
@@ -487,29 +487,29 @@ impl_cast_from_via! {
 // (`f64x2.convert_low_i32x4_s` / `_u`), so it is one instruction per output
 // register rather than the widen-then-convert NEON uses or the magic-constant
 // sequence x86 needs for the unsigned side.
-#[thermite_macros::inline_always]
 impl crate::register::CastRegister<I32x2Wasm> for F64x2Wasm {
+    #[inline(always)]
     fn cast_from(value: Storage<I32x2Wasm>) -> Storage<Self> {
         unsafe { arch::f64x2_convert_low_i32x4(value.0) }
     }
 }
 
-#[thermite_macros::inline_always]
 impl crate::register::CastRegister<U32x2Wasm> for F64x2Wasm {
+    #[inline(always)]
     fn cast_from(value: Storage<U32x2Wasm>) -> Storage<Self> {
         unsafe { arch::f64x2_convert_low_u32x4(value.0) }
     }
 }
 
-#[thermite_macros::inline_always]
 impl crate::register::CastRegister<I32x4Wasm> for ArrayRegister<F64x2Wasm, 2> {
+    #[inline(always)]
     fn cast_from(value: Storage<I32x4Wasm>) -> Storage<Self> {
         ArrayRegister(unsafe { arch::i32x4_to_2xf64x2(value) })
     }
 }
 
-#[thermite_macros::inline_always]
 impl crate::register::CastRegister<U32x4Wasm> for ArrayRegister<F64x2Wasm, 2> {
+    #[inline(always)]
     fn cast_from(value: Storage<U32x4Wasm>) -> Storage<Self> {
         ArrayRegister(unsafe { arch::u32x4_to_2xf64x2(value) })
     }

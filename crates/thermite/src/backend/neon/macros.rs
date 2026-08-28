@@ -304,8 +304,8 @@ macro_rules! neon_mask_core {
                 }
             }
 
-            #[thermite_macros::inline_always]
             impl CastMaskRegister<$reg> for $reg {
+                #[inline(always)]
                 fn mask_from(value: Storage<Self>) -> Storage<Self> {
                     value
                 }
@@ -892,8 +892,8 @@ macro_rules! neon_partial_ord {
 macro_rules! neon_shuffle_permute {
     ($reg:ty, suffix: $s:ident, from_u: $from_u:ident; 4) => {
         paste::paste! {
-            #[thermite_macros::inline_always]
             impl ShuffleRegister for $reg {
+                #[inline(always)]
                 fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                     Self::blendv(
                         unsafe { arch::$from_u(const { arch::neon_imm8x4_to_mask::<IMM8>() }) },
@@ -903,8 +903,8 @@ macro_rules! neon_shuffle_permute {
                 }
             }
 
-            #[thermite_macros::inline_always]
             impl PermuteRegister for $reg {
+                #[inline(always)]
                 fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
                     arch::[<neon_tbl_ $s>](value, const { arch::neon_imm8x4_to_table::<IMM8>() })
                 }
@@ -913,8 +913,8 @@ macro_rules! neon_shuffle_permute {
     };
     ($reg:ty, suffix: $s:ident, from_u: $from_u:ident; 2) => {
         paste::paste! {
-            #[thermite_macros::inline_always]
             impl ShuffleRegister for $reg {
+                #[inline(always)]
                 fn shuffle<const IMM8: i32>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
                     Self::blendv(
                         unsafe { arch::$from_u(const { arch::neon_imm8x2_to_mask::<IMM8>() }) },
@@ -924,8 +924,8 @@ macro_rules! neon_shuffle_permute {
                 }
             }
 
-            #[thermite_macros::inline_always]
             impl PermuteRegister for $reg {
+                #[inline(always)]
                 fn permute<const IMM8: i32>(value: Storage<Self>) -> Storage<Self> {
                     arch::[<neon_tbl_ $s>](value, const { arch::neon_imm8x2_to_table::<IMM8>() })
                 }
@@ -1634,12 +1634,13 @@ macro_rules! neon_int64_register {
 /// a 1-lane scalar "register" extends into lane 0.
 macro_rules! neon_extend_scalar {
     ($reg:ty, elem: $e:ty) => {
-        #[thermite_macros::inline_always]
         impl crate::register::ExtendRegister<$e> for $reg {
+            #[inline(always)]
             fn extend(value: Storage<$e>) -> Storage<Self> {
                 Self::single(value)
             }
 
+            #[inline(always)]
             fn narrow(value: Storage<Self>) -> Storage<$e> {
                 Self::extract::<0>(value)
             }
@@ -1653,8 +1654,8 @@ macro_rules! neon_extend_scalar {
 macro_rules! neon_widen_casts {
     ($narrow_reg:ty => [$wide_reg:ty; 2], suffixes: $s:ident/$w:ident) => {
         paste::paste! {
-            #[thermite_macros::inline_always]
             impl crate::register::CastRegister<$narrow_reg> for ArrayRegister<$wide_reg, 2> {
+                #[inline(always)]
                 fn cast_from(value: Storage<$narrow_reg>) -> Storage<Self> {
                     unsafe {
                         ArrayRegister([
@@ -1667,12 +1668,13 @@ macro_rules! neon_widen_casts {
 
             // `vmovn` truncates and `vqmovn` saturates, so this pair is one of the
             // few where both strengths are a distinct single instruction.
-            #[thermite_macros::inline_always]
             impl crate::register::CastRegister<ArrayRegister<$wide_reg, 2>> for $narrow_reg {
+                #[inline(always)]
                 fn cast_from(value: Storage<ArrayRegister<$wide_reg, 2>>) -> Storage<Self> {
                     unsafe { arch::[<vmovn_high_ $w>](arch::[<vmovn_ $w>](value.0[0]), value.0[1]) }
                 }
 
+                #[inline(always)]
                 fn saturating_cast_from(value: Storage<ArrayRegister<$wide_reg, 2>>) -> Storage<Self> {
                     unsafe { arch::[<vqmovn_high_ $w>](arch::[<vqmovn_ $w>](value.0[0]), value.0[1]) }
                 }
@@ -1686,14 +1688,15 @@ macro_rules! neon_widen_casts {
 macro_rules! neon_concat_scalar2 {
     ($reg:ty, elem: $e:ty, suffix: $s:ident) => {
         paste::paste! {
-            #[thermite_macros::inline_always]
             impl crate::register::ConcatRegister<$e> for $reg {
+                #[inline(always)]
                 fn concat(lo: Storage<$e>, hi: Storage<$e>) -> Storage<Self> {
                     unsafe {
                         arch::[<vsetq_lane_ $s>]::<1>(hi, arch::[<vsetq_lane_ $s>]::<0>(lo, Self::EMPTY))
                     }
                 }
 
+                #[inline(always)]
                 fn split(value: Storage<Self>) -> (Storage<$e>, Storage<$e>) {
                     unsafe {
                         (

@@ -54,15 +54,15 @@ impl HasIsa for Neon {
 macro_rules! impl_reinterpret_casts {
     ($($from:ty as $to:ty => $conv:ident),* $(,)?) => {
         const _: () = {$(
-            #[thermite_macros::inline_always]
             impl $crate::register::BitCastRegister<$from> for $to {
+                #[inline(always)]
                 fn from_bits(value: Storage<$from>) -> Storage<Self> {
                     unsafe { arch::$conv(value) }
                 }
             }
 
-            #[thermite_macros::inline_always]
             impl $crate::register::CastMaskRegister<$from> for $to {
+                #[inline(always)]
                 fn mask_from(value: Storage<$from>) -> Storage<Self> {
                     unsafe { arch::$conv(value) }
                 }
@@ -101,8 +101,8 @@ impl_reinterpret_casts! {
 
 macro_rules! impl_self_bitcasts {
     ($($ty:ty),* $(,)?) => {$(
-        #[thermite_macros::inline_always]
         impl $crate::register::BitCastRegister<$ty> for $ty {
+            #[inline(always)]
             fn from_bits(value: Storage<Self>) -> Storage<Self> {
                 value
             }
@@ -423,22 +423,22 @@ impl_sad_scalar! {
 const _: () = {
     use crate::register::{Sad32Register, Sad64Register, UnsignedIntegerRegister};
 
-    #[thermite_macros::inline_always]
     impl Sad32Register<U32x4Neon> for U16x8Neon {
+        #[inline(always)]
         fn sad32(a: Storage<Self>, b: Storage<Self>) -> Storage<U32x4Neon> {
             unsafe { arch::vpaddlq_u16(Self::abs_diff(a, b)) }
         }
     }
 
-    #[thermite_macros::inline_always]
     impl Sad64Register<U64x2Neon> for U16x8Neon {
+        #[inline(always)]
         fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<U64x2Neon> {
             unsafe { arch::vpaddlq_u32(arch::vpaddlq_u16(Self::abs_diff(a, b))) }
         }
     }
 
-    #[thermite_macros::inline_always]
     impl Sad64Register<U64x2Neon> for U32x4Neon {
+        #[inline(always)]
         fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<U64x2Neon> {
             unsafe { arch::vpaddlq_u32(Self::abs_diff(a, b)) }
         }
@@ -457,22 +457,22 @@ impl_sad_u32!(@scalar U32x2Neon => u64);
 const _: () = {
     use crate::register::{Sad16Register, Sad32Register, Sad64Register, UnsignedIntegerRegister};
 
-    #[thermite_macros::inline_always]
     impl Sad16Register<U16x8Neon> for U8x16Neon {
+        #[inline(always)]
         fn sad16(a: Storage<Self>, b: Storage<Self>) -> Storage<U16x8Neon> {
             unsafe { arch::vpaddlq_u8(Self::abs_diff(a, b)) }
         }
     }
 
-    #[thermite_macros::inline_always]
     impl Sad32Register<U32x4Neon> for U8x16Neon {
+        #[inline(always)]
         fn sad32(a: Storage<Self>, b: Storage<Self>) -> Storage<U32x4Neon> {
             unsafe { arch::vpaddlq_u16(arch::vpaddlq_u8(Self::abs_diff(a, b))) }
         }
     }
 
-    #[thermite_macros::inline_always]
     impl Sad64Register<U64x2Neon> for U8x16Neon {
+        #[inline(always)]
         fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<U64x2Neon> {
             unsafe { arch::vpaddlq_u32(arch::vpaddlq_u16(arch::vpaddlq_u8(Self::abs_diff(a, b)))) }
         }

@@ -271,15 +271,15 @@ impl_bit_casts_identity! {
 const _: () = {
     use crate::register::{Sad16Register, Sad32Register, Sad64Register, UnsignedIntegerRegister};
 
-    #[thermite_macros::inline_always]
     impl Sad16Register<U16x16V3> for U8x32V3 {
+        #[inline(always)]
         fn sad16(a: Storage<Self>, b: Storage<Self>) -> Storage<U16x16V3> {
             unsafe { arch::_mm256_maddubs_epi16(Self::abs_diff(a, b), arch::_mm256_set1_epi8(1)) }
         }
     }
 
-    #[thermite_macros::inline_always]
     impl Sad32Register<U32x8V3> for U8x32V3 {
+        #[inline(always)]
         fn sad32(a: Storage<Self>, b: Storage<Self>) -> Storage<U32x8V3> {
             unsafe {
                 arch::_mm256_madd_epi16(
@@ -290,8 +290,8 @@ const _: () = {
         }
     }
 
-    #[thermite_macros::inline_always]
     impl Sad64Register<U64x4V3> for U8x32V3 {
+        #[inline(always)]
         fn sad64(a: Storage<Self>, b: Storage<Self>) -> Storage<U64x4V3> {
             unsafe { arch::_mm256_sad_epu8(a, b) }
         }
@@ -518,8 +518,8 @@ impl_cast_from_via! {
 // The x16 rungs are not stated: the array cast ladder in `register/array.rs`
 // derives `ArrayRegister<F64x4V3, 4>` from these, and stamping them would be a
 // coherence conflict.
-#[thermite_macros::inline_always]
 impl crate::register::CastRegister<I32x8V3> for ArrayRegister<F64x4V3, 2> {
+    #[inline(always)]
     fn cast_from(value: Storage<I32x8V3>) -> Storage<Self> {
         let (lo, hi) = I32x8V3::split(value);
 
@@ -527,8 +527,8 @@ impl crate::register::CastRegister<I32x8V3> for ArrayRegister<F64x4V3, 2> {
     }
 }
 
-#[thermite_macros::inline_always]
 impl crate::register::CastRegister<U32x8V3> for ArrayRegister<F64x4V3, 2> {
+    #[inline(always)]
     fn cast_from(value: Storage<U32x8V3>) -> Storage<Self> {
         let (lo, hi) = U32x8V3::split(value);
 

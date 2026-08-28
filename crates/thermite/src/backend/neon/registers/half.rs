@@ -19,8 +19,8 @@ pub type U32x2Neon = HalfRegister2<super::U32x4Neon>;
 
 macro_rules! impl_half_ladder {
     ($($e:ty: $half:ty, $full:ty, suffix: $s:ident, via_u64: ($to_u64:ident, $from_u64:ident)),* $(,)?) => {$(paste::paste! {
-        #[thermite_macros::inline_always]
         impl ConcatRegister<$e> for $half {
+            #[inline(always)]
             fn concat(lo: Storage<$e>, hi: Storage<$e>) -> Storage<Self> {
                 unsafe {
                     ReducedRegister::new(arch::[<vsetq_lane_ $s>]::<1>(
@@ -30,6 +30,7 @@ macro_rules! impl_half_ladder {
                 }
             }
 
+            #[inline(always)]
             fn split(value: Storage<Self>) -> (Storage<$e>, Storage<$e>) {
                 unsafe {
                     (
@@ -44,13 +45,14 @@ macro_rules! impl_half_ladder {
         // blanket in `register/reduced.rs`, which composes `$full`'s own
         // `neon_extend_scalar!` impl - same `vsetq_lane`/`vgetq_lane` codegen.
 
-        #[thermite_macros::inline_always]
         impl ConcatRegister<$half> for $full {
+            #[inline(always)]
             fn concat(lo: Storage<$half>, hi: Storage<$half>) -> Storage<Self> {
                 // low 64-bit half of each source, zipped: [lo0, lo1, hi0, hi1]
                 unsafe { arch::$from_u64(arch::vzip1q_u64(arch::$to_u64(lo.0), arch::$to_u64(hi.0))) }
             }
 
+            #[inline(always)]
             fn split(value: Storage<Self>) -> (Storage<$half>, Storage<$half>) {
                 unsafe {
                     (
@@ -131,7 +133,6 @@ impl CastRegister<U32x2Neon> for super::U64x2Neon {
 // IndexableRegister<U32x2Neon> for the half types is auto-derived by the
 // ReducedRegister blanket impl; only the U64x2Neon index type needs markers.
 
-#[thermite_macros::inline_always]
 impl IndexableRegister<super::U64x2Neon> for F32x2Neon {}
 impl IndexableRegister<super::U64x2Neon> for I32x2Neon {}
 impl IndexableRegister<super::U64x2Neon> for U32x2Neon {}

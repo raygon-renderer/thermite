@@ -98,36 +98,36 @@ impl ConcatRegister<U32x2V3> for super::U32x4V3 {
     }
 }
 
-#[thermite_macros::inline_always]
 impl CastRegister<F32x2V3> for super::F64x2V3 {
+    #[inline(always)]
     fn cast_from(value: Storage<F32x2V3>) -> Storage<Self> {
         unsafe { arch::_mm_cvtps_pd(value.0) }
     }
 }
 
-#[thermite_macros::inline_always]
 impl CastRegister<super::F64x2V3> for F32x2V3 {
+    #[inline(always)]
     fn cast_from(value: Storage<super::F64x2V3>) -> Storage<Self> {
         ReducedRegister::new(unsafe { arch::_mm_cvtpd_ps(value) })
     }
 }
 
-#[thermite_macros::inline_always]
 impl CastRegister<I32x2V3> for super::F64x2V3 {
+    #[inline(always)]
     fn cast_from(value: Storage<I32x2V3>) -> Storage<Self> {
         unsafe { arch::_mm_cvtepi32_pd(value.0) }
     }
 }
 
-#[thermite_macros::inline_always]
 impl CastRegister<U32x2V3> for super::F64x2V3 {
+    #[inline(always)]
     fn cast_from(value: Storage<U32x2V3>) -> Storage<Self> {
         unsafe { arch::_mm_cvtepu32_pdx_v1(value.0) }
     }
 }
 
-#[thermite_macros::inline_always]
 impl CastRegister<U32x2V3> for super::U64x2V3 {
+    #[inline(always)]
     fn cast_from(value: Storage<U32x2V3>) -> Storage<Self> {
         unsafe { arch::_mm_cvtepu32_epi64(value.0) }
     }

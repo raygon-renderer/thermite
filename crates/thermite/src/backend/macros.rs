@@ -24,8 +24,8 @@ macro_rules! impl_packed_fp8 {
 macro_rules! impl_bit_casts_transmute {
     ($($from:ty as $to:ty),* $(,)?) => {
         const _: () = {$(
-            #[thermite_macros::inline_always]
             impl $crate::register::BitCastRegister<$from> for $to {
+                #[inline(always)]
                 fn from_bits(value: $crate::register::Storage<$from>) -> $crate::register::Storage<Self> {
                     unsafe { $crate::generic_array::const_transmute(value) }
                 }
@@ -47,8 +47,8 @@ macro_rules! impl_sad {
     // output register to be a same-width reinterpret of the byte register, which holds
     // whenever the group divides the lane count evenly.
     (@swar16 $u8:ty => $u16:ty) => {
-        #[thermite_macros::inline_always]
         impl $crate::register::Sad16Register<$u16> for $u8 {
+            #[inline(always)]
             fn sad16(
                 a: $crate::register::Storage<Self>,
                 b: $crate::register::Storage<Self>,
@@ -60,8 +60,8 @@ macro_rules! impl_sad {
         }
     };
     (@swar32 $u8:ty => $u32:ty) => {
-        #[thermite_macros::inline_always]
         impl $crate::register::Sad32Register<$u32> for $u8 {
+            #[inline(always)]
             fn sad32(
                 a: $crate::register::Storage<Self>,
                 b: $crate::register::Storage<Self>,
@@ -73,8 +73,8 @@ macro_rules! impl_sad {
         }
     };
     (@swar64 $u8:ty => $u64:ty) => {
-        #[thermite_macros::inline_always]
         impl $crate::register::Sad64Register<$u64> for $u8 {
+            #[inline(always)]
             fn sad64(
                 a: $crate::register::Storage<Self>,
                 b: $crate::register::Storage<Self>,
@@ -110,8 +110,8 @@ macro_rules! impl_sad_u16 {
             |a, b| $crate::register::sad_scalar_u16_64::<Self, $u64>(a, b));
     )*};
     (@body $u16:ty => ($u32:ty, $u64:ty), |$a32:ident, $b32:ident| $e32:expr, |$a64:ident, $b64:ident| $e64:expr) => {
-        #[thermite_macros::inline_always]
         impl $crate::register::Sad32Register<$u32> for $u16 {
+            #[inline(always)]
             fn sad32(
                 $a32: $crate::register::Storage<Self>,
                 $b32: $crate::register::Storage<Self>,
@@ -120,8 +120,8 @@ macro_rules! impl_sad_u16 {
             }
         }
 
-        #[thermite_macros::inline_always]
         impl $crate::register::Sad64Register<$u64> for $u16 {
+            #[inline(always)]
             fn sad64(
                 $a64: $crate::register::Storage<Self>,
                 $b64: $crate::register::Storage<Self>,
@@ -143,8 +143,8 @@ macro_rules! impl_sad_u32 {
         impl_sad_u32!(@body $u32 => $u64, |a, b| $crate::register::sad_scalar_u32_64::<Self, $u64>(a, b));
     )*};
     (@body $u32:ty => $u64:ty, |$a:ident, $b:ident| $e:expr) => {
-        #[thermite_macros::inline_always]
         impl $crate::register::Sad64Register<$u64> for $u32 {
+            #[inline(always)]
             fn sad64(
                 $a: $crate::register::Storage<Self>,
                 $b: $crate::register::Storage<Self>,
@@ -161,8 +161,8 @@ macro_rules! impl_sad_u32 {
 /// group, the single output lane sums the whole register.
 macro_rules! impl_sad_scalar {
     ($($u8:ty => ($u16:ty, $u32:ty, $u64:ty)),* $(,)?) => {$(
-        #[thermite_macros::inline_always]
         impl $crate::register::Sad16Register<$u16> for $u8 {
+            #[inline(always)]
             fn sad16(
                 a: $crate::register::Storage<Self>,
                 b: $crate::register::Storage<Self>,
@@ -171,8 +171,8 @@ macro_rules! impl_sad_scalar {
             }
         }
 
-        #[thermite_macros::inline_always]
         impl $crate::register::Sad32Register<$u32> for $u8 {
+            #[inline(always)]
             fn sad32(
                 a: $crate::register::Storage<Self>,
                 b: $crate::register::Storage<Self>,
@@ -181,8 +181,8 @@ macro_rules! impl_sad_scalar {
             }
         }
 
-        #[thermite_macros::inline_always]
         impl $crate::register::Sad64Register<$u64> for $u8 {
+            #[inline(always)]
             fn sad64(
                 a: $crate::register::Storage<Self>,
                 b: $crate::register::Storage<Self>,
@@ -204,8 +204,8 @@ macro_rules! impl_sad_native_u64 {
     // saturation never triggers), and `pmaddwd` against ones sums adjacent `u16` pairs
     // into `u32` - the 2- and 4-byte groupings in one instruction each past `abs_diff`.
     (@ssse3 $($u8:ty => ($u16:ty, $u32:ty, $u64:ty) via $sad:ident),* $(,)?) => {$(
-        #[thermite_macros::inline_always]
         impl $crate::register::Sad16Register<$u16> for $u8 {
+            #[inline(always)]
             fn sad16(
                 a: $crate::register::Storage<Self>,
                 b: $crate::register::Storage<Self>,
@@ -219,8 +219,8 @@ macro_rules! impl_sad_native_u64 {
             }
         }
 
-        #[thermite_macros::inline_always]
         impl $crate::register::Sad32Register<$u32> for $u8 {
+            #[inline(always)]
             fn sad32(
                 a: $crate::register::Storage<Self>,
                 b: $crate::register::Storage<Self>,
@@ -234,8 +234,8 @@ macro_rules! impl_sad_native_u64 {
             }
         }
 
-        #[thermite_macros::inline_always]
         impl $crate::register::Sad64Register<$u64> for $u8 {
+            #[inline(always)]
             fn sad64(
                 a: $crate::register::Storage<Self>,
                 b: $crate::register::Storage<Self>,
@@ -249,8 +249,8 @@ macro_rules! impl_sad_native_u64 {
         impl_sad!(@swar16 $u8 => $u16);
         impl_sad!(@swar32 $u8 => $u32);
 
-        #[thermite_macros::inline_always]
         impl $crate::register::Sad64Register<$u64> for $u8 {
+            #[inline(always)]
             fn sad64(
                 a: $crate::register::Storage<Self>,
                 b: $crate::register::Storage<Self>,
@@ -272,12 +272,13 @@ macro_rules! impl_sad_native_u64 {
 /// discharged by this same impl; integer/usize masks are handled where they differ.
 macro_rules! impl_native_extend_from_scalar {
     ($($reg:ty => $elem:ty),* $(,)?) => {$(
-        #[thermite_macros::inline_always]
         impl $crate::register::ExtendRegister<$elem> for $reg {
+            #[inline(always)]
             fn extend(value: $crate::register::Storage<$elem>) -> $crate::register::Storage<Self> {
                 <Self as $crate::register::Register>::single(value)
             }
 
+            #[inline(always)]
             fn narrow(value: $crate::register::Storage<Self>) -> $crate::register::Storage<$elem> {
                 <Self as $crate::register::Register>::extract::<0>(value)
             }
@@ -897,8 +898,8 @@ macro_rules! impl_widen_index_bytes_x86 {
 macro_rules! impl_bit_casts {
     ($($from:ty as $to:ty => $conv:ident),* $(,)?) => {
         const _: () = {$(
-            #[thermite_macros::inline_always]
             impl $crate::register::BitCastRegister<$from> for $to {
+                #[inline(always)]
                 fn from_bits(value: Storage<$from>) -> Storage<Self> {
                     unsafe { arch::$conv(value) }
                 }
@@ -921,8 +922,8 @@ macro_rules! impl_bit_casts {
 macro_rules! impl_bit_casts_identity {
     ($($from:ty as $to:ty),* $(,)?) => {
         const _: () = {$(
-            #[thermite_macros::inline_always]
             impl $crate::register::BitCastRegister<$from> for $to {
+                #[inline(always)]
                 fn from_bits(value: Storage<$from>) -> Storage<Self> {
                     value
                 }
@@ -934,13 +935,14 @@ macro_rules! impl_bit_casts_identity {
 macro_rules! impl_type_casts {
     ($($from:ty as $to:ty => $conv:ident $(| $fast_conv:ident)?),* $(,)?) => {
         const _: () = {$(
-            #[thermite_macros::inline_always]
             impl $crate::register::CastRegister<$from> for $to {
+                #[inline(always)]
                 fn cast_from(value: Storage<$from>) -> Storage<Self> {
                     unsafe { arch::$conv(value) }
                 }
 
                 $(
+                    #[inline(always)]
                     fn fast_cast_from(value: Storage<$from>) -> Storage<Self> {
                         unsafe { arch::$fast_conv(value) }
                     }
@@ -965,17 +967,19 @@ macro_rules! impl_type_casts {
 macro_rules! impl_float_to_int_casts {
     ($($from:ty as $to:ty => $conv:ident sat $sat:ident $(| $fast_conv:ident)?),* $(,)?) => {
         const _: () = {$(
-            #[thermite_macros::inline_always]
             impl $crate::register::CastRegister<$from> for $to {
+                #[inline(always)]
                 fn cast_from(value: Storage<$from>) -> Storage<Self> {
                     unsafe { arch::$conv(value) }
                 }
 
+                #[inline(always)]
                 fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
                     unsafe { arch::$sat(value) }
                 }
 
                 $(
+                    #[inline(always)]
                     fn fast_cast_from(value: Storage<$from>) -> Storage<Self> {
                         unsafe { arch::$fast_conv(value) }
                     }
@@ -997,14 +1001,15 @@ macro_rules! impl_float_to_int_casts {
 macro_rules! impl_cast_via {
     ($($from:ty as $to:ty => via $mid:ty),* $(,)?) => {
         const _: () = {$(
-            #[thermite_macros::inline_always]
             impl $crate::register::CastRegister<$from> for $to {
+                #[inline(always)]
                 fn cast_from(value: Storage<$from>) -> Storage<Self> {
                     <Self as $crate::register::CastRegister<$mid>>::cast_from(
                         <$mid as $crate::register::CastRegister<$from>>::cast_from(value),
                     )
                 }
 
+                #[inline(always)]
                 fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
                     <Self as $crate::register::CastRegister<$mid>>::saturating_cast_from(
                         <$mid as $crate::register::CastRegister<$from>>::saturating_cast_from(value),
@@ -1022,14 +1027,15 @@ macro_rules! impl_cast_via {
 macro_rules! impl_cast_via_widen {
     ($($from:ty as $to:ty => via $mid:ty),* $(,)?) => {
         const _: () = {$(
-            #[thermite_macros::inline_always]
             impl $crate::register::CastRegister<$from> for $to {
+                #[inline(always)]
                 fn cast_from(value: Storage<$from>) -> Storage<Self> {
                     <Self as $crate::register::CastRegister<$mid>>::cast_from(
                         <$mid as $crate::register::CastRegister<$from>>::cast_from(value),
                     )
                 }
 
+                #[inline(always)]
                 fn saturating_cast_from(value: Storage<$from>) -> Storage<Self> {
                     <Self as $crate::register::CastRegister<$mid>>::saturating_cast_from(
                         <$mid as $crate::register::CastRegister<$from>>::cast_from(value),
@@ -1061,8 +1067,8 @@ macro_rules! impl_cast_via_widen {
 macro_rules! impl_cast_from_via {
     ($($from:ty as $to:ty => via $mid:ty),* $(,)?) => {
         const _: () = {$(
-            #[thermite_macros::inline_always]
             impl $crate::register::CastRegister<$from> for $to {
+                #[inline(always)]
                 fn cast_from(value: Storage<$from>) -> Storage<Self> {
                     <Self as $crate::register::CastRegister<$mid>>::cast_from(
                         <$mid as $crate::register::CastRegister<$from>>::cast_from(value),
@@ -1213,8 +1219,8 @@ macro_rules! impl_float_cast_matrix {
 macro_rules! impl_mask_casts {
     ($($from:ty as $to:ty => $conv:ident),* $(,)?) => {
         const _: () = {$(
-            #[thermite_macros::inline_always]
             impl $crate::register::CastMaskRegister<$from> for $to {
+                #[inline(always)]
                 fn mask_from(value: Storage<$from>) -> Storage<Self> {
                     unsafe { arch::$conv(value) }
                 }
@@ -1228,24 +1234,26 @@ macro_rules! impl_concat_bool_register2 {
         const _: () = {
             use $crate::element::MaskElement;
 
-            #[thermite_macros::inline_always]
             impl $crate::register::ConcatRegister<bool> for $r {
+                #[inline(always)]
                 fn concat(lo: Storage<bool>, hi: Storage<bool>) -> Storage<Self> {
                     <Self as $crate::register::ConcatRegister<$e>>::concat(<$e>::from_bool(lo), <$e>::from_bool(hi))
                 }
 
+                #[inline(always)]
                 fn split(value: Storage<Self>) -> (Storage<bool>, Storage<bool>) {
                     let (lo, hi) = <Self as $crate::register::ConcatRegister<$e>>::split(value);
                     (lo.to_bool(), hi.to_bool())
                 }
             }
 
-            #[thermite_macros::inline_always]
             impl $crate::register::ExtendRegister<bool> for $r {
+                #[inline(always)]
                 fn extend(value: Storage<bool>) -> Storage<Self> {
                     <Self as $crate::register::ExtendRegister<$e>>::extend(<$e>::from_bool(value))
                 }
 
+                #[inline(always)]
                 fn narrow(value: Storage<Self>) -> Storage<bool> {
                     <Self as $crate::register::ExtendRegister<$e>>::narrow(value).to_bool()
                 }
