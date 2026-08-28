@@ -219,7 +219,7 @@ pub trait RealMathWithPolicyFfi: RealMathWithPolicy + RealPrimalMathWithPolicy {
     #[inline(always)]
     fn softplus_vs_p<P: Policy>(self, k: Self::Element) -> Self {
         let k = Self::splat(k);
-        SpecialMathWithPolicy::softplus_p::<P>(self, k, CoreMathWithPolicy::reciprocal_p::<P>(k))
+        SpecialMathWithPolicy::softplus_p::<P>(self, k, CoreMathWithPolicy::approx_reciprocal_p::<P>(k))
     }
 
     /// `x / (1 + |x|)`, the softsign function.
@@ -251,7 +251,7 @@ pub trait RealMathWithPolicyFfi: RealMathWithPolicy + RealPrimalMathWithPolicy {
     #[inline(always)]
     fn softplus_d_vs_p<P: Policy>(self, k: Self::Element) -> (Self, Self) {
         let k = Self::splat(k);
-        RealPrimalMathWithPolicy::softplus_d_p::<P>(self, k, CoreMathWithPolicy::reciprocal_p::<P>(k))
+        RealPrimalMathWithPolicy::softplus_d_p::<P>(self, k, CoreMathWithPolicy::approx_reciprocal_p::<P>(k))
     }
 
     #[inline(always)]
@@ -900,7 +900,7 @@ decl_methods! {
         /// Computes the inverse square root, which may vary in accuracy and performance based on the chosen precision policy.
         (x)inverse_sqrt v inverse_sqrt(out),
         /// Computes the reciprocal (1/x), which may vary in accuracy and performance based on the chosen precision policy.
-        (x)reciprocal v reciprocal(out)
+        (x)approx_reciprocal v approx_reciprocal(out)
     ],
     MAPPING: TranscendentalMathWithPolicy [
         /// Compute both sine and cosine of the input simultaneously, which will be more efficient than computing them separately.
