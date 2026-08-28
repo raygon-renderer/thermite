@@ -104,7 +104,9 @@ fn zero_identity_rhs(sig: &syn::Signature) -> Option<&Ident> {
 /// Exactly `Storage<Self>` -- not `Storage<Self::Unsigned>`, not `Self::Element`.
 fn is_self_storage_type(ty: &Type) -> bool {
     let Type::Path(tp) = ty else { return false };
-    let Some(last) = tp.path.segments.last() else { return false };
+    let Some(last) = tp.path.segments.last() else {
+        return false;
+    };
 
     last.ident == "Storage"
         && matches!(&last.arguments, PathArguments::AngleBracketed(args)
@@ -234,12 +236,12 @@ pub fn register_trait_inner(_attr: TokenStream, item: TokenStream) -> TokenStrea
         let (_, ty_gen, _) = method.sig.generics.split_for_impl();
         let turbo = ty_gen.as_turbofish();
         let doc = get_doc_attrs(&method.attrs);
-        let unsafety = method.sig.unsafety.as_ref();
+        let safety = &method.sig.safety;
 
         // Shared by every variant. The unsafe block is redundant inside an unsafe
         // fn, but clippy complains without it.
         let call = quote_spanned! { name.span() =>
-            #unsafety { Self::#name #turbo(#(#arg_names),*) }
+            #safety { Self::#name #turbo(#(#arg_names),*) }
         };
 
         if with_conditional {
@@ -265,7 +267,7 @@ pub fn register_trait_inner(_attr: TokenStream, item: TokenStream) -> TokenStrea
                 // `from_mask` has to produce an all-ones/all-zeros register.
                 Some(rhs) => quote_spanned! { name.span() =>
                     if const { <Self as CoreRegister>::HAS_EQUAL_SIZE_MASK } {
-                        #unsafety {
+                        #safety {
                             Self::#name(#this, Self::bitand(<Self as CoreRegister>::from_mask(mask), #rhs))
                         }
                     } else {
@@ -309,9 +311,9 @@ pub fn register_trait_inner(_attr: TokenStream, item: TokenStream) -> TokenStrea
         new_items.push(TraitItem::Fn(parse_quote_spanned! { sig_z.span() =>
             #(#doc)* #[doc = #z_doc] #[inline(always)] #[allow(unused)] #sig_z {
                 if const { <Self as CoreRegister>::HAS_EQUAL_SIZE_MASK } {
-                    Self::bitand(<Self as CoreRegister>::from_mask(mask), #unsafety { #call })
+                    Self::bitand(<Self as CoreRegister>::from_mask(mask), #safety { #call })
                 } else {
-                    #unsafety { Self::#m_name #turbo (Self::EMPTY, mask, #(#arg_names),*) }
+                    #safety { Self::#m_name #turbo (Self::EMPTY, mask, #(#arg_names),*) }
                 }
             }
         }));
@@ -341,7 +343,7 @@ pub fn double_pump_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStr
         let (skip, with_conditional) = skip_or_conditional_impl(method);
 
         let name = &method.sig.ident;
-        let unsafety = method.sig.unsafety.as_ref();
+        let safety = &method.sig.safety;
         let (_, ty_gen, _) = method.sig.generics.split_for_impl();
         let turbo = ty_gen.as_turbofish();
 
@@ -353,7 +355,7 @@ pub fn double_pump_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStr
             let (args_0, args_1) = split_args_for_dp_call(&method.sig.inputs);
 
             method.block = parse_quote!({
-                #unsafety { DoublePumpRegister(
+                #safety { DoublePumpRegister(
                     #reg_ty::#name #turbo(#args_0),
                     #reg_ty::#name #turbo(#args_1)
                 ) }
@@ -374,7 +376,7 @@ pub fn double_pump_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStr
 
                 new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_c.span() =>
                     #(#doc)* #[inline(always)] #[allow(unused)] #sig_c {
-                        #unsafety { DoublePumpRegister(
+                        #safety { DoublePumpRegister(
                             #reg_ty::#c_name #turbo(#c0),
                             #reg_ty::#c_name #turbo(#c1)
                         ) }
@@ -393,7 +395,7 @@ pub fn double_pump_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStr
 
             new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_m.span() =>
                 #(#doc)* #[inline(always)] #[allow(unused)] #sig_m {
-                    #unsafety { DoublePumpRegister(
+                    #safety { DoublePumpRegister(
                         #reg_ty::#m_name #turbo(#m0),
                         #reg_ty::#m_name #turbo(#m1)
                     ) }
@@ -410,7 +412,7 @@ pub fn double_pump_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStr
 
             new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_z.span() =>
                 #(#doc)* #[inline(always)] #[allow(unused)] #sig_z {
-                    #unsafety { DoublePumpRegister(
+                    #safety { DoublePumpRegister(
                         #reg_ty::#z_name #turbo(#z0),
                         #reg_ty::#z_name #turbo(#z1)
                     ) }
@@ -442,7 +444,7 @@ pub fn array_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStream {
         let (skip, with_conditional) = skip_or_conditional_impl(method);
 
         let name = &method.sig.ident;
-        let unsafety = method.sig.unsafety.as_ref();
+        let safety = &method.sig.safety;
         let (_, ty_gen, _) = method.sig.generics.split_for_impl();
         let turbo = ty_gen.as_turbofish();
 
@@ -472,7 +474,7 @@ pub fn array_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStream {
             }
 
             let call = quote_spanned! { target_name.span() =>
-                #unsafety { #reg_ty::#target_name #turbo(#(#call_args),*) }
+                #safety { #reg_ty::#target_name #turbo(#(#call_args),*) }
             };
 
             match arrays.len() {
@@ -568,7 +570,7 @@ pub fn reduced_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStream 
         let (skip, with_conditional) = skip_or_conditional_impl(method);
 
         let name = &method.sig.ident;
-        let unsafety = method.sig.unsafety.as_ref();
+        let safety = &method.sig.safety;
         let (_, ty_gen, _) = method.sig.generics.split_for_impl();
         let turbo = ty_gen.as_turbofish();
 
@@ -580,7 +582,7 @@ pub fn reduced_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStream 
             let args = args_for_reduced_call(&method.sig.inputs);
 
             method.block = parse_quote!({
-                #unsafety { ReducedRegister( #reg_ty::#name #turbo(#args), PhantomData ) }
+                #safety { ReducedRegister( #reg_ty::#name #turbo(#args), PhantomData ) }
             });
         }
 
@@ -598,7 +600,7 @@ pub fn reduced_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStream 
 
                 new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_c.span() =>
                     #(#doc)* #[inline(always)] #[allow(unused)] #sig_c {
-                        #unsafety { ReducedRegister( #reg_ty::#c_name #turbo(#args), PhantomData ) }
+                        #safety { ReducedRegister( #reg_ty::#c_name #turbo(#args), PhantomData ) }
                     }
                 }));
             }
@@ -614,7 +616,7 @@ pub fn reduced_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStream 
 
             new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_m.span() =>
                 #(#doc)* #[inline(always)] #[allow(unused)] #sig_m {
-                    #unsafety { ReducedRegister( #reg_ty::#m_name #turbo(#args), PhantomData ) }
+                    #safety { ReducedRegister( #reg_ty::#m_name #turbo(#args), PhantomData ) }
                 }
             }));
 
@@ -628,7 +630,7 @@ pub fn reduced_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStream 
 
             new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_z.span() =>
                 #(#doc)* #[inline(always)] #[allow(unused)] #sig_z {
-                    #unsafety { ReducedRegister( #reg_ty::#z_name #turbo(#args), PhantomData ) }
+                    #safety { ReducedRegister( #reg_ty::#z_name #turbo(#args), PhantomData ) }
                 }
             }));
         }
@@ -740,7 +742,7 @@ pub fn vector_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStream {
         let (skip, with_conditional) = skip_or_conditional_impl(method);
 
         let name = &method.sig.ident;
-        let unsafety = method.sig.unsafety.as_ref();
+        let safety = &method.sig.safety;
         let (_, ty_gen, _) = method.sig.generics.split_for_impl();
         let turbo = ty_gen.as_turbofish();
 
@@ -751,7 +753,7 @@ pub fn vector_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStream {
             let args = args_for_vector_call(&method.sig.inputs);
 
             method.block = parse_quote_spanned!(method.span() => {
-                Vector(#unsafety { #reg_ty::#name #turbo(#args) })
+                Vector(#safety { #reg_ty::#name #turbo(#args) })
             });
         }
 
@@ -781,7 +783,7 @@ pub fn vector_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
             new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_c.span() =>
                 #(#doc)* #[inline(always)] #[allow(unused)] #sig_c {
-                    Vector(#unsafety { #reg_ty::#c_name #turbo(mask.0, #args) })
+                    Vector(#safety { #reg_ty::#c_name #turbo(mask.0, #args) })
                 }
             }));
         }
@@ -799,7 +801,7 @@ pub fn vector_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_m.span() =>
             #(#doc)* #[inline(always)] #[allow(unused)] #sig_m {
-                Vector(#unsafety { #reg_ty::#m_name #turbo(src.0, mask.0, #args) })
+                Vector(#safety { #reg_ty::#m_name #turbo(src.0, mask.0, #args) })
             }
         }));
 
@@ -815,7 +817,7 @@ pub fn vector_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
         new_items.push(ImplItem::Fn(parse_quote_spanned! { sig_z.span() =>
             #(#doc)* #[inline(always)] #[allow(unused)] #sig_z {
-                Vector(#unsafety { #reg_ty::#z_name #turbo(mask.0, #args) })
+                Vector(#safety { #reg_ty::#z_name #turbo(mask.0, #args) })
             }
         }));
     }

@@ -3,8 +3,8 @@ use quote::{ToTokens, quote};
 
 use syn::{
     Attribute, Expr, ExprCall, ExprPath, FnArg, GenericParam, Ident, ImplItem, Item, ItemFn, ItemImpl, ItemMod,
-    ItemTrait, Pat, Path, PathArguments, PathSegment, QSelf, ReturnType, Token, TraitItem, Type, TypeParamBound,
-    WhereClause, WherePredicate,
+    ItemTrait, Pat, Path, PathArguments, PathSegment, QSelf, ReceiverKind, ReturnType, Signature, Token, TraitItem,
+    Type, TypeParamBound, WhereClause, WherePredicate,
     parse::{Parse, ParseStream, Parser as _},
     punctuated::Punctuated,
     visit_mut::VisitMut,
@@ -44,23 +44,19 @@ struct Backend {
 /// Morton fast path on u64-lane registers.
 #[cfg(feature = "x86")]
 const X86V3_TARGET_FEATURE: &str = cfg_select! {
-    all(feature = "avx2-f16c", feature = "avx2-pclmul") => "avx2,fma,popcnt,f16c,pclmulqdq",
-    feature = "avx2-f16c" => "avx2,fma,popcnt,f16c",
-    feature = "avx2-pclmul" => "avx2,fma,popcnt,pclmulqdq",
+    all(feature = "avx2-f16c", feature = "avx2-pclmul") => "avx2,fma,popcnt,f16c,pclmulqdq", feature = "avx2-f16c" => "avx2,fma,popcnt,f16c", feature = "avx2-pclmul" => "avx2,fma,popcnt,pclmulqdq",
     _ => "avx2,fma,popcnt",
 };
 
 static BACKENDS: &[Backend] = cfg_select! {
     feature = "x86" => &[
-        Backend { isa: "Scalar", target_feature: "",       simd_type: Some("backend::scalar::Scalar") },
-        Backend { isa: "X86V1",  target_feature: "sse2",   simd_type: Some("backend::x86_v1::X86V1")  },
-        Backend { isa: "X86V2",  target_feature: "sse4.2,popcnt", simd_type: Some("backend::x86_v2::X86V2")  },
+        Backend { isa: "Scalar", target_feature: "", simd_type: Some("backend::scalar::Scalar") },
+        Backend { isa: "X86V1", target_feature: "sse2", simd_type: Some("backend::x86_v1::X86V1")  },
+        Backend { isa: "X86V2", target_feature: "sse4.2,popcnt", simd_type: Some("backend::x86_v2::X86V2")  },
 
         // See `X86V3_TARGET_FEATURE` for what the AVX2 rung assumes about F16C/PCLMULQDQ.
         Backend {
-            isa: "X86V3",
-            target_feature: X86V3_TARGET_FEATURE,
-            simd_type: Some("backend::x86_v3::X86V3")
+            isa: "X86V3", target_feature: X86V3_TARGET_FEATURE, simd_type: Some("backend::x86_v3::X86V3")
         },
 
         // x86-v4 (AVX-512) deliberately maps to the *x86-v3* backend for now.
@@ -78,24 +74,19 @@ static BACKENDS: &[Backend] = cfg_select! {
         // When the x86-v4 registers exist, point `simd_type` at them and give this
         // entry its own `target_feature` string.
         Backend {
-            isa: "X86V4",
-            target_feature: X86V3_TARGET_FEATURE,
-            simd_type: Some("backend::x86_v3::X86V3")
+            isa: "X86V4", target_feature: X86V3_TARGET_FEATURE, simd_type: Some("backend::x86_v3::X86V3")
         },
-    ],
-    feature = "neon" => &[
-        Backend { isa: "Scalar", target_feature: "",     simd_type: Some("backend::scalar::Scalar") },
+    ], feature = "neon" => &[
+        Backend { isa: "Scalar", target_feature: "", simd_type: Some("backend::scalar::Scalar") },
         // NEON/AdvSIMD is mandatory on aarch64 (the only ARM target the backend
         // supports), so `InstructionSet::get()` is constant and the `neon`
         // target feature is already in the target baseline - the trampoline
         // attribute is a stable no-op.
-        Backend { isa: "NEON",   target_feature: "neon", simd_type: Some("backend::neon::Neon")     },
-    ],
-    feature = "wasm" => &[
-        Backend { isa: "Scalar", target_feature: "",        simd_type: Some("backend::scalar::Scalar") },
+        Backend { isa: "NEON", target_feature: "neon", simd_type: Some("backend::neon::Neon")     },
+    ], feature = "wasm" => &[
+        Backend { isa: "Scalar", target_feature: "", simd_type: Some("backend::scalar::Scalar") },
         Backend { isa: "WASM32", target_feature: "simd128", simd_type: Some("backend::wasm::Wasm")     },
-    ],
-    feature = "spirv" => &[
+    ], feature = "spirv" => &[
         Backend { isa: "SPIRV", target_feature: "", simd_type: None },
     ],
     _ => &[
@@ -184,8 +175,7 @@ struct TypeVisitor {
 }
 
 impl VisitMut for TypeVisitor {
-    #[rustfmt::skip]
-    fn visit_type_mut(&mut self, i: &mut Type) {
+    #[rustfmt::skip]    fn visit_type_mut(&mut self, i: &mut Type) {
         if let Type::Path(p) = i && p.qself.is_none() && p.path.segments.len() > 1
             && let Some(first) = p.path.segments.first_mut()
             && first.ident == "Self"
@@ -198,11 +188,7 @@ impl VisitMut for TypeVisitor {
             p.path.segments = path;
             p.path.leading_colon = Some(Default::default());
             p.qself = Some(QSelf {
-                lt_token: Default::default(),
-                ty: self.self_ty.clone(),
-                position: 0,
-                as_token: None,
-                gt_token: Default::default(),
+                lt_token: Default::default(), ty: self.self_ty.clone(), position: 0, as_token: None, gt_token: Default::default(),
             });
         }
 
@@ -335,7 +321,7 @@ struct DemutSelfVisitor;
 impl VisitMut for DemutSelfVisitor {
     fn visit_fn_arg_mut(&mut self, i: &mut FnArg) {
         if let FnArg::Receiver(rcv) = i
-            && rcv.reference.is_none()
+            && matches!(rcv.kind, ReceiverKind::Value)
         {
             rcv.mutability = None;
         }
@@ -346,6 +332,48 @@ impl VisitMut for DemutSelfVisitor {
 // -----------------------------------------------------------------------------
 // Generators
 // -----------------------------------------------------------------------------
+
+/// Signature properties that cannot survive being rebuilt as a dispatch trampoline.
+///
+/// `#[dispatch]` re-emits each function as one `#[target_feature]` copy per backend
+/// plus a const-folded ISA match. Two properties are incompatible with that:
+///
+/// - **`const`** - a `#[target_feature]` fn cannot be `const`, so the per-backend
+///   copies could never be const even if the trampolines did forward it.
+/// - **variadic `...`**. Only legal in an `extern` fn, the generated trampolines
+///   would not be well-formed.
+///
+/// Neither was ever forwarded, so both used to be dropped _silently_: a
+/// `#[dispatch] const fn` came out non-const with no diagnostic, and only failed
+/// later at some unrelated const-context call site. Reject them here instead,
+/// in the spirit of syn 3's `Modifiers::require_empty()`. Refuse syntax the macro
+/// does not understand rather than quietly eating it.
+///
+/// Checked _after_ `skip_dispatch`, so a skipped function keeps both. Nothing is
+/// rebuilt for it, and the item is emitted from the mutated AST unchanged.
+fn reject_unsupported_signature(sig: &Signature) -> Option<TokenStream> {
+    if let Some(constness) = &sig.constness {
+        return Some(
+            syn::Error::new_spanned(
+                constness,
+                "#[dispatch] cannot be applied to a `const fn`: the generated per-backend copies carry #[target_feature], which a `const fn` cannot. Remove `const`, or mark this function #[skip_dispatch].",
+            )
+            .into_compile_error(),
+        );
+    }
+
+    if let Some(variadic) = &sig.variadic {
+        return Some(
+            syn::Error::new_spanned(
+                variadic,
+                "#[dispatch] cannot be applied to a variadic function: `...` is only legal in an `extern` fn, and the generated per-backend copies would not be well-formed. Mark this function #[skip_dispatch].",
+            )
+            .into_compile_error(),
+        );
+    }
+
+    None
+}
 
 fn gen_mod_def(attr: &DispatchAttributes, mod_item: &mut ItemMod) {
     if take_attribute(&mut mod_item.attrs, SKIP_DISPATCH) {
@@ -397,6 +425,11 @@ fn gen_impl_block(attr: &DispatchAttributes, item_impl: &mut ItemImpl) {
                 continue;
             }
 
+            if let Some(err) = reject_unsupported_signature(&f.sig) {
+                f.block = syn::parse_quote! {{ #err }};
+                continue;
+            }
+
             let sig = &f.sig;
             let asyncness = &sig.asyncness;
             let abi = &sig.abi;
@@ -404,7 +437,7 @@ fn gen_impl_block(attr: &DispatchAttributes, item_impl: &mut ItemImpl) {
             let fn_generics = &sig.generics;
             let inputs = &sig.inputs;
             let output = &sig.output;
-            let defaultness = &f.defaultness;
+            let defaultness = &f.modifiers.defaultness;
 
             let helper_trait_name = quote::format_ident!("__DispatchHelper_{}", ident);
 
@@ -420,7 +453,7 @@ fn gen_impl_block(attr: &DispatchAttributes, item_impl: &mut ItemImpl) {
             }
 
             // Disambiguate recursive calls if implementing a trait
-            if let Some((_, trait_, _)) = &item_impl.trait_ {
+            if let Some((trait_, _)) = &item_impl.trait_ {
                 SelfTraitVisitor::new(trait_.clone(), self_ty.clone(), ident.clone()).visit_block_mut(&mut f.block);
             }
 
@@ -512,11 +545,16 @@ fn gen_function(attr: &DispatchAttributes, f: &mut ItemFn) {
         return;
     }
 
+    if let Some(err) = reject_unsupported_signature(&f.sig) {
+        *f.block = syn::parse_quote! {{ #err }};
+        return;
+    }
+
     let thermite = &attr.thermite;
 
     let sig = &f.sig;
     let asyncness = &sig.asyncness;
-    let unsafety = &sig.unsafety;
+    let safety = &sig.safety;
     let abi = &sig.abi;
     let ident = &sig.ident;
     let generics = &sig.generics;
@@ -648,7 +686,7 @@ fn gen_function(attr: &DispatchAttributes, f: &mut ItemFn) {
 
     let inner = quote! {
         #[inline(always)]
-        #asyncness #unsafety #abi fn #ident #impl_generics(#inputs) #output #where_clause #original_block
+        #asyncness #safety #abi fn #ident #impl_generics(#inputs) #output #where_clause #original_block
     };
 
     let mut branches = Vec::new();
@@ -982,7 +1020,7 @@ impl Parse for DispatchDynInput {
             stream.parse::<Token![for]>()?;
             stream.parse::<Token![<]>()?;
             let ty_param: syn::TypeParam = stream.parse()?;
-            if ty_param.eq_token.is_some() {
+            if ty_param.default.is_some() {
                 return Err(syn::Error::new(
                     ty_param.ident.span(),
                     "default types (`= Type`) are not allowed in `for<...>` dispatch binding",
