@@ -44,8 +44,42 @@ macro_rules! impl_neon {
     };
 }
 
-impl_neon!(f64, sqrt, floor, ceil, trunc, round, fma,
-    [vsqrt_f64, vrndm_f64, vrndp_f64, vrnd_f64, vrndn_f64, vfma_f64, vdup_n_f64, vget_lane_f64]);
+impl_neon!(
+    f64,
+    sqrt,
+    floor,
+    ceil,
+    trunc,
+    round,
+    fma,
+    [
+        vsqrt_f64,
+        vrndm_f64,
+        vrndp_f64,
+        vrnd_f64,
+        vrndn_f64,
+        vfma_f64,
+        vdup_n_f64,
+        vget_lane_f64
+    ]
+);
 
-impl_neon!(f32, sqrtf, floorf, ceilf, truncf, roundf, fmaf,
-    [vsqrt_f32, vrndm_f32, vrndp_f32, vrnd_f32, vrndn_f32, vfma_f32, vdup_n_f32, vget_lane_f32]);
+impl_neon!(
+    f32,
+    sqrtf,
+    floorf,
+    ceilf,
+    truncf,
+    roundf,
+    fmaf,
+    [
+        vsqrt_f32,
+        vrndm_f32,
+        vrndp_f32,
+        vrnd_f32,
+        vrndn_f32,
+        vfma_f32,
+        vdup_n_f32,
+        vget_lane_f32
+    ]
+);

@@ -51,21 +51,24 @@ pub(crate) fn detect_relaxed_fma() -> u8 {
     // then 1 - 1 = 0.
     let a = black_box(f64x2_splat(1.0 + 2.0_f64.powi(-27)));
     let b = black_box(f64x2_splat(1.0 - 2.0_f64.powi(-27)));
-    let fused_64 = f64x2_extract_lane::<0>(f64x2_relaxed_madd(a, b, f64x2_splat(-1.0)))
-        == -(2.0_f64.powi(-54));
-    let nfused_64 = f64x2_extract_lane::<0>(f64x2_relaxed_nmadd(a, b, f64x2_splat(1.0)))
-        == 2.0_f64.powi(-54);
+    let fused_64 = f64x2_extract_lane::<0>(f64x2_relaxed_madd(a, b, f64x2_splat(-1.0))) == -(2.0_f64.powi(-54));
+    let nfused_64 = f64x2_extract_lane::<0>(f64x2_relaxed_nmadd(a, b, f64x2_splat(1.0))) == 2.0_f64.powi(-54);
 
     // Subnormal guards: inputs must not be DAZed, subnormal results must not
     // be FTZed, or the "fused" answer is not a true FMA.
     let min_sub = black_box(f64x2_splat(f64::from_bits(1)));
     let tiny = black_box(f64x2_splat(2.0_f64.powi(-537)));
-    let sub_in = f64x2_extract_lane::<0>(f64x2_relaxed_madd(min_sub, black_box(f64x2_splat(1.0)), f64x2_splat(0.0)))
-        == f64::from_bits(1);
-    let sub_out = f64x2_extract_lane::<0>(f64x2_relaxed_madd(tiny, tiny, f64x2_splat(0.0)))
-        == 2.0_f64.powi(-1074);
-    let nsub_in = f64x2_extract_lane::<0>(f64x2_relaxed_nmadd(min_sub, black_box(f64x2_splat(-1.0)), f64x2_splat(0.0)))
-        == f64::from_bits(1);
+    let sub_in = f64x2_extract_lane::<0>(f64x2_relaxed_madd(
+        min_sub,
+        black_box(f64x2_splat(1.0)),
+        f64x2_splat(0.0),
+    )) == f64::from_bits(1);
+    let sub_out = f64x2_extract_lane::<0>(f64x2_relaxed_madd(tiny, tiny, f64x2_splat(0.0))) == 2.0_f64.powi(-1074);
+    let nsub_in = f64x2_extract_lane::<0>(f64x2_relaxed_nmadd(
+        min_sub,
+        black_box(f64x2_splat(-1.0)),
+        f64x2_splat(0.0),
+    )) == f64::from_bits(1);
 
     if fused_64 && sub_in && sub_out {
         flags |= RELAXED_F64_MADD_FUSED;
@@ -77,20 +80,23 @@ pub(crate) fn detect_relaxed_fma() -> u8 {
     // f32 analogue: a * b = 1 - 2^-24 exactly, the midpoint at 24 bits.
     let a = black_box(f32x4_splat(1.0 + 2.0_f32.powi(-12)));
     let b = black_box(f32x4_splat(1.0 - 2.0_f32.powi(-12)));
-    let fused_32 = f32x4_extract_lane::<0>(f32x4_relaxed_madd(a, b, f32x4_splat(-1.0)))
-        == -(2.0_f32.powi(-24));
-    let nfused_32 = f32x4_extract_lane::<0>(f32x4_relaxed_nmadd(a, b, f32x4_splat(1.0)))
-        == 2.0_f32.powi(-24);
+    let fused_32 = f32x4_extract_lane::<0>(f32x4_relaxed_madd(a, b, f32x4_splat(-1.0))) == -(2.0_f32.powi(-24));
+    let nfused_32 = f32x4_extract_lane::<0>(f32x4_relaxed_nmadd(a, b, f32x4_splat(1.0))) == 2.0_f32.powi(-24);
 
     let min_sub = black_box(f32x4_splat(f32::from_bits(1)));
     let tiny_a = black_box(f32x4_splat(2.0_f32.powi(-75)));
     let tiny_b = black_box(f32x4_splat(2.0_f32.powi(-74)));
-    let sub_in = f32x4_extract_lane::<0>(f32x4_relaxed_madd(min_sub, black_box(f32x4_splat(1.0)), f32x4_splat(0.0)))
-        == f32::from_bits(1);
-    let sub_out = f32x4_extract_lane::<0>(f32x4_relaxed_madd(tiny_a, tiny_b, f32x4_splat(0.0)))
-        == 2.0_f32.powi(-149);
-    let nsub_in = f32x4_extract_lane::<0>(f32x4_relaxed_nmadd(min_sub, black_box(f32x4_splat(-1.0)), f32x4_splat(0.0)))
-        == f32::from_bits(1);
+    let sub_in = f32x4_extract_lane::<0>(f32x4_relaxed_madd(
+        min_sub,
+        black_box(f32x4_splat(1.0)),
+        f32x4_splat(0.0),
+    )) == f32::from_bits(1);
+    let sub_out = f32x4_extract_lane::<0>(f32x4_relaxed_madd(tiny_a, tiny_b, f32x4_splat(0.0))) == 2.0_f32.powi(-149);
+    let nsub_in = f32x4_extract_lane::<0>(f32x4_relaxed_nmadd(
+        min_sub,
+        black_box(f32x4_splat(-1.0)),
+        f32x4_splat(0.0),
+    )) == f32::from_bits(1);
 
     if fused_32 && sub_in && sub_out {
         flags |= RELAXED_F32_MADD_FUSED;

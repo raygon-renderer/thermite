@@ -59,8 +59,38 @@ macro_rules! impl_wasm {
     };
 }
 
-impl_wasm!(f64, sqrt, floor, ceil, trunc, round,
-    [f64x2_sqrt, f64x2_floor, f64x2_ceil, f64x2_trunc, f64x2_nearest, f64x2_splat, f64x2_extract_lane]);
+impl_wasm!(
+    f64,
+    sqrt,
+    floor,
+    ceil,
+    trunc,
+    round,
+    [
+        f64x2_sqrt,
+        f64x2_floor,
+        f64x2_ceil,
+        f64x2_trunc,
+        f64x2_nearest,
+        f64x2_splat,
+        f64x2_extract_lane
+    ]
+);
 
-impl_wasm!(f32, sqrtf, floorf, ceilf, truncf, roundf,
-    [f32x4_sqrt, f32x4_floor, f32x4_ceil, f32x4_trunc, f32x4_nearest, f32x4_splat, f32x4_extract_lane]);
+impl_wasm!(
+    f32,
+    sqrtf,
+    floorf,
+    ceilf,
+    truncf,
+    roundf,
+    [
+        f32x4_sqrt,
+        f32x4_floor,
+        f32x4_ceil,
+        f32x4_trunc,
+        f32x4_nearest,
+        f32x4_splat,
+        f32x4_extract_lane
+    ]
+);

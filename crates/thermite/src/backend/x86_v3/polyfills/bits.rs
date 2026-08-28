@@ -329,10 +329,38 @@ macro_rules! varshift256_step {
 #[inline(always)]
 pub unsafe fn _mm256_sllv_epi16x_v3(value: __m256i, shifts: __m256i) -> __m256i {
     let mut x = value;
-    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 1, _mm256_slli_epi16(x, 1));
-    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 2, _mm256_slli_epi16(x, 2));
-    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 4, _mm256_slli_epi16(x, 4));
-    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 8, _mm256_slli_epi16(x, 8));
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi16,
+        _mm256_cmpeq_epi16,
+        1,
+        _mm256_slli_epi16(x, 1)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi16,
+        _mm256_cmpeq_epi16,
+        2,
+        _mm256_slli_epi16(x, 2)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi16,
+        _mm256_cmpeq_epi16,
+        4,
+        _mm256_slli_epi16(x, 4)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi16,
+        _mm256_cmpeq_epi16,
+        8,
+        _mm256_slli_epi16(x, 8)
+    );
     x
 }
 
@@ -340,10 +368,38 @@ pub unsafe fn _mm256_sllv_epi16x_v3(value: __m256i, shifts: __m256i) -> __m256i 
 #[inline(always)]
 pub unsafe fn _mm256_srlv_epi16x_v3(value: __m256i, shifts: __m256i) -> __m256i {
     let mut x = value;
-    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 1, _mm256_srli_epi16(x, 1));
-    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 2, _mm256_srli_epi16(x, 2));
-    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 4, _mm256_srli_epi16(x, 4));
-    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 8, _mm256_srli_epi16(x, 8));
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi16,
+        _mm256_cmpeq_epi16,
+        1,
+        _mm256_srli_epi16(x, 1)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi16,
+        _mm256_cmpeq_epi16,
+        2,
+        _mm256_srli_epi16(x, 2)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi16,
+        _mm256_cmpeq_epi16,
+        4,
+        _mm256_srli_epi16(x, 4)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi16,
+        _mm256_cmpeq_epi16,
+        8,
+        _mm256_srli_epi16(x, 8)
+    );
     x
 }
 
@@ -351,10 +407,38 @@ pub unsafe fn _mm256_srlv_epi16x_v3(value: __m256i, shifts: __m256i) -> __m256i 
 #[inline(always)]
 pub unsafe fn _mm256_srav_epi16x_v3(value: __m256i, shifts: __m256i) -> __m256i {
     let mut x = value;
-    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 1, _mm256_srai_epi16(x, 1));
-    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 2, _mm256_srai_epi16(x, 2));
-    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 4, _mm256_srai_epi16(x, 4));
-    varshift256_step!(x, shifts, _mm256_set1_epi16, _mm256_cmpeq_epi16, 8, _mm256_srai_epi16(x, 8));
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi16,
+        _mm256_cmpeq_epi16,
+        1,
+        _mm256_srai_epi16(x, 1)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi16,
+        _mm256_cmpeq_epi16,
+        2,
+        _mm256_srai_epi16(x, 2)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi16,
+        _mm256_cmpeq_epi16,
+        4,
+        _mm256_srai_epi16(x, 4)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi16,
+        _mm256_cmpeq_epi16,
+        8,
+        _mm256_srai_epi16(x, 8)
+    );
     x
 }
 
@@ -362,9 +446,30 @@ pub unsafe fn _mm256_srav_epi16x_v3(value: __m256i, shifts: __m256i) -> __m256i 
 #[inline(always)]
 pub unsafe fn _mm256_sllv_epi8x_v3(value: __m256i, shifts: __m256i) -> __m256i {
     let mut x = value;
-    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 1, _mm256_slli_epi8x_v3::<1>(x));
-    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 2, _mm256_slli_epi8x_v3::<2>(x));
-    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 4, _mm256_slli_epi8x_v3::<4>(x));
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi8,
+        _mm256_cmpeq_epi8,
+        1,
+        _mm256_slli_epi8x_v3::<1>(x)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi8,
+        _mm256_cmpeq_epi8,
+        2,
+        _mm256_slli_epi8x_v3::<2>(x)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi8,
+        _mm256_cmpeq_epi8,
+        4,
+        _mm256_slli_epi8x_v3::<4>(x)
+    );
     x
 }
 
@@ -372,9 +477,30 @@ pub unsafe fn _mm256_sllv_epi8x_v3(value: __m256i, shifts: __m256i) -> __m256i {
 #[inline(always)]
 pub unsafe fn _mm256_srlv_epi8x_v3(value: __m256i, shifts: __m256i) -> __m256i {
     let mut x = value;
-    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 1, _mm256_srli_epi8x_v3::<1>(x));
-    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 2, _mm256_srli_epi8x_v3::<2>(x));
-    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 4, _mm256_srli_epi8x_v3::<4>(x));
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi8,
+        _mm256_cmpeq_epi8,
+        1,
+        _mm256_srli_epi8x_v3::<1>(x)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi8,
+        _mm256_cmpeq_epi8,
+        2,
+        _mm256_srli_epi8x_v3::<2>(x)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi8,
+        _mm256_cmpeq_epi8,
+        4,
+        _mm256_srli_epi8x_v3::<4>(x)
+    );
     x
 }
 
@@ -382,9 +508,30 @@ pub unsafe fn _mm256_srlv_epi8x_v3(value: __m256i, shifts: __m256i) -> __m256i {
 #[inline(always)]
 pub unsafe fn _mm256_srav_epi8x_v3(value: __m256i, shifts: __m256i) -> __m256i {
     let mut x = value;
-    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 1, _mm256_srai_epi8x_v3::<1>(x));
-    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 2, _mm256_srai_epi8x_v3::<2>(x));
-    varshift256_step!(x, shifts, _mm256_set1_epi8, _mm256_cmpeq_epi8, 4, _mm256_srai_epi8x_v3::<4>(x));
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi8,
+        _mm256_cmpeq_epi8,
+        1,
+        _mm256_srai_epi8x_v3::<1>(x)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi8,
+        _mm256_cmpeq_epi8,
+        2,
+        _mm256_srai_epi8x_v3::<2>(x)
+    );
+    varshift256_step!(
+        x,
+        shifts,
+        _mm256_set1_epi8,
+        _mm256_cmpeq_epi8,
+        4,
+        _mm256_srai_epi8x_v3::<4>(x)
+    );
     x
 }
 

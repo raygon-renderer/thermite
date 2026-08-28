@@ -181,7 +181,18 @@ mod f64_impl {
 
 mod f32_impl {
     use super::*;
-    impl_fallback!(f32, u32, i32, sqrtf, floorf, ceilf, truncf, roundf, fmaf, [sqrtf, fmadd_widen_ro]);
+    impl_fallback!(
+        f32,
+        u32,
+        i32,
+        sqrtf,
+        floorf,
+        ceilf,
+        truncf,
+        roundf,
+        fmaf,
+        [sqrtf, fmadd_widen_ro]
+    );
 }
 
 pub use f32_impl::{ceilf, floorf, fmaf, roundf, sqrtf, truncf};

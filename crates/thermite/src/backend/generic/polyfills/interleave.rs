@@ -234,11 +234,7 @@ fn gather_deinterleaved<R: Register>(group: &[Storage<R>], off: usize, j: usize,
                 GenericArray::generate(|l| (l * p + j) / lanes == k);
 
             let mask = <R::Mask as MaskRegister>::new_mask(selected);
-            acc = R::blendv(
-                mask,
-                acc,
-                R::permutev(unsafe { *group.get_unchecked(off + k) }, local),
-            );
+            acc = R::blendv(mask, acc, R::permutev(unsafe { *group.get_unchecked(off + k) }, local));
         }
         k += 1;
     }

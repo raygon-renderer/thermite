@@ -122,7 +122,11 @@ fn odd_round_add_full<R: FloatRegister, const SORTED: bool>(
     // for +2..+8% rthr, llvm-mca znver3) but not for the f32 widen path,
     // whose doubled ArrayRegister halves pay the sort twice for the same
     // chain win (+21% rthr), so it passes `false`.
-    let (s, err) = if SORTED { two_sum_sorted::<R>(x, y) } else { two_sum::<R>(x, y) };
+    let (s, err) = if SORTED {
+        two_sum_sorted::<R>(x, y)
+    } else {
+        two_sum::<R>(x, y)
+    };
 
     let s_bits = <R::Bits as BitCastRegister<R>>::from_bits(s);
     let err_bits = <R::Bits as BitCastRegister<R>>::from_bits(err);
@@ -145,7 +149,9 @@ fn odd_round_add_full<R: FloatRegister, const SORTED: bool>(
     let even = R::Bits::sub(R::Bits::bitand(s_bits, R::Bits::ONE), R::Bits::ONE);
 
     let adjust = R::Bits::bitand(
-        <R::Bits as CoreRegister>::from_mask(<<R::Bits as CoreRegister>::Mask as BitwiseRegister>::bitand(inexact, finite)),
+        <R::Bits as CoreRegister>::from_mask(<<R::Bits as CoreRegister>::Mask as BitwiseRegister>::bitand(
+            inexact, finite,
+        )),
         even,
     );
 
@@ -216,7 +222,10 @@ pub fn fmadd_ro<R: FloatRegister>(a: Storage<R>, b: Storage<R>, c: Storage<R>) -
         // ONE so it folds to a constant. A subnormal operand reads field 0, which
         // undershoots its true scale, so it conservatively fails the gate.
         let exp_field_max = R::Bits::sub(R::Bits::shl(R::Bits::ONE, exp_bits), R::Bits::ONE);
-        let thresh = R::Bits::add(R::Bits::shri::<1>(exp_field_max), R::Bits::splat(Element::from_u16(p as u16)));
+        let thresh = R::Bits::add(
+            R::Bits::shri::<1>(exp_field_max),
+            R::Bits::splat(Element::from_u16(p as u16)),
+        );
 
         let ul_ok = R::Bits::ge(esum, thresh);
 
@@ -540,9 +549,9 @@ fn fmadd_ro_rescue<R: FloatRegister>(a: Storage<R>, b: Storage<R>, c: Storage<R>
         let res_bits = <B<R> as BitCastRegister<R>>::from_bits(res_sign);
         let toward = B::<R>::shr(B::<R>::bitxor(res_bits, rn_bits), sign_shift); // 1 = residual opposes s_rn
         let away = B::<R>::sub(toward, B::<R>::ONE); // all-ones when residual and s_rn agree
-        let res_nonzero = <B<R> as CoreRegister>::from_mask(
-            <<B<R> as CoreRegister>::Mask as CastMaskRegister<R::Mask>>::mask_from(R::Mask::not(res_zero)),
-        );
+        let res_nonzero = <B<R> as CoreRegister>::from_mask(<<B<R> as CoreRegister>::Mask as CastMaskRegister<
+            R::Mask,
+        >>::mask_from(R::Mask::not(res_zero)));
         let kept_odd = B::<R>::sub(B::<R>::ZERO, B::<R>::bitand(kept, B::<R>::ONE)); // all-ones when odd
 
         // Round up on rem > half. On the exact boundary rem == half, round up if
@@ -554,7 +563,10 @@ fn fmadd_ro_rescue<R: FloatRegister>(a: Storage<R>, b: Storage<R>, c: Storage<R>
         );
         let round_up = B::<R>::bitor(
             B::<R>::bitand(B::<R>::from_mask(B::<R>::gt(rem, half)), B::<R>::ONE),
-            B::<R>::bitand(B::<R>::from_mask(B::<R>::eq(rem, half)), B::<R>::bitand(tie_up, B::<R>::ONE)),
+            B::<R>::bitand(
+                B::<R>::from_mask(B::<R>::eq(rem, half)),
+                B::<R>::bitand(tie_up, B::<R>::ONE),
+            ),
         );
 
         let sign_bit = B::<R>::shl(B::<R>::ONE, m + exp_bits);

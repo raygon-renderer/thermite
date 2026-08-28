@@ -112,7 +112,6 @@ where
             padded
         }
     }
-
 }
 
 impl<R: CoreRegister, N: 'static> crate::simd::HasIsa for ReducedRegister<R, N> {
@@ -577,8 +576,13 @@ impl<R: Register, N: Unsigned> Register for ReducedRegister<R, N> where R: Reduc
 fn bump_swizzle_idxs<U: UnsignedIntegerRegister>(idxs: Storage<U>, reduced_lanes: u16, pad: u16) -> Storage<U> {
     use crate::element::Element;
 
-    let rl = U::splat(<<U as Register>::Element as crate::element::Element>::from_u16(reduced_lanes));
-    let bumped = U::add(idxs, U::splat(<<U as Register>::Element as crate::element::Element>::from_u16(pad)));
+    let rl = U::splat(<<U as Register>::Element as crate::element::Element>::from_u16(
+        reduced_lanes,
+    ));
+    let bumped = U::add(
+        idxs,
+        U::splat(<<U as Register>::Element as crate::element::Element>::from_u16(pad)),
+    );
 
     U::blendv(U::ge(idxs, rl), idxs, bumped)
 }
@@ -798,17 +802,18 @@ where
 /// provably distinct, so there is no overlap.
 macro_rules! impl_reduced_extend_from_scalar {
     ($($elem:ty),* $(,)?) => {$(
-        #[thermite_macros::inline_always]
         impl<R, N: Unsigned> ExtendRegister<$elem> for ReducedRegister<R, N>
         where
             R: Register<Element = $elem> + CoreReducible<N> + ExtendRegister<$elem>,
         {
+            #[inline(always)]
             fn extend(value: Storage<$elem>) -> Storage<Self> {
                 // The scalar lands in lane 0 with the rest zeroed, which is exactly
                 // the reduced register's dead-upper-lane invariant.
                 ReducedRegister(R::extend(value), PhantomData)
             }
 
+            #[inline(always)]
             fn narrow(value: Storage<Self>) -> Storage<$elem> {
                 R::narrow(value.0)
             }

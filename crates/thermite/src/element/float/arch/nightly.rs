@@ -47,8 +47,24 @@ macro_rules! impl_nightly {
     };
 }
 
-impl_nightly!(f64, sqrt, floor, ceil, trunc, round, fma,
-    [sqrtf64, floorf64, ceilf64, truncf64, round_ties_even_f64, fmaf64]);
+impl_nightly!(
+    f64,
+    sqrt,
+    floor,
+    ceil,
+    trunc,
+    round,
+    fma,
+    [sqrtf64, floorf64, ceilf64, truncf64, round_ties_even_f64, fmaf64]
+);
 
-impl_nightly!(f32, sqrtf, floorf, ceilf, truncf, roundf, fmaf,
-    [sqrtf32, floorf32, ceilf32, truncf32, round_ties_even_f32, fmaf32]);
+impl_nightly!(
+    f32,
+    sqrtf,
+    floorf,
+    ceilf,
+    truncf,
+    roundf,
+    fmaf,
+    [sqrtf32, floorf32, ceilf32, truncf32, round_ties_even_f32, fmaf32]
+);
