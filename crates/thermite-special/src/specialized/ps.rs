@@ -1000,17 +1000,12 @@ where
 
         let alpha_x = alpha * x;
 
-        // GELU(x) = 0.5 * x * (1 + erf(ax / sqrt(2)))
+        // GELU(x) = 0.5 * x * (1 + erf(ax / sqrt(2))) = 0.5 * x * erfc(-ax / sqrt(2))
         // O = false: skip the exp(-ax^2) byproduct that only the derivative needs.
         let mut unused = Self::EMPTY;
-        let erf = erf_f_internal::<V, P, false, false>(alpha_x * Self::FRAC_1_SQRT_2, &mut unused);
+        let c = erf_f_internal::<V, P, true, false>(alpha_x * -Self::FRAC_1_SQRT_2, &mut unused);
 
-        if V::HAS_TRUE_FMA {
-            let half_x = x * Self::HALF;
-            half_x.mul_add(erf, half_x) // fma(0.5x, erf, 0.5x), one rounding
-        } else {
-            erf.mul_adde(Self::HALF, Self::HALF) * x
-        }
+        (x * Self::HALF) * c
     }
 }
 
@@ -1043,25 +1038,19 @@ where
 
         let alpha_x = alpha * x;
 
-        // GELU(x) = 0.5 * x * (1 + erf(ax / sqrt(2)))
+        // 0.5 * x * erfc(-ax / sqrt(2))
         let mut exp_neg_ax2 = Self::EMPTY;
-        let erf = erf_f_internal::<V, P, false, true>(alpha_x * Self::FRAC_1_SQRT_2, &mut exp_neg_ax2);
+        let c = erf_f_internal::<V, P, true, true>(alpha_x * -Self::FRAC_1_SQRT_2, &mut exp_neg_ax2);
 
-        let y;
-        let dy;
-
-        let half_erf = erf.mul_adde(Self::HALF, Self::HALF);
-
+        let half_c = c * Self::HALF; // 0.5 * (1 + erf(ax/sqrt(2)))
         let alpha_x_scaled = x.scale(FloatConsts::FRAC_1_SQRT_TAU);
 
-        if V::HAS_TRUE_FMA {
-            let half_x = x * Self::HALF;
-            y = half_x.mul_add(erf, half_x); // fma(0.5x, erf, 0.5x), one rounding
-            dy = alpha_x_scaled.mul_add(exp_neg_ax2, half_erf);
+        let y = x * half_c;
+        let dy = if V::HAS_TRUE_FMA {
+            alpha_x_scaled.mul_add(exp_neg_ax2, half_c)
         } else {
-            y = half_erf * x;
-            dy = half_erf + alpha_x_scaled * exp_neg_ax2;
-        }
+            half_c + alpha_x_scaled * exp_neg_ax2
+        };
 
         (y, dy)
     }
