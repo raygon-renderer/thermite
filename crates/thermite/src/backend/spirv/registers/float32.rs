@@ -962,7 +962,9 @@ impl LinAlg4Register for F32x4 {
     //   result.y = +lhs.w*rhs.y - lhs.x*rhs.z + lhs.y*rhs.w + lhs.z*rhs.x
     //   result.z = +lhs.w*rhs.z + lhs.x*rhs.y - lhs.y*rhs.x + lhs.z*rhs.w
     //   result.w = +lhs.w*rhs.w - lhs.x*rhs.x - lhs.y*rhs.y - lhs.z*rhs.z
-    fn quat4_product(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    //
+    // `FAST` is ignored.
+    fn quat4_product<const FAST: bool>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         use FloatRegister as FR;
         F32x4 {
             x: <f32 as FR>::mul_add(lhs.w, rhs.x, <f32 as FR>::mul_add(lhs.x, rhs.w, <f32 as FR>::mul_sub( lhs.y, rhs.z,  lhs.z * rhs.y))),

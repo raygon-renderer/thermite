@@ -45,7 +45,36 @@ where
     }
 }
 
-impl<T> Unwrap for &[T] {
+/// Runtime-length slices of vectors: the scalar layer's `&[E]` reinterprets as the vector
+/// layer's `&[Vector<E>]` in place, exactly as the out-parameter array impl above does.
+///
+/// This is why the identity impl below is bounded on [`Element`](crate::element::Element)
+/// rather than blanket over `T`: a blanket `&[T]` would overlap this one, and the two
+/// cases are genuinely different. `&[Self::Element]` (a coefficient list, `poly`) is the
+/// same type at both layers and passes through; `&[Self]` (a value list, `hypot_s`) is
+/// `&[Vector<E>]` at the vector layer and `&[E]` at the scalar one.
+impl<'a, R> Unwrap for &'a [crate::Vector<R>]
+where
+    R: crate::register::Register<Storage = R>,
+{
+    type Unwrapped = &'a [R];
+
+    #[inline(always)]
+    fn wrap(value: Self::Unwrapped) -> Self {
+        // SAFETY: `Vector<R>` is `#[repr(transparent)]` over `Storage<R>`, and
+        // `R: Register<Storage = R>` pins `Storage<R> = R`, so `[Vector<R>]` and `[R]`
+        // have identical layout.
+        unsafe { &*(value as *const [R] as *const [crate::Vector<R>]) }
+    }
+
+    #[inline(always)]
+    fn unwrap(self) -> Self::Unwrapped {
+        // SAFETY: as in `wrap`.
+        unsafe { &*(self as *const [crate::Vector<R>] as *const [R]) }
+    }
+}
+
+impl<T: crate::element::Element> Unwrap for &[T] {
     type Unwrapped = Self;
 
     #[inline(always)]

@@ -395,6 +395,43 @@ macro_rules! compress_z_merge_arm {
     };
 }
 
+/// The `_n` companion of [`compress_z_merge_arm!`]: same literal-`N` chunk-count
+/// dispatch, but carrying `NV` values through the shared merge tree at once.
+///
+/// The per-value chunk columns are gathered by a plain loop. Only the
+/// `[_; N]` <-> `[_; $n]` identity needs the pointer cast, exactly as in the
+/// single-value arm.
+macro_rules! compress_z_merge_arm_n {
+    ($n:literal, $f:ident, $values:ident, $mask:ident) => {
+        if const { N == $n } {
+            // SAFETY: `N == $n` per the guard, so the `[_; N]` and `[_; $n]`
+            // array types are identical.
+            unsafe {
+                let mut chunks = [[R::EMPTY; $n]; NV];
+
+                let mut v = 0;
+                while v < NV {
+                    chunks[v] = *(&$values[v].0 as *const [Storage<R>; N] as *const [Storage<R>; $n]);
+                    v += 1;
+                }
+
+                let masks = *(&$mask.0 as *const [Storage<R::Mask>; N] as *const [Storage<R::Mask>; $n]);
+                let merged = crate::backend::generic::polyfills::$f::<R, NV>(chunks, masks);
+
+                let mut out = [<Self as CoreRegister>::EMPTY; NV];
+
+                let mut v = 0;
+                while v < NV {
+                    out[v] = Self(*(&merged[v] as *const [Storage<R>; $n] as *const [Storage<R>; N]));
+                    v += 1;
+                }
+
+                return out;
+            }
+        }
+    };
+}
+
 #[rustfmt::skip] #[thermite_macros::array_impl]
 impl<R: Register, const N: usize> Register for ArrayRegister<R, N>
 where
@@ -987,6 +1024,119 @@ where
         }
 
         crate::backend::generic::polyfills::expand_z_default::<Self>(value, mask)
+    }
+
+    // The `_n` family. Everything mask-derived on the emulated-wide paths is
+    // shareable: the <= 8-lane table row, the wide scatter's global gather
+    // index, and (for `compress_z_n`) the merge tree's per-chunk counts and
+    // `merge_pair` controls, whose chunk compactions recurse into the chunk
+    // register's own `_n`. The const generic is named `NV` here because `N` is
+    // already this impl's chunk count.
+
+    fn compress_n<const NV: usize>(values: [Storage<Self>; NV], mask: Storage<Self::Mask>) -> [Storage<Self>; NV] {
+        if const { Self::Lanes::USIZE <= 8 && Self::HAS_PERMUTEV } {
+            // SAFETY: `Lanes <= 8` per the guard above.
+            return unsafe { crate::backend::generic::polyfills::compress_permute8_raw_n::<Self, NV>(values, mask) };
+        }
+
+        if const { Self::HAS_PERMUTEV && Self::Lanes::USIZE % 8 == 0 && Self::Lanes::USIZE >= 16 && Self::Lanes::USIZE <= 64 }
+        {
+            // SAFETY: the guard is exactly `compress_permute_wide`'s contract.
+            return unsafe {
+                crate::backend::generic::polyfills::compress_permute_wide_raw_n::<Self, NV>(values, mask)
+            };
+        }
+
+        let mut out = [<Self as CoreRegister>::EMPTY; NV];
+        let mut i = 0;
+        while i < NV {
+            out[i] = Self::compress(values[i], mask);
+            i += 1;
+        }
+        out
+    }
+
+    fn compress_z_n<const NV: usize>(mut values: [Storage<Self>; NV], mask: Storage<Self::Mask>) -> [Storage<Self>; NV] {
+        if const { Self::Lanes::USIZE <= 8 && Self::HAS_PERMUTEV } {
+            // Zero the unselected lanes first, since they carry into the tail.
+            let mut i = 0;
+            while i < NV {
+                values[i] = Self::zz(mask, values[i]);
+                i += 1;
+            }
+
+            // SAFETY: `Lanes <= 8` per the guard above.
+            return unsafe { crate::backend::generic::polyfills::compress_permute8_raw_n::<Self, NV>(values, mask) };
+        }
+
+        if const {
+            Self::HAS_PERMUTEV
+                && crate::backend::generic::polyfills::merge_ctrl_supported(
+                    <R::Lanes as typenum::Unsigned>::USIZE,
+                    N,
+                )
+        } {
+            compress_z_merge_arm_n!(2, compress_z_merge2_n, values, mask);
+            compress_z_merge_arm_n!(4, compress_z_merge4_n, values, mask);
+            compress_z_merge_arm_n!(8, compress_z_merge8_n, values, mask);
+        }
+
+        let mut out = [<Self as CoreRegister>::EMPTY; NV];
+        let mut i = 0;
+        while i < NV {
+            out[i] = Self::compress_z(values[i], mask);
+            i += 1;
+        }
+        out
+    }
+
+    fn expand_n<const NV: usize>(values: [Storage<Self>; NV], mask: Storage<Self::Mask>) -> [Storage<Self>; NV] {
+        if const { Self::Lanes::USIZE <= 8 && Self::HAS_PERMUTEV } {
+            // SAFETY: `Lanes <= 8` per the guard above.
+            return unsafe { crate::backend::generic::polyfills::expand_permute8_raw_n::<Self, NV>(values, mask) };
+        }
+
+        if const { Self::HAS_PERMUTEV && Self::Lanes::USIZE % 8 == 0 && Self::Lanes::USIZE >= 16 && Self::Lanes::USIZE <= 64 }
+        {
+            // SAFETY: the guard is exactly `expand_permute_wide`'s contract.
+            return unsafe { crate::backend::generic::polyfills::expand_permute_wide_raw_n::<Self, NV>(values, mask) };
+        }
+
+        let mut out = [<Self as CoreRegister>::EMPTY; NV];
+        let mut i = 0;
+        while i < NV {
+            out[i] = Self::expand(values[i], mask);
+            i += 1;
+        }
+        out
+    }
+
+    fn expand_z_n<const NV: usize>(values: [Storage<Self>; NV], mask: Storage<Self::Mask>) -> [Storage<Self>; NV] {
+        if const {
+            Self::HAS_PERMUTEV
+                && (Self::Lanes::USIZE <= 8
+                    || (Self::Lanes::USIZE % 8 == 0 && Self::Lanes::USIZE >= 16 && Self::Lanes::USIZE <= 64))
+        } {
+            // Both covered shapes are a full permutation followed by one `zz`,
+            // exactly as the single-vector `expand_z` composes them.
+            let mut out = Self::expand_n::<NV>(values, mask);
+
+            let mut i = 0;
+            while i < NV {
+                out[i] = Self::zz(mask, out[i]);
+                i += 1;
+            }
+
+            return out;
+        }
+
+        let mut out = [<Self as CoreRegister>::EMPTY; NV];
+        let mut i = 0;
+        while i < NV {
+            out[i] = Self::expand_z(values[i], mask);
+            i += 1;
+        }
+        out
     }
 
     // Per-chunk forwarding rather than the trait's portable per-lane loop:

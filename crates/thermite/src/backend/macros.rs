@@ -1350,6 +1350,59 @@ macro_rules! compress_via_table {
                 $crate::backend::generic::polyfills::expand_permute::<Self>(value, mask),
             )
         }
+
+        // The `_n` family: the whole mask-derived half of the table path is the
+        // movemask plus the row address, so `N` values share one row fetch and
+        // pay one `permutev_row` each. `#[inline(always)]` is spelled here
+        // because `#[thermite_macros::inline_always]` on the surrounding impl
+        // block expands BEFORE this macro and cannot see these methods.
+        #[inline(always)]
+        fn compress_n<const N: usize>(
+            values: [$crate::register::Storage<Self>; N],
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> [$crate::register::Storage<Self>; N] {
+            $crate::backend::generic::polyfills::compress_permute_n::<Self, N>(values, mask)
+        }
+
+        #[inline(always)]
+        fn compress_z_n<const N: usize>(
+            mut values: [$crate::register::Storage<Self>; N],
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> [$crate::register::Storage<Self>; N] {
+            // Zero first, exactly as the single-vector arm does.
+            let mut i = 0;
+            while i < N {
+                values[i] = <Self as $crate::register::CoreRegister>::zz(mask, values[i]);
+                i += 1;
+            }
+
+            $crate::backend::generic::polyfills::compress_permute_n::<Self, N>(values, mask)
+        }
+
+        #[inline(always)]
+        fn expand_n<const N: usize>(
+            values: [$crate::register::Storage<Self>; N],
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> [$crate::register::Storage<Self>; N] {
+            $crate::backend::generic::polyfills::expand_permute_n::<Self, N>(values, mask)
+        }
+
+        #[inline(always)]
+        fn expand_z_n<const N: usize>(
+            values: [$crate::register::Storage<Self>; N],
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> [$crate::register::Storage<Self>; N] {
+            // Zero after, exactly as the single-vector arm does.
+            let mut out = $crate::backend::generic::polyfills::expand_permute_n::<Self, N>(values, mask);
+
+            let mut i = 0;
+            while i < N {
+                out[i] = <Self as $crate::register::CoreRegister>::zz(mask, out[i]);
+                i += 1;
+            }
+
+            out
+        }
     };
 }
 
@@ -1417,6 +1470,45 @@ macro_rules! compress_via_wide {
             // The unmerge-passes + grouped-rows kernel does its own zeroing
             // (it composes the `zz` internally, after the permutes).
             $crate::backend::generic::polyfills::expand_z_grouped::<Self>(value, mask)
+        }
+
+        // The `_n` family: the grouped kernels' plan (movemask, per-group table
+        // rows, every merge/unmerge level's index register, and for the
+        // non-zeroing forms the complement plan plus the shift control) is
+        // mask-derived and shared, leaving only the zz/nz + permute ladder per
+        // value. `#[inline(always)]` is spelled here because
+        // `#[thermite_macros::inline_always]` on the surrounding impl block
+        // expands BEFORE this macro and cannot see these methods.
+        #[inline(always)]
+        fn compress_n<const N: usize>(
+            values: [$crate::register::Storage<Self>; N],
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> [$crate::register::Storage<Self>; N] {
+            $crate::backend::generic::polyfills::compress_grouped_n::<Self, N>(values, mask)
+        }
+
+        #[inline(always)]
+        fn compress_z_n<const N: usize>(
+            values: [$crate::register::Storage<Self>; N],
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> [$crate::register::Storage<Self>; N] {
+            $crate::backend::generic::polyfills::compress_z_grouped_n::<Self, N>(values, mask)
+        }
+
+        #[inline(always)]
+        fn expand_n<const N: usize>(
+            values: [$crate::register::Storage<Self>; N],
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> [$crate::register::Storage<Self>; N] {
+            $crate::backend::generic::polyfills::expand_grouped_n::<Self, N>(values, mask)
+        }
+
+        #[inline(always)]
+        fn expand_z_n<const N: usize>(
+            values: [$crate::register::Storage<Self>; N],
+            mask: $crate::register::Storage<<Self as $crate::register::CoreRegister>::Mask>,
+        ) -> [$crate::register::Storage<Self>; N] {
+            $crate::backend::generic::polyfills::expand_z_grouped_n::<Self, N>(values, mask)
         }
     };
 }

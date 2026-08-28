@@ -46,6 +46,20 @@ impl<R: Register> Clone for Vector<R> {
 
 impl<R: Register> Copy for Vector<R> {}
 
+/// `[Vector<R>; N]` -> `[Storage<R>; N]`
+#[inline(always)]
+const fn wrap_n<R: Register, const N: usize>(values: [Vector<R>; N]) -> [Storage<R>; N] {
+    // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
+    unsafe { core::mem::transmute_copy(&values) }
+}
+
+/// The inverse of [`wrap_n`].
+#[inline(always)]
+const fn unwrap_n<R: Register, const N: usize>(values: [Storage<R>; N]) -> [Vector<R>; N] {
+    // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
+    unsafe { core::mem::transmute_copy(&values) }
+}
+
 const _: () = {
     use core::fmt;
 
@@ -337,6 +351,16 @@ impl<R: Register> GenericVector for Vector<R> {
     fn expand(self, mask: Self::Mask) -> Self { Vector(R::expand(self.0, mask.0)) }
     fn expand_z(self, mask: Self::Mask) -> Self { Vector(R::expand_z(self.0, mask.0)) }
     fn expand_m(self, src: Self, mask: Self::Mask) -> Self { Vector(R::expand_m(src.0, mask.0, self.0)) }
+
+    // The `_n` family delegates straight to the register's shared-plan forms.
+    // `Vector<R>` is `#[repr(transparent)]`, but the array conversions are
+    // written as hand-rolled loops over `.0` rather than `array::map`/`from_fn`
+    // (which do not inline in `target_feature` code) or a transmute. The loops
+    // SROA away and cost nothing.
+    fn compress_n<const N: usize>(values: [Self; N], mask: Self::Mask) -> [Self; N] { unwrap_n(R::compress_n::<N>(wrap_n(values), mask.0)) }
+    fn compress_z_n<const N: usize>(values: [Self; N], mask: Self::Mask) -> [Self; N] { unwrap_n(R::compress_z_n::<N>(wrap_n(values), mask.0)) }
+    fn expand_n<const N: usize>(values: [Self; N], mask: Self::Mask) -> [Self; N] { unwrap_n(R::expand_n::<N>(wrap_n(values), mask.0)) }
+    fn expand_z_n<const N: usize>(values: [Self; N], mask: Self::Mask) -> [Self; N] { unwrap_n(R::expand_z_n::<N>(wrap_n(values), mask.0)) }
     fn align<const OFFSET: usize>(self, other: Self) -> Self { Vector(R::align::<OFFSET>(self.0, other.0)) }
     const HAS_NATIVE_ALIGN: bool = R::HAS_NATIVE_ALIGN;
 
@@ -368,114 +392,24 @@ impl<R: Register> GenericVector for Vector<R> {
         (Vector(a), Vector(b))
     }
 
-    // Hand-rolled unwrap/rewrap loops, not `core::array::map` - that fails to
-    // inline inside `#[target_feature]` code and falls back to scalar copies.
-    fn interleave_radix<const N: usize>(inputs: [Self; N]) -> [Self; N] {
-        let mut regs = [R::EMPTY; N];
-        let mut i = 0;
-        while i < N {
-            regs[i] = inputs[i].0;
-            i += 1;
-        }
-        let out = R::interleave_radix::<N>(regs);
-        let mut res = [Vector(R::EMPTY); N];
-        let mut i = 0;
-        while i < N {
-            res[i] = Vector(out[i]);
-            i += 1;
-        }
-        res
-    }
+    fn interleave_radix<const N: usize>(inputs: [Self; N]) -> [Self; N] { unwrap_n(R::interleave_radix::<N>(wrap_n(inputs))) }
+    fn deinterleave_radix<const N: usize>(inputs: [Self; N]) -> [Self; N] { unwrap_n(R::deinterleave_radix::<N>(wrap_n(inputs))) }
+    fn deinterleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Self; N]) -> [Self; N] { unwrap_n(R::deinterleave_radix_by::<N, GROUP>(wrap_n(inputs))) }
+    fn interleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Self; N]) -> [Self; N] { unwrap_n(R::interleave_radix_by::<N, GROUP>(wrap_n(inputs))) }
 
-    fn deinterleave_radix<const N: usize>(inputs: [Self; N]) -> [Self; N] {
-        let mut regs = [R::EMPTY; N];
-        let mut i = 0;
-        while i < N {
-            regs[i] = inputs[i].0;
-            i += 1;
-        }
-        let out = R::deinterleave_radix::<N>(regs);
-        let mut res = [Vector(R::EMPTY); N];
-        let mut i = 0;
-        while i < N {
-            res[i] = Vector(out[i]);
-            i += 1;
-        }
-        res
-    }
-
-    // Hand-rolled unwrap/rewrap loops (not `core::array::map`) - see the note above.
-    fn deinterleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Self; N]) -> [Self; N] {
-        let mut regs = [R::EMPTY; N];
-        let mut i = 0;
-        while i < N {
-            regs[i] = inputs[i].0;
-            i += 1;
-        }
-        let out = R::deinterleave_radix_by::<N, GROUP>(regs);
-        let mut res = [Vector(R::EMPTY); N];
-        let mut i = 0;
-        while i < N {
-            res[i] = Vector(out[i]);
-            i += 1;
-        }
-        res
-    }
-
-    fn interleave_radix_by<const N: usize, const GROUP: usize>(inputs: [Self; N]) -> [Self; N] {
-        let mut regs = [R::EMPTY; N];
-        let mut i = 0;
-        while i < N {
-            regs[i] = inputs[i].0;
-            i += 1;
-        }
-        let out = R::interleave_radix_by::<N, GROUP>(regs);
-        let mut res = [Vector(R::EMPTY); N];
-        let mut i = 0;
-        while i < N {
-            res[i] = Vector(out[i]);
-            i += 1;
-        }
-        res
-    }
-
-    // NOTE: hand-rolled loops, not `core::array::{from_fn, map}` - those fail to
-    // inline inside `#[target_feature]` code and fall back to scalar copies.
-    unsafe fn load_deinterleaved<const N: usize>(ptr: *const Self::Element) -> [Self; N] {
-        let regs = unsafe { R::load_deinterleaved::<N>(ptr) };
-
-        let mut out = [Vector(R::EMPTY); N];
-        let mut i = 0;
-        while i < N {
-            out[i] = Vector(regs[i]);
-            i += 1;
-        }
-        out
-    }
-
-    unsafe fn store_interleaved<const N: usize>(ptr: *mut Self::Element, values: [Self; N]) {
-        let mut regs = [R::EMPTY; N];
-        let mut i = 0;
-        while i < N {
-            regs[i] = values[i].0;
-            i += 1;
-        }
-        unsafe { R::store_interleaved::<N>(ptr, regs) }
-    }
+    unsafe fn load_deinterleaved<const N: usize>(ptr: *const Self::Element) -> [Self; N] { unwrap_n(unsafe { R::load_deinterleaved::<N>(ptr) }) }
+    unsafe fn store_interleaved<const N: usize>(ptr: *mut Self::Element, values: [Self; N]) { unsafe { R::store_interleaved::<N>(ptr, wrap_n(values)) } }
 
     // Overrides `GenericVector`'s lane-wise record defaults with the register
-    // engine. Same hand-rolled-loop reasoning as above.
+    // engine. The outer loops are hand-rolled for the same reason `wrap_n` is,
+    // since `array::map` does not inline in `#[target_feature]` code.
     unsafe fn load_deinterleaved_arrays<const M: usize, const C: usize>(ptr: *const Self::Element) -> [[Self; C]; M] {
         let records = unsafe { R::load_deinterleaved_arrays::<M, C>(ptr) };
 
         let mut out = [[Vector(R::EMPTY); C]; M];
         let mut j = 0;
         while j < M {
-            let mut c = 0;
-            while c < C {
-                out[j][c] = Vector(records[j][c]);
-                c += 1;
-            }
+            out[j] = unwrap_n(records[j]);
             j += 1;
         }
         out
@@ -485,11 +419,7 @@ impl<R: Register> GenericVector for Vector<R> {
         let mut records = [[R::EMPTY; C]; M];
         let mut j = 0;
         while j < M {
-            let mut c = 0;
-            while c < C {
-                records[j][c] = values[j][c].0;
-                c += 1;
-            }
+            records[j] = wrap_n(values[j]);
             j += 1;
         }
         unsafe { R::store_interleaved_arrays::<M, C>(ptr, records) }
@@ -503,13 +433,7 @@ impl<R: Register> GenericVector for Vector<R> {
         let mut out = [StreamGroup { head: Vector(R::EMPTY), tail: [Vector(R::EMPTY); TAIL] }; M];
         let mut j = 0;
         while j < M {
-            let mut tail = [Vector(R::EMPTY); TAIL];
-            let mut c = 0;
-            while c < TAIL {
-                tail[c] = Vector(groups[j].tail[c]);
-                c += 1;
-            }
-            out[j] = StreamGroup { head: Vector(groups[j].head), tail };
+            out[j] = StreamGroup { head: Vector(groups[j].head), tail: unwrap_n(groups[j].tail) };
             j += 1;
         }
         out
@@ -523,13 +447,7 @@ impl<R: Register> GenericVector for Vector<R> {
         let mut regs = [empty; M];
         let mut j = 0;
         while j < M {
-            let mut tail = [R::EMPTY; TAIL];
-            let mut c = 0;
-            while c < TAIL {
-                tail[c] = values[j].tail[c].0;
-                c += 1;
-            }
-            regs[j] = StreamGroup { head: values[j].head.0, tail };
+            regs[j] = StreamGroup { head: values[j].head.0, tail: wrap_n(values[j].tail) };
             j += 1;
         }
         unsafe { R::store_interleaved_grouped::<M, TAIL>(ptr, regs) }
@@ -880,12 +798,11 @@ where
     #[conditional] fn abs_diff(self, other: Self) -> Self {}
 
     fn morton<const N: usize>(values: [Self; N]) -> Self {
-        Vector(R::morton::<N>(unsafe { core::mem::transmute_copy(&values) }))
+        Vector(R::morton::<N>(wrap_n(values)))
     }
 
     fn reverse_morton<const N: usize>(self) -> [Self; N] {
-        let regs = R::reverse_morton::<N>(self.0);
-        unsafe { core::mem::transmute_copy(&regs) }
+        unwrap_n(R::reverse_morton::<N>(self.0))
     }
 }
 
@@ -985,7 +902,7 @@ impl<R: LinAlg3Register> LinAlg3Vector for Vector<R> {
     fn prod_elements3(self) -> Self::Element { R::prod_elements3(self.0) }
 
     fn mat3_transpose(m: &[Self; 3]) -> [Self; 3] {
-        R::mat3_transpose(unsafe { core::mem::transmute(m) }).map(Vector)
+        unwrap_n(R::mat3_transpose(unsafe { core::mem::transmute(m) }))
     }
 
     fn mat3_vec3_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 3]) -> Self {
@@ -998,21 +915,18 @@ impl<R: LinAlg3Register> LinAlg3Vector for Vector<R> {
         vectors: &[Self; N],
     ) -> [Self; N] {
         // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
-        let raw = R::mat3_vec3_product::<COLUMN_MAJOR, N>(
+        unwrap_n(R::mat3_vec3_product::<COLUMN_MAJOR, N>(
             unsafe { core::mem::transmute(m) },
             unsafe { core::mem::transmute(vectors) },
-        );
-        // SAFETY: [Vector<R>; N] and [Storage<R>; N] share an identical layout.
-        unsafe { core::mem::transmute_copy::<[Storage<R>; N], [Self; N]>(&raw) }
+        ))
     }
 
     fn mat3_product<const COLUMN_MAJOR: bool>(lhs: &[Self; 3], rhs: &[Self; 3]) -> [Self; 3] {
         // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
-        R::mat3_product::<COLUMN_MAJOR>(
+        unwrap_n(R::mat3_product::<COLUMN_MAJOR>(
             unsafe { core::mem::transmute(lhs) },
             unsafe { core::mem::transmute(rhs) },
-        )
-        .map(Vector)
+        ))
     }
 
     fn mat3_det<const FAST: bool>(m: &[Self; 3]) -> Self::Element {
@@ -1027,7 +941,7 @@ impl<R: LinAlg3Register> LinAlg3Vector for Vector<R> {
 
     fn mat3_normal<const DIVIDE: bool, const FAST: bool>(m: &[Self; 3]) -> [Self; 3] {
         // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
-        R::mat3_normal::<DIVIDE, FAST>(unsafe { core::mem::transmute(m) }).map(Vector)
+        unwrap_n(R::mat3_normal::<DIVIDE, FAST>(unsafe { core::mem::transmute(m) }))
     }
 }
 
@@ -1037,8 +951,8 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
         R::dot4(self.0, other.0)
     }
 
-    fn quat4_product(self, other: Self) -> Self {
-        Vector(R::quat4_product(self.0, other.0))
+    fn quat4_product<const FAST: bool>(self, other: Self) -> Self {
+        Vector(R::quat4_product::<FAST>(self.0, other.0))
     }
 
     fn quat4_vec3_product<const FAST: bool>(self, vec: Self) -> Self {
@@ -1046,17 +960,17 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
     }
 
     fn quat_to_mat3<const COLUMN_MAJOR: bool>(self) -> [Self; 3] {
-        R::quat_to_mat3::<COLUMN_MAJOR>(self.0).map(Vector)
+        unwrap_n(R::quat_to_mat3::<COLUMN_MAJOR>(self.0))
     }
 
     fn quat_to_mat4<const COLUMN_MAJOR: bool>(self) -> [Self; 4] {
-        R::quat_to_mat4::<COLUMN_MAJOR>(self.0).map(Vector)
+        unwrap_n(R::quat_to_mat4::<COLUMN_MAJOR>(self.0))
     }
 
     fn mat4_transpose(m: &[Self; 4]) -> [Self; 4] {
         // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
         // because Vector<R> is repr(transparent) around Storage<R>
-        R::mat4_transpose(unsafe { core::mem::transmute(m) }).map(Vector)
+        unwrap_n(R::mat4_transpose(unsafe { core::mem::transmute(m) }))
     }
 
     fn mat4_vec4_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self {
@@ -1074,11 +988,10 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
         vectors: &[Self; N],
     ) -> [Self; N] {
         // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
-        let raw = R::mat4_vec3_product::<COLUMN_MAJOR, N>(unsafe { core::mem::transmute(m) }, unsafe {
-            core::mem::transmute(vectors)
-        });
-        // SAFETY: [Vector<R>; N] and [Storage<R>; N] share an identical layout.
-        unsafe { core::mem::transmute_copy::<[Storage<R>; N], [Self; N]>(&raw) }
+        unwrap_n(R::mat4_vec3_product::<COLUMN_MAJOR, N>(
+            unsafe { core::mem::transmute(m) },
+            unsafe { core::mem::transmute(vectors) },
+        ))
     }
 
     fn mat4_point3_product<const COLUMN_MAJOR: bool>(self, m: &[Self; 4]) -> Self {
@@ -1091,21 +1004,19 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
         vectors: &[Self; N],
     ) -> [Self; N] {
         // SAFETY: Vector<R> is repr(transparent) around Storage<R>.
-        let raw = R::mat4_point3_product::<COLUMN_MAJOR, N>(unsafe { core::mem::transmute(m) }, unsafe {
-            core::mem::transmute(vectors)
-        });
-        // SAFETY: [Vector<R>; N] and [Storage<R>; N] share an identical layout.
-        unsafe { core::mem::transmute_copy::<[Storage<R>; N], [Self; N]>(&raw) }
+        unwrap_n(R::mat4_point3_product::<COLUMN_MAJOR, N>(
+            unsafe { core::mem::transmute(m) },
+            unsafe { core::mem::transmute(vectors) },
+        ))
     }
 
     fn mat4_product<const COLUMN_MAJOR: bool>(lhs: &[Self; 4], rhs: &[Self; 4]) -> [Self; 4] {
         // SAFETY: transmute &[Vector<R>; 4] to &[Storage<R>; 4] is safe
         // because Vector<R> is repr(transparent) around Storage<R>
-        R::mat4_product::<COLUMN_MAJOR>(
+        unwrap_n(R::mat4_product::<COLUMN_MAJOR>(
             unsafe { core::mem::transmute(lhs) }, //
             unsafe { core::mem::transmute(rhs) },
-        )
-        .map(Vector)
+        ))
     }
 
     fn mat4_vec4_product_array<const COLUMN_MAJOR: bool, const N: usize>(
@@ -1114,11 +1025,10 @@ impl<R: LinAlg4Register> LinAlg4Vector for Vector<R> {
     ) -> [Self; N] {
         // SAFETY: transmute &[Vector<R>; _] to &[Storage<R>; _] is safe because
         // Vector<R> is repr(transparent) around Storage<R>.
-        let raw = R::mat4_vec4_product::<COLUMN_MAJOR, N>(unsafe { core::mem::transmute(m) }, unsafe {
-            core::mem::transmute(vectors)
-        });
-        // SAFETY: [Vector<R>; N] and [Storage<R>; N] share an identical layout.
-        unsafe { core::mem::transmute_copy::<[Storage<R>; N], [Self; N]>(&raw) }
+        unwrap_n(R::mat4_vec4_product::<COLUMN_MAJOR, N>(
+            unsafe { core::mem::transmute(m) },
+            unsafe { core::mem::transmute(vectors) },
+        ))
     }
 
     fn mat4_det<const FAST: bool>(m: &[Self; 4]) -> Self::Element {

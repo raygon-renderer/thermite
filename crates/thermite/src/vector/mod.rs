@@ -545,6 +545,28 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// Number of lanes in the vector.
     const LANES: usize;
 
+    /// Marks the top of one loop iteration, for the benefit of anything that
+    /// *records* a kernel rather than running it.
+    ///
+    /// Compiles to nothing here (the body is empty and the call is inlined
+    /// away), so a kernel may call it in a hot loop at no cost. A symbolic
+    /// vector type overrides it to note the boundary, which is what lets a
+    /// recorded trace be folded back into a loop: the host `while` has already
+    /// unrolled by the time anything sees it, and the boundaries are the one
+    /// piece of structure that cannot be recovered from the data flow alone.
+    ///
+    /// The call *site* is the loop's identity, so nothing has to be passed in
+    /// and no id has to be kept unique.
+    ///
+    /// **Composite vector types must forward this to the value they wrap**
+    /// (`fn _loop_hint() { V::_loop_hint() }`) rather than inherit the empty
+    /// body, or a kernel traced through them loses the structure. Forwarding
+    /// costs them nothing and pulls in no machinery: this method is core's.
+    #[doc(hidden)]
+    #[inline(always)]
+    #[track_caller]
+    fn _loop_hint() {}
+
     /// Number of lanes in the vector, as a runtime value.
     ///
     /// Today this is always [`LANES`](Self::LANES), but prefer it over the constant in
@@ -1350,6 +1372,83 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// `mask = [true, false, true, false]` this returns `[a, x, c, z]` -
     /// equivalent to `mask.select(self.expand(mask), src)`.
     fn expand_m(self, src: Self, mask: Self::Mask) -> Self;
+
+    /// Apply **one** mask's [`compress`](Self::compress) to `N` vectors.
+    ///
+    /// Compaction splits into a *plan* (the lane bitmask, table rows and index
+    /// registers, all derived from the mask alone) and an *apply* (the permute
+    /// ladder, the only per-value work). This builds the plan once and applies
+    /// it `N` times, which is what a key-value partition or a multi-column
+    /// reorder wants: the mask half is paid once instead of `N` times.
+    ///
+    /// Results are **bit-identical** to `N` separate `compress` calls.
+    ///
+    /// # All `N` vectors share one type
+    ///
+    /// For a key/value pair whose element widths match, bitcast the payload
+    /// into the key's vector type, call once, and bitcast back. Mixed-width
+    /// pairs must stay on separate calls.
+    ///
+    /// The default is a per-value loop, so every composite inherits it.
+    /// [`Vector`](crate::Vector) overrides it with the register's shared-plan
+    /// form.
+    #[inline(always)]
+    fn compress_n<const N: usize>(values: [Self; N], mask: Self::Mask) -> [Self; N] {
+        let mut out = [Self::EMPTY; N];
+
+        let mut i = 0;
+        while i < N {
+            out[i] = values[i].compress(mask);
+            i += 1;
+        }
+
+        out
+    }
+
+    /// Apply one mask's [`compress_z`](Self::compress_z) to `N` vectors. See
+    /// [`compress_n`](Self::compress_n).
+    #[inline(always)]
+    fn compress_z_n<const N: usize>(values: [Self; N], mask: Self::Mask) -> [Self; N] {
+        let mut out = [Self::EMPTY; N];
+
+        let mut i = 0;
+        while i < N {
+            out[i] = values[i].compress_z(mask);
+            i += 1;
+        }
+
+        out
+    }
+
+    /// Apply one mask's [`expand`](Self::expand) to `N` vectors. See
+    /// [`compress_n`](Self::compress_n).
+    #[inline(always)]
+    fn expand_n<const N: usize>(values: [Self; N], mask: Self::Mask) -> [Self; N] {
+        let mut out = [Self::EMPTY; N];
+
+        let mut i = 0;
+        while i < N {
+            out[i] = values[i].expand(mask);
+            i += 1;
+        }
+
+        out
+    }
+
+    /// Apply one mask's [`expand_z`](Self::expand_z) to `N` vectors. See
+    /// [`compress_n`](Self::compress_n).
+    #[inline(always)]
+    fn expand_z_n<const N: usize>(values: [Self; N], mask: Self::Mask) -> [Self; N] {
+        let mut out = [Self::EMPTY; N];
+
+        let mut i = 0;
+        while i < N {
+            out[i] = values[i].expand_z(mask);
+            i += 1;
+        }
+
+        out
+    }
 
     /// Two-register element align (the `palignr` family): the window of `LANES`
     /// lanes starting at lane `OFFSET` of the concatenation `[self, other]`
@@ -3489,7 +3588,15 @@ pub trait LinAlg4Vector: LinAlg3Vector {
     /// T4 = (lhs.z * rhs.yxwz) * {-,+,+,-}
     /// T1 + T2 + T3 + T4
     /// ```
-    fn quat4_product(self, other: Self) -> Self;
+    ///
+    /// In lieu of a full policy system, `FAST` picks the internal behavior.
+    /// `true` is the textbook decomposition with partial fusing (5 FP ops), so
+    /// the vector lanes of `q * conj(q)` retain the rounding error of the
+    /// products that were supposed to cancel. `false` regroups the terms so each
+    /// cancelling pair sits inside one FMA-compensated group (9 FP ops):
+    /// `q * conj(q)` comes out as exactly `(0, 0, 0, |q|^2)`, and it is slightly
+    /// the more accurate arm in general.
+    fn quat4_product<const FAST: bool>(self, other: Self) -> Self;
 
     /// Quaternion-vector multiplication.
     ///

@@ -1550,6 +1550,92 @@ pub trait Register:
         Self::blendv(mask, src, Self::expand(value, mask))
     }
 
+    /// Apply **one** mask's [`compress`](Self::compress) to `N` registers.
+    ///
+    /// Every compaction kernel splits into a *plan* (the movemask, the table
+    /// rows, the index registers, all derived from the mask alone) and an
+    /// *apply* (the zeroing and the permute ladder, the only per-value work).
+    /// The `_n` family builds the plan once and applies it `N` times, so a
+    /// key-value pair or a multi-column reorder pays the mask half once instead
+    /// of `N` times. On the grouped 16/32/64-lane kernels the plan is the
+    /// majority of the body.
+    ///
+    /// Results are **bit-identical** to `N` separate calls. This shares work
+    /// between them and never changes the permutation.
+    ///
+    /// # All `N` values share one register type
+    ///
+    /// The signature takes `[Storage<Self>; N]`, so the values must all be the
+    /// same register. For a key/value pair whose element *widths* match (say
+    /// `u32` keys and `f32` payloads), bitcast the payload into the key's
+    /// register, call once, and bitcast back. The permutation is width-driven,
+    /// so this is exact. Mixed-width pairs (`u32` keys, `u64` payloads) have no
+    /// common register and must stay on separate calls.
+    ///
+    /// The array return type is not mask-eligible, so there are deliberately no
+    /// `_c`/`_m`/`_z` siblings generated for these, and the zeroing forms are
+    /// the separate `compress_z_n`/`expand_z_n` entry points.
+    ///
+    /// The default is a per-value loop over [`compress`](Self::compress),
+    /// correct on every backend and composite. Registers with a real shared
+    /// plan override it.
+    fn compress_n<const N: usize>(values: [Storage<Self>; N], mask: Storage<Self::Mask>) -> [Storage<Self>; N] {
+        let mut out = [Self::EMPTY; N];
+
+        let mut i = 0;
+        while i < N {
+            out[i] = Self::compress(values[i], mask);
+            i += 1;
+        }
+
+        out
+    }
+
+    /// Apply one mask's [`compress_z`](Self::compress_z) to `N` registers. See
+    /// [`compress_n`](Self::compress_n) for the plan/apply rationale and the
+    /// same-register-type constraint.
+    fn compress_z_n<const N: usize>(values: [Storage<Self>; N], mask: Storage<Self::Mask>) -> [Storage<Self>; N] {
+        let mut out = [Self::EMPTY; N];
+
+        let mut i = 0;
+        while i < N {
+            out[i] = Self::compress_z(values[i], mask);
+            i += 1;
+        }
+
+        out
+    }
+
+    /// Apply one mask's [`expand`](Self::expand) to `N` registers. See
+    /// [`compress_n`](Self::compress_n) for the plan/apply rationale and the
+    /// same-register-type constraint.
+    fn expand_n<const N: usize>(values: [Storage<Self>; N], mask: Storage<Self::Mask>) -> [Storage<Self>; N] {
+        let mut out = [Self::EMPTY; N];
+
+        let mut i = 0;
+        while i < N {
+            out[i] = Self::expand(values[i], mask);
+            i += 1;
+        }
+
+        out
+    }
+
+    /// Apply one mask's [`expand_z`](Self::expand_z) to `N` registers. See
+    /// [`compress_n`](Self::compress_n) for the plan/apply rationale and the
+    /// same-register-type constraint.
+    fn expand_z_n<const N: usize>(values: [Storage<Self>; N], mask: Storage<Self::Mask>) -> [Storage<Self>; N] {
+        let mut out = [Self::EMPTY; N];
+
+        let mut i = 0;
+        while i < N {
+            out[i] = Self::expand_z(values[i], mask);
+            i += 1;
+        }
+
+        out
+    }
+
     const HAS_PERMUTEV: bool;
 
     /// Scalar reference lowering for [`permutev`](Self::permutev): a per-lane

@@ -39,6 +39,19 @@
 //!   on. Branchless, but the index scatter is a long dependency chain, so prefer
 //!   any of the above where the shape allows.
 //!
+//! ## The `_n` family (same-mask multi-vector)
+//!
+//! Every kernel above splits into a **plan** (the `movemask`, the table rows
+//! and every index register, all derived from the mask alone) and an
+//! **apply** (the `zz`/`nz` plus the permute ladder), which is the only
+//! per-value work. The single-vector entry points are plan + one apply, so
+//! their lowering is unchanged. The `_n` entry points
+//! ([`compress_permute_n`], [`compress_grouped_n`], [`compress_z_grouped_n`],
+//! [`compress_permute_wide_raw_n`], [`compress_z_merge2_n`]/`4`/`8`) are one
+//! plan and `N` applies. On the grouped kernels the plan is the majority of the
+//! body, so `N == 2` runs at roughly 1.2x a single call rather than 2x. These
+//! back [`Register::compress_n`] and its siblings.
+//!
 //! The inverse direction lives in [`super::expand`], a mirror image of
 //! this module. This module owns everything the two share: [`CompressRow`],
 //! [`CompressTable`], and [`COMPRESS8`], which `EXPAND8` is the row-wise
@@ -195,6 +208,48 @@ pub unsafe fn compress_permute8_raw<R: Register>(value: Storage<R>, mask: Storag
     R::permutev_row(value, &unsafe { COMPRESS8.get_unchecked(bm) }.0)
 }
 
+/// Same-mask multi-vector form of [`compress_permute`]: one table row fetch
+/// shared by `N` [`permutev_row`](Register::permutev_row)s.
+///
+/// The whole mask-derived half of the table path is the `movemask` plus the row
+/// address, so `N` vectors cost that once plus one permute each.
+#[inline(always)]
+pub fn compress_permute_n<R, const N: usize>(values: [Storage<R>; N], mask: Storage<R::Mask>) -> [Storage<R>; N]
+where
+    R: Register<Lanes: CompressTable>,
+{
+    // SAFETY: every lane count implementing `CompressTable` is <= 8.
+    unsafe { compress_permute8_raw_n::<R, N>(values, mask) }
+}
+
+/// The bound-free body of [`compress_permute_n`], mirroring
+/// [`compress_permute8_raw`].
+///
+/// # Safety
+///
+/// `R::Lanes` must be <= 8.
+#[inline(always)]
+pub unsafe fn compress_permute8_raw_n<R: Register, const N: usize>(
+    values: [Storage<R>; N],
+    mask: Storage<R::Mask>,
+) -> [Storage<R>; N] {
+    // SAFETY: as in `compress_permute8_raw`.
+    let bm = unsafe { <R::Mask as MaskRegister>::native_bitmask(mask).unwrap_unchecked() } as usize;
+
+    // SAFETY: `bm < 256`, exactly the table length.
+    let row = &unsafe { COMPRESS8.get_unchecked(bm) }.0;
+
+    let mut out = [R::EMPTY; N];
+
+    let mut i = 0;
+    while i < N {
+        out[i] = R::permutev_row(values[i], row);
+        i += 1;
+    }
+
+    out
+}
+
 /// Wide left-pack (`compress`, non-zeroing) for lane counts above 8, built by
 /// applying the 8-lane [`CompressTable`] kernel once per 8-lane group and
 /// merging the per-group results into a single global gather index that is
@@ -248,6 +303,47 @@ where
 /// `R::Lanes` must be a nonzero multiple of 8 and `<= 64`.
 #[inline(always)]
 pub unsafe fn compress_permute_wide_raw<R: Register>(value: Storage<R>, mask: Storage<R::Mask>) -> Storage<R> {
+    // SAFETY: the caller carries the lane-count contract.
+    let idx = unsafe { compress_permute_wide_indices::<R>(mask) };
+
+    R::permutev(value, idx)
+}
+
+/// Same-mask multi-vector form of [`compress_permute_wide_raw`]: the per-lane
+/// gather-index scatter is entirely mask-derived, so it is assembled once and
+/// resolved with one [`permutev`](Register::permutev) per value.
+///
+/// # Safety
+///
+/// `R::Lanes` must be a nonzero multiple of 8 and `<= 64`.
+#[inline(always)]
+pub unsafe fn compress_permute_wide_raw_n<R: Register, const N: usize>(
+    values: [Storage<R>; N],
+    mask: Storage<R::Mask>,
+) -> [Storage<R>; N] {
+    // SAFETY: the caller carries the lane-count contract.
+    let idx = unsafe { compress_permute_wide_indices::<R>(mask) };
+
+    let mut out = [R::EMPTY; N];
+
+    let mut i = 0;
+    while i < N {
+        out[i] = R::permutev(values[i], idx);
+        i += 1;
+    }
+
+    out
+}
+
+/// The mask-only half of [`compress_permute_wide_raw`]: the global gather index
+/// register. Shared by the single- and multi-vector entry points, so both walk
+/// exactly the same scatter.
+///
+/// # Safety
+///
+/// `R::Lanes` must be a nonzero multiple of 8 and `<= 64`.
+#[inline(always)]
+unsafe fn compress_permute_wide_indices<R: Register>(mask: Storage<R::Mask>) -> Storage<R::Unsigned> {
     let n = <R::Lanes as Unsigned>::USIZE;
     let groups = n / 8;
 
@@ -302,7 +398,7 @@ pub unsafe fn compress_permute_wide_raw<R: Register>(value: Storage<R>, mask: St
         tail += 8 - cnt;
     }
 
-    R::permutev(value, R::Unsigned::new(g))
+    R::Unsigned::new(g)
 }
 
 /// Chunked zeroing left-pack for any multiple-of-8 lane count up to 64, the
@@ -379,9 +475,7 @@ pub fn compress_z_wide<R: Register>(value: Storage<R>, mask: Storage<R::Mask>) -
 /// every shape it would add is currently unreachable.
 #[inline(always)]
 pub const fn merge_ctrl_supported(chunk_lanes: usize, chunks: usize) -> bool {
-    matches!(chunk_lanes, 4 | 8 | 16 | 32)
-        && matches!(chunks, 2 | 4 | 8)
-        && chunk_lanes * chunks <= 64
+    matches!(chunk_lanes, 4 | 8 | 16 | 32) && matches!(chunks, 2 | 4 | 8) && chunk_lanes * chunks <= 64
 }
 
 /// The largest `ext` scratch the pairwise merge needs: `3 * M` entries at the
@@ -476,11 +570,59 @@ fn merge_pair<B: Register, const M: usize, const TWO_M: usize>(
     right: [Storage<B>; M],
     count_left: usize,
 ) -> [Storage<B>; TWO_M] {
+    let plan = merge_pair_plan::<B, M>(count_left);
+
+    merge_pair_apply::<B, M, TWO_M>(left, right, &plan)
+}
+
+/// The most chunk-shift blend stages any supported `M` needs: `log2(4) == 2`
+/// (see [`merge_ctrl_supported`]). Unused slots hold an all-clear mask and the
+/// stages that would read them fold away, since the stage count is `log2(M)`
+/// with `M` a literal.
+const MERGE_SEL_MAX: usize = 2;
+
+/// The mask-only half of [`merge_pair`]: the chunk-shift blend selectors and
+/// the shared window index register, everything derived from `count_left`
+/// alone.
+///
+/// Split out so a caller merging `N` data blocks under the *same* mask (the
+/// `_n` family) builds these once. The single-block [`merge_pair`] is exactly
+/// this plus [`merge_pair_apply`], so its lowering is unchanged.
+#[inline(always)]
+fn merge_pair_plan<B: Register, const M: usize>(
+    count_left: usize,
+) -> ([Storage<B::Mask>; MERGE_SEL_MAX], Storage<B::Unsigned>) {
     let l = <B::Lanes as Unsigned>::USIZE;
 
     let u = M * l - count_left;
     let a = u.saturating_sub(1) / l;
     let off = u - a * l;
+
+    let mut sel = [<B::Mask as CoreRegister>::EMPTY; MERGE_SEL_MAX];
+
+    let mut step = 1;
+    let mut s = 0;
+    while step < M {
+        sel[s] = splat_bit_mask::<B>((a / step) & 1);
+        s += 1;
+        step *= 2;
+    }
+
+    let idx = B::Unsigned::add(lane_iota::<B>(), B::Unsigned::splat(Element::from_u16(off as u16)));
+
+    (sel, idx)
+}
+
+/// The data half of [`merge_pair`]: the `EMPTY`-padded scratch, `log2(M)` blend
+/// stages, one `swizzle` per output chunk and the exact `bitor`. Every control
+/// it needs comes from [`merge_pair_plan`].
+#[inline(always)]
+fn merge_pair_apply<B: Register, const M: usize, const TWO_M: usize>(
+    left: [Storage<B>; M],
+    right: [Storage<B>; M],
+    plan: &([Storage<B::Mask>; MERGE_SEL_MAX], Storage<B::Unsigned>),
+) -> [Storage<B>; TWO_M] {
+    let (sel, idx) = plan;
 
     // `ext[M..2M]` = the right block, everything else zero.
     let mut e = [B::EMPTY; MERGE_EXT_MAX];
@@ -493,24 +635,24 @@ fn merge_pair<B: Register, const M: usize, const TWO_M: usize>(
     // Shift the scratch down by `a` chunks, one blend stage per bit of `a`.
     // `M` is a literal, so the stage count folds and the loops unroll.
     let mut step = 1;
+    let mut s = 0;
     while step < M {
-        let sel = splat_bit_mask::<B>((a / step) & 1);
+        let bit = sel[s];
 
         let mut i = 0;
         while i + step < MERGE_EXT_MAX {
-            e[i] = B::blendv(sel, e[i], e[i + step]);
+            e[i] = B::blendv(bit, e[i], e[i + step]);
             i += 1;
         }
 
+        s += 1;
         step *= 2;
     }
-
-    let idx = B::Unsigned::add(lane_iota::<B>(), B::Unsigned::splat(Element::from_u16(off as u16)));
 
     let mut out = [B::EMPTY; TWO_M];
     let mut k = 0;
     while k < TWO_M {
-        let w = B::swizzle(e[k], e[k + 1], idx);
+        let w = B::swizzle(e[k], e[k + 1], *idx);
         // Only the left block's own chunks have anything to OR in.
         out[k] = if k < M { B::bitor(left[k], w) } else { w };
         k += 1;
@@ -732,14 +874,55 @@ pub fn compress_z_grouped<R: Register>(value: Storage<R>, mask: Storage<R::Mask>
 /// `0xFF ^ bmg` directly.
 #[inline(always)]
 fn compress_z_grouped_bm<R: Register>(zeroed: Storage<R>, bm: u64) -> Storage<R> {
+    compress_z_grouped_apply::<R>(&compress_z_grouped_plan::<R>(bm), zeroed)
+}
+
+/// The permute ladder of the grouped kernels is one level-0 pass plus
+/// `log2(LANES / 8)` merge/unmerge levels, i.e. at most 4 at the 64-lane
+/// ceiling. Plans are fixed-size arrays of that length with
+/// [`EMPTY`](CoreRegister::EMPTY) in the unused high slots: the ladder that
+/// reads them is an `if const` chain on `LANES`, so the padded slots are dead
+/// at every instantiation and never materialize.
+pub(super) const GROUPED_LEVELS: usize = 4;
+
+/// A grouped kernel's **plan**: one index register per *merge* (or *unmerge*)
+/// level, plus the level-0 table rows left as **raw bytes**.
+///
+/// Depends on the bitmask alone, so `N` data vectors under one mask share
+/// exactly one of these ([`compress_z_grouped_n`] and friends).
+///
+/// Level 0 stays un-widened on purpose. Widening it in the plan hoists a live
+/// vector register across the whole permute chain, or across *two* chains in
+/// the non-zeroing forms, which measurably lengthened the single-vector lowering
+/// (+10 instructions on `u16x16` expand). Leaving the bytes here keeps the
+/// widening exactly where the pre-split kernels had it, and costs the `_n`
+/// forms nothing: the buffer is loop-invariant, so the widening load is hoisted
+/// by CSE rather than repeated per value.
+///
+/// Which index slots are live is fixed per level and per direction (compress
+/// merges at half-sizes 8/16/32 into slots 1/2/3, expand unmerges at 32/16/8
+/// from slots 0/1/2), so a narrower shape simply leaves the rest at
+/// [`EMPTY`](CoreRegister::EMPTY) and the reading `if const` arm never fires.
+pub(super) type GroupedPlan<R> = (
+    [Storage<<R as Register>::Unsigned>; GROUPED_LEVELS],
+    GenericArray<u8, <R as CoreRegister>::Lanes>,
+);
+
+/// The **mask-only** half of [`compress_z_grouped_bm`]: read each 8-lane
+/// group's [`COMPRESS8`] row and population count, then build the level-0 index
+/// register and every merge level's, in application order.
+///
+/// This is the majority of the kernel's instruction count, and none of it
+/// touches the data, which is what makes the `_n` family worth having.
+#[inline(always)]
+fn compress_z_grouped_plan<R: Register>(bm: u64) -> GroupedPlan<R> {
     let n = <R::Lanes as Unsigned>::USIZE;
     let groups = n / 8;
 
-    let mut cur = zeroed;
-
     let mut counts = [0u8; 8];
 
-    // Level 0: every 8-lane group compacted in place by one permute.
+    // Level 0: the per-group compaction rows, staged as raw bytes and widened
+    // once (see `copy_row_into`).
     let mut bytes: GenericArray<u8, R::Lanes> = GenericArray::default();
     let mut g = 0;
     while g < groups {
@@ -752,20 +935,83 @@ fn compress_z_grouped_bm<R: Register>(zeroed: Storage<R>, bm: u64) -> Storage<R>
         g += 1;
     }
 
-    cur = R::permutev(cur, R::Unsigned::add(R::widen_index_bytes(&bytes), block_base::<R, 8>()));
+    let mut idx = [<R::Unsigned as CoreRegister>::EMPTY; GROUPED_LEVELS];
 
     // Merge levels, literal half-sizes so the control-table select folds.
     if const { <R::Lanes as Unsigned>::USIZE >= 16 } {
-        cur = R::permutev(cur, merge_indices::<R, 8, 16>(&mut counts));
+        idx[1] = merge_indices::<R, 8, 16>(&mut counts);
     }
     if const { <R::Lanes as Unsigned>::USIZE >= 32 } {
-        cur = R::permutev(cur, merge_indices::<R, 16, 32>(&mut counts));
+        idx[2] = merge_indices::<R, 16, 32>(&mut counts);
     }
     if const { <R::Lanes as Unsigned>::USIZE >= 64 } {
-        cur = R::permutev(cur, merge_indices::<R, 32, 64>(&mut counts));
+        idx[3] = merge_indices::<R, 32, 64>(&mut counts);
+    }
+
+    (idx, bytes)
+}
+
+/// The **data** half of [`compress_z_grouped_bm`]: the permute ladder, fed by
+/// [`compress_z_grouped_plan`]. `zeroed` must already satisfy the tree's
+/// `[selected..., 0...]` invariant (see [`compress_z_grouped_bm`]).
+#[inline(always)]
+fn compress_z_grouped_apply<R: Register>(plan: &GroupedPlan<R>, zeroed: Storage<R>) -> Storage<R> {
+    let (idx, bytes) = plan;
+
+    // Level 0: every 8-lane group compacted in place by one permute.
+    let mut cur = R::permutev(
+        zeroed,
+        R::Unsigned::add(R::widen_index_bytes(bytes), block_base::<R, 8>()),
+    );
+
+    if const { <R::Lanes as Unsigned>::USIZE >= 16 } {
+        cur = R::permutev(cur, idx[1]);
+    }
+    if const { <R::Lanes as Unsigned>::USIZE >= 32 } {
+        cur = R::permutev(cur, idx[2]);
+    }
+    if const { <R::Lanes as Unsigned>::USIZE >= 64 } {
+        cur = R::permutev(cur, idx[3]);
     }
 
     cur
+}
+
+/// Same-mask multi-vector [`compress_z_grouped`]: one plan, `N` applications.
+///
+/// Every index register the kernel needs is mask-derived, so `N` vectors pay
+/// the `movemask`, the table reads and the whole index assembly **once** and
+/// one [`zz`](CoreRegister::zz) plus one permute ladder each.
+#[inline(always)]
+pub fn compress_z_grouped_n<R: Register, const N: usize>(
+    values: [Storage<R>; N],
+    mask: Storage<R::Mask>,
+) -> [Storage<R>; N] {
+    const {
+        assert!(
+            <R::Lanes as Unsigned>::USIZE % 8 == 0,
+            "compress_z_grouped_n requires a lane count that is a multiple of 8"
+        );
+        assert!(
+            <R::Lanes as Unsigned>::USIZE >= 16 && <R::Lanes as Unsigned>::USIZE <= 64,
+            "compress_z_grouped_n requires 16..=64 lanes"
+        );
+    }
+
+    // SAFETY: <= 64 lanes, so `native_bitmask` is always `Some` within Thermite.
+    let bm = unsafe { <R::Mask as MaskRegister>::native_bitmask(mask).unwrap_unchecked() };
+
+    let plan = compress_z_grouped_plan::<R>(bm);
+
+    let mut out = [R::EMPTY; N];
+
+    let mut i = 0;
+    while i < N {
+        out[i] = compress_z_grouped_apply::<R>(&plan, R::zz(mask, values[i]));
+        i += 1;
+    }
+
+    out
 }
 
 /// Non-zeroing left-pack (`compress`) for a native wide register: **two
@@ -843,6 +1089,58 @@ pub fn compress_grouped<R: Register>(value: Storage<R>, mask: Storage<R::Mask>) 
     );
 
     R::bitor(front, R::swizzle(R::EMPTY, tail, idx))
+}
+
+/// Same-mask multi-vector [`compress_grouped`]: **two** plans (front and
+/// complement) plus the shared shift index register built once, then one front
+/// ladder, one tail ladder and the `swizzle`/`bitor` per value.
+///
+/// Both trees still share the single `movemask` (the complement tree indexes
+/// the same tables with `!bm`), so the whole mask-derived half is paid exactly
+/// once for all `N`. That half is the bulk of the single-vector body.
+#[inline(always)]
+pub fn compress_grouped_n<R: Register, const N: usize>(
+    values: [Storage<R>; N],
+    mask: Storage<R::Mask>,
+) -> [Storage<R>; N] {
+    const {
+        assert!(
+            <R::Lanes as Unsigned>::USIZE % 8 == 0,
+            "compress_grouped_n requires a lane count that is a multiple of 8"
+        );
+        assert!(
+            <R::Lanes as Unsigned>::USIZE >= 16 && <R::Lanes as Unsigned>::USIZE <= 64,
+            "compress_grouped_n requires 16..=64 lanes"
+        );
+    }
+
+    let n = <R::Lanes as Unsigned>::USIZE;
+
+    // SAFETY: <= 64 lanes, so `native_bitmask` is always `Some` within
+    // Thermite. Read ONCE and shared by both trees and every value.
+    let bm = unsafe { <R::Mask as MaskRegister>::native_bitmask(mask).unwrap_unchecked() };
+    let total = bm.count_ones() as usize;
+
+    let plan_front = compress_z_grouped_plan::<R>(bm);
+    let plan_tail = compress_z_grouped_plan::<R>(!bm);
+
+    let idx = R::Unsigned::add(
+        lane_iota::<R>(),
+        R::Unsigned::splat(Element::from_u16((n - total) as u16)),
+    );
+
+    let mut out = [R::EMPTY; N];
+
+    let mut i = 0;
+    while i < N {
+        let front = compress_z_grouped_apply::<R>(&plan_front, R::zz(mask, values[i]));
+        let tail = compress_z_grouped_apply::<R>(&plan_tail, R::nz(mask, values[i]));
+
+        out[i] = R::bitor(front, R::swizzle(R::EMPTY, tail, idx));
+        i += 1;
+    }
+
+    out
 }
 
 /// Compact one chunk (zeroing) via the chunk register's own `compress_z` and
@@ -928,6 +1226,148 @@ pub fn compress_z_merge8<B: Register>(chunks: [Storage<B>; 8], masks: [Storage<B
 
     // Level 2: 4l+4l -> 8l, placing m4567 after m0123's selected lanes.
     merge_pair::<B, 4, 8>(m0123, m4567, n0 + n1 + n2 + n3)
+}
+
+/// One chunk mask's population count, the only mask-derived input the merge
+/// tree needs beyond the chunks' own `compress_z`.
+#[inline(always)]
+fn chunk_count<B: Register>(mask: Storage<B::Mask>) -> usize {
+    // `native_bitmask` is `Some` for every <= 64-lane mask within Thermite.
+    let bm = unsafe { <B::Mask as MaskRegister>::native_bitmask(mask).unwrap_unchecked() };
+
+    bm.count_ones() as usize
+}
+
+/// Gather chunk `c` of every one of `N` values into one `[Storage<B>; N]`, the
+/// shape the chunk register's own `compress_z_n` takes.
+///
+/// Hand-rolled rather than `array::map`/`from_fn` for the usual
+/// `target_feature` inlining reason. The arrays are register-sized and SROA
+/// away entirely.
+#[inline(always)]
+fn chunk_column<B: Register, const C: usize, const N: usize>(
+    values: &[[Storage<B>; C]; N],
+    c: usize,
+) -> [Storage<B>; N] {
+    let mut col = [B::EMPTY; N];
+
+    let mut v = 0;
+    while v < N {
+        col[v] = values[v][c];
+        v += 1;
+    }
+
+    col
+}
+
+/// Same-mask multi-vector [`compress_z_merge2`]: the chunk compactions become
+/// the chunk register's own `compress_z_n` (recursively sharing *its* plan),
+/// the counts and the [`merge_pair_plan`] are built once, and only the blends,
+/// swizzles and OR are per value.
+#[inline(always)]
+pub fn compress_z_merge2_n<B: Register, const N: usize>(
+    values: [[Storage<B>; 2]; N],
+    masks: [Storage<B::Mask>; 2],
+) -> [[Storage<B>; 2]; N] {
+    let lo = B::compress_z_n::<N>(chunk_column::<B, 2, N>(&values, 0), masks[0]);
+    let hi = B::compress_z_n::<N>(chunk_column::<B, 2, N>(&values, 1), masks[1]);
+
+    let plan = merge_pair_plan::<B, 1>(chunk_count::<B>(masks[0]));
+
+    let mut out = [[B::EMPTY; 2]; N];
+
+    let mut v = 0;
+    while v < N {
+        out[v] = merge_pair_apply::<B, 1, 2>([lo[v]], [hi[v]], &plan);
+        v += 1;
+    }
+
+    out
+}
+
+/// Same-mask multi-vector [`compress_z_merge4`]: three shared merge plans (two
+/// at `M == 1`, one at `M == 2`) and `N` two-level applications.
+#[inline(always)]
+pub fn compress_z_merge4_n<B: Register, const N: usize>(
+    values: [[Storage<B>; 4]; N],
+    masks: [Storage<B::Mask>; 4],
+) -> [[Storage<B>; 4]; N] {
+    let c0 = B::compress_z_n::<N>(chunk_column::<B, 4, N>(&values, 0), masks[0]);
+    let c1 = B::compress_z_n::<N>(chunk_column::<B, 4, N>(&values, 1), masks[1]);
+    let c2 = B::compress_z_n::<N>(chunk_column::<B, 4, N>(&values, 2), masks[2]);
+    let c3 = B::compress_z_n::<N>(chunk_column::<B, 4, N>(&values, 3), masks[3]);
+
+    let n0 = chunk_count::<B>(masks[0]);
+    let n1 = chunk_count::<B>(masks[1]);
+    let n2 = chunk_count::<B>(masks[2]);
+
+    let p01 = merge_pair_plan::<B, 1>(n0);
+    let p23 = merge_pair_plan::<B, 1>(n2);
+    let top = merge_pair_plan::<B, 2>(n0 + n1);
+
+    let mut out = [[B::EMPTY; 4]; N];
+
+    let mut v = 0;
+    while v < N {
+        let m01 = merge_pair_apply::<B, 1, 2>([c0[v]], [c1[v]], &p01);
+        let m23 = merge_pair_apply::<B, 1, 2>([c2[v]], [c3[v]], &p23);
+
+        out[v] = merge_pair_apply::<B, 2, 4>(m01, m23, &top);
+        v += 1;
+    }
+
+    out
+}
+
+/// Same-mask multi-vector [`compress_z_merge8`]: seven shared merge plans
+/// across three levels and `N` applications.
+#[inline(always)]
+pub fn compress_z_merge8_n<B: Register, const N: usize>(
+    values: [[Storage<B>; 8]; N],
+    masks: [Storage<B::Mask>; 8],
+) -> [[Storage<B>; 8]; N] {
+    let c0 = B::compress_z_n::<N>(chunk_column::<B, 8, N>(&values, 0), masks[0]);
+    let c1 = B::compress_z_n::<N>(chunk_column::<B, 8, N>(&values, 1), masks[1]);
+    let c2 = B::compress_z_n::<N>(chunk_column::<B, 8, N>(&values, 2), masks[2]);
+    let c3 = B::compress_z_n::<N>(chunk_column::<B, 8, N>(&values, 3), masks[3]);
+    let c4 = B::compress_z_n::<N>(chunk_column::<B, 8, N>(&values, 4), masks[4]);
+    let c5 = B::compress_z_n::<N>(chunk_column::<B, 8, N>(&values, 5), masks[5]);
+    let c6 = B::compress_z_n::<N>(chunk_column::<B, 8, N>(&values, 6), masks[6]);
+    let c7 = B::compress_z_n::<N>(chunk_column::<B, 8, N>(&values, 7), masks[7]);
+
+    let n0 = chunk_count::<B>(masks[0]);
+    let n1 = chunk_count::<B>(masks[1]);
+    let n2 = chunk_count::<B>(masks[2]);
+    let n3 = chunk_count::<B>(masks[3]);
+    let n4 = chunk_count::<B>(masks[4]);
+    let n5 = chunk_count::<B>(masks[5]);
+    let n6 = chunk_count::<B>(masks[6]);
+
+    let p01 = merge_pair_plan::<B, 1>(n0);
+    let p23 = merge_pair_plan::<B, 1>(n2);
+    let p45 = merge_pair_plan::<B, 1>(n4);
+    let p67 = merge_pair_plan::<B, 1>(n6);
+    let p0123 = merge_pair_plan::<B, 2>(n0 + n1);
+    let p4567 = merge_pair_plan::<B, 2>(n4 + n5);
+    let top = merge_pair_plan::<B, 4>(n0 + n1 + n2 + n3);
+
+    let mut out = [[B::EMPTY; 8]; N];
+
+    let mut v = 0;
+    while v < N {
+        let m01 = merge_pair_apply::<B, 1, 2>([c0[v]], [c1[v]], &p01);
+        let m23 = merge_pair_apply::<B, 1, 2>([c2[v]], [c3[v]], &p23);
+        let m45 = merge_pair_apply::<B, 1, 2>([c4[v]], [c5[v]], &p45);
+        let m67 = merge_pair_apply::<B, 1, 2>([c6[v]], [c7[v]], &p67);
+
+        let m0123 = merge_pair_apply::<B, 2, 4>(m01, m23, &p0123);
+        let m4567 = merge_pair_apply::<B, 2, 4>(m45, m67, &p4567);
+
+        out[v] = merge_pair_apply::<B, 4, 8>(m0123, m4567, &top);
+        v += 1;
+    }
+
+    out
 }
 
 #[cfg(test)]

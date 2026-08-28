@@ -58,6 +58,8 @@ where
     let mut converged = V::Mask::FALSY;
 
     for _ in 0..P::POLICY.max_iterations {
+        V::_loop_hint();
+
         let (y, y_prime) = f(x);
 
         // Lanes within tolerance in function space (|f(x)| <= tolerance) have converged.
@@ -140,6 +142,8 @@ where
 
     let mut _iter = 0usize;
     while _iter < P::POLICY.max_iterations {
+        V::_loop_hint();
+
         _iter += 1;
         if n >= end {
             break;
@@ -196,6 +200,8 @@ where
 
     let mut _iter = 0usize;
     while _iter < P::POLICY.max_iterations {
+        V::_loop_hint();
+
         _iter += 1;
         if n >= end {
             break;
@@ -280,6 +286,8 @@ where
 
     let mut _iter = 0usize;
     while _iter < P::POLICY.max_iterations {
+        V::_loop_hint();
+
         _iter += 1;
         if n >= end {
             break;

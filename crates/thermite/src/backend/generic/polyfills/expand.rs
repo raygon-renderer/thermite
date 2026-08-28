@@ -45,6 +45,11 @@
 //!   as the `ArrayRegister` non-zeroing `expand`, which has no single-register
 //!   permute to build a grouped kernel on.
 //!
+//! The same plan/apply split as the compress side (see that module's header)
+//! backs the `_n` family here: [`expand_permute_n`], [`expand_grouped_n`],
+//! [`expand_z_grouped_n`] and [`expand_permute_wide_raw_n`] build the
+//! mask-derived plan once and apply it to `N` values.
+//!
 //! There is no analogue of the `compress_z_merge*` chunk trees (the cross-chunk
 //! `array_swizzle` forms). Expand *splits* a packed run across chunks rather
 //! than merging per-chunk results, so that construction is not symmetric. The
@@ -59,7 +64,7 @@ use super::*;
 
 // Named explicitly, though the glob above would supply them, to keep the
 // dependency on the compress side visible at the top of the file.
-use super::compress::{CompressRow, CompressTable, block_base, copy_row_into};
+use super::compress::{CompressRow, CompressTable, GROUPED_LEVELS, GroupedPlan, block_base, copy_row_into};
 
 /// The single 256-entry 8-lane expand table: row `m` is the inverse of
 /// [`COMPRESS8`]'s row `m` (same [`CompressRow`] shape, same population count).
@@ -162,6 +167,45 @@ pub unsafe fn expand_permute8_raw<R: Register>(value: Storage<R>, mask: Storage<
     R::permutev_row(value, &unsafe { EXPAND8.get_unchecked(bm) }.0)
 }
 
+/// Same-mask multi-vector form of [`expand_permute`]: one table row fetch
+/// shared by `N` [`permutev_row`](Register::permutev_row)s, the mirror of
+/// [`compress_permute_n`](super::compress::compress_permute_n).
+#[inline(always)]
+pub fn expand_permute_n<R, const N: usize>(values: [Storage<R>; N], mask: Storage<R::Mask>) -> [Storage<R>; N]
+where
+    R: Register<Lanes: CompressTable>,
+{
+    // SAFETY: every lane count implementing `CompressTable` is <= 8.
+    unsafe { expand_permute8_raw_n::<R, N>(values, mask) }
+}
+
+/// The bound-free body of [`expand_permute_n`].
+///
+/// # Safety
+///
+/// `R::Lanes` must be <= 8.
+#[inline(always)]
+pub unsafe fn expand_permute8_raw_n<R: Register, const N: usize>(
+    values: [Storage<R>; N],
+    mask: Storage<R::Mask>,
+) -> [Storage<R>; N] {
+    // SAFETY: as in `expand_permute8_raw`.
+    let bm = unsafe { <R::Mask as MaskRegister>::native_bitmask(mask).unwrap_unchecked() } as usize;
+
+    // SAFETY: `bm < 256`, exactly the table length.
+    let row = &unsafe { EXPAND8.get_unchecked(bm) }.0;
+
+    let mut out = [R::EMPTY; N];
+
+    let mut i = 0;
+    while i < N {
+        out[i] = R::permutev_row(values[i], row);
+        i += 1;
+    }
+
+    out
+}
+
 /// Wide inverse left-pack (`expand`, non-zeroing) for lane counts above 8: the
 /// exact mirror of [`compress_permute_wide`], assembling one global gather
 /// index from per-8-lane-group [`EXPAND8`] rows and resolving it with a single
@@ -211,6 +255,46 @@ where
 /// `R::Lanes` must be a nonzero multiple of 8 and `<= 64`.
 #[inline(always)]
 pub unsafe fn expand_permute_wide_raw<R: Register>(value: Storage<R>, mask: Storage<R::Mask>) -> Storage<R> {
+    // SAFETY: the caller carries the lane-count contract.
+    let idx = unsafe { expand_permute_wide_indices::<R>(mask) };
+
+    R::permutev(value, idx)
+}
+
+/// Same-mask multi-vector form of [`expand_permute_wide_raw`]: the per-lane
+/// scatter is entirely mask-derived, so it is assembled once and resolved with
+/// one [`permutev`](Register::permutev) per value.
+///
+/// # Safety
+///
+/// `R::Lanes` must be a nonzero multiple of 8 and `<= 64`.
+#[inline(always)]
+pub unsafe fn expand_permute_wide_raw_n<R: Register, const N: usize>(
+    values: [Storage<R>; N],
+    mask: Storage<R::Mask>,
+) -> [Storage<R>; N] {
+    // SAFETY: the caller carries the lane-count contract.
+    let idx = unsafe { expand_permute_wide_indices::<R>(mask) };
+
+    let mut out = [R::EMPTY; N];
+
+    let mut i = 0;
+    while i < N {
+        out[i] = R::permutev(values[i], idx);
+        i += 1;
+    }
+
+    out
+}
+
+/// The mask-only half of [`expand_permute_wide_raw`]: the global gather index
+/// register. Shared by the single- and multi-vector entry points.
+///
+/// # Safety
+///
+/// `R::Lanes` must be a nonzero multiple of 8 and `<= 64`.
+#[inline(always)]
+unsafe fn expand_permute_wide_indices<R: Register>(mask: Storage<R::Mask>) -> Storage<R::Unsigned> {
     let n = <R::Lanes as Unsigned>::USIZE;
     let groups = n / 8;
 
@@ -258,7 +342,7 @@ pub unsafe fn expand_permute_wide_raw<R: Register>(value: Storage<R>, mask: Stor
         base += cnt;
     }
 
-    R::permutev(value, R::Unsigned::new(g))
+    R::Unsigned::new(g)
 }
 
 /// Build a *single-register* **unmerge**-control table for splitting a merged
@@ -339,12 +423,9 @@ const fn build_unmerge_ctrl_u8<TwoH: ArrayLength, Entries: ArrayLength>(
 
 // Single-register unmerge levels: 16->8+8, 32->16+16, 64->32+32. 144 + 544 +
 // 2112 = 2800 bytes of `.rodata` total, mirroring `MERGE_CTRL_U8_*`.
-static UNMERGE_CTRL_U8_8: GenericArray<GenericArray<u8, U16>, generic_array::typenum::U9> =
-    build_unmerge_ctrl_u8(8);
-static UNMERGE_CTRL_U8_16: GenericArray<GenericArray<u8, U32>, generic_array::typenum::U17> =
-    build_unmerge_ctrl_u8(16);
-static UNMERGE_CTRL_U8_32: GenericArray<GenericArray<u8, U64>, generic_array::typenum::U33> =
-    build_unmerge_ctrl_u8(32);
+static UNMERGE_CTRL_U8_8: GenericArray<GenericArray<u8, U16>, generic_array::typenum::U9> = build_unmerge_ctrl_u8(8);
+static UNMERGE_CTRL_U8_16: GenericArray<GenericArray<u8, U32>, generic_array::typenum::U17> = build_unmerge_ctrl_u8(16);
+static UNMERGE_CTRL_U8_32: GenericArray<GenericArray<u8, U64>, generic_array::typenum::U33> = build_unmerge_ctrl_u8(32);
 
 /// Pointer to the `2H`-byte unmerge-control row for `count` selected lanes in
 /// the left block. `H` is a literal at every call site, so the match folds to
@@ -473,6 +554,16 @@ pub fn expand_z_grouped<R: Register>(value: Storage<R>, mask: Storage<R::Mask>) 
 /// discards.
 #[inline(always)]
 fn expand_z_grouped_bm<R: Register>(value: Storage<R>, bm: u64) -> Storage<R> {
+    expand_z_grouped_apply::<R>(&expand_z_grouped_plan::<R>(bm), value)
+}
+
+/// The **mask-only** half of [`expand_z_grouped_bm`]: every unmerge level's
+/// index register (coarsest first) plus the level-0 row bytes.
+///
+/// Mirrors [`compress_z_grouped_plan`](super::compress). See [`GroupedPlan`]
+/// for why the ladder is a fixed-size `EMPTY`-padded array.
+#[inline(always)]
+fn expand_z_grouped_plan<R: Register>(bm: u64) -> GroupedPlan<R> {
     let n = <R::Lanes as Unsigned>::USIZE;
     let groups = n / 8;
 
@@ -494,24 +585,84 @@ fn expand_z_grouped_bm<R: Register>(value: Storage<R>, bm: u64) -> Storage<R> {
         g += 1;
     }
 
-    let mut cur = value;
+    let mut plan = [<R::Unsigned as CoreRegister>::EMPTY; GROUPED_LEVELS];
 
     // Unmerge levels, coarsest first. Literal half-sizes so the control-table
-    // select folds.
+    // select folds. Slots are fixed per level (0 = the 64-lane level, 3 = level
+    // 0), so a narrower shape simply leaves its high levels' slots at EMPTY and
+    // the apply ladder's matching `if const` arms never read them.
     if const { <R::Lanes as Unsigned>::USIZE >= 64 } {
-        cur = R::permutev(cur, unmerge_indices::<R, 32, 64>(&counts));
+        plan[0] = unmerge_indices::<R, 32, 64>(&counts);
     }
     if const { <R::Lanes as Unsigned>::USIZE >= 32 } {
-        cur = R::permutev(cur, unmerge_indices::<R, 16, 32>(&counts));
+        plan[1] = unmerge_indices::<R, 16, 32>(&counts);
     }
     if const { <R::Lanes as Unsigned>::USIZE >= 16 } {
-        cur = R::permutev(cur, unmerge_indices::<R, 8, 16>(&counts));
+        plan[2] = unmerge_indices::<R, 8, 16>(&counts);
+    }
+
+    (plan, bytes)
+}
+
+/// The **data** half of [`expand_z_grouped_bm`]: the permute ladder, fed by
+/// [`expand_z_grouped_plan`].
+///
+/// The returned register is only correct in the lanes selected by the plan's
+/// bitmask, and the caller composes its own [`zz`](CoreRegister::zz) / `nz`.
+#[inline(always)]
+fn expand_z_grouped_apply<R: Register>(plan: &GroupedPlan<R>, value: Storage<R>) -> Storage<R> {
+    let (idx, bytes) = plan;
+
+    let mut cur = value;
+
+    if const { <R::Lanes as Unsigned>::USIZE >= 64 } {
+        cur = R::permutev(cur, idx[0]);
+    }
+    if const { <R::Lanes as Unsigned>::USIZE >= 32 } {
+        cur = R::permutev(cur, idx[1]);
+    }
+    if const { <R::Lanes as Unsigned>::USIZE >= 16 } {
+        cur = R::permutev(cur, idx[2]);
     }
 
     // Level 0: scatter each group's packed prefix to its selected lanes. Every
     // selected lane is now correct. The unselected ones read dead data, which
-    // the `zz` discards.
-    R::permutev(cur, R::Unsigned::add(R::widen_index_bytes(&bytes), block_base::<R, 8>()))
+    // the caller's `zz` discards.
+    R::permutev(cur, R::Unsigned::add(R::widen_index_bytes(bytes), block_base::<R, 8>()))
+}
+
+/// Same-mask multi-vector [`expand_z_grouped`]: one plan, `N` applications plus
+/// one [`zz`](CoreRegister::zz) each.
+#[inline(always)]
+pub fn expand_z_grouped_n<R: Register, const N: usize>(
+    values: [Storage<R>; N],
+    mask: Storage<R::Mask>,
+) -> [Storage<R>; N] {
+    const {
+        assert!(
+            <R::Lanes as Unsigned>::USIZE % 8 == 0,
+            "expand_z_grouped_n requires a lane count that is a multiple of 8"
+        );
+        assert!(
+            <R::Lanes as Unsigned>::USIZE >= 16 && <R::Lanes as Unsigned>::USIZE <= 64,
+            "expand_z_grouped_n requires 16..=64 lanes"
+        );
+    }
+
+    // SAFETY: <= 64 lanes, so `native_bitmask` is always `Some` within Thermite.
+    let bm = unsafe { <R::Mask as MaskRegister>::native_bitmask(mask).unwrap_unchecked() };
+
+    let plan = expand_z_grouped_plan::<R>(bm);
+
+    let mut out = [R::EMPTY; N];
+
+    let mut i = 0;
+    while i < N {
+        out[i] = R::zz(mask, expand_z_grouped_apply::<R>(&plan, values[i]));
+        i += 1;
+    }
+
+    out
 }
 
 /// Non-zeroing inverse left-pack (`expand`) for a native wide register: **two
@@ -583,6 +734,53 @@ pub fn expand_grouped<R: Register>(value: Storage<R>, mask: Storage<R::Mask>) ->
     let tailv = R::swizzle(value, R::EMPTY, idx);
 
     R::bitor(sel, R::nz(mask, expand_z_grouped_bm::<R>(tailv, !bm)))
+}
+
+/// Same-mask multi-vector [`expand_grouped`]: **two** plans (selected and
+/// complement) plus the shared shift index register built once, then per value
+/// one selected ladder, one shift `swizzle`, one complement ladder and the
+/// `bitor`.
+#[inline(always)]
+pub fn expand_grouped_n<R: Register, const N: usize>(
+    values: [Storage<R>; N],
+    mask: Storage<R::Mask>,
+) -> [Storage<R>; N] {
+    const {
+        assert!(
+            <R::Lanes as Unsigned>::USIZE % 8 == 0,
+            "expand_grouped_n requires a lane count that is a multiple of 8"
+        );
+        assert!(
+            <R::Lanes as Unsigned>::USIZE >= 16 && <R::Lanes as Unsigned>::USIZE <= 64,
+            "expand_grouped_n requires 16..=64 lanes"
+        );
+    }
+
+    // SAFETY: <= 64 lanes, so `native_bitmask` is always `Some` within
+    // Thermite. Read ONCE and shared by both trees and every value.
+    let bm = unsafe { <R::Mask as MaskRegister>::native_bitmask(mask).unwrap_unchecked() };
+    let total = bm.count_ones() as usize;
+
+    let plan_sel = expand_z_grouped_plan::<R>(bm);
+    let plan_tail = expand_z_grouped_plan::<R>(!bm);
+
+    let idx = R::Unsigned::add(
+        super::compress::lane_iota::<R>(),
+        R::Unsigned::splat(Element::from_u16(total as u16)),
+    );
+
+    let mut out = [R::EMPTY; N];
+
+    let mut i = 0;
+    while i < N {
+        let sel = R::zz(mask, expand_z_grouped_apply::<R>(&plan_sel, values[i]));
+        let tailv = R::swizzle(values[i], R::EMPTY, idx);
+
+        out[i] = R::bitor(sel, R::nz(mask, expand_z_grouped_apply::<R>(&plan_tail, tailv)));
+        i += 1;
+    }
+
+    out
 }
 
 /// The portable scalar inverse left-pack: the default body behind
@@ -925,8 +1123,16 @@ mod tests {
             let there = expand_grouped::<R>(compress_grouped::<R>(value, mask), mask);
             let back = compress_grouped::<R>(expand_grouped::<R>(value, mask), mask);
 
-            assert_eq!(<R>::as_slice(&there), <R>::as_slice(&value), "expand(compress) bits={bits:b}");
-            assert_eq!(<R>::as_slice(&back), <R>::as_slice(&value), "compress(expand) bits={bits:b}");
+            assert_eq!(
+                <R>::as_slice(&there),
+                <R>::as_slice(&value),
+                "expand(compress) bits={bits:b}"
+            );
+            assert_eq!(
+                <R>::as_slice(&back),
+                <R>::as_slice(&value),
+                "compress(expand) bits={bits:b}"
+            );
         }
     }
 
@@ -968,7 +1174,10 @@ mod tests {
             let there = <R<N>>::as_slice(&there);
             for lane in 0..N {
                 let want = if (bits >> lane) & 1 == 1 { data[lane] } else { 0 };
-                assert_eq!(there[lane], want, "expand_z(compress_z) N={N} bits={bits:b} lane={lane}");
+                assert_eq!(
+                    there[lane], want,
+                    "expand_z(compress_z) N={N} bits={bits:b} lane={lane}"
+                );
             }
 
             // back: compress_z . expand_z restores the packed prefix (the tail
@@ -977,10 +1186,16 @@ mod tests {
             let back = compress_z_grouped::<R<N>>(expand_z_grouped::<R<N>>(value, mask), mask);
             let back = <R<N>>::as_slice(&back);
             for lane in 0..count {
-                assert_eq!(back[lane], data[lane], "compress_z(expand_z) N={N} bits={bits:b} lane={lane}");
+                assert_eq!(
+                    back[lane], data[lane],
+                    "compress_z(expand_z) N={N} bits={bits:b} lane={lane}"
+                );
             }
             for lane in count..N {
-                assert_eq!(back[lane], 0, "compress_z(expand_z) tail N={N} bits={bits:b} lane={lane}");
+                assert_eq!(
+                    back[lane], 0,
+                    "compress_z(expand_z) tail N={N} bits={bits:b} lane={lane}"
+                );
             }
         }
     }

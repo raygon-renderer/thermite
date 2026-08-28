@@ -394,45 +394,139 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
     /// 3. Calculate T3 = (lhs.y * rhs.zwxy) * {+,+,-,-}
     /// 4. Calculate T4 = (lhs.z * rhs.yxwz) * {-,+,+,-}
     /// 5. Sum T1 + T2 + T3 + T4
+    ///
+    /// In lieu of a full policy system, `FAST` is used to pick the internal
+    /// behavior.
+    ///
+    /// `FAST = true` is the decomposition above with one product of each pair
+    /// fused (5 FP ops). Good enough for almost every case, but the vector lanes
+    /// of `q * conj(q)` retain the rounding error of the products that were
+    /// supposed to cancel, because each cancelling pair compares an exact (fused)
+    /// product against a rounded one. Measured on `f64` with
+    /// `q = (0.1, 0.2, 0.3, 0.927...)`: `(1.5e-19, 0, -5.6e-17, 1.0)`.
+    ///
+    /// `FAST = false` regroups the terms geometrically (the vector part becomes
+    /// `(w1*v2 + w2*v1) + (v1 x v2)`), so that every cancelling pair of the
+    /// conjugate identity falls inside one compensated two-product group
+    /// (9 FP ops, `cross3::<false>`'s scheme). `q * conj(q)` then comes out as
+    /// exactly `(0, 0, 0, |q|^2)`, and away from cancellation it is
+    /// *also* the more accurate arm: over 200k random f32 pairs, mean error 0.324
+    /// against `FAST`'s 0.337 in units of the natural bound `u * sum|a_i b_i|`
+    /// (p99 1.22 vs 1.23, max 2.20 vs 2.43). Cost on AVX2+FMA: 30 instructions
+    /// against 23.
+    ///
+    /// On backends without a true FMA, `FAST = false` routes to the fast arm:
+    /// the compensation residuals would be identically zero there, and the
+    /// fast arm's unfused degradation already cancels the conjugate exactly
+    /// (all products rounded), so the identity holds on every backend.
+    ///
+    /// The regrouping is the load-bearing part. In the component-broadcast
+    /// decomposition the three vector lanes cancel across three *different*
+    /// pairings of its four term-vectors, so exactness there demands treating
+    /// every product identically. All rounded costs 7 ops and forfeits the
+    /// FMAs, and with them the accuracy. All error-free-transformed costs 15
+    /// ops, 41 instrs. Partial fusing and pair-wise Kahan both break a lane
+    /// (the `y` lane surviving `FAST` is an accident of the arrangement).
+    /// Re-shuffling the operands so the cancelling pairings become
+    /// per-lane-local is what lets FMA compensation work at 9 ops. See the
+    /// comments in the body.
     #[inline(always)]
-    fn quat4_product(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
+    fn quat4_product<const FAST: bool>(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         use crate::{math::FloatConsts as C, register::Element as E};
 
         let w = Self::broadcast::<3>(lhs);
-        let x = Self::broadcast::<0>(lhs);
-        let y = Self::broadcast::<1>(lhs);
-        let z = Self::broadcast::<2>(lhs);
 
-        // TODO: Alternative implementation when permutev is not available?
-        let rhs_x = s!(Self: rhs, [3, 2, 1, 0]);
-        let rhs_y = s!(Self: rhs, [2, 3, 0, 1]);
-        let rhs_z = s!(Self: rhs, [1, 0, 3, 2]);
+        if const { FAST || !Self::HAS_TRUE_FMA } {
+            let x = Self::broadcast::<0>(lhs);
+            let y = Self::broadcast::<1>(lhs);
+            let z = Self::broadcast::<2>(lhs);
 
-        // T2 Signs: (+, -, +, -) -> Negate indices 1 and 3
-        let rhs_x_signed = Self::bitxor(
-            rhs_x,
-            const { reg::<Self, 4>([E::ZERO, C::NEG_ZERO, E::ZERO, C::NEG_ZERO]) },
-        );
+            // TODO: Alternative implementation when permutev is not available?
+            let rhs_x = s!(Self: rhs, [3, 2, 1, 0]);
+            let rhs_y = s!(Self: rhs, [2, 3, 0, 1]);
+            let rhs_z = s!(Self: rhs, [1, 0, 3, 2]);
 
-        // T3 Signs: (+, +, -, -) -> Negate indices 2 and 3
-        let rhs_y_signed = Self::bitxor(
-            rhs_y,
-            const { reg::<Self, 4>([E::ZERO, E::ZERO, C::NEG_ZERO, C::NEG_ZERO]) },
-        );
+            // T2 Signs: (+, -, +, -) -> Negate indices 1 and 3
+            let rhs_x_signed = Self::bitxor(
+                rhs_x,
+                const { reg::<Self, 4>([E::ZERO, C::NEG_ZERO, E::ZERO, C::NEG_ZERO]) },
+            );
 
-        // T4 Signs: (-, +, +, -) -> Negate indices 0 and 3
-        let rhs_z_signed = Self::bitxor(
-            rhs_z,
-            const { reg::<Self, 4>([C::NEG_ZERO, E::ZERO, E::ZERO, C::NEG_ZERO]) },
-        );
+            // T3 Signs: (+, +, -, -) -> Negate indices 2 and 3
+            let rhs_y_signed = Self::bitxor(
+                rhs_y,
+                const { reg::<Self, 4>([E::ZERO, E::ZERO, C::NEG_ZERO, C::NEG_ZERO]) },
+            );
 
-        // Pair 1: (w * rhs) + (x * rhs_x_signed)
-        let sum12 = Self::mul_adde(x, rhs_x_signed, Self::mul(w, rhs));
+            // T4 Signs: (-, +, +, -) -> Negate indices 0 and 3
+            let rhs_z_signed = Self::bitxor(
+                rhs_z,
+                const { reg::<Self, 4>([C::NEG_ZERO, E::ZERO, E::ZERO, C::NEG_ZERO]) },
+            );
 
-        // Pair 2: (y * rhs_y_signed) + (z * rhs_z_signed)
-        let sum34 = Self::mul_adde(z, rhs_z_signed, Self::mul(y, rhs_y_signed));
+            // Pair 1: (w * rhs) + (x * rhs_x_signed)
+            let sum12 = Self::mul_adde(x, rhs_x_signed, Self::mul(w, rhs));
 
-        Self::add(sum12, sum34)
+            // Pair 2: (y * rhs_y_signed) + (z * rhs_z_signed)
+            let sum34 = Self::mul_adde(z, rhs_z_signed, Self::mul(y, rhs_y_signed));
+
+            Self::add(sum12, sum34)
+        } else {
+            // Regrouped so every cancelling pair of `q * conj(q)` sits INSIDE one
+            // compensated two-product group. The component-broadcast decomposition
+            // above cannot do this at any fusing (its three vector lanes cancel
+            // across three different pairings of its four term-vectors). These
+            // shuffles instead realize the geometric split
+            //
+            //   vector = (w1*v2 + w2*v1) + (v1 x v2),   scalar = w1*w2 - v1.v2
+            //
+            // where the conjugate cancels within each parenthesis. Each group is a
+            // sum of two products, so TwoProd-style compensation applies: one
+            // product exact inside the FMA, the other's rounding residual
+            // recovered exactly by a second FMA. For the conjugate the cancelling
+            // terms then meet as `r` against `-r` (both exact residuals), and each
+            // group comes out exactly zero. This is `cross3::<false>`'s scheme,
+            // extended to the w-mixing group.
+            //
+            // This branch requires HAS_TRUE_FMA (gated above). Without it the
+            // residuals would compute as fl(ab) - fl(ab) = exactly zero, leaving
+            // only this arm's addition tree over the same four rounded products
+            // the FAST arm degrades to. Measured a dead tie on random inputs
+            // and ~13% better mean error near cancellation (tails identical),
+            // so it is not worth the extra shuffles on legacy backends. The conjugate
+            // identity stays exact on the non-FMA route regardless, because
+            // all-rounded products cancel as fl(t) vs fl(-t) in any tree.
+
+            // [ x1,  y1, z1, -x1]
+            let a1 = Self::bitxor(
+                s!(Self: lhs, [0, 1, 2, 0]),
+                const { reg::<Self, 4>([E::ZERO, E::ZERO, E::ZERO, C::NEG_ZERO]) },
+            );
+
+            // [ y1, z1, x1, -y1]
+            let a2 = Self::bitxor(
+                s!(Self: lhs, [1, 2, 0, 1]),
+                const { reg::<Self, 4>([E::ZERO, E::ZERO, E::ZERO, C::NEG_ZERO]) },
+            );
+
+            let b1 = s!(Self: rhs, [3, 3, 3, 0]); // [w2, w2, w2, x2]
+            let b2 = s!(Self: rhs, [2, 0, 1, 1]); // [z2, x2, y2, y2]
+            let c2 = s!(Self: lhs, [2, 0, 1, 2]); // [z1, x1, y1, z1]
+            let d2 = s!(Self: rhs, [1, 2, 0, 2]); // [y2, z2, x2, z2]
+
+            // Group 1: w1*rhs + a1*b1.
+            let t1 = Self::mul(a1, b1);
+            let e1 = Self::mul_sub(a1, b1, t1); // a1*b1 - fl(a1*b1), exact
+            let s1 = Self::mul_add(w, rhs, t1);
+
+            // Group 2: a2*b2 - c2*d2 (Kahan difference of products).
+            let t2 = Self::mul(c2, d2);
+            let e2 = Self::nmul_add(c2, d2, t2); // fl(c2*d2) - c2*d2, exact
+            let s2 = Self::mul_sub(a2, b2, t2);
+
+            // Group-wise so each (s, e) pair's exact zero survives the final add.
+            Self::add(Self::add(s1, e1), Self::add(s2, e2))
+        }
     }
 
     #[inline(always)]
