@@ -1,4 +1,4 @@
-//! Orthonormal Hermite functions: `hermite_function::<N>` and `hermite_function_series::<N>`.
+//! Orthonormal Hermite functions: `hermite_function::<N>` and `hermite_function_series_n::<N>`.
 //!
 //! References come from `scripts/orthonormal_ref.py` (mpmath, 50 digits) and include
 //! degrees 50 to 1000 - far past where the raw polynomial is finite in either format,
@@ -233,12 +233,12 @@ fn series_sums_the_single_functions() {
         for k in 0..N {
             let mut unit = [0.0f64; N];
             unit[k] = 1.0;
-            let solo = v.hermite_function_series::<N>(&unit).extract::<0>();
+            let solo = v.hermite_function_series_n::<N>(&unit).extract::<0>();
             close_abs(&format!("unit series k={k} at {x}"), solo, HF[k][j], 4e-16);
             want += c[k] * HF[k][j];
         }
 
-        let got = v.hermite_function_series::<N>(&c).extract::<0>();
+        let got = v.hermite_function_series_n::<N>(&c).extract::<0>();
         close_abs(&format!("series at {x}"), got, want, 2e-15);
     }
 }
@@ -252,14 +252,14 @@ fn series_short_forms() {
         let one = [2.5];
         close_abs(
             "N=1",
-            v.hermite_function_series::<1>(&one).extract::<0>(),
+            v.hermite_function_series_n::<1>(&one).extract::<0>(),
             2.5 * HF[0][j],
             1e-15,
         );
         let two = [2.5, -1.25];
         close_abs(
             "N=2",
-            v.hermite_function_series::<2>(&two).extract::<0>(),
+            v.hermite_function_series_n::<2>(&two).extract::<0>(),
             2.5 * HF[0][j] - 1.25 * HF[1][j],
             1e-15,
         );
@@ -276,7 +276,7 @@ fn series_at_high_degree_stays_in_range() {
         if n != 100 {
             continue;
         }
-        let got = D::splat(x).hermite_function_series::<101>(&c).extract::<0>();
+        let got = D::splat(x).hermite_function_series_n::<101>(&c).extract::<0>();
         // Clenshaw's own rounding is comparable to the forward kernel's, so give it 2x.
         close_abs(
             &format!("series psi_100({x})"),

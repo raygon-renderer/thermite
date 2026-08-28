@@ -28,10 +28,22 @@ where
     const LAGUERRE_PRODUCT_SEED_CAP: i32 = 170;
 
     #[inline(always)]
-    fn chebyshev<P: Policy, const K: usize, const N: usize>(self, coeffs: &[f64; N]) -> Self {
+    fn chebyshev_n<P: Policy, const K: usize, const N: usize>(self, coeffs: &[f64; N]) -> Self {
+        // See the trait default: the kernel reads `N = 0` as "runtime length", so the
+        // empty-series rejection belongs to the entry point.
+        const {
+            assert!(N >= 1, "chebyshev_n: N must be at least 1");
+        }
+
         // Real vectors have copysign and a real nearest endpoint, so the Reinsch form is
         // available, but the kernel still gates it on the policy asking for `Best` or better.
         generic::chebyshev::chebyshev_series::<P, _, _, K, N, true>(self, coeffs)
+    }
+
+    #[inline(always)]
+    fn chebyshev<P: Policy, const K: usize>(self, coeffs: &[f64]) -> Self {
+        // Reinsch available here too, on the same terms. See `chebyshev_n`.
+        generic::chebyshev::chebyshev_series::<P, _, _, K, 0, true>(self, coeffs)
     }
 
     // TEMP(bessel_j): disabled until orders beyond J_0 exist. See thermite-special/src/lib.rs.

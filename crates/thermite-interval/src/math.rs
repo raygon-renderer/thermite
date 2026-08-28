@@ -24,7 +24,7 @@
 //!
 //! [`algo_widen`] widens by [`ULP_DEFAULT`] ulps (or a per-function override),
 //! derived from a sweep of every kernel against a `Compensated<Vector<f64>>`
-//! reference over its full domain (`bin/ulp_sweep`, 2026-08-15). Nearly every
+//! reference over its full domain (`bin/ulp_sweep`). Nearly every
 //! thermite kernel measured at or below 4 ulp, and the margins are that
 //! maximum times a 4x safety factor.
 //!
@@ -109,7 +109,7 @@ impl<P: Policy> Policy for KernelPolicy<P> {
 
 /// Default algorithm-error margin, in ulps of the computed bound.
 ///
-/// The 2026-08-15 sweep (`bin/ulp_sweep`) measured every kernel below against
+/// The `bin/ulp_sweep` run measured every kernel below against
 /// a double-double reference across its domain. All but the three overridden
 /// below came in at or under 4 ulp at every tier from `Average` up. 4x safety.
 pub const ULP_DEFAULT: u32 = 16;
@@ -133,7 +133,7 @@ pub const ULP_COMPOUND_M1: u32 = 1024;
 /// Largest `|x|` at which thermite's trig kernels still deliver their nominal
 /// accuracy, by tier. Past this the enclosure degrades to `[-1, 1]`.
 ///
-/// Measured 2026-08-15 (`bin/ulp_sweep`, `trigmag`): the `Average`-tier range
+/// Measured with `bin/ulp_sweep` (`trigmag`): the `Average`-tier range
 /// reduction holds to 1.1e-16 absolute out to |x| ~ 1e8, then collapses
 /// (1.2e-7 at 1e9, 1.9e-6 at 1e10, a useless 1.0 by 1e14). `Best` and up
 /// carry a Payne-Hanek-class reduction and stay at 2.2e-16 through 1e16.
@@ -150,9 +150,9 @@ pub(crate) fn trig_safe_magnitude<V: IntervalMathVector, P: Policy>() -> V {
     if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
         <V as FloatConsts>::EPSILON
             .scale(<V::Element as thermite::element::FloatElement>::from_int(8))
-            .reciprocal_p::<P>()
+            .approx_reciprocal_p::<P>()
     } else {
-        <V as FloatConsts>::SQRT_EPSILON.reciprocal_p::<P>()
+        <V as FloatConsts>::SQRT_EPSILON.approx_reciprocal_p::<P>()
     }
 }
 
@@ -246,7 +246,7 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedCoreMath<IntervalElem<
     /// and the ILP the default was buying does not exist for a serial
     /// interval accumulator anyway.
     #[inline(always)]
-    fn poly<P: Policy, const N: usize>(self, coeffs: &[IntervalElem<V::Element>; N]) -> Self {
+    fn poly_n<P: Policy, const N: usize>(self, coeffs: &[IntervalElem<V::Element>; N]) -> Self {
         let x = self;
         let mut res = Self::splat(coeffs[N - 1]);
         let mut i = const { N - 1 };
@@ -259,7 +259,7 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedCoreMath<IntervalElem<
     }
 
     #[inline(always)]
-    fn poly_rev<P: Policy, const N: usize>(self, coeffs: &[IntervalElem<V::Element>; N]) -> Self {
+    fn poly_rev_n<P: Policy, const N: usize>(self, coeffs: &[IntervalElem<V::Element>; N]) -> Self {
         let x = self;
         let mut res = Self::splat(coeffs[0]);
         let mut i = 1;
@@ -297,7 +297,7 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedCoreMath<IntervalElem<
     }
 
     #[inline(always)]
-    fn reciprocal<P: Policy>(self) -> Self {
+    fn approx_reciprocal<P: Policy>(self) -> Self {
         self.recip_interval()
     }
 
@@ -394,7 +394,7 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
         let has_residue = |r: i64| -> V::Mask {
             let rv = V::splat(<V::Element as thermite::element::FloatElement>::from_int(r));
             // Largest k <= q_hi with k = r (mod 4):
-            let k = ((q_hi - rv) * four.reciprocal_p::<KernelPolicy<P>>())
+            let k = ((q_hi - rv) * four.approx_reciprocal_p::<KernelPolicy<P>>())
                 .floor()
                 .mul_adde(four, rv);
             k.cmp_gt(q_lo) & crossed.cmp_ge(V::ZERO)
@@ -843,24 +843,15 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedSpatialMath<IntervalEl
         self.abs_interval()
     }
 
-    /// `hypot` is increasing in `|x|` and `|y|`: `[hypot(mig), hypot(mag)]`.
+    /// Increasing in every `|x_i|`: `[hypot(migs), hypot(mags)]`.
     ///
     /// The trait default's max/scale scheme is built on certainly-compares
     /// (`max.cmp_eq(ZERO)`) that go wide the moment an interval touches
     /// zero, ending in `[0, inf]`. This form is tight.
-    #[inline(always)]
-    fn hypot<P: Policy>(self, other: Self) -> Self {
-        let poison = self.is_empty() | other.is_empty();
-        let (lo, hi) = algo_widen::<V, P>(
-            self.mignitude().hypot_p::<KernelPolicy<P>>(other.mignitude()),
-            self.magnitude().hypot_p::<KernelPolicy<P>>(other.magnitude()),
-        );
-        Self::from_bounds_unchecked(
-            poison.select(V::INFINITY, lo.max(V::ZERO)),
-            poison.select(V::NEG_INFINITY, hi),
-        )
-    }
-
+    ///
+    /// This subsumes the two-argument `hypot` override that used to sit beside it: that
+    /// method was the same mignitude/magnitude pair at `N = 2`, and it went away with the
+    /// method itself rather than being reimplemented here.
     #[inline(always)]
     fn hypot_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
         let (migs, mags, poison) = split_mig_mag(values);
@@ -887,6 +878,134 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedSpatialMath<IntervalEl
             poison.select(V::NEG_INFINITY, hi),
         )
     }
+
+    /// The runtime-length [`hypot_n`](Self::hypot_n), overridden for the same reason.
+    ///
+    /// The trait default cannot be reused here for the reason it cannot be reused at a
+    /// const length either: its scaling divides by a certainly-compared max, which goes
+    /// wide the moment an interval touches zero. Nothing here needs a buffer over the
+    /// slice - `mignitude`/`magnitude` are per-value, so each side is one pass of scalar
+    /// accumulators.
+    #[inline(always)]
+    fn hypot_s<P: Policy>(values: &[Self]) -> Self {
+        slice_hypot::<V, W, P, false>(values)
+    }
+
+    /// The runtime-length [`inv_hypot_n`](Self::inv_hypot_n). See [`hypot_s`](Self::hypot_s).
+    #[inline(always)]
+    fn inv_hypot<P: Policy>(values: &[Self]) -> Self {
+        slice_hypot::<V, W, P, true>(values)
+    }
+}
+
+/// One side of a scaled L2 norm over an interval slice: `MAG` picks the magnitudes (which
+/// bound the norm above) or the mignitudes (which bound it below).
+///
+/// This is `generic::hypot_slice_pow2_scaled`'s shape - max, scale, sum of scaled squares,
+/// root, with `INV` fused into `inverse_sqrt` so the norm is never formed - reading a
+/// projection of the slice rather than a slice. The inner kernel cannot be called directly
+/// because it wants a contiguous `&[V]`, and the mignitudes are not materialized anywhere.
+#[inline(always)]
+fn slice_hypot_side<V, W, P, const INV: bool, const MAG: bool>(values: &[Interval<V, W>]) -> V
+where
+    V: IntervalMathVector,
+    W: WideningPolicy,
+    P: Policy,
+{
+    #[inline(always)]
+    fn side<V: IntervalMathVector, W: WideningPolicy, const MAG: bool>(v: Interval<V, W>) -> V {
+        if MAG { v.magnitude() } else { v.mignitude() }
+    }
+
+    let mut max_abs = side::<V, W, MAG>(values[0]);
+    for &v in &values[1..] {
+        max_abs = max_abs.max(side::<V, W, MAG>(v));
+    }
+
+    // A zero max would make every term 0/0; scaling by 1 gives a zero sum instead, hence a
+    // zero norm and an infinite inverse, which are the limits.
+    let scale = max_abs
+        .cmp_eq(V::ZERO)
+        .select(V::ONE, max_abs.approx_reciprocal_p::<KernelPolicy<P>>());
+
+    let mut acc = V::ZERO;
+    for &v in values {
+        let u = side::<V, W, MAG>(v) * scale;
+        acc = u.mul_adde(u, acc);
+    }
+
+    if INV {
+        scale.approx_div_sqrt_p::<KernelPolicy<P>>(acc)
+    } else {
+        max_abs * acc.sqrt()
+    }
+}
+
+/// One endpoint of `logsumexp` over an interval slice: `HI` picks the upper bounds.
+///
+/// The plain `m + ln(sum exp(x - m))` form rather than the inner kernel's `ln_1p` split.
+/// The split exists to keep the dominant term out of a rounded `1 + s`, and it needs a
+/// lane-wise equality test against the max that an interval endpoint pass has no use for -
+/// here each side is already a plain real vector, and `algo_widen` covers the difference.
+#[inline(always)]
+fn slice_logsumexp_side<V, W, P, const HI: bool>(values: &[Interval<V, W>]) -> V
+where
+    V: IntervalMathVector,
+    W: WideningPolicy,
+    P: Policy,
+{
+    #[inline(always)]
+    fn side<V: IntervalMathVector, W: WideningPolicy, const HI: bool>(v: Interval<V, W>) -> V {
+        if HI { v.hi } else { v.lo }
+    }
+
+    let mut m = side::<V, W, HI>(values[0]);
+    for &v in &values[1..] {
+        m = m.max(side::<V, W, HI>(v));
+    }
+
+    let mut acc = V::ZERO;
+    for &v in values {
+        acc += (side::<V, W, HI>(v) - m).exp_p::<KernelPolicy<P>>();
+    }
+
+    let r = m + acc.ln_p::<KernelPolicy<P>>();
+
+    // An infinite (or NaN) max is the answer: every difference against it is NaN otherwise,
+    // and an all-(-inf) input is the log-domain zero, which must stay -inf.
+    m.is_finite().select(r, m)
+}
+
+/// Increasing in every `|x_i|`, so the norm of the mignitudes and the norm of the
+/// magnitudes are the two bounds - and the inverse, being decreasing, simply swaps them.
+#[inline(always)]
+fn slice_hypot<V, W, P, const INV: bool>(values: &[Interval<V, W>]) -> Interval<V, W>
+where
+    V: IntervalMathVector,
+    W: WideningPolicy,
+    P: Policy,
+{
+    if values.is_empty() {
+        // The empty norm is 0, and 1/0 is infinity: degenerate either way.
+        let e = if INV { V::INFINITY } else { V::ZERO };
+        return Interval::from_bounds_unchecked(e, e);
+    }
+
+    let mut poison: V::Mask = thermite::mask::GenericMask::FALSY;
+    for &v in values {
+        poison = poison | v.is_empty();
+    }
+
+    let migs = slice_hypot_side::<V, W, P, INV, false>(values);
+    let mags = slice_hypot_side::<V, W, P, INV, true>(values);
+
+    let (lo, hi) = if INV { (mags, migs) } else { (migs, mags) };
+    let (lo, hi) = algo_widen::<V, P>(lo, hi);
+
+    Interval::from_bounds_unchecked(
+        poison.select(V::INFINITY, lo.max(V::ZERO)),
+        poison.select(V::NEG_INFINITY, hi),
+    )
 }
 
 /// Mignitude and magnitude arrays of an interval array, plus the union of
@@ -1008,6 +1127,34 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedRealMath<IntervalElem<
             V::logsumexp_n_p::<KernelPolicy<P>, N>(los),
             V::logsumexp_n_p::<KernelPolicy<P>, N>(his),
         );
+        Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
+    }
+
+    /// The runtime-length [`logsumexp_n`](Self::logsumexp_n), and it MUST be overridden.
+    ///
+    /// Not a tightness call: the trait default is wrong here. Its accurate path drops
+    /// exactly one dominant term so the rest can go through `ln_1p`, and it identifies that
+    /// term with `(x - m).cmp_eq(ZERO)` - a *certainly*-equal compare, which is false for
+    /// every non-degenerate interval. No term is ever selected, every term is zeroed, and
+    /// the result collapses to the max. Increasing in every argument, so the honest form is
+    /// the same endpoint pair the const version uses.
+    #[inline(always)]
+    fn logsumexp<P: Policy>(values: &[Self]) -> Self {
+        let Some((&first, rest)) = values.split_first() else {
+            // The empty sum is 0, and ln(0) = -inf. Degenerate.
+            return Self::from_bounds_unchecked(V::NEG_INFINITY, V::NEG_INFINITY);
+        };
+
+        let mut poison = first.is_empty();
+        for &v in rest {
+            poison = poison | v.is_empty();
+        }
+
+        let (lo, hi) = algo_widen::<V, P>(
+            slice_logsumexp_side::<V, W, P, false>(values),
+            slice_logsumexp_side::<V, W, P, true>(values),
+        );
+
         Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
     }
 

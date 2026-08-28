@@ -51,7 +51,7 @@ macro_rules! suite {
 
             // binary
             close(x.scalar_atan2(0.5 as $e), $atan2(x, 0.5 as $e));
-            close(x.scalar_hypot(0.5 as $e), $hypot(x, 0.5 as $e));
+            close(<$e>::scalar_hypot_n::<2>([x, 0.5 as $e]), $hypot(x, 0.5 as $e));
 
             // a broad sweep that only needs to execute (correctness covered by diff_math)
             let _ = x.scalar_tan();

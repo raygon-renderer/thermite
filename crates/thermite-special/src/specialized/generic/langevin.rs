@@ -99,12 +99,15 @@ where
     E: FloatElementWithBits,
     V: FloatVectorWithBits<Element = E> + SpecializedSpecialMath<E>,
 {
-    // The exp never needs the Best tier: `x >= 2` keeps `-2x` inside the single-scale
-    // range of the Average kernel (its low end saturates to exactly 0, which is what
-    // `q` wants there anyway), and Average is already 1-2 ulp, which is below what
-    // `L`'s own rounding contributes. Best's two-part scaling and range gate cost more
-    // than the whole rest of the branch (measured 2x on f32x8), for nothing here.
-    // Overflow checks are off for the same reason: the caller owns the edges.
+    // The exp never needs the Best tier: Average is already 1-2 ulp, below what `L`'s
+    // own rounding contributes, and Best's range gate costs more than the whole rest of
+    // the branch (measured 2x on f32x8). Overflow checks are off for the same reason:
+    // the caller owns the edges.
+    //
+    // What this DOES depend on is `exp`'s low end saturating to exactly 0 rather than
+    // wrapping, since `q` wants 0 there. Average takes the two-scale reconstruction, whose
+    // halves are clamped explicitly in `exp_{f,d}_internal` under `!check_overflow`.
+    // Removing that clamp returns NaN here, at x = 100 in f32.
     type ExpPolicy<P> = CheckOverflow<CmpLessPrecision<P, AveragePrecision<P>>, false>;
 
     // Argument clamped where q has long underflowed to 0 (x > 52 in f32, 372 in f64):
@@ -113,7 +116,7 @@ where
     let xc = x.min(V::splat(<E as FloatElement>::ConstInt::<400>::VALUE));
     let q = (-(xc + xc)).exp_p::<ExpPolicy<P>>();
     let omq = V::ONE - q;
-    let r = (x * omq).reciprocal_p::<P>();
+    let r = (x * omq).approx_reciprocal_p::<P>();
     (q, omq, r)
 }
 
@@ -159,7 +162,7 @@ where
     let is_small = ax.cmp_le(V::splat(<E as FloatElement>::ConstInt::<X0_NUM>::VALUE));
 
     // Odd polynomial on the signed input, so the sign rides along for free.
-    let p = (x * x).poly_p::<P, _>(small);
+    let p = (x * x).poly_n_p::<P, _>(small);
     let l_small = x * p;
     // 1 - L*(L + 2/x) with L = x p: 2L/x = 2p, no division needed, as -L*L + (1 - 2p).
     let mut dl = l_small.nmul_adde(l_small, p.nmul_adde(V::TWO, V::ONE));
@@ -229,11 +232,11 @@ where
     let opy = V::ONE + y;
     // 1/(1-y^2) as the product of the two exact-ish factors, never as 1 - y*y: without
     // FMA that would lose the whole low half near y = 1.
-    let inv = (t * opy).reciprocal_p::<P>();
+    let inv = (t * opy).approx_reciprocal_p::<P>();
 
     let use_tail = y.cmp_ge(V::splat(<E as FloatElement>::ConstRatio::<Y1_NUM, Y1_DEN>::VALUE));
     let s = y * y;
-    let num = use_tail.select(opy, y * s.poly_p::<P, _>(seed_poly));
+    let num = use_tail.select(opy, y * s.poly_n_p::<P, _>(seed_poly));
     let mut x = num * inv;
 
     let x0 = V::splat(<E as FloatElement>::ConstInt::<X0_NUM>::VALUE);
@@ -248,13 +251,13 @@ where
         // differentiating that identity: L'' = -2 L L' - 2 (L' - p)/x. It cancels near
         // 0 (L'' ~ -2x/15), which Halley's correction term does not mind. The clamp
         // only keeps x = 0 (y = 0, whose step is exactly zero anyway) finite.
-        let p = (x * x).poly_p::<P, _>(small);
+        let p = (x * x).poly_n_p::<P, _>(small);
         let l = x * p;
         let mut r = l - y;
         let mut dl = l.nmul_adde(l, p.nmul_adde(V::TWO, V::ONE));
         let mut d2l = V::ZERO;
         if const { HALLEY } {
-            let rcp = x.max(V::MIN_POSITIVE).reciprocal_p::<P>();
+            let rcp = x.max(V::MIN_POSITIVE).approx_reciprocal_p::<P>();
             d2l = (l + l).nmul_sube(dl, (rcp + rcp) * (dl - p));
         }
 

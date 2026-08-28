@@ -161,7 +161,7 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
     fn atan<P: Policy>(self) -> Self {
         let v = self.re.atan_p::<P>();
         // 1 / (1 + x^2)
-        self.chain(v, self.re.mul_adde(self.re, V::ONE).reciprocal_p::<P>())
+        self.chain(v, self.re.mul_adde(self.re, V::ONE).approx_reciprocal_p::<P>())
     }
 
     #[inline(always)]
@@ -182,7 +182,7 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
     fn atanh<P: Policy>(self) -> Self {
         let v = self.re.atanh_p::<P>();
         // 1 / (1 - x^2)
-        self.chain(v, self.re.nmul_adde(self.re, V::ONE).reciprocal_p::<P>())
+        self.chain(v, self.re.nmul_adde(self.re, V::ONE).approx_reciprocal_p::<P>())
     }
 
     #[inline(always)]
@@ -312,7 +312,7 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
         let v = self.re.cbrt_p::<P>();
         // d/dx x^(1/3) = 1 / (3 x^(2/3)) = 1 / (3 v^2)
         let three: V = thermite::const_splat!(int <V::Element>: 3);
-        self.chain(v, (three * v * v).reciprocal_p::<P>())
+        self.chain(v, (three * v * v).approx_reciprocal_p::<P>())
     }
 
     // The default `nth_root` runs a dual `powf` plus a Halley iteration with dual
@@ -328,14 +328,14 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
     #[inline(always)]
     fn ln<P: Policy>(self) -> Self {
         let v = self.re.ln_p::<P>();
-        self.chain(v, self.re.reciprocal_p::<P>())
+        self.chain(v, self.re.approx_reciprocal_p::<P>())
     }
 
     #[inline(always)]
     fn ln_1p<P: Policy>(self) -> Self {
         let v = self.re.ln_1p_p::<P>();
         // 1 / (1 + x)
-        self.chain(v, (V::ONE + self.re).reciprocal_p::<P>())
+        self.chain(v, (V::ONE + self.re).approx_reciprocal_p::<P>())
     }
 
     #[inline(always)]
@@ -350,28 +350,28 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
     fn log2<P: Policy>(self) -> Self {
         let v = self.re.log2_p::<P>();
         // d/dx log2(x) = 1 / (x ln 2) = log2(e) / x
-        self.chain(v, self.re.reciprocal_p::<P>() * V::LOG2_E)
+        self.chain(v, self.re.approx_reciprocal_p::<P>() * V::LOG2_E)
     }
 
     #[inline(always)]
     fn log10<P: Policy>(self) -> Self {
         let v = self.re.log10_p::<P>();
         // d/dx log10(x) = 1 / (x ln 10) = log10(e) / x
-        self.chain(v, self.re.reciprocal_p::<P>() * V::LOG10_E)
+        self.chain(v, self.re.approx_reciprocal_p::<P>() * V::LOG10_E)
     }
 
     #[inline(always)]
     fn log2_p1<P: Policy>(self) -> Self {
         let v = self.re.log2_p1_p::<P>();
         // d/dx log2(1 + x) = 1 / ((1 + x) ln 2) = log2(e) / (1 + x)
-        self.chain(v, (V::ONE + self.re).reciprocal_p::<P>() * V::LOG2_E)
+        self.chain(v, (V::ONE + self.re).approx_reciprocal_p::<P>() * V::LOG2_E)
     }
 
     #[inline(always)]
     fn log10_p1<P: Policy>(self) -> Self {
         let v = self.re.log10_p1_p::<P>();
         // d/dx log10(1 + x) = 1 / ((1 + x) ln 10) = log10(e) / (1 + x)
-        self.chain(v, (V::ONE + self.re).reciprocal_p::<P>() * V::LOG10_E)
+        self.chain(v, (V::ONE + self.re).approx_reciprocal_p::<P>() * V::LOG10_E)
     }
 
     #[inline(always)]
@@ -379,7 +379,7 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
         let v = self.re.log_n_p::<P, M>();
         // d/dx log_M(x) = 1 / (x ln M)
         let ln_m = V::splat(<V::Element as FloatElement>::from_int(M as thermite::LargeInt)).ln_p::<P>();
-        self.chain(v, (self.re * ln_m).reciprocal_p::<P>())
+        self.chain(v, (self.re * ln_m).approx_reciprocal_p::<P>())
     }
 
     #[inline(always)]
@@ -447,7 +447,7 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
         // `atanhc_m1` primitive (atanh(x)/x - 1) so that (g-1) - (f-1) is formed from two
         // small quantities instead. `log1pmx` alone does not get there, since
         // atanh(x) - x = (log1pmx(x) - log1pmx(-x))/2 cancels its own x^2/2 terms.
-        let d = (V::ONE - self.re.square()).reciprocal_p::<P>();
+        let d = (V::ONE - self.re.square()).approx_reciprocal_p::<P>();
         let factor = (d - v) / self.re;
         let factor = self.re.is_zero().select(V::ZERO, factor);
         self.chain(v, factor)
@@ -481,7 +481,7 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
     #[inline(always)]
     fn ln1m_expnx<P: Policy>(self) -> Self {
         let v = self.re.ln1m_expnx_p::<P>();
-        self.chain(v, self.re.exp_m1_p::<P>().reciprocal_p::<P>())
+        self.chain(v, self.re.exp_m1_p::<P>().approx_reciprocal_p::<P>())
     }
 
     #[inline(always)]
@@ -490,7 +490,7 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
         // g(x) = ln(1 - e^(-x)),  g'(x) = 1 / (e^x - 1).
         // Use exp_m1 (= e^x - 1) instead of exp(x) - 1: same cost, but it avoids
         // catastrophic cancellation near x = 0, where the derivative blows up to 1/x.
-        self.chain(v, self.re.exp_m1_p::<P>().reciprocal_p::<P>())
+        self.chain(v, self.re.exp_m1_p::<P>().approx_reciprocal_p::<P>())
     }
 }
 
@@ -513,7 +513,7 @@ impl<V: DualMathVector, const N: usize> SpecializedSpatialMath<Dual<V::Element, 
         self.abs()
     }
 
-    // The default routes through `hypot_n_impl`: scaling, dual squaring, a dual
+    // The default routes through `hypot_n_recip_scaled`: scaling, dual squaring, a dual
     // sum and a dual sqrt, which is expensive and NaN-derivative at the origin. Compute
     // the primal with the dedicated inner `hypot_n`, then apply the analytic
     // gradient d/dt ||v|| = (sum_k v_k * v_k') / ||v||.
@@ -529,7 +529,7 @@ impl<V: DualMathVector, const N: usize> SpecializedSpatialMath<Dual<V::Element, 
         let h = <V as thermite::math::SpatialMathWithPolicy>::hypot_n_p::<P, K>(re);
         // d||v|| is undefined at the origin: h == 0 -> 1/h = inf, dotted with the
         // zero numerator -> NaN. Pin the gradient to 0 there instead.
-        let inv = h.reciprocal_p::<P>().nz(h.is_zero());
+        let inv = h.approx_reciprocal_p::<P>().nz(h.is_zero());
 
         let mut dual = [V::ZERO; N];
         let mut i = 0;
@@ -579,6 +579,91 @@ impl<V: DualMathVector, const N: usize> SpecializedSpatialMath<Dual<V::Element, 
 
         Dual { re: ih, dual }
     }
+
+    /// The runtime-length [`hypot_n`](Self::hypot_n), overridden for the same reason.
+    ///
+    /// The trait default is a dual square, a dual sum and a dual sqrt, whose gradient is
+    /// `0/0` at the origin, the exact failure the const override exists to avoid, so it
+    /// has to be avoided here too rather than inherited. Same analytic gradient,
+    /// `d/dt ||v|| = (sum_k v_k v_k') / ||v||`, over a runtime length.
+    #[inline(always)]
+    fn hypot_s<P: Policy>(values: &[Self]) -> Self {
+        slice_hypot::<V, N, P, false>(values)
+    }
+
+    /// The runtime-length [`inv_hypot_n`](Self::inv_hypot_n). See [`hypot_s`](Self::hypot_s).
+    #[inline(always)]
+    fn inv_hypot<P: Policy>(values: &[Self]) -> Self {
+        slice_hypot::<V, N, P, true>(values)
+    }
+}
+
+/// [`Dual::hypot_n`]/[`Dual::inv_hypot_n`] over a runtime length.
+///
+/// Same two steps as the const forms (the primal from the inner real kernel, then the
+/// analytic gradient), with the array passes rewritten as slice passes. The primal is
+/// computed inline rather than by calling `V::hypot_s`, because the `re` parts of a
+/// `&[Dual]` are not a contiguous `&[V]` and there is no buffer to make them one. That
+/// inline form is `generic::hypot_slice_pow2_scaled`'s: max, scale, sum of scaled squares,
+/// root, with `INV` fused into `inverse_sqrt` so the norm is never formed.
+#[inline(always)]
+fn slice_hypot<V: DualMathVector, const N: usize, P: Policy, const INV: bool>(
+    values: &[Dual<V, N>],
+) -> Dual<V, N> {
+    let Some((&first, rest)) = values.split_first() else {
+        // The empty norm is 0 (and 1/0 is infinity), with a zero gradient either way.
+        let re = if INV { V::INFINITY } else { V::ZERO };
+        return Dual { re, dual: [V::ZERO; N] };
+    };
+
+    let mut max_abs = first.re.abs();
+    for &v in rest {
+        max_abs = max_abs.max(v.re.abs());
+    }
+
+    // A zero max would make every term 0/0; scaling by 1 gives a zero sum instead.
+    let scale = max_abs
+        .cmp_eq(V::ZERO)
+        .select(V::ONE, max_abs.approx_reciprocal_p::<P>());
+
+    let mut acc = V::ZERO;
+    for &v in values {
+        let u = v.re * scale;
+        acc = u.mul_adde(u, acc);
+    }
+
+    // `h` is the norm and `ih` its inverse, exactly one of which is ever formed: the
+    // inverse direction keeps the scaling and the root fused, so it stays representable at
+    // magnitudes where the norm itself would overflow.
+    let (re, factor) = if INV {
+        let ih = scale.approx_div_sqrt_p::<P>(acc);
+
+        // d/dt (1/||v||) = -||v||^-3 (sum_k v_k v_k'). Undefined at the origin, where `ih`
+        // is infinite and the cube overflows near it, so zero the gradient wherever the
+        // factor is not finite rather than letting it poison the dot product into a NaN.
+        let factor = (ih * ih * ih).neg();
+        (ih, factor.zz(factor.is_finite()))
+    } else {
+        let h = max_abs * acc.sqrt();
+
+        // d||v|| is undefined at the origin: 1/h is infinite there and the numerator is
+        // zero, so pin the gradient to 0 instead of taking 0 * inf.
+        (h, h.approx_reciprocal_p::<P>().nz(h.is_zero()))
+    };
+
+    let mut dual = [V::ZERO; N];
+    let mut i = 0;
+    while i < N {
+        let mut dot = V::ZERO;
+        for &v in values {
+            dot = v.re.mul_adde(v.dual[i], dot);
+        }
+
+        dual[i] = factor * dot;
+        i += 1;
+    }
+
+    Dual { re, dual }
 }
 
 impl<V: DualMathVector, const N: usize> SpecializedRealMath<Dual<V::Element, N>> for Dual<V, N> {
@@ -587,7 +672,7 @@ impl<V: DualMathVector, const N: usize> SpecializedRealMath<Dual<V::Element, N>>
         let v = self.re.atan2_p::<P>(x.re);
         // d/da atan2(a,b) = b/(a^2+b^2); d/db = -a/(a^2+b^2)
         let denom = self.re.mul_adde(self.re, x.re * x.re);
-        let inv = denom.reciprocal_p::<P>();
+        let inv = denom.approx_reciprocal_p::<P>();
         let mut dual = self.dual;
         let mut i = 0;
         while i < N {
@@ -609,6 +694,6 @@ impl<V: DualMathVector, const N: usize> SpecializedRealMath<Dual<V::Element, N>>
         let edges_re = edges.map(|(a, b)| (a.re, b.re));
         let t = y.re.inverse_smoothstep_p::<P, M>(edges_re);
         let dprime = t.smoothstep_derivative_p::<P, M>(edges_re);
-        y.chain(t, dprime.reciprocal_p::<P>())
+        y.chain(t, dprime.approx_reciprocal_p::<P>())
     }
 }

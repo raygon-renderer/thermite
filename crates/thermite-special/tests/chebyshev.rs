@@ -1,4 +1,4 @@
-//! Chebyshev series summation: `chebyshev::<K, N>` over all four kinds.
+//! Chebyshev series summation: `chebyshev_n::<K, N>` over all four kinds.
 //!
 //! The reference is a compensated (Neumaier) forward sum of `c_k * P_k(x)`, which shares
 //! no structure with Clenshaw's backward recurrence and carries roughly twice the working
@@ -157,8 +157,8 @@ fn matches_compensated_forward_sum_on_all_kinds() {
         macro_rules! check {
             ($k:literal) => {{
                 let want = reference($k, &c, x);
-                let fast = v.chebyshev_p::<Performance, $k, N>(&c).extract::<0>();
-                let best = v.chebyshev_p::<Precision, $k, N>(&c).extract::<0>();
+                let fast = v.chebyshev_n_p::<Performance, $k, N>(&c).extract::<0>();
+                let best = v.chebyshev_n_p::<Precision, $k, N>(&c).extract::<0>();
                 assert!(
                     rel_err(fast, want) <= 1e-14,
                     "K={} clenshaw at x={x}: got {fast}, want {want}",
@@ -197,10 +197,10 @@ fn kinds_match_their_closed_forms_in_theta() {
         let v = D::splat(t.cos());
         let k = DEG as f64;
 
-        let got_t = v.chebyshev_p::<Precision, 1, { DEG + 1 }>(&c).extract::<0>();
-        let got_u = v.chebyshev_p::<Precision, 2, { DEG + 1 }>(&c).extract::<0>();
-        let got_v = v.chebyshev_p::<Precision, 3, { DEG + 1 }>(&c).extract::<0>();
-        let got_w = v.chebyshev_p::<Precision, 4, { DEG + 1 }>(&c).extract::<0>();
+        let got_t = v.chebyshev_n_p::<Precision, 1, { DEG + 1 }>(&c).extract::<0>();
+        let got_u = v.chebyshev_n_p::<Precision, 2, { DEG + 1 }>(&c).extract::<0>();
+        let got_v = v.chebyshev_n_p::<Precision, 3, { DEG + 1 }>(&c).extract::<0>();
+        let got_w = v.chebyshev_n_p::<Precision, 4, { DEG + 1 }>(&c).extract::<0>();
 
         assert!(rel_err(got_t, (k * t).cos()) <= 1e-13, "T_{DEG} at t={t}");
         assert!(
@@ -225,17 +225,17 @@ fn short_series_skip_the_recurrence() {
         let v = D::splat(x);
 
         let one = [2.5];
-        assert_eq!(v.chebyshev_p::<Precision, 1, 1>(&one).extract::<0>(), 2.5);
-        assert_eq!(v.chebyshev_p::<Precision, 4, 1>(&one).extract::<0>(), 2.5);
+        assert_eq!(v.chebyshev_n_p::<Precision, 1, 1>(&one).extract::<0>(), 2.5);
+        assert_eq!(v.chebyshev_n_p::<Precision, 4, 1>(&one).extract::<0>(), 2.5);
 
         let two = [2.5, -1.25];
         for kind in 1..=4 {
             let want = 2.5 - 1.25 * p1(kind, x);
             let got = match kind {
-                1 => v.chebyshev_p::<Precision, 1, 2>(&two).extract::<0>(),
-                2 => v.chebyshev_p::<Precision, 2, 2>(&two).extract::<0>(),
-                3 => v.chebyshev_p::<Precision, 3, 2>(&two).extract::<0>(),
-                _ => v.chebyshev_p::<Precision, 4, 2>(&two).extract::<0>(),
+                1 => v.chebyshev_n_p::<Precision, 1, 2>(&two).extract::<0>(),
+                2 => v.chebyshev_n_p::<Precision, 2, 2>(&two).extract::<0>(),
+                3 => v.chebyshev_n_p::<Precision, 3, 2>(&two).extract::<0>(),
+                _ => v.chebyshev_n_p::<Precision, 4, 2>(&two).extract::<0>(),
             };
             assert!(rel_err(got, want) <= 1e-15, "K={kind} N=2 at x={x}");
         }
@@ -260,8 +260,8 @@ fn precision_policy_bounds_the_endpoint_error_more_tightly() {
             for &x in &xs {
                 let v = D::splat(x);
                 let want = reference($k, &c, x);
-                worst_fast = worst_fast.max(rel_err(v.chebyshev_p::<Performance, $k, N>(&c).extract::<0>(), want));
-                worst_best = worst_best.max(rel_err(v.chebyshev_p::<Precision, $k, N>(&c).extract::<0>(), want));
+                worst_fast = worst_fast.max(rel_err(v.chebyshev_n_p::<Performance, $k, N>(&c).extract::<0>(), want));
+                worst_best = worst_best.max(rel_err(v.chebyshev_n_p::<Precision, $k, N>(&c).extract::<0>(), want));
             }
             assert!(
                 worst_best < worst_fast,
@@ -295,8 +295,8 @@ fn lanes_carrying_different_arguments_stay_independent() {
     // half of these.
     let xs = [-0.99999, -0.25, 0.25, 0.99999];
 
-    let got_fast = D4::new(xs).chebyshev_p::<Performance, 1, N>(&c);
-    let got_best = D4::new(xs).chebyshev_p::<Precision, 1, N>(&c);
+    let got_fast = D4::new(xs).chebyshev_n_p::<Performance, 1, N>(&c);
+    let got_best = D4::new(xs).chebyshev_n_p::<Precision, 1, N>(&c);
 
     for (lane, &x) in xs.iter().enumerate() {
         let want = reference(1, &c, x);
@@ -309,7 +309,7 @@ fn lanes_carrying_different_arguments_stay_independent() {
             "reinsch lane {lane} at x={x}"
         );
         // And each lane must equal what that argument produces on its own.
-        let solo = D::splat(x).chebyshev_p::<Precision, 1, N>(&c).extract::<0>();
+        let solo = D::splat(x).chebyshev_n_p::<Precision, 1, N>(&c).extract::<0>();
         assert_eq!(
             got_best.as_slice()[lane],
             solo,
@@ -334,7 +334,7 @@ fn both_endpoint_forms_are_exercised_within_one_vector() {
     for j in 1..=30 {
         let e = 2f64.powi(-j);
         let xs = [1.0 - e, -1.0 + e, -(1.0 - e), 1.0 - e * 0.5];
-        let got = D4::new(xs).chebyshev_p::<Precision, 1, N>(&c);
+        let got = D4::new(xs).chebyshev_n_p::<Precision, 1, N>(&c);
 
         for (lane, &x) in xs.iter().enumerate() {
             let want = reference(1, &c, x);
@@ -365,11 +365,11 @@ fn f32_matches_the_reference_on_all_kinds() {
                 for (label, got) in [
                     (
                         "clenshaw",
-                        v.chebyshev_p::<Performance, $k, N>(&c32(&c)).extract::<0>(),
+                        v.chebyshev_n_p::<Performance, $k, N>(&c32(&c)).extract::<0>(),
                     ),
                     (
                         "reinsch",
-                        v.chebyshev_p::<Precision, $k, N>(&c32(&c)).extract::<0>(),
+                        v.chebyshev_n_p::<Precision, $k, N>(&c32(&c)).extract::<0>(),
                     ),
                 ] {
                     let err = (got as f64 - want).abs();
@@ -439,8 +439,8 @@ fn f32_precision_policy_also_tightens_the_endpoint_envelope() {
             let mut differ = 0;
             for &x in &xs {
                 let v = FV::splat(x);
-                let fast = v.chebyshev_p::<Performance, $k, N>(&c32v).extract::<0>();
-                let best = v.chebyshev_p::<Precision, $k, N>(&c32v).extract::<0>();
+                let fast = v.chebyshev_n_p::<Performance, $k, N>(&c32v).extract::<0>();
+                let best = v.chebyshev_n_p::<Precision, $k, N>(&c32v).extract::<0>();
                 if fast.to_bits() != best.to_bits() {
                     differ += 1;
                 }
@@ -479,10 +479,10 @@ fn fitted_spectra_are_accurate_at_the_endpoints_under_either_policy() {
         for kind in 1..=4 {
             let want = reference(kind, &c, x);
             let got = match kind {
-                1 => v.chebyshev_p::<Performance, 1, N>(&c).extract::<0>(),
-                2 => v.chebyshev_p::<Performance, 2, N>(&c).extract::<0>(),
-                3 => v.chebyshev_p::<Performance, 3, N>(&c).extract::<0>(),
-                _ => v.chebyshev_p::<Performance, 4, N>(&c).extract::<0>(),
+                1 => v.chebyshev_n_p::<Performance, 1, N>(&c).extract::<0>(),
+                2 => v.chebyshev_n_p::<Performance, 2, N>(&c).extract::<0>(),
+                3 => v.chebyshev_n_p::<Performance, 3, N>(&c).extract::<0>(),
+                _ => v.chebyshev_n_p::<Performance, 4, N>(&c).extract::<0>(),
             };
             assert!(rel_err(got, want) <= 1e-14, "K={kind} at x={x}: got {got}, want {want}");
         }

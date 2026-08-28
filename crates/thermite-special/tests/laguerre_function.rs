@@ -1,5 +1,5 @@
 //! Orthonormal generalized Laguerre functions: `laguerre_function::<N>` and
-//! `laguerre_function_series::<N>`.
+//! `laguerre_function_series_n::<N>`.
 //!
 //! References come from `scripts/orthonormal_ref.py` (mpmath, three-term recurrence at 400
 //! digits) over five weights including a half-integer and a negative one, and include
@@ -211,7 +211,7 @@ fn series_sums_the_single_functions() {
             for k in 0..N {
                 let mut unit = [0.0f64; N];
                 unit[k] = 1.0;
-                let solo = v.laguerre_function_series::<N>(a, &unit).extract::<0>();
+                let solo = v.laguerre_function_series_n::<N>(a, &unit).extract::<0>();
                 close_abs(
                     &format!("unit series k={k} a={alpha} x={x}"),
                     solo,
@@ -221,7 +221,7 @@ fn series_sums_the_single_functions() {
                 want += c[k] * LF[i][k][j];
             }
 
-            let got = v.laguerre_function_series::<N>(a, &c).extract::<0>();
+            let got = v.laguerre_function_series_n::<N>(a, &c).extract::<0>();
             close_abs(
                 &format!("series a={alpha} x={x}"),
                 got,
@@ -243,14 +243,14 @@ fn series_short_forms() {
             let one = [2.5];
             close_abs(
                 "N=1",
-                v.laguerre_function_series::<1>(a, &one).extract::<0>(),
+                v.laguerre_function_series_n::<1>(a, &one).extract::<0>(),
                 2.5 * LF[i][0][j],
                 budget(1, alpha, x, f64::EPSILON) * 3.0,
             );
             let two = [2.5, -1.25];
             close_abs(
                 "N=2",
-                v.laguerre_function_series::<2>(a, &two).extract::<0>(),
+                v.laguerre_function_series_n::<2>(a, &two).extract::<0>(),
                 2.5 * LF[i][0][j] - 1.25 * LF[i][1][j],
                 budget(2, alpha, x, f64::EPSILON) * 3.0,
             );
@@ -267,7 +267,7 @@ fn series_at_high_degree_stays_in_range() {
             continue;
         }
         let got = D::splat(x)
-            .laguerre_function_series::<81>(D::splat(alpha), &c)
+            .laguerre_function_series_n::<81>(D::splat(alpha), &c)
             .extract::<0>();
         close_abs(
             &format!("series l_80^({alpha})({x})"),
@@ -387,8 +387,8 @@ fn integer_series_agrees_with_the_float_series() {
     for a in 0..=4i32 {
         for &x in &LF_XS {
             let v = D::splat(x);
-            let want = v.laguerre_function_series::<N>(D::splat(a as f64), &c).extract::<0>();
-            let got = v.laguerre_function_series_i::<N>(a, &c).extract::<0>();
+            let want = v.laguerre_function_series_n::<N>(D::splat(a as f64), &c).extract::<0>();
+            let got = v.laguerre_function_series_i_n::<N>(a, &c).extract::<0>();
             close_abs(&format!("series a={a} x={x} i vs f"), got, want, 1e-14);
         }
     }
@@ -403,7 +403,7 @@ fn integer_series_with_a_unit_coefficient_is_the_single_function() {
             unit[k] = 1.0;
             for &x in &LF_XS {
                 let v = D::splat(x);
-                let got = v.laguerre_function_series_i::<N>(a, &unit).extract::<0>();
+                let got = v.laguerre_function_series_i_n::<N>(a, &unit).extract::<0>();
                 let want = match k {
                     0 => v.laguerre_function_i::<0>(a),
                     1 => v.laguerre_function_i::<1>(a),

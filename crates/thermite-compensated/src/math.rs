@@ -395,7 +395,7 @@ where
 
         // if x > 1: x = 1/x
         // We will compute pi/2 - atan(1/x) later
-        let mut curr = gt_1.select(abs_x.reciprocal_p::<P>(), abs_x);
+        let mut curr = gt_1.select(abs_x.approx_reciprocal_p::<P>(), abs_x);
 
         // Check if x > tan(pi/8)
         let gt_tan_pi8 = curr.value().cmp_gt(tan_pi_8.value());

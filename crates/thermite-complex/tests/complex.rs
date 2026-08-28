@@ -111,7 +111,7 @@ diff_unary! {
     diff_expm1    => |z| z.exp_m1(), |o| o.exp() - Complex64::new(1.0, 0.0), TOL;
     diff_ln_1p    => |z| z.ln_1p(), |o| (o + Complex64::new(1.0, 0.0)).ln(), TOL;
     diff_inv_sqrt => |z| z.inverse_sqrt(), |o| o.sqrt().inv(), TOL;
-    diff_rcp_full => |z| z.reciprocal(), |o| o.inv(), TOL;
+    diff_rcp_full => |z| z.approx_reciprocal(), |o| o.inv(), TOL;
 }
 
 #[test]
@@ -647,10 +647,7 @@ fn inv_hypot_is_the_reciprocal_norm() {
     let (a, b, cc, d) = (3.0, 4.0, 5.0, 12.0);
     let want = 1.0 / (25.0f64 + 169.0).sqrt();
 
-    let got = parts(<C as SpatialMathWithPolicy>::inv_hypot_n_p::<Precision, 2>([
-        c(a, b),
-        c(cc, d),
-    ]));
+    let got = parts(<C as SpatialMathWithPolicy>::inv_hypot_n_p::<Precision, 2>([c(a, b), c(cc, d)]));
 
     assert!(
         (got.0 - want).abs() < 1e-12 && got.1.abs() < 1e-12,
@@ -658,12 +655,12 @@ fn inv_hypot_is_the_reciprocal_norm() {
     );
 }
 
-/// `poly_rational` must pick its evaluation form on `|z|`, not on the lexicographic
+/// `poly_rational_n` must pick its evaluation form on `|z|`, not on the lexicographic
 /// order. At `z = 10^150 i` the real part is 0, so the generic default judges `z` "not
 /// greater than one" and evaluates the direct form, where `z^3` overflows to infinity
 /// and the ratio comes back NaN. Through `1/z` it is the ratio of leading coefficients.
 #[test]
-fn poly_rational_inverts_on_modulus_not_lexicographic_order() {
+fn poly_rational_n_inverts_on_modulus_not_lexicographic_order() {
     use thermite::math::CoreMathWithPolicy;
 
     // constant-term-first, equal degree: the limit as |z| -> inf is 4/8.
@@ -674,25 +671,25 @@ fn poly_rational_inverts_on_modulus_not_lexicographic_order() {
     let denc = den.map(|z| Complex::new(z.re.extract::<0>(), z.im.extract::<0>()));
 
     // Purely imaginary, so Re z = 0 < 1 while |z| is enormous.
-    let got = c(0.0, 1.0e150).poly_rational_p::<Precision, 4, 4>(&numc, &denc);
+    let got = c(0.0, 1.0e150).poly_rational_n_p::<Precision, 4, 4>(&numc, &denc);
     let (re, im) = parts(got);
 
     assert!(
         re.is_finite() && im.is_finite(),
-        "poly_rational @ 1e150i: got ({re}, {im}), want finite"
+        "poly_rational_n @ 1e150i: got ({re}, {im}), want finite"
     );
     assert!(
         (re - 0.5).abs() < 1e-12 && im.abs() < 1e-12,
-        "poly_rational @ 1e150i: got ({re}, {im}), want (0.5, 0)"
+        "poly_rational_n @ 1e150i: got ({re}, {im}), want (0.5, 0)"
     );
 
     // And it still agrees with the direct form well inside the unit disc.
-    let small = c(0.25, -0.125).poly_rational_p::<Precision, 4, 4>(&numc, &denc);
+    let small = c(0.25, -0.125).poly_rational_n_p::<Precision, 4, 4>(&numc, &denc);
     let z = Complex64::new(0.25, -0.125);
     let want = (Complex64::new(1.0, 0.0) + 2.0 * z + 3.0 * z * z + 4.0 * z * z * z)
         / (Complex64::new(5.0, 0.0) + 6.0 * z + 7.0 * z * z + 8.0 * z * z * z);
 
-    assert_close("poly_rational small", small, want, 1e-13);
+    assert_close("poly_rational_n small", small, want, 1e-13);
 }
 
 /// `harmonic_mean` / `inv_sum_inv` on `Complex`, which take the DIRECT reciprocal-sum form
@@ -716,8 +713,8 @@ fn harmonic_mean_and_inv_sum_inv() {
         let want_isi = 1.0 / (1.0 / z0 + 1.0 / z1);
         let want_hm = want_isi * 2.0;
 
-        let got_hm = C::harmonic_mean([c(a, b), c(p, q)]);
-        let got_isi = C::inv_sum_inv([c(a, b), c(p, q)]);
+        let got_hm = C::harmonic_mean_n([c(a, b), c(p, q)]);
+        let got_isi = C::inv_sum_inv_n([c(a, b), c(p, q)]);
 
         let (hr, hi) = (got_hm.re.extract::<0>(), got_hm.im.extract::<0>());
         let (sr, si) = (got_isi.re.extract::<0>(), got_isi.im.extract::<0>());
@@ -730,8 +727,8 @@ fn harmonic_mean_and_inv_sum_inv() {
 
     // The defining factor of N still holds on Complex: N copies give z and z/N.
     let z = c(2.0, -5.0);
-    let hm = C::harmonic_mean([z, z, z]);
-    let si = C::inv_sum_inv([z, z, z]);
+    let hm = C::harmonic_mean_n([z, z, z]);
+    let si = C::inv_sum_inv_n([z, z, z]);
     assert!((hm.re.extract::<0>() - 2.0).abs() < 1e-14 && (hm.im.extract::<0>() + 5.0).abs() < 1e-14);
     assert!((si.re.extract::<0>() - 2.0 / 3.0).abs() < 1e-14 && (si.im.extract::<0>() + 5.0 / 3.0).abs() < 1e-14);
 
@@ -741,7 +738,7 @@ fn harmonic_mean_and_inv_sum_inv() {
     // There is no complex infinity in this representation to sum toward. The mean inherits
     // exactly what the crate's own division does, which the second assertion pins.
     let zero = c(0.0, 0.0);
-    let hz = C::harmonic_mean([zero, c(1.0, 1.0)]);
+    let hz = C::harmonic_mean_n([zero, c(1.0, 1.0)]);
     assert!(hz.re.extract::<0>().is_nan(), "a zero element gives NaN on Complex, not 0");
 
     let recip = C::ONE / zero;

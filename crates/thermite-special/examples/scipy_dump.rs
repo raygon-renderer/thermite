@@ -122,7 +122,7 @@ fn main() {
         }
     }
 
-    // --- power transforms (this session's work) ---------------------------------------
+    // --- power transforms ---------------------------------------------------------------
     for x in decades(1e-4, 1e4, 25) {
         for l in [-2.0, -0.5, 0.0, 1e-8, 0.25, 0.5, 1.0, 2.0, 3.5] {
             row2("boxcox", x, l, s(x).boxcox(s(l)));

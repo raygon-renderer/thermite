@@ -227,7 +227,7 @@ go in `[ params ][ names ]`, not `<...>`:
 ```rust
 decl_math! {
     trait Core<FloatElement>: FloatVector {
-        fn reciprocal[][](self: Self) -> Self;                 // no generics
+        fn approx_reciprocal[][](self: Self) -> Self;                 // no generics
         #[skip_dispatch] fn poly[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
     }
 }
@@ -237,11 +237,11 @@ expands (paraphrased) to:
 
 ```rust
 pub trait CoreMathWithPolicy: FloatVector {
-    fn reciprocal_p<P: Policy>(self: Self) -> Self;
+    fn approx_reciprocal_p<P: Policy>(self: Self) -> Self;
     fn poly_p<P: Policy, const N: usize>(self: Self, coeffs: &[Self::Element; N]) -> Self;
 }
 pub trait CoreMath: CoreMathWithPolicy {
-    #[inline(always)] fn reciprocal(self) -> Self { Self::reciprocal_p::<DefaultPolicy>(self) }
+    #[inline(always)] fn approx_reciprocal(self) -> Self { Self::approx_reciprocal_p::<DefaultPolicy>(self) }
     #[inline(always)] fn poly<const N: usize>(self, c: &[Self::Element; N]) -> Self { Self::poly_p::<DefaultPolicy, N>(self, c) }
 }
 impl<M> CoreMath for M where M: CoreMathWithPolicy {}
@@ -250,7 +250,7 @@ impl<M> CoreMath for M where M: CoreMathWithPolicy {}
 impl<E: FloatElement, V: FloatVector<Element = E>> CoreMathWithPolicy for V
     where V: specialized::SpecializedCoreMath<E>
 {
-    #[inline(always)] fn reciprocal_p<P: Policy>(self) -> Self {
+    #[inline(always)] fn approx_reciprocal_p<P: Policy>(self) -> Self {
         <V as specialized::SpecializedCoreMath<E>>::reciprocal::<P>(self)
     }
 }

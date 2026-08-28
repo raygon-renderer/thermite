@@ -196,11 +196,102 @@ fn native_wide_expand_shapes() {
     check_expand::<<X86V3 as NativeSimd>::u8xN>(sample(32, 20000));
 }
 
+/// The `_n` family: `compress_n` / `compress_z_n` / `expand_n` / `expand_z_n`
+/// must be **bit-identical** to `N` separate single-vector calls under the same
+/// mask, for every mask pattern.
+///
+/// That is the whole contract. The `_n` forms only share the mask-derived plan
+/// (movemask, table rows, index registers, merge controls), never change the
+/// permutation, so comparing against the single-vector ops is a complete
+/// check, and it transitively inherits those ops' own oracle coverage above.
+///
+/// The `N` value registers carry disjoint value ranges so a lane leaking
+/// between values is visible, not just a lane leaking between positions.
+fn check_n<R: Register, const N: usize>(patterns: impl Iterator<Item = u64>) {
+    let n = <R::Lanes as Unsigned>::USIZE;
+
+    let mut vals = [R::EMPTY; N];
+    for (k, slot) in vals.iter_mut().enumerate() {
+        *slot = R::new(GenericArray::generate(|i| {
+            // Distinct per (value, lane), wrapped into the element's range.
+            <R::Element as Element>::from_u8(((k * n + i + 1) % 251 + 1) as u8)
+        }));
+    }
+
+    for bits in patterns {
+        let sel: GenericArray<R::Element, R::Lanes> =
+            GenericArray::generate(|i| <R::Element as Element>::from_u8(((bits >> i) & 1) as u8));
+        let mask = R::into_mask(R::new(sel));
+
+        let got_c = R::compress_n::<N>(vals, mask);
+        let got_cz = R::compress_z_n::<N>(vals, mask);
+        let got_e = R::expand_n::<N>(vals, mask);
+        let got_ez = R::expand_z_n::<N>(vals, mask);
+
+        for k in 0..N {
+            assert_eq!(
+                R::as_slice(&got_c[k]),
+                R::as_slice(&R::compress(vals[k], mask)),
+                "compress_n N={N} k={k} lanes={n} bits={bits:b}"
+            );
+            assert_eq!(
+                R::as_slice(&got_cz[k]),
+                R::as_slice(&R::compress_z(vals[k], mask)),
+                "compress_z_n N={N} k={k} lanes={n} bits={bits:b}"
+            );
+            assert_eq!(
+                R::as_slice(&got_e[k]),
+                R::as_slice(&R::expand(vals[k], mask)),
+                "expand_n N={N} k={k} lanes={n} bits={bits:b}"
+            );
+            assert_eq!(
+                R::as_slice(&got_ez[k]),
+                R::as_slice(&R::expand_z(vals[k], mask)),
+                "expand_z_n N={N} k={k} lanes={n} bits={bits:b}"
+            );
+        }
+    }
+}
+
+/// `_n` on the <= 8-lane table path (one row fetch, `N` `permutev_row`s).
+#[test]
+fn n_family_table() {
+    check_n::<<X86V3 as Simd>::i32x8, 2>(0..256);
+    check_n::<<X86V3 as Simd>::i32x8, 4>(0..256);
+}
+
+/// `_n` on the native grouped kernels (`compress_via_wide!`): one plan for the
+/// zeroing forms, two plus a shared shift control for the non-zeroing ones.
+#[test]
+fn n_family_grouped() {
+    check_n::<<X86V3 as Simd>::u16x16, 2>(0..(1 << 16));
+    check_n::<<X86V3 as Simd>::u16x16, 4>(0..(1 << 16));
+
+    // 32 lanes, 4 groups and two merge levels.
+    check_n::<<X86V3 as NativeSimd>::u8xN, 2>(sample(32, 20000));
+    check_n::<<X86V3 as NativeSimd>::u8xN, 4>(sample(32, 20000));
+}
+
+/// `_n` on the emulated `ArrayRegister` shapes: `compress_z_n` takes the merge
+/// tree with shared counts/`merge_pair` controls and chunk-recursive `_n`
+/// calls, and the other three take the shared-index wide scatter.
+#[test]
+fn n_family_array() {
+    // v3 f32x16 = ArrayRegister<F32x8V3, 2>: 8-lane chunks, merge2.
+    check_n::<<X86V3 as Simd>::f32x16, 2>(0..(1 << 16));
+    check_n::<<X86V3 as Simd>::f32x16, 4>(0..(1 << 16));
+    // v2 f32x16 = ArrayRegister<F32x4V2, 4>: 4-lane chunks, merge4 (the M=2
+    // chunk-shift stage as well as M=1).
+    check_n::<<X86V2 as Simd>::f32x16, 2>(0..(1 << 16));
+    // 64 lanes over 8 chunks: merge8, the M=4 stage.
+    check_n::<thermite::register::array::ArrayRegister<<X86V2 as NativeSimd>::u8xN, 4>, 2>(sample(64, 20000));
+}
+
 #[test]
 fn v2() {
     check::<<X86V2 as Simd>::f32x4>(0..16);
-    // The 64-bit v2 registers gained pshufb-based `permutev` overrides
-    // (2026-08-08); compress routes through them.
+    // The 64-bit v2 registers gained pshufb-based `permutev` overrides, and
+    // compress routes through them.
     check::<<X86V2 as Simd>::f64x2>(0..4);
     check::<<X86V2 as Simd>::i64x2>(0..4);
     check::<<X86V2 as Simd>::u64x2>(0..4);

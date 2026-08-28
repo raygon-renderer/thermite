@@ -74,7 +74,7 @@ fn holomorphic_derivatives() {
 
     // f(z) = 1/z  =>  f'(z) = -1/z^2. At z = i: 1/i = -i, -1/i^2 = 1.
     let z = seeded(0.0, 1.0);
-    assert_deriv("1/z at i", z.reciprocal(), (0.0, -1.0), (1.0, 0.0), 1e-12);
+    assert_deriv("1/z at i", z.approx_reciprocal(), (0.0, -1.0), (1.0, 0.0), 1e-12);
 
     // f(z) = sin(z)  =>  f'(z) = cos(z)
     let z = seeded(0.7, -0.3);

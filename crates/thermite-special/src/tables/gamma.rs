@@ -24,10 +24,10 @@
 /// two consumers want opposite conventions - mixing them up is silent and expensive:
 ///
 /// * `p_rev` / `q_rev` are the unscaled Lanczos sum in **leading-term-first** order,
-///   for `tgamma`, which evaluates them with `poly_rev_p` (that often optimizes better
+///   for `tgamma`, which evaluates them with `poly_rev_n_p` (that often optimizes better
 ///   than the rational form).
 /// * `p_expg_scaled` / `q` are the `exp(g)`-scaled sum in **constant-term-first**
-///   order, which is what `poly_rational_p` expects, for `lgamma_r` and `beta`.
+///   order, which is what `poly_rational_n_p` expects, for `lgamma_r` and `beta`.
 ///
 /// The `q`/`q_rev` pair is the same polynomial `z(z+1)...(z+N-2)` written both ways.
 /// Coefficients from Boost.Math `lanczos.hpp` (BSL-1.0); Boost lists both `num` and
@@ -50,7 +50,7 @@ pub const LN_MAX_F64: f64 = 709.782712893383973096206318586483;
 pub const LANCZOS_F32: Lanczos<f32, 6> = Lanczos {
     g: 1.428456135094165802001953125,
 
-    // Boost's `num`, reversed into leading-term-first order for `poly_rev_p`.
+    // Boost's `num`, reversed into leading-term-first order for `poly_rev_n_p`.
     p_rev: [
         2.50662858515256974113978724717473206342,
         27.5192015197455403062503721613097825345,
@@ -72,7 +72,7 @@ pub const LANCZOS_F32: Lanczos<f32, 6> = Lanczos {
         0.6007854010515290065101128585795542383721,
     ],
 
-    // The same polynomial as `q_rev`, constant-term-first, for `poly_rational_p`.
+    // The same polynomial as `q_rev`, constant-term-first, for `poly_rational_n_p`.
     // NOT interchangeable with it: the two orderings agree only at z = 1, so swapping
     // them is invisible in a spot-check and wrong everywhere else.
     q: [0.0, 24.0, 50.0, 35.0, 10.0, 1.0],
@@ -246,7 +246,7 @@ pub const DIGAMMA_F64: Digamma<f64, 3, 8, 6, 7> = Digamma {
 
 /// Minimax rational coefficients for `trigamma`, in three regions of `x >= 1`.
 ///
-/// Every array is constant-term-first, matching `poly_p`. Boost.Math fits these for
+/// Every array is constant-term-first, matching `poly_n_p`. Boost.Math fits these for
 /// 53-bit precision and uses the *same* set for `float`, since its tag dispatch is
 /// `precision <= 53 ? 53 : ...` and float is 24 bits - so unlike `digamma`, there is
 /// no separate f32 table to port, and `TRIGAMMA_F32` below is this one rounded down.

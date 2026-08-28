@@ -16,6 +16,7 @@ use thermite::{
 };
 
 use crate::specialized::SpecializedSpecialMath;
+use thermite::math::policy::DenormalBehavior;
 
 /// Legendre integral kinds for [`ellint_impl`]'s `KIND` const parameter.
 pub const KIND_F: u8 = 1; // first kind: F(phi, k) / K(k)
@@ -66,6 +67,8 @@ where
     let thresh = V::SQRT_EPSILON; // c_n^2 ~ eps once |c_n| ~ sqrt(eps)
     let mut iter = 0;
     loop {
+        V::_loop_hint();
+
         let an = (a + b).scale(sc!(1 / 2));
         let bn = (a * b).sqrt();
         c = (a - b).scale(sc!(1 / 2));
@@ -169,6 +172,8 @@ where
 
     let mut iter = 0;
     loop {
+        V::_loop_hint();
+
         let rx = xn.sqrt();
         let ry = yn.sqrt();
         let rz = zn.sqrt();
@@ -259,6 +264,8 @@ where
 
     let mut iter = 0;
     loop {
+        V::_loop_hint();
+
         let rx = xn.sqrt();
         let ry = yn.sqrt();
         let rz = zn.sqrt();
@@ -297,7 +304,7 @@ where
     let e4 = zz.mul_adde(c!(-3 / 1), xy3) * zz; // (3 xy - 3 zz) zz = 3 (xy - zz) zz
     let e5 = xy * (zz * zd);
 
-    let taylor = fac * rdj_poly::<E, V>(e2, e3, e4, e5) / (an * an.sqrt()); // fac * An^(-3/2) * poly
+    let taylor = fac * rdj_poly_n::<E, V>(e2, e3, e4, e5) / (an * an.sqrt()); // fac * An^(-3/2) * poly
     let rd = c!(3 / 1).mul_adde(sum, taylor); // taylor + 3 * sum
 
     if const { P::POLICY.check_overflow } {
@@ -312,7 +319,7 @@ where
 /// Shared 5th-order Taylor tail polynomial for R_D and R_J (Carlson 2015) - they use the
 /// same form in the deviation variables E2..E5.
 #[inline(always)]
-fn rdj_poly<E, V>(e2: V, e3: V, e4: V, e5: V) -> V
+fn rdj_poly_n<E, V>(e2: V, e3: V, e4: V, e5: V) -> V
 where
     E: FloatElement,
     V: FloatVector<Element = E>,
@@ -423,23 +430,30 @@ where
     // a/sqrt(b) is a single divide, so sqrt + div stays optimal. `irx = 1/sqrt(x)` also scales
     // the series (poly * irx) in both paths. The carried `scale` is 1/sad on the rsqrt path
     // (multiply) and sad on the divide path; the combine below picks the matching op.
-    let (s, neg_arg, irx, scale) = if const { V::HAS_APPROX_RSQRT } {
-        let isad = absd.inverse_sqrt_p::<P>(); // 1/sqrt(|y-x|)
-        let irx = x.inverse_sqrt_p::<P>(); // 1/sqrt(x)
-        let iry = y.inverse_sqrt_p::<P>(); // 1/sqrt(y)
-        let sad = absd * isad; // sqrt(|y-x|)
-        let rx = x * irx; // sqrt(x)
-        (sad * irx, (rx + sad) * iry, irx, isad)
-    } else {
-        let sad = absd.sqrt(); // sqrt(|y-x|)
-        let rx = x.sqrt();
-        let irx = rx.reciprocal_p::<P>(); // 1/sqrt(x)
-        (sad * irx, (rx + sad) / y.sqrt(), irx, sad)
-    };
+    // The rsqrt arm only pays when the hardware estimate is BOTH present and permitted.
+    // Under `Preserve` the estimate is forbidden (`rsqrtps` treats a subnormal operand as
+    // zero in hardware whatever MXCSR says), so `inverse_sqrt_p` becomes an exact
+    // `1/sqrt` and this arm would spend three of them where the other spends one divide.
+    let (s, neg_arg, irx, scale) =
+        if const { V::HAS_APPROX_RSQRT && !matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
+            let isad = absd.inverse_sqrt_p::<P>(); // 1/sqrt(|y-x|)
+            let irx = x.inverse_sqrt_p::<P>(); // 1/sqrt(x)
+            let iry = y.inverse_sqrt_p::<P>(); // 1/sqrt(y)
+            let sad = absd * isad; // sqrt(|y-x|)
+            let rx = x * irx; // sqrt(x)
+            (sad * irx, (rx + sad) * iry, irx, isad)
+        } else {
+            let sad = absd.sqrt(); // sqrt(|y-x|)
+            let rx = x.sqrt();
+            let irx = rx.approx_reciprocal_p::<P>(); // 1/sqrt(x)
+            (sad * irx, (rx + sad) / y.sqrt(), irx, sad)
+        };
 
     // x < y: atan(s)  ;  x > y: ln((sqrt(x) + sqrt(x-y))/sqrt(y)) = atanh(s). Both scaled by 1/sad.
     let num = d.cmp_gt(V::ZERO).select(s.atan_p::<P>(), neg_arg.ln_p::<P>());
-    let closed = if const { V::HAS_APPROX_RSQRT } {
+    // Must match the arm chosen above, since `scale` is 1/sad on one path and sad on the other.
+    let closed = if const { V::HAS_APPROX_RSQRT && !matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) }
+    {
         num * scale
     } else {
         num / scale
@@ -458,7 +472,7 @@ where
     let small = t.abs().cmp_lt(c!(1 / 128));
 
     if const { P::POLICY.avoid_branching } || small.any() {
-        let series = t.poly_rev_p::<P, _>(&[
+        let series = t.poly_rev_n_p::<P, _>(&[
             <E as FloatElement>::ConstRatio::<-1, 15>::VALUE,
             <E as FloatElement>::ConstRatio::<1, 13>::VALUE,
             <E as FloatElement>::ConstRatio::<-1, 11>::VALUE,
@@ -528,6 +542,8 @@ where
 
     let mut iter = 0;
     loop {
+        V::_loop_hint();
+
         let rx = xn.sqrt();
         let ry = yn.sqrt();
         let rz = zn.sqrt();
@@ -585,7 +601,7 @@ where
     let e4 = e2.mul_adde(pp, pre4); // e2 pp + pre4
     let e5 = xyz * pp;
 
-    let taylor = fmn * rdj_poly::<E, V>(e2, e3, e4, e5) / (an * an.sqrt());
+    let taylor = fmn * rdj_poly_n::<E, V>(e2, e3, e4, e5) / (an * an.sqrt());
     let rj = c!(6 / 1).mul_adde(rc_sum, taylor); // taylor + 6 * rc_sum
 
     let out = if const { P::POLICY.avoid_branching } || neg.any() {

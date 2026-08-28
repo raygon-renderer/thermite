@@ -116,9 +116,22 @@ fn medium_gives_up_the_top_binade_on_fma() {
         .cbrt_p::<MediumPrecision<Performance>>()
         .extract::<0>();
 
-    assert!(
-        got.is_nan(),
-        "cbrt(f32::MAX) @Medium is documented as overflowing (the raw ratio forms \
-         ~3x); got {got:e}. If this now works, update the tier comments in ps.rs."
-    );
+    // Mode-aware rather than `#[cfg]`-skipped: under `preserve_denormals` the kernel
+    // already forces the extended-precision path at every tier (see the `Preserve` arm
+    // in `ps.rs::cbrt`), which never forms the ~3x intermediate, so the top binade works
+    // and this trade does not exist there. Skipping would hide the assertion, not state
+    // it.
+    if cfg!(feature = "preserve_denormals") {
+        let want = libm::cbrtf(f32::MAX);
+        assert!(
+            (got / want - 1.0).abs() < 1e-3,
+            "cbrt(f32::MAX) @Medium under preserve_denormals takes the extended path; want ~{want:e}, got {got:e}"
+        );
+    } else {
+        assert!(
+            got.is_nan(),
+            "cbrt(f32::MAX) @Medium is documented as overflowing (the raw ratio forms \
+             ~3x); got {got:e}. If this now works, update the tier comments in ps.rs."
+        );
+    }
 }

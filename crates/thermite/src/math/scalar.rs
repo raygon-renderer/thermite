@@ -51,7 +51,7 @@ where
 /// This is why the identity impl below is bounded on [`Element`](crate::element::Element)
 /// rather than blanket over `T`: a blanket `&[T]` would overlap this one, and the two
 /// cases are genuinely different. `&[Self::Element]` (a coefficient list, `poly`) is the
-/// same type at both layers and passes through; `&[Self]` (a value list, `hypot_s`) is
+/// same type at both layers and passes through. `&[Self]` (a value list, `hypot_s`) is
 /// `&[Vector<E>]` at the vector layer and `&[E]` at the scalar one.
 impl<'a, R> Unwrap for &'a [crate::Vector<R>]
 where

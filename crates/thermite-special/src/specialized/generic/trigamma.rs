@@ -50,7 +50,7 @@ where
     let below_one = x.cmp_lt(V::ONE);
 
     if const { P::POLICY.avoid_branching } || below_one.any() {
-        acc = (x * x).reciprocal_p::<P>().zz(below_one);
+        acc = (x * x).approx_reciprocal_p::<P>().zz(below_one);
         x = x.add_c(below_one, V::ONE);
     }
 
@@ -63,26 +63,26 @@ where
     // (mid, large) scale factor, and on the x > 2 lanes it is *also* the polynomial
     // argument y = 1/x. Note the small lanes take 1/(x*x) directly rather than
     // squaring a reciprocal, so they keep the accuracy of a single rounding.
-    let y = small.select(x * x, x).reciprocal_p::<P>();
+    let y = small.select(x * x, x).approx_reciprocal_p::<P>();
 
     let mut num = V::EMPTY;
     let mut den = V::EMPTY;
     let mut base = V::ONE;
 
     if const { P::POLICY.avoid_branching } || small.any() {
-        num = x.poly_p::<P, _>(&t.p_1_2);
-        den = x.poly_p::<P, _>(&t.q_1_2);
+        num = x.poly_n_p::<P, _>(&t.p_1_2);
+        den = x.poly_n_p::<P, _>(&t.q_1_2);
         base = small.select(V::splat(t.offset), V::ONE);
     }
 
     if const { P::POLICY.avoid_branching } || mid.any() {
-        num = mid.select(y.poly_p::<P, _>(&t.p_2_4), num);
-        den = mid.select(y.poly_p::<P, _>(&t.q_2_4), den);
+        num = mid.select(y.poly_n_p::<P, _>(&t.p_2_4), num);
+        den = mid.select(y.poly_n_p::<P, _>(&t.q_2_4), den);
     }
 
     if const { P::POLICY.avoid_branching } || large.any() {
-        num = large.select(y.poly_p::<P, _>(&t.p_4_inf), num);
-        den = large.select(y.poly_p::<P, _>(&t.q_4_inf), den);
+        num = large.select(y.poly_n_p::<P, _>(&t.p_4_inf), num);
+        den = large.select(y.poly_n_p::<P, _>(&t.q_4_inf), den);
     }
 
     // Selecting the numerator and denominator before dividing keeps this to one

@@ -29,10 +29,22 @@ where
     const LAGUERRE_PRODUCT_SEED_CAP: i32 = 29;
 
     #[inline(always)]
-    fn chebyshev<P: Policy, const K: usize, const N: usize>(self, coeffs: &[f32; N]) -> Self {
+    fn chebyshev_n<P: Policy, const K: usize, const N: usize>(self, coeffs: &[f32; N]) -> Self {
+        // See the trait default: the kernel reads `N = 0` as "runtime length", so the
+        // empty-series rejection belongs to the entry point.
+        const {
+            assert!(N >= 1, "chebyshev_n: N must be at least 1");
+        }
+
         // Real vectors have copysign and a real nearest endpoint, so the Reinsch form is
         // available, but the kernel still gates it on the policy asking for `Best` or better.
         generic::chebyshev::chebyshev_series::<P, _, _, K, N, true>(self, coeffs)
+    }
+
+    #[inline(always)]
+    fn chebyshev<P: Policy, const K: usize>(self, coeffs: &[f32]) -> Self {
+        // Reinsch available here too, on the same terms. See `chebyshev_n`.
+        generic::chebyshev::chebyshev_series::<P, _, _, K, 0, true>(self, coeffs)
     }
 
     // TEMP(bessel_j): disabled until orders beyond J_0 exist. See the note in lib.rs.
@@ -119,7 +131,7 @@ where
         let l2 = lnx.ln_p::<Approx<P>>();
 
         let w0_asymptotic = if const { P::POLICY.precision.le(PrecisionPolicy::Average) && V::HAS_APPROX_RCP } {
-            l2.mul_adde(lnx.reciprocal_p::<Approx<P>>(), lnx - l2)
+            l2.mul_adde(lnx.approx_reciprocal_p::<Approx<P>>(), lnx - l2)
         } else {
             (lnx - l2) + (l2 / lnx)
         };
@@ -258,7 +270,7 @@ where
             return n / d;
         }
 
-        (Self::ONE + (-self).exp_p::<P>()).reciprocal_p::<ExtraPrecision<P>>()
+        (Self::ONE + (-self).exp_p::<P>()).approx_reciprocal_p::<ExtraPrecision<P>>()
     }
 
     // This ended up being a bust, but I'll keep it around anyway.
@@ -281,7 +293,7 @@ where
     //             base *= base;
     //         }
 
-    //         base.mul_adde(base, Self::ONE).reciprocal_p::<P>()
+    //         base.mul_adde(base, Self::ONE).approx_reciprocal_p::<P>()
     //     }
     // }
 
@@ -540,7 +552,7 @@ where
         3.0365585327e+01,  /* 0x41f2ecb8 */
     ];
 
-    let z = x.reciprocal_p::<P>();
+    let z = x.approx_reciprocal_p::<P>();
     let z2 = z * z;
 
     let m8 = ix.cmp_ge(thermite::const_splat!(u32: 0x41000000)); // |x| >= 8.0
@@ -549,28 +561,28 @@ where
 
     // Evaluate numerators and denominators for all 4 regions independently,
     // then select before dividing once.
-    let pn8 = z2.poly_rev_p::<P, _>(&PR8);
-    let pn5 = z2.poly_rev_p::<P, _>(&PR5);
-    let pn3 = z2.poly_rev_p::<P, _>(&PR3);
-    let pn2 = z2.poly_rev_p::<P, _>(&PR2);
+    let pn8 = z2.poly_rev_n_p::<P, _>(&PR8);
+    let pn5 = z2.poly_rev_n_p::<P, _>(&PR5);
+    let pn3 = z2.poly_rev_n_p::<P, _>(&PR3);
+    let pn2 = z2.poly_rev_n_p::<P, _>(&PR2);
 
-    let pd8 = z2.poly_rev_p::<P, _>(&PS8);
-    let pd5 = z2.poly_rev_p::<P, _>(&PS5);
-    let pd3 = z2.poly_rev_p::<P, _>(&PS3);
-    let pd2 = z2.poly_rev_p::<P, _>(&PS2);
+    let pd8 = z2.poly_rev_n_p::<P, _>(&PS8);
+    let pd5 = z2.poly_rev_n_p::<P, _>(&PS5);
+    let pd3 = z2.poly_rev_n_p::<P, _>(&PS3);
+    let pd2 = z2.poly_rev_n_p::<P, _>(&PS2);
 
     let pn = m3.select(m5.select(m8.select(pn8, pn5), pn3), pn2);
     let pd = m3.select(m5.select(m8.select(pd8, pd5), pd3), pd2);
 
-    let qn8 = z2.poly_rev_p::<P, _>(&QR8);
-    let qn5 = z2.poly_rev_p::<P, _>(&QR5);
-    let qn3 = z2.poly_rev_p::<P, _>(&QR3);
-    let qn2 = z2.poly_rev_p::<P, _>(&QR2);
+    let qn8 = z2.poly_rev_n_p::<P, _>(&QR8);
+    let qn5 = z2.poly_rev_n_p::<P, _>(&QR5);
+    let qn3 = z2.poly_rev_n_p::<P, _>(&QR3);
+    let qn2 = z2.poly_rev_n_p::<P, _>(&QR2);
 
-    let qd8 = z2.poly_rev_p::<P, _>(&QS8);
-    let qd5 = z2.poly_rev_p::<P, _>(&QS5);
-    let qd3 = z2.poly_rev_p::<P, _>(&QS3);
-    let qd2 = z2.poly_rev_p::<P, _>(&QS2);
+    let qd8 = z2.poly_rev_n_p::<P, _>(&QS8);
+    let qd5 = z2.poly_rev_n_p::<P, _>(&QS5);
+    let qd3 = z2.poly_rev_n_p::<P, _>(&QS3);
+    let qd2 = z2.poly_rev_n_p::<P, _>(&QS2);
 
     let qn = m3.select(m5.select(m8.select(qn8, qn5), qn3), qn2);
     let qd = m3.select(m5.select(m8.select(qd8, qd5), qd3), qd2);
@@ -612,14 +624,14 @@ where
     let z = x * x;
 
     /* R0/S0 on [0, 2.00] */
-    let r = z * z.poly_rev_p::<P, _>(&[
+    let r = z * z.poly_rev_n_p::<P, _>(&[
         -4.6183270541e-09, /* 0xb19eaf3c */
         1.8295404516e-06,  /* 0x35f58e88 */
         -1.8997929874e-04, /* 0xb947352e */
         1.5625000000e-02,  /* 0x3c800000 */
     ]);
 
-    let s = z.poly_rev_p::<P, _>(&[
+    let s = z.poly_rev_n_p::<P, _>(&[
         1.1661400734e-09, /* 0x30a045e8 */
         5.1354652442e-07, /* 0x3509daa6 */
         1.1692678527e-04, /* 0x38f53697 */
@@ -675,7 +687,7 @@ where
         if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
             let very_large = ix.cmp_ge(thermite::const_splat!(u32: 0x7f800000));
 
-            y = very_large.select(ax.square().reciprocal_p::<P>(), y);
+            y = very_large.select(ax.square().approx_reciprocal_p::<P>(), y);
         }
     }
 
@@ -749,7 +761,7 @@ where
         let ge5 = w.cmp_ge(thermite::const_splat!(f32: 5.0));
 
         let w0 = w - thermite::const_splat!(f32: 2.5);
-        let mut p0 = w0.poly_rev_p::<P, _>(&[
+        let mut p0 = w0.poly_rev_n_p::<P, _>(&[
             2.81022636e-08,
             3.43273939e-07,
             -3.5233877e-06,
@@ -763,7 +775,7 @@ where
 
         if const { P::POLICY.avoid_branching } || thermite::unlikely(ge5.any()) {
             let w1 = w.sqrt() - thermite::const_splat!(f32: 3.0);
-            let p1 = w1.poly_rev_p::<P, _>(&[
+            let p1 = w1.poly_rev_n_p::<P, _>(&[
                 -0.000200214257,
                 0.000100950558,
                 0.00134934322,
@@ -894,7 +906,7 @@ where
             // this tier's 10000-ulp budget and not worth an inexact constant.
             let t = x.mul_adde(Self::HALF, Self::NEG_ONE);
 
-            let mut y = t.poly_p::<P, _>(&[
+            let mut y = t.poly_n_p::<P, _>(&[
                 6.931471825e-01,
                 1.845574498e+00,
                 7.898645401e-01,
@@ -1080,11 +1092,11 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
         // Both use erf(x) ≈ 1 - 1/t^n for a polynomial t, and only the poly and
         // exponent differ. Worst: A&S degree-4, t^4.  Medium: A&S 7.1.27 degree-6, t^16 (3e-7).
         let tn = if const { matches!(P::POLICY.precision, PrecisionPolicy::Worst) } {
-            let t = x.poly_rev_p::<P, _>(&[0.078108, 0.000972, 0.230389, 0.278393, 1.0]);
+            let t = x.poly_rev_n_p::<P, _>(&[0.078108, 0.000972, 0.230389, 0.278393, 1.0]);
 
             t.powi_p::<P>(4)
         } else {
-            let t = x.poly_rev_p::<P, _>(&[
+            let t = x.poly_rev_n_p::<P, _>(&[
                 0.0000430638,
                 0.0002765672,
                 0.0001520143,
@@ -1103,12 +1115,21 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
             *out_exp_neg_x2 = (-x * x).exp_p::<MediumPrecision<CheckOverflow<P, false>>>();
         }
 
-        match const { (C, V::HAS_APPROX_RCP) } {
+        // The second flag is "may we use the RAW `rcp()` estimate here". The `true` arms
+        // below call it with a hand-rolled Newton step, so they inherit its
+        // denormal-as-zero behaviour and `Preserve` forbids them. The `false` arms go
+        // through `approx_reciprocal_p`, which is exact there.
+        match const {
+            (
+                C,
+                V::HAS_APPROX_RCP && !matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve),
+            )
+        } {
             (false, true) => {
                 let y = tn.rcp();
                 y.nmul_adde(tn.nmul_adde(y, V::TWO), V::ONE) ^ sign
             }
-            (false, false) => (V::ONE - tn.reciprocal_p::<ExtraPrecision<P>>()) ^ sign,
+            (false, false) => (V::ONE - tn.approx_reciprocal_p::<ExtraPrecision<P>>()) ^ sign,
             (true, true) => {
                 let y = tn.rcp();
                 let k = tn.nmul_adde(y, V::TWO);
@@ -1121,7 +1142,7 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
                 }
             }
             (true, false) => {
-                let y = tn.reciprocal_p::<ExtraPrecision<P>>();
+                let y = tn.approx_reciprocal_p::<ExtraPrecision<P>>();
                 sign.select_negative(V::TWO - y, y)
             }
         }
@@ -1144,9 +1165,9 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
         let p1: V = thermite::const_splat!(f32: 0.406742016006509);
         let p2: V = thermite::const_splat!(f32: 0.0072279182302319);
 
-        let t = x.mul_adde(x.mul_adde(p2, p1), V::ONE).reciprocal_p::<P>();
+        let t = x.mul_adde(x.mul_adde(p2, p1), V::ONE).approx_reciprocal_p::<P>();
 
-        let m = t.poly_rev_p::<P, _>(&[
+        let m = t.poly_rev_n_p::<P, _>(&[
             0.0382613542530727,
             -0.393127715207728,
             1.20644903073232,
@@ -1177,11 +1198,11 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
             if const { P::POLICY.precision.ge(PrecisionPolicy::Average) }
                 && (const { P::POLICY.avoid_branching } || is_big.any())
             {
-                let s = x.reciprocal_p::<P>();
+                let s = x.approx_reciprocal_p::<P>();
 
                 let big_y = if const { P::POLICY.precision.ge(PrecisionPolicy::Reference) } {
                     // slow reference code from libm, matches nearly exactly to libm itself.
-                    let r = s.poly_rev_p::<P, _>(&[
+                    let r = s.poly_rev_n_p::<P, _>(&[
                         -4.8351919556e+02,
                         -1.0250950928e+03,
                         -6.3756646729e+02,
@@ -1191,7 +1212,7 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
                         -9.8649431020e-03,
                     ]);
 
-                    let b = s.poly_rev_p::<P, _>(&[
+                    let b = s.poly_rev_n_p::<P, _>(&[
                         -2.2440952301e+01,
                         4.7452853394e+02,
                         2.5530502930e+03,
@@ -1220,7 +1241,7 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
                             thermite::const_splat!(f32: 9.0 / 4.0),
                             thermite::const_splat!(f32: -5.0 / 4.0),
                         )
-                        .poly_rev_p::<P, _>(&[
+                        .poly_rev_n_p::<P, _>(&[
                             -1.5849000192247331142425537109375e-5,
                             4.057946716784499585628509521484375e-5,
                             -2.17467240872792899608612060546875e-5,
@@ -1245,7 +1266,7 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
             if const { P::POLICY.precision.ge(PrecisionPolicy::Average) } {
                 let small = if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
                     // Taylor series for erf(x)/x, faster but slightly less accurate at points
-                    x * x2.poly_rev_p::<P, _>(&[
+                    x * x2.poly_rev_n_p::<P, _>(&[
                         0.00012055332981789664251,
                         -0.00085483270234508528325,
                         0.0052239776254421878421,
@@ -1256,7 +1277,7 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
                     ])
                 } else {
                     // Pade approximate for (Erf(x)-x)/x
-                    let n = x2.poly_rev_p::<P, _>(&[
+                    let n = x2.poly_rev_n_p::<P, _>(&[
                         -2.3763017452e-05,
                         -5.7702702470e-03,
                         -2.8481749818e-02,
@@ -1264,7 +1285,7 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
                         1.2837916613e-01,
                     ]);
 
-                    let d = x2.poly_rev_p::<P, _>(&[
+                    let d = x2.poly_rev_n_p::<P, _>(&[
                         -3.9602282413e-06,
                         1.3249473704e-04,
                         5.0813062117e-03,

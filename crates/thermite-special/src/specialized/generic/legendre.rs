@@ -1,5 +1,67 @@
 use thermite::{element::FloatElement, prelude::*};
 
+/// Runtime-length form of [`legendre_series`].
+///
+/// A genuine port of the recurrence rather than a fold over the const kernel: a series
+/// carries `k`-dependent state and does not partition the way the slice reductions in
+/// `thermite` do. Both forms must be edited together.
+///
+/// `chebyshev_series` no longer has a twin like this, its two bodies having been merged
+/// behind an `N = 0` sentinel and an `assert_unchecked`. **This one has not been merged,
+/// and the reason is `a` and `b_next` below.** They are `E::from_ratio` calls, not
+/// `const fn`s, so they become literals only when LLVM fully unrolls the loop. Chebyshev's
+/// only per-step quantity is `coeffs[k]` and has nothing to lose, while merging here would
+/// put a division per step behind an `assume` that nothing would detect. Wants an asm or
+/// llvm-mca check before anyone tries it.
+///
+/// What the runtime length costs here is more than the lost unrolling: `a_k` and `b_{k+1}`
+/// are no longer compile-time constants, so each step pays a division to form them. If the
+/// degree is known, [`legendre_series`] is meaningfully cheaper, not just tidier.
+///
+/// The empty series is `0`, where the const form refuses to compile.
+#[inline(always)]
+pub fn legendre_series_slice<E, V>(x: V, coeffs: &[E]) -> V
+where
+    E: FloatElement,
+    V: FloatVector<Element = E>,
+{
+    let n = coeffs.len();
+
+    if n == 0 {
+        return V::ZERO;
+    }
+
+    if n == 1 {
+        return V::splat(coeffs[0]);
+    }
+
+    let cn1 = V::splat(coeffs[n - 1]);
+
+    if n == 2 {
+        return x.mul_adde(cn1, V::splat(coeffs[0]));
+    }
+
+    let mut y2 = cn1;
+    let mut y1 = (x * V::splat(a::<E>(n - 2))).mul_adde(cn1, V::splat(coeffs[n - 2]));
+
+    let mut k = n - 2;
+    while k > 1 {
+        k -= 1;
+        let ax = x * V::splat(a::<E>(k));
+        let yk = ax.mul_adde(y1, y2.mul_adde(V::splat(b_next::<E>(k)), V::splat(coeffs[k])));
+        y2 = y1;
+        y1 = yk;
+    }
+
+    x.mul_adde(
+        y1,
+        y2.mul_adde(
+            V::splat(<E as FloatElement>::ConstRatio::<{ -1 }, 2>::VALUE),
+            V::splat(coeffs[0]),
+        ),
+    )
+}
+
 /// Clenshaw summation of a Legendre series, `$\sum_{k=0}^{N-1} c_k P_k(x)$`.
 ///
 /// The Legendre recurrence `(k+1) P_{k+1} = (2k+1) x P_k - k P_{k-1}` is

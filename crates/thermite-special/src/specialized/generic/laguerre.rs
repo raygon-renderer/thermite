@@ -55,7 +55,7 @@ where
     } else {
         let k1 = V::splat(E::from_int((k + 1) as thermite::LargeInt));
         let s = (k1 * (k1 + alpha)).sqrt();
-        (s, s.reciprocal_p::<P>())
+        (s, s.approx_reciprocal_p::<P>())
     }
 }
 
@@ -302,6 +302,69 @@ where
     }
 
     p1 * f
+}
+
+/// Runtime-length form of [`laguerre_function_series`].
+///
+/// A genuine port of the recurrence rather than a fold over the const kernel: a series
+/// carries `k`-dependent state and does not partition the way the slice reductions in
+/// `thermite` do. Both forms must be edited together.
+///
+/// Same pre-scaling, same seed, same backward `s_k` order. Read
+/// [`laguerre_function_series`] for the reasoning. `INT_ALPHA` still selects the
+/// integer-weight path, but the weights are no longer folded literals at any `alpha`,
+/// since `k` is not a constant, so the per-step `sqrt` is paid in full here.
+///
+/// The empty series is `0`, where the const form refuses to compile.
+#[inline(always)]
+pub fn laguerre_function_series_slice<P, E, V, const INT_ALPHA: bool>(
+    x: V,
+    alpha: V,
+    alpha_int: i32,
+    coeffs: &[E],
+) -> V
+where
+    P: Policy,
+    E: FloatElement,
+    V: FloatVector<Element = E> + SpecializedSpecialMath<E>,
+{
+    let n = coeffs.len();
+
+    if n == 0 {
+        return V::ZERO;
+    }
+
+    let (f, g0) = seed::<P, E, V, INT_ALPHA>(x, alpha, alpha_int);
+
+    if n == 1 {
+        return (f * V::splat(coeffs[0])) * g0;
+    }
+
+    let a1 = weight::<E, V, INT_ALPHA>(alpha, alpha_int) + V::ONE;
+
+    let mut y2 = V::ZERO;
+    let mut y1 = f * V::splat(coeffs[n - 1]);
+
+    let mut k = n - 1;
+    while k > 1 {
+        k -= 1;
+        let (s_k, d_k) = step_scale::<P, E, V, INT_ALPHA>(k, alpha, alpha_int);
+        let (_, d_k1) = step_scale::<P, E, V, INT_ALPHA>(k + 1, alpha, alpha_int);
+
+        let alpha_k = (two_k_a1::<E, V, INT_ALPHA>(k, a1, alpha_int) - x) * d_k;
+        let ratio_k1 = s_k * d_k1;
+
+        let yk = alpha_k.mul_adde(y1, y2.nmul_adde(ratio_k1, f * V::splat(coeffs[k])));
+        y2 = y1;
+        y1 = yk;
+    }
+
+    let (s0, d0) = step_scale::<P, E, V, INT_ALPHA>(0, alpha, alpha_int);
+    let (_, d1) = step_scale::<P, E, V, INT_ALPHA>(1, alpha, alpha_int);
+    let alpha_0 = (a1 - x) * d0;
+    let ratio_1 = s0 * d1;
+
+    alpha_0.mul_adde(y1, y2.nmul_adde(ratio_1, f * V::splat(coeffs[0]))) * g0
 }
 
 /// Clenshaw summation of a Laguerre-function series, `$\sum_{k=0}^{N-1} c_k l_k^{(\alpha)}(x)$`.

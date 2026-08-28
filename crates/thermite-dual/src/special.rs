@@ -381,7 +381,7 @@ where
     fn inv_langevin<P: Policy>(self) -> Self {
         // d/dy L^-1(y) = 1/L'(x) at x = L^-1(y).
         let x = self.re.inv_langevin_p::<P>();
-        self.chain(x, langevin_deriv::<P, V>(x, self.re).reciprocal_p::<P>())
+        self.chain(x, langevin_deriv::<P, V>(x, self.re).approx_reciprocal_p::<P>())
     }
 
     // The complement pair: same derivatives up to sign.
@@ -403,7 +403,7 @@ where
     #[inline(always)]
     fn inv_langevin_1m<P: Policy>(self) -> Self {
         let x = self.re.inv_langevin_1m_p::<P>();
-        self.chain(x, -langevin_deriv::<P, V>(x, V::ONE - self.re).reciprocal_p::<P>())
+        self.chain(x, -langevin_deriv::<P, V>(x, V::ONE - self.re).approx_reciprocal_p::<P>())
     }
 
     #[inline(always)]
@@ -435,7 +435,7 @@ impl<V, E: 'static, const N: usize> thermite_special::specialized::ExpIntDetails
 fn langevin_deriv<P: Policy, V: DualMathVector>(x: V, l: V) -> V {
     let ax = x.abs();
     let is_small = ax.cmp_le(V::ONE);
-    let rcp = ax.reciprocal_p::<P>();
+    let rcp = ax.approx_reciprocal_p::<P>();
 
     // 1 - L(L + 2/x). L is odd so L/x = |L|/|x|.
     let mut dl = l.nmul_adde(l, (l.abs() + l.abs()).nmul_adde(rcp, V::ONE));
@@ -448,7 +448,7 @@ fn langevin_deriv<P: Policy, V: DualMathVector>(x: V, l: V) -> V {
         // Clamped so x = inf gives 0 rather than inf*0 (see the real kernel).
         let ax = ax.min(V::MAX);
         let q = (-(ax + ax)).exp_p::<P>();
-        let d = (V::ONE - q).reciprocal_p::<P>();
+        let d = (V::ONE - q).approx_reciprocal_p::<P>();
         let csch2 = (q + q) * d * (d + d);
         dl = is_small.select(dl, rcp.mul_sube(rcp, csch2));
     }

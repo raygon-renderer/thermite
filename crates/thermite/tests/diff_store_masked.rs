@@ -47,7 +47,8 @@ macro_rules! diff_store_masked {
                 });
 
                 assert_eq!(
-                    buf.0, expected,
+                    buf.0,
+                    expected,
                     "{}: mask bits {bits:#b} over {L} lanes",
                     stringify!($reg)
                 );

@@ -403,6 +403,14 @@ impl<V: IntervalFloatVector, W: WideningPolicy> core::iter::Product for Interval
 
 #[rustfmt::skip]
 impl<V: IntervalFloatVector, W: WideningPolicy> GenericVector for Interval<V, W> {
+    /// Forwarded, not inherited: the empty default would drop the marker, and a
+    /// kernel traced through this type would lose its loop structure.
+    #[inline(always)]
+    #[track_caller]
+    fn _loop_hint() {
+        V::_loop_hint()
+    }
+
     type Element = IntervalElem<V::Element>;
 
     const EMPTY: Self = Interval { lo: V::ZERO, hi: V::ZERO, _widen: PhantomData };

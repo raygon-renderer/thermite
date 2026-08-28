@@ -449,7 +449,7 @@ fn series_matches_the_double_double_forward_sum() {
     let xs: Vec<f64> = (-20..=20).map(|i| i as f64 / 20.0).collect();
     for &x in &xs {
         let want = series_reference(&c, x);
-        let got = D::splat(x).legendre_series::<SN>(&c).extract::<0>();
+        let got = D::splat(x).legendre_series_n::<SN>(&c).extract::<0>();
         let bound = 4.0 * f64::EPSILON * series_condition(&c, x).max(1.0);
         assert!(
             (got - want).abs() <= bound,
@@ -466,7 +466,7 @@ fn series_with_a_unit_coefficient_is_the_single_polynomial() {
         let mut unit = [0.0f64; SN];
         unit[n] = 1.0;
         for &x in &XS {
-            let got = D::splat(x).legendre_series::<SN>(&unit).extract::<0>();
+            let got = D::splat(x).legendre_series_n::<SN>(&unit).extract::<0>();
             let want = D::splat(x).legendre(n as u32, 0).extract::<0>();
             close_cond(
                 &format!("unit series P_{n}({x})"),
@@ -483,13 +483,13 @@ fn series_with_a_unit_coefficient_is_the_single_polynomial() {
 fn series_short_forms() {
     for &x in &XS {
         let v = D::splat(x);
-        assert_eq!(v.legendre_series::<1>(&[2.5]).extract::<0>(), 2.5);
+        assert_eq!(v.legendre_series_n::<1>(&[2.5]).extract::<0>(), 2.5);
         let want = 2.5 - 1.25 * x;
-        let got = v.legendre_series::<2>(&[2.5, -1.25]).extract::<0>();
+        let got = v.legendre_series_n::<2>(&[2.5, -1.25]).extract::<0>();
         assert!((got - want).abs() <= 2.0 * f64::EPSILON, "N=2 at {x}");
         // N = 3 is the first to enter the loop-hoist path.
         let want = 2.5 - 1.25 * x + 0.5 * (1.5 * x * x - 0.5);
-        let got = v.legendre_series::<3>(&[2.5, -1.25, 0.5]).extract::<0>();
+        let got = v.legendre_series_n::<3>(&[2.5, -1.25, 0.5]).extract::<0>();
         assert!((got - want).abs() <= 8.0 * f64::EPSILON, "N=3 at {x}: {got} vs {want}");
     }
 }
@@ -514,7 +514,7 @@ fn henyey_greenstein_moments_reproduce_the_closed_form() {
         for i in 0..=40 {
             let mu = -1.0 + i as f64 / 20.0;
             let want = (1.0 - g * g) / (1.0 + g * g - 2.0 * g * mu).powf(1.5);
-            let got = D::splat(mu).legendre_series::<N>(&c).extract::<0>();
+            let got = D::splat(mu).legendre_series_n::<N>(&c).extract::<0>();
             let bound = trunc + 1e-14 * want.abs().max(1.0);
             assert!(
                 (got - want).abs() <= bound,
@@ -531,11 +531,11 @@ fn series_lanes_stay_independent() {
     type D4 = thermite::simd::f64x4<Scalar>;
     let c = decaying();
     let xs = [-0.9375, -0.25, 0.5, 0.99];
-    let got = D4::new(xs).legendre_series::<SN>(&c);
+    let got = D4::new(xs).legendre_series_n::<SN>(&c);
     for (lane, &x) in xs.iter().enumerate() {
         assert_eq!(
             got.as_slice()[lane],
-            D::splat(x).legendre_series::<SN>(&c).extract::<0>(),
+            D::splat(x).legendre_series_n::<SN>(&c).extract::<0>(),
             "lane {lane}"
         );
     }
@@ -555,7 +555,7 @@ fn f32_series_tracks_the_reference() {
     for i in -16..=16 {
         let x = i as f64 / 16.0;
         let want = series_reference(&cw, x);
-        let got = F::splat(x as f32).legendre_series::<SN>(&c32).extract::<0>() as f64;
+        let got = F::splat(x as f32).legendre_series_n::<SN>(&c32).extract::<0>() as f64;
         let bound = 4.0 * f32::EPSILON as f64 * series_condition(&cw, x).max(1.0);
         assert!(
             (got - want).abs() <= bound,

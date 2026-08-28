@@ -119,12 +119,14 @@ macro_rules! linalg_suite {
                     // cross3 (both FAST modes), first 3 lanes
                     let want3 = o_cross3(af, bf);
                     let g = rd(va.cross3::<true>(vb));
-                    harness::assert_lanes_eq(concat!($bl, " [cross3<false>]"), &[], &g[..3], &want3, Tol::Rel($tol));
-                    let g = rd(va.cross3::<false>(vb));
                     harness::assert_lanes_eq(concat!($bl, " [cross3<true>]"), &[], &g[..3], &want3, Tol::Rel($tol));
+                    let g = rd(va.cross3::<false>(vb));
+                    harness::assert_lanes_eq(concat!($bl, " [cross3<false>]"), &[], &g[..3], &want3, Tol::Rel($tol));
 
-                    // quat4_product (full 4 lanes)
-                    harness::assert_lanes_eq(concat!($bl, " [quat4_product]"), &[], &rd(va.quat4_product(vb)), &o_quat(af, bf), Tol::Rel($tol));
+                    // quat4_product (both FAST modes, full 4 lanes)
+                    let want_q = o_quat(af, bf);
+                    harness::assert_lanes_eq(concat!($bl, " [quat4_product<true>]"), &[], &rd(va.quat4_product::<true>(vb)), &want_q, Tol::Rel($tol));
+                    harness::assert_lanes_eq(concat!($bl, " [quat4_product<false>]"), &[], &rd(va.quat4_product::<false>(vb)), &want_q, Tol::Rel($tol));
 
                     // sum_elements3 (first 3 lanes summed)
                     let want_s = af[0] + af[1] + af[2];
@@ -133,6 +135,36 @@ macro_rules! linalg_suite {
                     // zero4 / one4 (bit-exact lane set)
                     harness::assert_lanes_eq(concat!($bl, " [zero4]"), &[], &rd(va.zero4()), &[af[0], af[1], af[2], 0.0], Tol::Exact);
                     harness::assert_lanes_eq(concat!($bl, " [one4]"), &[], &rd(va.one4()), &[af[0], af[1], af[2], 1.0], Tol::Exact);
+                }
+            }
+
+            /// `q * conj(q)` must be exactly `(0, 0, 0, |q|^2)` under
+            /// `FAST = false`. This is a bit-exactness claim, not a tolerance:
+            /// the whole point of the non-fast arm is that the cancelling terms
+            /// meet as `fl(t)` against `fl(-t)`. `FAST = true` deliberately does
+            /// not hold this and is not asserted here.
+            #[test]
+            fn quat_conjugate_is_exact() {
+                let mut rng = harness::rng();
+                for _ in 0..TRIALS {
+                    let (q, vq) = rv(&mut rng);
+                    let conj = V::from_slice(&[-q[0], -q[1], -q[2], q[3]]);
+                    let got = rd(vq.quat4_product::<false>(conj));
+
+                    for (lane, &g) in got[..3].iter().enumerate() {
+                        assert!(
+                            g == 0.0,
+                            concat!($bl, " [quat*conj] lane {} = {:e}, expected exactly 0 (q = {:?})"),
+                            lane, g, q,
+                        );
+                    }
+
+                    // The w lane is a sum of four squares, with no cancellation, so
+                    // it only has to be the correctly-summed norm, not exact.
+                    let want_w: f64 = f64x4(q).iter().map(|v| v * v).sum();
+                    harness::assert_lanes_eq(
+                        concat!($bl, " [quat*conj w]"), &[], &got[3..], &[want_w], Tol::Rel($tol),
+                    );
                 }
             }
 

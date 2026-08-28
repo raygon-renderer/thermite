@@ -167,13 +167,30 @@ macro_rules! suite {
 
             /// The flushing tiers are untouched: a denormal is a zero there, so
             /// `-inf` is what they should keep returning.
+            ///
+            /// **Mode-aware, not `#[cfg]`-skipped.** The `preserve_denormals` feature
+            /// flips the default `denormal_behavior`, so `Performance` stops flushing and
+            /// this assertion inverts. Written as a `cfg!` switch rather than a
+            /// `#[cfg(not(...))]` on the test, so `--features preserve_denormals` is a
+            /// clean run instead of a run with silent holes in it, the same reason
+            /// `exp_range::powf_of_a_subnormal_base` is written that way.
             #[test]
             fn ln_denormals_still_flush_by_default() {
                 for x in f64_denormals().into_iter().filter(|x| *x > 0.0) {
                     let got = Vector::<<$b as Simd>::f64x4>::splat(x)
                         .ln_p::<Performance>()
                         .extract::<0>();
-                    assert_eq!(got, f64::NEG_INFINITY, "ln({x:e}) under Performance");
+
+                    if cfg!(feature = "preserve_denormals") {
+                        // Preserved: the true log of a denormal, near -708 to -745.
+                        let want = libm::log(x);
+                        assert!(
+                            got.is_finite() && (got - want).abs() <= 1e-9 * want.abs(),
+                            "ln({x:e}) under Performance with preserve_denormals: got {got:e}, want {want:e}"
+                        );
+                    } else {
+                        assert_eq!(got, f64::NEG_INFINITY, "ln({x:e}) under Performance");
+                    }
                 }
             }
 

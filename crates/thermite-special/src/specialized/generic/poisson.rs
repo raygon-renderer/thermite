@@ -92,7 +92,7 @@ where
     ];
     let terms = const { stirlerr_terms(P::POLICY.precision) };
 
-    let rn = n.reciprocal_p::<P>();
+    let rn = n.approx_reciprocal_p::<P>();
     let rnn = rn * rn;
 
     // p = S_0 - rnn (S_1 - rnn (S_2 - ...)), then p / n.
@@ -282,7 +282,7 @@ where
         return if const { LOG } {
             tau_n.ln_p::<P>().mul_adde(neg_half, rest)
         } else {
-            rest.exp_p::<P>() * tau_n.inverse_sqrt_p::<P>()
+            rest.exp_p::<P>().approx_div_sqrt_p::<P>(tau_n)
         };
     }
 
@@ -298,7 +298,7 @@ where
         let l = tau_n.ln_p::<P>().mul_adde(neg_half, (base + rest) + prod.ln_p::<P>());
         lambda_zero.select(k_zero.select(V::ZERO, V::NEG_INFINITY), l)
     } else {
-        let p = exp_two_sum::<P, E, V>(base, rest) * prod * tau_n.inverse_sqrt_p::<P>();
+        let p = (exp_two_sum::<P, E, V>(base, rest) * prod).approx_div_sqrt_p::<P>(tau_n);
         lambda_zero.select(k_zero.select(V::ONE, V::ZERO), p)
     }
 }

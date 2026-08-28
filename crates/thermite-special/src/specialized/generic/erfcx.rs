@@ -66,10 +66,10 @@ where
     let ax = x.abs();
 
     // L + |x| >= L > 0: the one reciprocal, and it needs no guard.
-    let r = (l + ax).reciprocal_p::<P>();
+    let r = (l + ax).approx_reciprocal_p::<P>();
     let z = (l - ax) * r;
 
-    let p = z.poly_rev_p::<P, _>(a);
+    let p = z.poly_rev_n_p::<P, _>(a);
 
     // w = r/sqrt(pi) + 2 P r^2, grouped so the second `r` multiplies once.
     let mut y = r * (p + p).mul_adde(r, V::FRAC_1_SQRT_PI);

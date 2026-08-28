@@ -299,7 +299,7 @@ fn poly_encloses() {
             thermite_interval::IntervalElem::degenerate(-4.0),
             thermite_interval::IntervalElem::degenerate(5.0),
         ];
-        let enclosed = i.poly(&ic);
+        let enclosed = i.poly_n(&ic);
 
         // Reference: Horner in double-double.
         let mut r = C::new(V1::splat(coeffs[4]));
@@ -607,12 +607,12 @@ fn poly_all_policies() {
         r = r * C::new(V1::splat(x)) + C::new(V1::splat(1.0));
 
         for (name, e) in [
-            ("precision", CoreMathWithPolicy::poly_p::<Precision, 3>(i, &ic)),
-            ("performance", CoreMathWithPolicy::poly_p::<Performance, 3>(i, &ic)),
-            ("ultra", CoreMathWithPolicy::poly_p::<UltraPerformance, 3>(i, &ic)),
+            ("precision", CoreMathWithPolicy::poly_n_p::<Precision, 3>(i, &ic)),
+            ("performance", CoreMathWithPolicy::poly_n_p::<Performance, 3>(i, &ic)),
+            ("ultra", CoreMathWithPolicy::poly_n_p::<UltraPerformance, 3>(i, &ic)),
             (
                 "rev",
-                CoreMathWithPolicy::poly_rev_p::<Precision, 3>(i, &[ic[2], ic[1], ic[0]]),
+                CoreMathWithPolicy::poly_rev_n_p::<Precision, 3>(i, &[ic[2], ic[1], ic[0]]),
             ),
         ] {
             assert!(
@@ -696,11 +696,11 @@ fn low_policy_tiers_still_contain() {
         for (tier, got) in [
             (
                 "Medium",
-                SpatialMathWithPolicy::hypot_p::<MediumPrecision<DefaultPolicy>>(p, q),
+                p.hypot_p::<MediumPrecision<DefaultPolicy>>(q),
             ),
             (
                 "Worst",
-                SpatialMathWithPolicy::hypot_p::<WorstPrecision<DefaultPolicy>>(p, q),
+                p.hypot_p::<WorstPrecision<DefaultPolicy>>(q),
             ),
         ] {
             assert!(

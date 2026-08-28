@@ -370,10 +370,15 @@ fn exp_shoulders_f64<S: Simd>(name: &str) {
         "[{name}] Average exp(709) is representable (gate was 708.39)"
     );
     assert!(ha(710.0).is_finite(), "[{name}] Average exph(710) is representable");
+
+    // Was `== +0`, and that OLD expectation was the bug: it pinned a limitation of the
+    // single-scale form. `Average` moved onto the two-scale reconstruction, which reaches
+    // the subnormal range, so `exph(-709) = e^-709 / 2` comes back as its true value
+    // 6.0839e-309 instead of being flushed.
     let got = ha(-709.0);
     assert!(
-        got == 0.0 && got.is_sign_positive(),
-        "[{name}] Average exph(-709) flushes to +0, got {got:e}"
+        got > 0.0 && (got / 6.083903753117115e-309 - 1.0).abs() < 1e-6,
+        "[{name}] Average exph(-709) is ~6.0839e-309, got {got:e}"
     );
     assert!(
         ma(-709.5) == -1.0,
@@ -393,10 +398,15 @@ fn exp_shoulders_f32<S: Simd>(name: &str) {
     // Default policy: the NaN and sign-garbage cases.
     let m1 = |x: f32| Vector::<S::f32x8>::splat(x).exp_m1_p::<Performance>().extract::<0>();
 
+    // Was `is_infinite()`, for the same reason as the f64 `exph(-709)` case above.
+    // `e^88.5 - 1` is 2.723e38, comfortably inside float32, and `Performance` returned
+    // `inf` only because the single-scale reconstruction capped the input at 88.3. The
+    // assertion's original purpose, "not NaN", is preserved and strengthened to "the right
+    // number".
     let got = m1(88.5);
     assert!(
-        got.is_infinite() && got > 0.0,
-        "[{name}] Performance exp_m1(88.5) is +inf, NOT NaN; got {got:e}"
+        got.is_finite() && (got / 2.7230875e38 - 1.0).abs() < 1e-4,
+        "[{name}] Performance exp_m1(88.5) is ~2.7231e38 and NOT NaN; got {got:e}"
     );
     assert!(
         m1(-88.5) == -1.0,
@@ -404,12 +414,15 @@ fn exp_shoulders_f32<S: Simd>(name: &str) {
         m1(-88.5)
     );
 
+    // Was `== +0`, for the same reason as the two assertions above: the two-scale
+    // reconstruction reaches subnormals, so `exph(-88) = e^-88 / 2` is now its true
+    // value 3.0273e-39 rather than a flush.
     let got = Vector::<S::f32x8>::splat(-88.0f32)
         .exph_p::<Performance>()
         .extract::<0>();
     assert!(
-        got == 0.0 && got.is_sign_positive(),
-        "[{name}] Performance exph(-88) flushes to +0, got {got:e}"
+        got > 0.0 && (got / 3.027301e-39 - 1.0).abs() < 1e-4,
+        "[{name}] Performance exph(-88) is ~3.0273e-39, got {got:e}"
     );
 
     // The widened Performance gate: exp(88) is 1.65e38, representable.

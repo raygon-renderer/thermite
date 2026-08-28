@@ -8,19 +8,30 @@ use super::reference::{is_reference, map1, map1x2, map2};
 
 // The `PrimalProjection<Primal = V>` pin: the rigid `PrimalProjection` supertrait
 // of `SpecializedCoreMath` shadows the fixpoint blanket impl on a generic `V`, so
-// without it `V::Primal` would not normalize to `V` in the `poly_primal` body.
+// without it `V::Primal` would not normalize to `V` in the `poly_n_primal` body.
 impl<V: FloatVectorWithBits<Element = f64> + PrimalProjection<Primal = V>> SpecializedCoreMath<f64> for V {
     // Scaled by the smallest input so a denormal cannot overflow the reciprocal sum. See
     // `generic::inv_sum_inv_internal` for why the composites keep the direct form.
     #[inline(always)]
-    fn harmonic_mean<P: Policy, const N: usize>(values: [Self; N]) -> Self {
+    fn harmonic_mean_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
         let n = Self::splat(Self::Element::from_int(N as crate::LargeInt));
         super::generic::inv_sum_inv_internal::<V, f64, P, N>(values, n)
     }
 
     #[inline(always)]
-    fn inv_sum_inv<P: Policy, const N: usize>(values: [Self; N]) -> Self {
+    fn inv_sum_inv_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
         super::generic::inv_sum_inv_internal::<V, f64, P, N>(values, Self::ONE)
+    }
+
+    #[inline(always)]
+    fn harmonic_mean<P: Policy>(values: &[Self]) -> Self {
+        let n = Self::splat(Self::Element::from_int(values.len() as crate::LargeInt));
+        super::generic::inv_sum_inv_slice_internal::<V, f64, P>(values, n)
+    }
+
+    #[inline(always)]
+    fn inv_sum_inv<P: Policy>(values: &[Self]) -> Self {
+        super::generic::inv_sum_inv_slice_internal::<V, f64, P>(values, Self::ONE)
     }
 
     /// `Primal = Self`, so the coefficients are already this vector type, which means
@@ -30,16 +41,29 @@ impl<V: FloatVectorWithBits<Element = f64> + PrimalProjection<Primal = V>> Speci
     /// The one difference from `poly` is that these coefficients arrive pre-splatted, so
     /// the per-term `splat` disappears too.
     #[inline(always)]
-    fn poly_primal<P: Policy, N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self {
-        super::generic::poly_primal_internal::<V, P, N>(self, coeffs)
+    fn poly_n_primal<P: Policy, N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self {
+        super::generic::poly_n_primal_internal::<V, P, N>(self, coeffs)
     }
 
-    /// The reverse-order twin of [`poly_primal`](SpecializedCoreMath::poly_primal), with
+    /// The reverse-order twin of [`poly_n_primal`](SpecializedCoreMath::poly_n_primal), with
     /// the same reasoning: pre-splatted coefficients over the ILP lowering of
     /// [`poly_rev`](SpecializedCoreMath::poly_rev).
     #[inline(always)]
-    fn poly_rev_primal<P: Policy, N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self {
-        super::generic::poly_rev_primal_internal::<V, P, N>(self, coeffs)
+    fn poly_rev_n_primal<P: Policy, N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self {
+        super::generic::poly_rev_n_primal_internal::<V, P, N>(self, coeffs)
+    }
+
+    /// Slice twin of [`poly_n_primal`](SpecializedCoreMath::poly_n_primal): same ILP
+    /// lowering, length no longer constant.
+    #[inline(always)]
+    fn poly_primal<P: Policy>(self, coeffs: &[Self::Primal]) -> Self {
+        super::generic::poly_primal_slice_internal::<V, P, false>(self, coeffs)
+    }
+
+    /// Slice twin of [`poly_rev_n_primal`](SpecializedCoreMath::poly_rev_n_primal).
+    #[inline(always)]
+    fn poly_rev_primal<P: Policy>(self, coeffs: &[Self::Primal]) -> Self {
+        super::generic::poly_primal_slice_internal::<V, P, true>(self, coeffs)
     }
 
     #[inline(always)]
@@ -119,13 +143,34 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealMath<f64> for V {
 
 #[rustfmt::skip]
 impl<V: FloatVectorWithBits<Element = f64>> SpecializedSpatialMath<f64> for V {
+    // A real float vector has a bit representation, so it takes the power-of-two
+    // rescaling in `hypot_n_pow2_scaled` rather than the divide-based generic body. The
+    // composites (Complex, Dual, Interval, Jet, Compensated, Trace) keep the generic
+    // one, which has no exponent field to read.
     #[inline(always)]
-    fn hypot<P: Policy>(self, y: Self) -> Self {
-        if const { is_reference::<P>() } {
-            return map2(self, y, libm::hypot);
+    fn hypot_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
+        // See `ps.rs`: `libm` covers `N = 2` only, and this arm moved here when the
+        // two-argument `hypot` method was removed.
+        if const { is_reference::<P>() && N == 2 } {
+            return map2(values[0], values[1], libm::hypot);
         }
 
-        Self::hypot_n::<P, 2>([self, y])
+        super::generic::hypot_n_pow2_scaled::<Self, f64, P, N, false>(values)
+    }
+
+    #[inline(always)]
+    fn inv_hypot_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
+        super::generic::hypot_n_pow2_scaled::<Self, f64, P, N, true>(values)
+    }
+
+    #[inline(always)]
+    fn hypot_s<P: Policy>(values: &[Self]) -> Self {
+        super::generic::hypot_slice_pow2_scaled::<Self, f64, P, false>(values)
+    }
+
+    #[inline(always)]
+    fn inv_hypot<P: Policy>(values: &[Self]) -> Self {
+        super::generic::hypot_slice_pow2_scaled::<Self, f64, P, true>(values)
     }
 
     #[inline(always)] fn l2_norm_squared<P: Policy>(self) -> Self { self * self }
@@ -227,7 +272,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
             let x2 = x * x;
 
             #[rustfmt::skip]
-            let y1 = x2.poly_rational_p::<P, _, _>(
+            let y1 = x2.poly_rational_n_p::<P, _, _>(
                 &[
                     -3.51754964808151394800E5,
                     -1.15614435765005216044E4,
@@ -275,7 +320,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
             let x2 = x * x;
 
             #[rustfmt::skip]
-            let y1 = x2.poly_rational_p::<P, _, _>(
+            let y1 = x2.poly_rational_n_p::<P, _, _>(
                 &[
                     -3.51754964808151394800E5,
                     -1.15614435765005216044E4,
@@ -336,7 +381,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
             let x2 = x * x;
 
             #[rustfmt::skip]
-            let y1 = x2.poly_rational_p::<P, _, _>(
+            let y1 = x2.poly_rational_n_p::<P, _, _>(
                 &[
                     -1.61468768441708447952E3,
                     -9.92877231001918586564E1,
@@ -411,7 +456,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
         if const { P::POLICY.avoid_branching } || x_small.any() {
             let y1 = x2
-                .poly_rational_p::<P, _, _>(
+                .poly_rational_n_p::<P, _, _>(
                     &[
                         -5.56682227230859640450E0,
                         -9.09030533308377316566E0,
@@ -471,7 +516,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
         if const { P::POLICY.avoid_branching } || x_small.any() {
             let mut y1 = x1.sqrt()
-                * x1.poly_rational_p::<P, _, _>(
+                * x1.poly_rational_n_p::<P, _, _>(
                     &[
                         1.10855947270161294369E5,
                         1.08102874834699867335E5,
@@ -529,7 +574,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
             let x2 = x * x;
 
             let y1 = x2
-                .poly_rational_p::<P, _, _>(
+                .poly_rational_n_p::<P, _, _>(
                     &[
                         -3.09092539379866942570E1,
                         6.54566728676544377376E1,
@@ -617,7 +662,21 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         let ln2d_hi = crate::const_splat!(f64: 0.693145751953125); // log(2) in extra precision, high bits
         let ln2d_lo = crate::const_splat!(f64: 1.42860682030941723212E-6); // low bits of log(2)
 
-        let x1 = x0.abs().flush_denormals::<P>();
+        // A subnormal base has no exponent field to split, so `fraction2`/`exponent`
+        // cannot reduce it and the kernel hands back garbage. `powf(1.375e-39, -1.33e-16)`
+        // returned `inf` where the answer is 1.0. Harmless while denormals are flushed
+        // (the call below), which is the default, and wrong the moment they are preserved.
+        // Same fix and shape as `ln_d_internal`: lift into the normal range by 2^54, then
+        // take those 54 powers of two back out of the exponent, where a masked subtract on
+        // `ef` costs nothing that was not already happening.
+        let mut x1 = x0.abs().flush_denormals::<P>();
+
+        let mut lifted = GenericMask::FALSY;
+
+        if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
+            lifted = x1.is_subnormal();
+            x1 = x1.mul_c(lifted, crate::const_splat!(f64: hexf::hexf64!("0x1.0p54")));
+        }
 
         let mut x = fraction2(x1);
 
@@ -629,7 +688,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         let x2 = x * x;
 
         #[rustfmt::skip]
-        let lg1 = (x2 * x) * x.poly_rational_p::<P, _, _>(
+        let lg1 = (x2 * x) * x.poly_rational_n_p::<P, _, _>(
             &[
                 2.0039553499201281259648E1,
                 5.7112963590585538103336E1,
@@ -650,7 +709,11 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
             ],
         );
 
-        let ef = exponent_f(x1).add_c(blend, V::ONE); // conditional add, only if blend is true
+        let mut ef = exponent_f(x1).add_c(blend, V::ONE); // conditional add, only if blend is true
+
+        if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
+            ef = ef.sub_c(lifted, crate::const_splat!(f64: 54.0));
+        }
 
         // multiply exponent by y, nearest integer e1 goes into exponent of result, remainder yr is added to log
         let e1 = (ef * y).round();
@@ -686,7 +749,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         x = e3.nmul_adde(V::LN_2, x); // x -= e3 * VM_LN2;
 
         // Taylor coefficients for exp function, 1/n!
-        let z = x.poly_rev_p::<P, _>(&[
+        let z = x.poly_rev_n_p::<P, _>(&[
             1.0 / 6227020800.0,
             1.0 / 479001600.0,
             1.0 / 39916800.0,
@@ -730,7 +793,15 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         let yfinite = y.is_finite();
         let efinite = ee.is_finite();
 
-        let xzero = x0.is_zero_or_subnormal();
+        // `is_zero_or_subnormal` is right only while denormals are FLUSHED, where a
+        // subnormal base really has become zero by this point. Under `Preserve` it would
+        // route every subnormal base into the `x == 0` rule below, throwing away the log
+        // the lift above went to the trouble of computing.
+        let xzero = if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve) } {
+            x0.is_zero()
+        } else {
+            x0.is_zero_or_subnormal()
+        };
         let xsign = x0.is_negative();
 
         if crate::unlikely((overflow | underflow).any()) {
@@ -828,7 +899,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
 
         let r = (t * t) * (t / x); // encourage ILP
 
-        t *= r.poly_p::<P, _>(&[
+        t *= r.poly_n_p::<P, _>(&[
             1.87595182427177009643,   /* 0x3ffe03e6, 0x0f61e692 */
             -1.88497979543377169875,  /* 0xbffe28e0, 0x92f02420 */
             1.621429720105354466140,  /* 0x3ff9f160, 0x4a49d6c2 */
@@ -1020,14 +1091,14 @@ fn ln_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const P1: boo
     let x3 = x * x2;
 
     let mut res =
-        x3 * x.poly_p::<P, _>(&[
+        x3 * x.poly_n_p::<P, _>(&[
             7.70838733755885391666E0,
             1.79368678507819816313E1,
             1.44989225341610930846E1,
             4.70579119878881725854E0,
             4.97494994976747001425E-1,
             1.01875663804580931796E-4,
-        ]) / x.poly_p::<P, _>(&[
+        ]) / x.poly_n_p::<P, _>(&[
             2.31251620126765340583E1,
             7.11544750618563894466E1,
             8.29875266912776603211E1,
@@ -1039,6 +1110,29 @@ fn ln_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const P1: boo
     res = fe.mul_adde(ln2_lo, res); // res += fe * ln2_lo;
     res += x2.nmul_adde(V::HALF, x); // res += x - 0.5 * x2;
     res = fe.mul_adde(ln2_hi, res); // res += fe * ln2_hi;
+
+    if P1 {
+        // Restore the sign of a zero result. `ln_1p(x)` has the SAME SIGN as `x` for
+        // every point of its domain, so OR-ing `x`'s sign bit in is a no-op everywhere
+        // except the one place it is not: `x = -0.0` gives `x1 = 1.0`, `fe = +0.0`, and
+        // the final `fe * ln2_hi + res` is `+0.0 + -0.0`, which IEEE rounds to **+0.0**.
+        // C99 Annex F wants `-0.0`, libm gives `-0.0`, and `cbrt`/`sqrt1pm1` in this tree
+        // give `-0.0`.
+        //
+        // Not only a pedantic edge. `ln1m_expnx(x) = ln(1 - e^-x)` reaches this path with
+        // `-e^-x`, which underflows to `-0.0` far enough out in the tail, and the answer
+        // there is a negative number too small to represent. `-0.0` represents it and
+        // `+0.0` does not.
+        //
+        // Placed here rather than in the `check_overflow` block below, which early-returns
+        // on `likely((overflow | underflow).none())`. A signed zero is neither, so
+        // anything written there runs only for inputs that already took an edge path.
+        //
+        // Two bitwise ops, on FP pipes the surrounding multiplies leave idle, and only in
+        // the P1 monomorph. The sign agreement is total rather than conditional, so this
+        // needs no comparison and no select.
+        res = res | (x0 & <V as FloatConsts>::NEG_ZERO);
+    }
 
     if const { !P::POLICY.check_overflow } {
         return res;
@@ -1107,13 +1201,13 @@ fn atan_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ATAN2: 
 
     let zz = z * z;
 
-    let re0 = zz.poly_p::<P, _>(&[
+    let re0 = zz.poly_n_p::<P, _>(&[
         -6.485021904942025371773E1,
         -1.228866684490136173410E2,
         -7.500855792314704667340E1,
         -1.615753718733365076637E1,
         -8.750608600031904122785E-1,
-    ]) / zz.poly_p::<P, _>(&[
+    ]) / zz.poly_n_p::<P, _>(&[
         1.945506571482613964425E2,
         4.853903996359136964868E2,
         4.328810604912902668951E2,
@@ -1152,7 +1246,7 @@ fn asin_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ACOS: b
 
     // if not all are big (if any are small)
     if const { P::POLICY.avoid_branching } || !is_big.all() {
-        px = x1.poly_rev_p::<P, _>(&[
+        px = x1.poly_rev_n_p::<P, _>(&[
             4.253011369004428248960E-3,
             -6.019598008014123785661E-1,
             5.444622390564711410273E0,
@@ -1161,7 +1255,7 @@ fn asin_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ACOS: b
             -8.198089802484824371615E0,
         ]);
 
-        qx = x1.poly_rev_p::<P, _>(&[
+        qx = x1.poly_rev_n_p::<P, _>(&[
             1.0,
             -1.474091372988853791896E1,
             7.049610280856842141659E1,
@@ -1175,7 +1269,7 @@ fn asin_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ACOS: b
     if const { P::POLICY.avoid_branching } || is_big.any() {
         xb = (x1 + x1).sqrt();
 
-        rx = x1.poly_p::<P, _>(&[
+        rx = x1.poly_n_p::<P, _>(&[
             2.853665548261061424989E1,
             -2.556901049652824852289E1,
             6.968710824104713396794E0,
@@ -1183,7 +1277,7 @@ fn asin_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const ACOS: b
             2.967721961301243206100E-3,
         ]);
 
-        sx = x1.poly_p::<P, _>(&[
+        sx = x1.poly_n_p::<P, _>(&[
             3.424398657913078477438E2,
             -3.838770957603691357202E2,
             1.470656354026814941758E2,
@@ -1289,7 +1383,7 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
 
     // Taylor coefficients, 1/n!
     // Not using minimax approximation because we prioritize precision close to x = 0
-    let mut z = x.poly_p::<P, _>(&[
+    let mut z = x.poly_n_p::<P, _>(&[
         0.0,
         1.0,
         1.0 / 2.0,
@@ -1306,11 +1400,29 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
         1.0 / 6227020800.0,
     ]);
 
-    z = if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
+    // `Medium`, not `Average`. The single-scale form caps `r` at the top exponent,
+    // which caps the INPUT at 88.3 (f32) / 709.42 (f64), short of `ln(MAX)` by 0.42
+    // and 0.36, so every result above 2.24e38 / 1.25e308 came back `inf` when the
+    // true answer was finite. That is a wrong answer rather than reduced precision,
+    // and `Average` is `DefaultPolicy` on x86. The two-scale form is also *cheaper*,
+    // at f32 8.0 -> 7.5 and f64 8.5 -> 8.0 cycles RThroughput for +4 uOps (llvm-mca,
+    // znver3), because the two independent scale constructions spread over FP pipes
+    // the serialized single-scale chain leaves idle. It costs 3 cycles of latency
+    // (46 -> 49). The fast tiers keep the single scale, since they have
+    // `check_overflow = false` and saturate by design.
+    z = if const { P::POLICY.precision.gt(PrecisionPolicy::Medium) } {
         // Two-part scaling reaches the full domain: results past `1.42 * 2^1023`
         // (which one `pow2n_d` cannot form) and the whole subnormal range, matching
         // the f32 Best path. The extra multiply is nothing next to this tier's
         // polynomial.
+        // See the f32 twin: each half of the split must stay in `[-1023, 1023]`, and
+        // without the range gate below nothing else keeps it there.
+        let r = if const { P::POLICY.check_overflow } {
+            r
+        } else {
+            r.clamp(crate::const_splat!(f64: -2046.0), crate::const_splat!(f64: 2046.0))
+        };
+
         let (n2a, n2b) = pow2n_d_safe::<V>(r);
 
         match MODE {
@@ -1356,7 +1468,8 @@ fn exp_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const MODE: 
     if const { P::POLICY.check_overflow } {
         let mut in_range = x0.is_finite();
 
-        if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
+        // Matches the reconstruction gate above.
+        if const { P::POLICY.precision.gt(PrecisionPolicy::Medium) } {
             // With `pow2n_d_safe` the kernel is exact over the whole domain, so the
             // gate can sit at the true per-mode bounds (as the f32 path does): the
             // high end is where the result overflows the format, the low end where
@@ -1524,21 +1637,44 @@ pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f
     let y = if PI {
         xa + xa // 2x for sinpi/cospi
     } else {
-        // Without true FMA, `y * dp1` (30-bit dp1) is only exact while y fits in
-        // 23 bits, i.e. |x| <~ 1.3e7. Beyond that Cody-Waite quietly loses bits.
-        // At Best+ (where Payne-Hanek takes over) hand off there. At <= Average
-        // the limit only gates the bounded clamp, so the wider window stands.
+        // These two limits answer DIFFERENT questions and do not share an answer.
+        //
+        // At Best+ it is a HANDOFF: above it, Payne-Hanek takes over, so the right
+        // value is the last point where Cody-Waite is still ~1 ulp.
+        //
+        // At <= Average it is a CLAMP to zero (there is no Payne-Hanek at those
+        // tiers), so the right value is the last point where Cody-Waite produces
+        // a usable number at all, considerably further out.
+        //
+        // Ulp figures below are against mpmath, 400 points per binade, in ulp of the
+        // output scale.
         is_large = xa.cmp_gt(if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
             crate::const_splat!(<V> = <V: FloatVectorWithBits> f64: {
                 match V::HAS_TRUE_FMA {
-                    true => 1e15,
+                    // Cody-Waite holds 0.5-0.7 ulp through 2^48 and spikes in the
+                    // 2^49 binade (7-77 ulp, sample-dependent, the error is
+                    // spiky). Hand off at 2^49.
+                    true => 562949953421312.0, // 2^49
+                    // Measured 0.5-0.7 ulp all the way to this limit with no
+                    // degradation. Possibly conservative, since the truncated-split
+                    // path is documented valid to |x| ~ 3.4e9, but handing off early
+                    // only costs speed.
                     false => 1e7,
                 }
             })
         } else {
             crate::const_splat!(<V> = <V: FloatVectorWithBits> f64: {
                 match V::HAS_TRUE_FMA {
-                    true => 1e15,
+                    // Unclamped Cody-Waite still delivers ~35 bits through the
+                    // 2^51 binade and detonates at 2^52 (2.1e5 ulp -> 8.6e15 ulp).
+                    // 2^52 is also where consecutive f64 values become >= 1 apart
+                    // and the quotient stops being representable at all.
+                    true => 4503599627370496.0, // 2^52
+                    // NOT a validity limit: without FMA there is no cliff to find.
+                    // Error grows strictly proportional to x (5.3e11 ulp at 2^40,
+                    // doubling per binade) right up to 2^52. This is a BITS BUDGET,
+                    // where 1e13 corresponds to roughly 11 bits of the result, and
+                    // it is a choice rather than a measurement.
                     false => 1e13,
                 }
             })
@@ -1605,7 +1741,7 @@ fn sincos_d_internal<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI:
     let x2 = x * x;
     let x4 = x2 * x2;
 
-    let mut s = x2.poly_rev_p::<P, _>(&[
+    let mut s = x2.poly_rev_n_p::<P, _>(&[
         1.58962301576546568060E-10,
         -2.50507477628578072866E-8,
         2.75573136213857245213E-6,
@@ -1614,7 +1750,7 @@ fn sincos_d_internal<P: Policy, V: FloatVectorWithBits<Element = f64>, const PI:
         -1.66666666666666307295E-1,
     ]);
 
-    let mut c = x2.poly_rev_p::<P, _>(&[
+    let mut c = x2.poly_rev_n_p::<P, _>(&[
         -1.13585365213876817300E-11,
         2.08757008419747316778E-9,
         -2.75573141792967388112E-7,

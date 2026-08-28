@@ -400,6 +400,14 @@ where
 // =====================================================================================
 
 impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
+    /// Forwarded, not inherited: the empty default would drop the marker, and a
+    /// kernel traced through this type would lose its loop structure.
+    #[inline(always)]
+    #[track_caller]
+    fn _loop_hint() {
+        V::_loop_hint()
+    }
+
     type Element = Dual<V::Element, N>;
 
     const EMPTY: Self = Self::ZERO;

@@ -74,13 +74,19 @@ fn subnormal_c() {
 #[cfg(not(feature = "ignore_denormals"))]
 fn subnormal_results() {
     // 2^-537 * 2^-538 = 2^-1075, exactly half the smallest subnormal: ties to 0.
-    assert_eq!(fma64(2.0_f64.powi(-537), 2.0_f64.powi(-538), 0.0).to_bits(), 0.0_f64.to_bits());
+    assert_eq!(
+        fma64(2.0_f64.powi(-537), 2.0_f64.powi(-538), 0.0).to_bits(),
+        0.0_f64.to_bits()
+    );
     // MIN_POSITIVE * (1 - 2^-53) sits exactly on the top-subnormal/min-normal
     // midpoint: ties up (min-normal's mantissa is even).
     let b = 1.0 - 2.0_f64.powi(-53);
     assert_eq!(fma64(f64::MIN_POSITIVE, b, 0.0).to_bits(), f64::MIN_POSITIVE.to_bits());
     // f32: 2^-75 * 2^-74 = 2^-149, the smallest f32 subnormal, exactly.
-    assert_eq!(fma32(2.0_f32.powi(-75), 2.0_f32.powi(-74), 0.0).to_bits(), 2.0_f32.powi(-149).to_bits());
+    assert_eq!(
+        fma32(2.0_f32.powi(-75), 2.0_f32.powi(-74), 0.0).to_bits(),
+        2.0_f32.powi(-149).to_bits()
+    );
 }
 
 /// Specials route correctly whatever the lowering.

@@ -398,6 +398,14 @@ impl<V: RealFloatVector> Complex<V> {
 }
 
 impl<V: RealFloatVector> GenericVector for Complex<V> {
+    /// Forwarded, not inherited: the empty default would drop the marker, and a
+    /// kernel traced through this type would lose its loop structure.
+    #[inline(always)]
+    #[track_caller]
+    fn _loop_hint() {
+        V::_loop_hint()
+    }
+
     type Element = Complex<V::Element>;
 
     const EMPTY: Self = Self::ZERO;
@@ -1350,7 +1358,7 @@ impl<V: RealFloatVector> SignedVector for Complex<V> {
     fn signum(self) -> Self {
         let m = self.modulus();
         let is_zero = m.is_zero();
-        let inv = m.reciprocal_p::<DefaultPolicy>();
+        let inv = m.approx_reciprocal_p::<DefaultPolicy>();
 
         // nz() zeroes where the mask is set, pinning signum(0) to 0; the division
         // there gives 0 * inf = NaN.

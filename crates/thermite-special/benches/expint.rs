@@ -1,4 +1,4 @@
-//! `expint` across the regimes its two algorithms cover, so the cost of the 2026-08-18
+//! `expint` across the regimes its two algorithms cover, so the cost of the
 //! correctness fix is on the record rather than assumed.
 //!
 //! What changed: the forward recurrence used to run until it had amplified a seed ulp by the

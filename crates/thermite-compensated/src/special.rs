@@ -148,7 +148,7 @@ where
                     d = a.mul_adde(d, b); // D = b + a*D
 
                     c = b + a / c.max(tiny); // if C<=0 -> tiny
-                    d = d.max(tiny).reciprocal_p::<P>(); // if D<=0 -> tiny
+                    d = d.max(tiny).approx_reciprocal_p::<P>(); // if D<=0 -> tiny
 
                     f *= c * d;
                 }
@@ -192,7 +192,7 @@ where
                     d = a.mul_adde(d, b); // D = b + a*D
 
                     c = b + a / c.max(tiny); // if C<=0 -> tiny
-                    d = d.max(tiny).reciprocal_p::<P>(); // if D<=0 -> tiny
+                    d = d.max(tiny).approx_reciprocal_p::<P>(); // if D<=0 -> tiny
 
                     f = use_series.select(f, f * c * d);
                 }

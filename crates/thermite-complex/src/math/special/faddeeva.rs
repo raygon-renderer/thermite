@@ -77,11 +77,11 @@ pub use thermite_special::tables::weideman::{Weideman, WeidemanTables, weideman_
 
 /// Horner over **real** coefficients at a complex argument, leading-term-first.
 ///
-/// [`poly_rev_primal`](thermite::math::specialized::SpecializedCoreMath::poly_rev_primal)
+/// [`poly_rev_n_primal`](thermite::math::specialized::SpecializedCoreMath::poly_rev_n_primal)
 /// does the same job generically and emits the same arithmetic, but its coefficients are
 /// pre-splatted *vectors*: at `N = 40` this loop does not unroll, so the table would have
 /// to be materialized at 32 bytes per term instead of broadcast from 8. Hence the
-/// hand-written form with element coefficients. See `bin/poly_primal_probe`. The
+/// hand-written form with element coefficients. See `bin/poly_n_primal_probe`. The
 /// iteration order matches `poly_rev`'s.
 ///
 /// `N` is a literal at every call site (the ladder in [`faddeeva_w`] instantiates it as
@@ -148,7 +148,7 @@ where
     let l = V::from_primal(<V::Primal as GenericVector>::splat(l));
 
     // L - iz = (L + y) - ix  and  L + iz = (L - y) + ix
-    let r = Complex::new(l + z.im, -z.re).reciprocal_p::<P>();
+    let r = Complex::new(l + z.im, -z.re).approx_reciprocal_p::<P>();
     let zz = Complex::new(l - z.im, z.re) * r;
 
     let pr = horner_real::<P, E, PE, V, N>(zz, a) * r;
@@ -303,7 +303,7 @@ where
         let big = z.re.abs().cmp_gt(h) | z.im.abs().cmp_gt(h);
 
         if thermite::unlikely(big.any()) {
-            let asym = Complex::new(V::ZERO, V::FRAC_1_SQRT_PI) * z.reciprocal_p::<P>();
+            let asym = Complex::new(V::ZERO, V::FRAC_1_SQRT_PI) * z.approx_reciprocal_p::<P>();
             res = big.select(asym, res);
         }
     }

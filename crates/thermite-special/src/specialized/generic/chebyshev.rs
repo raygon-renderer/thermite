@@ -4,7 +4,8 @@ use thermite::{
     prelude::*,
 };
 
-/// Shared Chebyshev series summation for all element types and all four kinds.
+/// Shared Chebyshev series summation for all element types, all four kinds, and both the
+/// compile-time and runtime coefficient counts.
 ///
 /// Evaluates `$\sum_{k=0}^{N-1} c_k P_k(x)$` where `P_k` is `T_k`, `U_k`, `V_k`, or `W_k`
 /// for `K` of 1, 2, 3, or 4. All four share the recurrence
@@ -15,8 +16,36 @@ use thermite::{
 /// a real `copysign` and a meaningful nearest endpoint, so real vectors pass `true` and
 /// `Complex` and the composites pass `false`. It is a capability, not a request: the
 /// form is taken only when the policy also asks for `Best` precision or better.
+///
+/// # The `N` parameter
+///
+/// `N` is the coefficient count when the caller knows it and **`0` when it does not**, the
+/// same sentinel `fast_polynomial::poly_f_internal` uses. At a nonzero `N` the length is
+/// handed to LLVM as an `assert_unchecked`, so the `n == 1`/`n == 2` shortcuts fold away
+/// and the loop unrolls exactly as it did when the bound was the const generic itself. At
+/// `N = 0` every one of those becomes an ordinary runtime branch.
+///
+/// This replaces a hand-ported `chebyshev_series_slice` that duplicated the whole
+/// recurrence, Reinsch arm included, under a doc comment reading "both forms must be edited
+/// together". A series is still not a reduction, since it carries `k`-dependent state and
+/// cannot be folded over chunks the way a norm can, so sharing the *body* is the only way
+/// to share anything here, and it is what removes the drift.
+///
+/// Chebyshev is the merge's safe case on purpose: the only per-step quantity is
+/// `coeffs[k]`, so nothing here depends on `k` becoming a literal. The Legendre, Hermite
+/// and Laguerre series do (a division or a square root per step folds away only if the
+/// loop unrolls), which is why they have not been merged.
+///
+/// # Safety
+///
+/// `N != 0` promises `coeffs.len() == N`. The const-length entry point is the only caller
+/// that passes a nonzero `N`, and it takes a `&[E; N]`, so the promise is the array's.
+///
+/// The empty series is `0`. `N = 0` is therefore both "unknown length" and "empty", which
+/// agree: an empty slice returns `V::ZERO` down the runtime path. The rejection of an empty
+/// *const* count lives on the `chebyshev_n` entry point, where it is still a compile error.
 #[inline(always)]
-pub fn chebyshev_series<P, E, V, const K: usize, const N: usize, const REINSCH: bool>(x: V, coeffs: &[E; N]) -> V
+pub fn chebyshev_series<P, E, V, const K: usize, const N: usize, const REINSCH: bool>(x: V, coeffs: &[E]) -> V
 where
     P: Policy,
     E: FloatElement,
@@ -24,11 +53,23 @@ where
 {
     const {
         assert!(K >= 1 && K <= 4, "chebyshev: K must be 1, 2, 3, or 4");
-        assert!(N >= 1, "chebyshev: N must be at least 1");
     }
 
-    // S = Σ c_k P_0 = c_0 when N = 1; skip the whole recurrence.
-    if const { N == 1 } {
+    let n = coeffs.len();
+
+    // SAFETY: IFF N != 0, `n` is guaranteed to be == N by this function's contract, so this
+    // is an optimization hint rather than a check. It is what keeps the const-length caller
+    // generating the code it did when `N` was the loop bound directly.
+    if const { N != 0 } {
+        unsafe { core::hint::assert_unchecked(n == N) };
+    }
+
+    if n == 0 {
+        return V::ZERO;
+    }
+
+    // S = Σ c_k P_0 = c_0 when n = 1; skip the whole recurrence.
+    if n == 1 {
         return V::splat(coeffs[0]);
     }
 
@@ -47,11 +88,11 @@ where
         unsafe { core::hint::unreachable_unchecked() }
     };
 
-    let cn1 = V::splat(coeffs[N - 1]);
-    let cn2 = V::splat(coeffs[N - 2]);
+    let cn1 = V::splat(coeffs[n - 1]);
+    let cn2 = V::splat(coeffs[n - 2]);
 
-    // S = c_0 + c_1*P_1(x) when N = 2.
-    if const { N == 2 } {
+    // S = c_0 + c_1*P_1(x) when n = 2.
+    if n == 2 {
         return p1.mul_adde(cn1, cn2);
     }
 
@@ -80,8 +121,8 @@ where
         let mut b_2 = V::ZERO; // b_{k+2}
         let mut d_1 = V::ZERO; // d_{k+1}
 
-        // k = N-1 down to 1. The first two steps fold away against the zero seeds.
-        let mut k = N - 1;
+        // k = n-1 down to 1. The first two steps fold away against the zero seeds.
+        let mut k = n - 1;
         while k >= 1 {
             let d = step.mul_adde(b_1, s.mul_adde(d_1, V::splat(coeffs[k])));
             let b = s.mul_adde(b_1, d);
@@ -96,8 +137,8 @@ where
 
     // Clenshaw's backward recurrence:
     //
-    //     b_{N+1} = b_N = 0
-    //     for k = N-1 down to 1:  b_k = 2x*b_{k+1} - b_{k+2} + c_k
+    //     b_{n+1} = b_n = 0
+    //     for k = n-1 down to 1:  b_k = 2x*b_{k+1} - b_{k+2} + c_k
     //     S = (c_0 - b_2) + b_1 * P_1(x)
     //
     // This is more numerically stable than the forward sum (especially when the partial sums
@@ -105,13 +146,13 @@ where
     // instead of three.
     //
     // Hoist the first two iterations to eliminate the b_2 = 0 subtraction in the loop:
-    //     k = N-1:  b_{N-1} = 2x*0 + c_{N-1} - 0          = c_{N-1}
-    //     k = N-2:  b_{N-2} = 2x*c_{N-1} + c_{N-2} - 0    = 2x*c_{N-1} + c_{N-2}
-    let mut b1 = x2.mul_adde(cn1, cn2); // b_{k+1} = b_{N-2}
-    let mut b2 = cn1; // b_{k+2} = b_{N-1}
+    //     k = n-1:  b_{n-1} = 2x*0 + c_{n-1} - 0          = c_{n-1}
+    //     k = n-2:  b_{n-2} = 2x*c_{n-1} + c_{n-2} - 0    = 2x*c_{n-1} + c_{n-2}
+    let mut b1 = x2.mul_adde(cn1, cn2); // b_{k+1} = b_{n-2}
+    let mut b2 = cn1; // b_{k+2} = b_{n-1}
 
-    // Iterate k = N-3, N-4, ..., 1.
-    let mut k = N - 2;
+    // Iterate k = n-3, n-4, ..., 1.
+    let mut k = n - 2;
     while k > 1 {
         k -= 1;
         // b_k = (2x*b_{k+1} + c_k) - b_{k+2}

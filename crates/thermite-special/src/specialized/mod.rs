@@ -145,7 +145,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         //   E_0(x)    = e^-x / x
         //   E_{-1}(x) = e^-x (1 + 1/x) / x
         let exp_neg_x = (-x).exp_p::<P>();
-        let inv_x = x.reciprocal_p::<P>();
+        let inv_x = x.approx_reciprocal_p::<P>();
         let e0 = exp_neg_x * inv_x;
 
         if const { N == 0 } {
@@ -207,9 +207,9 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         let mut cf_d = {
             let b1 = x + Self::ONE;
             // D_1 = 1/(b_1 + a_1*D_0) = 1/(x+1), since D_0 = 0
-            let d1 = b1.reciprocal_p::<P>();
+            let d1 = b1.approx_reciprocal_p::<P>();
             // C_1 = b_1 + a_1/C_0 = (x+1) + 1/tiny ≈ 1/tiny
-            cf_c = b1 + cf_c.reciprocal_p::<P>();
+            cf_c = b1 + cf_c.approx_reciprocal_p::<P>();
             let delta = cf_c * d1;
             cf_f *= delta; // tiny * (1/tiny)/(x+1) ≈ 1/(x+1)
             d1
@@ -250,7 +250,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
                 // D = 1 / (b - |a|*D_prev)  [note: subtraction because a is negative]
                 let d_denom = neg_a_k.nmul_adde(cf_d, b_k); // b - |a|*D
-                let new_d = d_denom.cmp_eq(Self::ZERO).select(tiny, d_denom).reciprocal_p::<P>();
+                let new_d = d_denom.cmp_eq(Self::ZERO).select(tiny, d_denom).approx_reciprocal_p::<P>();
 
                 // C = b - |a|/C_prev  [same sign flip]
                 let new_c = b_k - neg_a_k / cf_c;
@@ -348,7 +348,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
             return n / d;
         }
 
-        (Self::ONE + (-self).exp_p::<P>()).reciprocal_p::<ExtraPrecision<P>>()
+        (Self::ONE + (-self).exp_p::<P>()).approx_reciprocal_p::<ExtraPrecision<P>>()
     }
 
     #[inline(always)]
@@ -513,8 +513,13 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn hermite_function_series<P: Policy, const N: usize>(self, coeffs: &[Self::Element; N]) -> Self {
+    fn hermite_function_series_n<P: Policy, const N: usize>(self, coeffs: &[Self::Element; N]) -> Self {
         generic::hermite::hermite_function_series::<P, _, _, N>(self, coeffs)
+    }
+
+    #[inline(always)]
+    fn hermite_function_series<P: Policy>(self, coeffs: &[Self::Element]) -> Self {
+        generic::hermite::hermite_function_series_slice::<P, _, _>(self, coeffs)
     }
 
     #[inline(always)]
@@ -629,17 +634,42 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn laguerre_function_series<P: Policy, const N: usize>(self, alpha: Self, coeffs: &[Self::Element; N]) -> Self {
+    fn laguerre_function_series_n<P: Policy, const N: usize>(self, alpha: Self, coeffs: &[Self::Element; N]) -> Self {
         generic::laguerre::laguerre_function_series::<P, _, _, N, false>(self, alpha, 0, coeffs)
     }
 
     #[inline(always)]
-    fn laguerre_function_series_i<P: Policy, const N: usize>(self, alpha: i32, coeffs: &[Self::Element; N]) -> Self {
+    fn laguerre_function_series_i_n<P: Policy, const N: usize>(self, alpha: i32, coeffs: &[Self::Element; N]) -> Self {
         generic::laguerre::laguerre_function_series::<P, _, _, N, true>(self, Self::ZERO, alpha, coeffs)
     }
 
     #[inline(always)]
-    fn chebyshev<P: Policy, const K: usize, const N: usize>(self, coeffs: &[Self::Element; N]) -> Self {
+    fn laguerre_function_series<P: Policy>(self, alpha: Self, coeffs: &[Self::Element]) -> Self {
+        generic::laguerre::laguerre_function_series_slice::<P, _, _, false>(self, alpha, 0, coeffs)
+    }
+
+    #[inline(always)]
+    fn laguerre_function_series_i<P: Policy>(self, alpha: i32, coeffs: &[Self::Element]) -> Self {
+        generic::laguerre::laguerre_function_series_slice::<P, _, _, true>(self, Self::ZERO, alpha, coeffs)
+    }
+
+    #[inline(always)]
+    fn chebyshev<P: Policy, const K: usize>(self, coeffs: &[Self::Element]) -> Self {
+        // See `chebyshev_n`. Same default, same reason for `REINSCH = false`. `N = 0` is
+        // the kernel's "length not known" sentinel, so this is the same body at a runtime
+        // count rather than a second implementation of it.
+        generic::chebyshev::chebyshev_series::<P, _, _, K, 0, false>(self, coeffs)
+    }
+
+    #[inline(always)]
+    fn chebyshev_n<P: Policy, const K: usize, const N: usize>(self, coeffs: &[Self::Element; N]) -> Self {
+        // The kernel treats `N = 0` as "runtime length" and answers `V::ZERO` for it, so the
+        // empty-series rejection has to live out here to stay a compile error. It was a
+        // `const` assert inside the kernel before the const and slice bodies were merged.
+        const {
+            assert!(N >= 1, "chebyshev_n: N must be at least 1");
+        }
+
         // Plain Clenshaw. Real vectors override this in `ps.rs`/`pd.rs` to pass `true` for
         // the kernel's `REINSCH` parameter, which buys accuracy near `$x = \pm 1$` under a
         // `Best`-or-better policy; `Complex` and the composites take this default, since the
@@ -736,7 +766,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         }
 
         let xc = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
-            x * c.reciprocal_p::<P>()
+            x * c.approx_reciprocal_p::<P>()
         } else {
             x / c
         };
@@ -888,9 +918,14 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn legendre_series<P: Policy, const N: usize>(self, coeffs: &[Self::Element; N]) -> Self {
+    fn legendre_series_n<P: Policy, const N: usize>(self, coeffs: &[Self::Element; N]) -> Self {
         // Plain Clenshaw at every policy, as the kernel has no policy-dependent path.
         generic::legendre::legendre_series::<_, _, N>(self, coeffs)
+    }
+
+    #[inline(always)]
+    fn legendre_series<P: Policy>(self, coeffs: &[Self::Element]) -> Self {
+        generic::legendre::legendre_series_slice::<_, _>(self, coeffs)
     }
 
     #[inline(always)]
@@ -1130,18 +1165,21 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
 
     #[inline(always)]
     fn gelu<P: Policy>(self, alpha: Self) -> Self {
-        let alpha_x = alpha * self;
+        // GELU(x) = 0.5 * x * (1 + erf(ax / sqrt(2))) = 0.5 * x * erfc(-ax / sqrt(2))
+        //
+        // The `erfc` spelling is load-bearing, not cosmetic. `1 + erf(u)` cancels
+        // *completely* in the left tail: erf(-4.24) rounds to exactly -1 in float32, so
+        // `0.5x + 0.5x*erf` evaluates 3 - 3 and `gelu(-6.0)` came back **+0.0** where the
+        // answer is -5.92e-9, twelve orders out and the wrong sign of zero besides.
+        // `erfc(4.24) = 1.97e-9` carries every digit. Float32 at `precision` returned
+        // exactly zero for every x below about -5, and f64 the same below about -8.3. The
+        // identity is exact, so nothing is traded for it.
+        //
+        // It is also cheaper: `erfc` and `erf` are the same kernel behind a const flag,
+        // and the FMA-vs-not split this replaced existed only to fold the `1 +`.
+        let c = (-(alpha * self)).scale(FloatConsts::FRAC_1_SQRT_2).erfc_p::<P>();
 
-        // GELU(x) = 0.5 * x * (1 + erf(ax / sqrt(2)))
-        let erf = alpha_x.scale(FloatConsts::FRAC_1_SQRT_2).erf_p::<P>();
-
-        if Self::HAS_TRUE_FMA {
-            // if we have true FMA, we can maintain precision while avoiding extra work.
-            let half_x = self.scale(E::ConstRatio::<1, 2>::VALUE);
-            half_x.mul_add(erf, half_x) // 0.5 * x + 0.5 * x * erf
-        } else {
-            self.scale(E::ConstRatio::<1, 2>::VALUE) * (Self::ONE + erf)
-        }
+        self.scale(E::ConstRatio::<1, 2>::VALUE) * c
     }
 
     #[inline(always)]
@@ -1151,7 +1189,7 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
 
         // sigmoid(beta * x) = 1 / (1 + exp(-beta * x))
         let e = (-beta_x).exp_p::<P>();
-        let s = (Self::ONE + e).reciprocal_p::<P>();
+        let s = (Self::ONE + e).approx_reciprocal_p::<P>();
 
         x * s
     }
@@ -1200,7 +1238,7 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
         let mut y = if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
             // this is the same number of operations as the more precise version, but
             // with better accuracy on large pre_root when using approximate rpc.
-            self * denom.reciprocal_p::<P>()
+            self * denom.approx_reciprocal_p::<P>()
         } else {
             self / denom
         };
@@ -1225,6 +1263,11 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
         if const { Self::HAS_TRUE_FMA } {
             // rsqrt is about 30% faster than sqrt+div, even with the extra
             // newton iteration merged in.
+            // Capability only, with no denormal-policy gate, and deliberately: the
+            // argument is `a = x*x + 1`, which is >= 1 for every finite `x`, so it can
+            // never be subnormal and the denormal-as-zero behaviour of `rsqrt` cannot
+            // reach it. Gating this on `Preserve` would cost a sqrt and a divide to
+            // protect an input that does not exist.
             if const { Self::HAS_APPROX_RSQRT } {
                 let a = x.mul_add(x, Self::ONE);
                 let y0 = a.rsqrt();
@@ -1240,6 +1283,7 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
                 let xh = x * Self::HALF;
                 q.mul_add(xh, xh)
             }
+        // Bare capability. See the `HAS_APPROX_RSQRT` note above: `a = x*x + 1 >= 1`.
         } else if const { Self::HAS_APPROX_RCP } {
             let a = x * x + Self::ONE;
             let y0 = a.rsqrt();
@@ -1264,7 +1308,7 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
         let denom = Self::SQRT_2 * c;
 
         let (a1, a0) = if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
-            let d = denom.reciprocal_p::<P>();
+            let d = denom.approx_reciprocal_p::<P>();
             (x1 * d, x0 * d)
         } else {
             (x1 / denom, x0 / denom)
@@ -1400,7 +1444,7 @@ pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> + PrimalPr
             let e = kx.abs().neg().exp2_p::<CheckOverflow<P, true>>();
             let y = (Self::ONE + e).log2_p::<P>().mul_adde(rcp_k, self.max(Self::ZERO));
 
-            let rcp = (Self::ONE + e).reciprocal_p::<P>();
+            let rcp = (Self::ONE + e).approx_reciprocal_p::<P>();
             let dy = kx.select_negative(e * rcp, rcp);
 
             return (y, dy);
@@ -1414,7 +1458,7 @@ pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> + PrimalPr
         let y = e.ln_1p_p::<P>().mul_adde(rcp_k, self.max(Self::ZERO));
 
         // sigmoid from already-computed e = exp(-|kx|)
-        let rcp = (e + Self::ONE).reciprocal_p::<P>();
+        let rcp = (e + Self::ONE).approx_reciprocal_p::<P>();
         let dy = kx.select_negative(e * rcp, rcp);
 
         (y, dy)
@@ -1424,15 +1468,9 @@ pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> + PrimalPr
     fn gelu_d<P: Policy>(self, alpha: Self) -> (Self, Self) {
         let alpha_x = alpha * self;
 
-        // GELU(x) = 0.5 * x * (1 + erf(ax / sqrt(2)))
-        let erf = alpha_x.scale(FloatConsts::FRAC_1_SQRT_2).erf_p::<P>();
-
-        let y = if Self::HAS_TRUE_FMA {
-            let half_x = self.scale(E::ConstRatio::<1, 2>::VALUE);
-            half_x.mul_add(erf, half_x) // 0.5 * x + 0.5 * x * erf
-        } else {
-            self.scale(E::ConstRatio::<1, 2>::VALUE) * (Self::ONE + erf)
-        };
+        // 0.5 * x * erfc(-ax / sqrt(2)). See `gelu` for why this is not `1 + erf`.
+        let c = (-alpha_x).scale(FloatConsts::FRAC_1_SQRT_2).erfc_p::<P>();
+        let y = self.scale(E::ConstRatio::<1, 2>::VALUE) * c;
 
         let dy = (alpha_x * alpha_x)
             .scale(E::ConstRatio::<{ -1 }, 2>::VALUE)
@@ -1448,7 +1486,7 @@ pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> + PrimalPr
         let beta_x = beta * x;
 
         let e = (-beta_x).exp_p::<P>();
-        let s = (Self::ONE + e).reciprocal_p::<P>();
+        let s = (Self::ONE + e).approx_reciprocal_p::<P>();
 
         let y = x * s;
 
@@ -1497,12 +1535,12 @@ pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> + PrimalPr
         let mut dy;
 
         if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
-            let inv_denom = denom.reciprocal_p::<P>();
+            let inv_denom = denom.approx_reciprocal_p::<P>();
             y = self * inv_denom;
             dy = inv_denom / pre_root;
         } else {
             y = self / denom;
-            dy = (pre_root * denom).reciprocal_p::<P>();
+            dy = (pre_root * denom).approx_reciprocal_p::<P>();
         }
 
         if const { P::POLICY.check_overflow } {
@@ -1525,6 +1563,11 @@ pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> + PrimalPr
         let x = self;
 
         if const { Self::HAS_TRUE_FMA } {
+            // Capability only, with no denormal-policy gate, and deliberately: the
+            // argument is `a = x*x + 1`, which is >= 1 for every finite `x`, so it can
+            // never be subnormal and the denormal-as-zero behaviour of `rsqrt` cannot
+            // reach it. Gating this on `Preserve` would cost a sqrt and a divide to
+            // protect an input that does not exist.
             if const { Self::HAS_APPROX_RSQRT } {
                 let a = x.mul_add(x, Self::ONE);
                 let y0 = a.rsqrt();
@@ -1546,12 +1589,13 @@ pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> + PrimalPr
                 let xh = x * Self::HALF;
                 let y = q.mul_add(xh, xh);
 
-                let inv_a = a.reciprocal_p::<P>();
+                let inv_a = a.approx_reciprocal_p::<P>();
                 let qa = q.mul_add(inv_a, q);
                 let dy = qa.mul_add(Self::HALF, Self::HALF);
 
                 (y, dy)
             }
+        // Bare capability. See the `HAS_APPROX_RSQRT` note above: `a = x*x + 1 >= 1`.
         } else if const { Self::HAS_APPROX_RCP } {
             let a = x * x + Self::ONE;
             let y0 = a.rsqrt();

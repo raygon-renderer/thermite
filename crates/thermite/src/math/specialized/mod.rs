@@ -60,6 +60,8 @@ mod generic;
 #[doc(hidden)]
 pub mod reference;
 
+use crate::math::policy::policies::MediumPrecision;
+
 impl<E, V> SpecializedFloatMath<E> for V
 where
     E: FloatElement,
@@ -414,7 +416,7 @@ impl<P: Policy, const N: usize, V: FloatVector> AsFloatVectorWithBitsKernel<V, N
 }
 
 pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
-    /// Backing definition of [`CoreMathWithPolicy::poly_primal`].
+    /// Backing definition of [`CoreMathWithPolicy::poly_n_primal`].
     ///
     /// Horner over primal coefficients. The multiply stays in `Self` (both operands
     /// genuinely vary), but the addend is a constant with no augmentation, so the
@@ -422,7 +424,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
     /// A type that is its own primal inherits `mul_add_primal = mul_adde`, so this
     /// compiles to exactly [`poly`](Self::poly) there.
     #[inline(always)]
-    fn poly_primal<P: Policy, N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self {
+    fn poly_n_primal<P: Policy, N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self {
         let x = self;
 
         let n = const { N::USIZE };
@@ -437,12 +439,12 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
         res
     }
 
-    /// Backing definition of [`CoreMathWithPolicy::poly_rev_primal`].
+    /// Backing definition of [`CoreMathWithPolicy::poly_rev_n_primal`].
     ///
-    /// [`poly_primal`](Self::poly_primal) with the coefficients in descending order.
+    /// [`poly_n_primal`](Self::poly_n_primal) with the coefficients in descending order.
     /// The same primal-Horner step, walked forwards.
     #[inline(always)]
-    fn poly_rev_primal<P: Policy, N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self {
+    fn poly_rev_n_primal<P: Policy, N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self {
         let x = self;
 
         let n = const { N::USIZE };
@@ -457,10 +459,50 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
         res
     }
 
+    /// Backing definition of [`CoreMathWithPolicy::poly_primal`].
+    ///
+    /// The same primal-Horner walk as [`poly_n_primal`](Self::poly_n_primal) over a
+    /// runtime length. Unlike the slice reductions, a polynomial is not folded over
+    /// chunks, since Horner carries `x^k` through every step, so this is its own loop.
+    #[inline(always)]
+    fn poly_primal<P: Policy>(self, coeffs: &[Self::Primal]) -> Self {
+        let x = self;
+
+        let Some((&last, rest)) = coeffs.split_last() else {
+            return Self::ZERO;
+        };
+
+        let mut res = Self::from_primal(last);
+        for &c in rest.iter().rev() {
+            res = res.mul_add_primal::<P>(x, c);
+        }
+
+        res
+    }
+
+    /// Backing definition of [`CoreMathWithPolicy::poly_rev_primal`].
+    ///
+    /// [`poly_primal`](Self::poly_primal) with the coefficients descending.
+    #[inline(always)]
+    fn poly_rev_primal<P: Policy>(self, coeffs: &[Self::Primal]) -> Self {
+        let x = self;
+
+        let Some((&first, rest)) = coeffs.split_first() else {
+            return Self::ZERO;
+        };
+
+        let mut res = Self::from_primal(first);
+        for &c in rest {
+            res = res.mul_add_primal::<P>(x, c);
+        }
+
+        res
+    }
+
     /// One Horner step against a primal addend: `self * m + a`.
     ///
     /// The single point where a composite says how to add an unaugmented constant, so
-    /// [`poly_primal`](Self::poly_primal) and anything else built on it inherit the
+    /// [`poly_n_primal`](Self::poly_n_primal) and anything else built on it inherit the
     /// saving from one override rather than reimplementing the evaluator. The default
     /// is correct for every type. It just lifts, which is free only when `Self` is its
     /// own primal.
@@ -511,7 +553,59 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
     }
 
     #[inline(always)]
-    fn poly<P: Policy, const N: usize>(self, coeffs: &[E; N]) -> Self {
+    fn poly<P: Policy>(self, coeffs: &[E]) -> Self {
+        if const {
+            !P::POLICY.unroll_loops
+                || P::POLICY.precision.ge(PrecisionPolicy::Best)
+                || !Self::ISA.has_instruction_level_parallelism()
+        } {
+            if crate::unlikely(coeffs.is_empty()) {
+                return Self::ZERO;
+            }
+
+            let mut res = Self::splat(coeffs[coeffs.len() - 1]);
+            for &c in coeffs.iter().rev().skip(1) {
+                res = res.mul_adde(self, Self::splat(c));
+            }
+            return res;
+        }
+
+        // NumVector provides the num_traits::MulAdd implementation needed for fast_polynomial
+        let res = fast_polynomial::poly_f::<_, _>(crate::vector::NumVector(self), coeffs.len(), |i| unsafe {
+            crate::vector::NumVector(Self::splat(*coeffs.get_unchecked(i)))
+        });
+
+        res.0
+    }
+
+    #[inline(always)]
+    fn poly_rev<P: Policy>(self, coeffs: &[E]) -> Self {
+        if const {
+            !P::POLICY.unroll_loops
+                || P::POLICY.precision.ge(PrecisionPolicy::Best)
+                || !Self::ISA.has_instruction_level_parallelism()
+        } {
+            if crate::unlikely(coeffs.is_empty()) {
+                return Self::ZERO;
+            }
+
+            let mut res = Self::splat(coeffs[0]);
+            for &c in coeffs.iter().skip(1) {
+                res = res.mul_adde(self, Self::splat(c));
+            }
+            return res;
+        }
+
+        // NumVector provides the num_traits::MulAdd implementation needed for fast_polynomial
+        let res = fast_polynomial::poly_f::<_, _>(crate::vector::NumVector(self), coeffs.len(), |i| unsafe {
+            crate::vector::NumVector(Self::splat(*coeffs.get_unchecked(coeffs.len() - 1 - i)))
+        });
+
+        res.0
+    }
+
+    #[inline(always)]
+    fn poly_n<P: Policy, const N: usize>(self, coeffs: &[E; N]) -> Self {
         let x = self;
 
         if const {
@@ -570,7 +664,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
     }
 
     #[inline(always)]
-    fn poly_rev<P: Policy, const N: usize>(self, coeffs: &[E; N]) -> Self {
+    fn poly_rev_n<P: Policy, const N: usize>(self, coeffs: &[E; N]) -> Self {
         let x = self;
 
         if const {
@@ -624,7 +718,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
     }
 
     #[inline(always)]
-    fn poly_rational<P: Policy, const N: usize, const D: usize>(
+    fn poly_rational_n<P: Policy, const N: usize, const D: usize>(
         self,
         numerator: &[E; N],
         denominator: &[E; D],
@@ -632,8 +726,8 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
         let x = self;
 
         if const { P::POLICY.precision.le(PrecisionPolicy::Average) } {
-            let n = Self::poly::<P, N>(x, numerator);
-            let d = Self::poly::<P, D>(x, denominator);
+            let n = Self::poly_n::<P, N>(x, numerator);
+            let d = Self::poly_n::<P, D>(x, denominator);
 
             return n.approx_div_p::<P>(d);
         }
@@ -646,16 +740,16 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
         let mut d1 = Self::EMPTY;
 
         if const { P::POLICY.avoid_branching } || !invert.all() {
-            n0 = Self::poly::<P, N>(x, numerator);
-            d0 = Self::poly::<P, D>(x, denominator);
+            n0 = Self::poly_n::<P, N>(x, numerator);
+            d0 = Self::poly_n::<P, D>(x, denominator);
         }
 
         let mut z = Self::EMPTY;
 
         if const { P::POLICY.avoid_branching } || invert.any() {
-            z = Self::reciprocal::<P>(x);
-            n1 = Self::poly_rev::<P, N>(z, numerator);
-            d1 = Self::poly_rev::<P, D>(z, denominator);
+            z = Self::approx_reciprocal::<P>(x);
+            n1 = Self::poly_rev_n::<P, N>(z, numerator);
+            d1 = Self::poly_rev_n::<P, D>(z, denominator);
         }
 
         let n = invert.select(n1, n0);
@@ -698,16 +792,32 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
     }
 
     #[inline(always)]
-    fn reciprocal<P: Policy>(self) -> Self {
-        if const { Self::HAS_APPROX_RCP && P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+    fn approx_reciprocal<P: Policy>(self) -> Self {
+        // Two policy reasons to spend a real division: `Best` wants full precision, and
+        // `Preserve` cannot use the estimate at all. `rcpps`/`rsqrtps` treat a denormal
+        // OPERAND as zero in hardware regardless of MXCSR, so the estimate returns `inf`
+        // for a subnormal input and the Newton step below turns that into `-inf`.
+        //
+        // No `HAS_APPROX_RCP` here: when the backend has no estimate, `rcp()` IS
+        // `Self::ONE / self`, so the path below already lands on this answer.
+        if const {
+            P::POLICY.precision.ge(PrecisionPolicy::Best)
+                || matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
+        } {
             return Self::ONE / self;
         }
 
         let mut y = self.rcp();
 
-        // if we have approximate reciprocal and want better precision
+        // The capability DOES gate the refinement: with no estimate `y` is already exact,
+        // and a Newton step on an exact value is pure cost.
         if const { Self::HAS_APPROX_RCP && P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
-            // one iteration of Newton's method
+            // One iteration of Newton's method. It is invalid at `self = 0` and
+            // `self = inf`, where the estimate was already exactly right and the step
+            // turns it into `inf * NaN`. That is DELIBERATELY left unguarded: this path
+            // only exists on the fast tiers (the registers set `HAS_APPROX_RCP` false
+            // under `strict_ieee754`, so the strict build takes the exact `rcp()` above),
+            // and a fixup for edges that rare is cycles the tiers came here to save.
             y = y * self.nmul_adde(y, Self::TWO);
         }
 
@@ -716,11 +826,144 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
 
     #[inline(always)]
     fn approx_div<P: Policy>(self, rhs: Self) -> Self {
-        if const { Self::HAS_APPROX_RCP && P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
+        // Same shape as `reciprocal`: a real divide when the estimate is either not
+        // precise enough or, under `Preserve`, not permitted. Only `Worst` without
+        // `Preserve` reaches the multiply, so the estimate is taken exactly where it was
+        // asked for.
+        //
+        // Unlike `approx_reciprocal` the capability is not a free pass here: with no
+        // hardware estimate `rhs.rcp()` is a division, so the fallthrough would be a
+        // divide AND a multiply for a doubly-rounded answer. The divide below is cheaper
+        // and better.
+        //
+        // `strict_ieee754` joins the escape outright rather than patching the estimate
+        // the way `approx_reciprocal` does, because a select cannot fix this path. The
+        // estimate treats a DENORMAL `rhs` as zero (regardless of MXCSR), so `0 / 2e-39`
+        // manufactures `0 * inf = NaN` and `x / 2e-39` a wrong infinity, and the second
+        // one's correct answer is a huge *finite* quotient only a real divide can
+        // produce. Unlike `approx_reciprocal`, `HAS_APPROX_RCP = false` does NOT make
+        // this moot under strict: even the exact `1/rhs` OVERFLOWS to infinity for
+        // `rhs` below ~2^-126-ish, so `0 * inf = NaN` survives an exact reciprocal and
+        // only `self / rhs` avoids it. Compiled out, not policy-gated, so a hand-built
+        // flush policy cannot reintroduce it under the strict build.
+        if const {
+            P::POLICY.precision.gt(PrecisionPolicy::Worst)
+                || matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
+                || cfg!(feature = "strict_ieee754")
+        } {
             return self / rhs;
         }
 
         self * rhs.rcp()
+    }
+
+    /// `$a/\sqrt{b}$`, spelled `a.approx_div_sqrt(b)`, as one kernel rather than a
+    /// divide bolted onto a square root.
+    ///
+    /// The shape is [`approx_div`](Self::approx_div)'s, one level up: multiply by the
+    /// reciprocal square root where the estimate is both permitted and profitable, and
+    /// take the exact route otherwise. Same two escapes, for the same reasons: `Best`
+    /// wants full precision, and `Preserve` cannot use the estimate at all, because
+    /// `rsqrtps` treats a denormal operand as zero in hardware regardless of MXCSR (see
+    /// `generic::sqrt::inverse_sqrt_internal`).
+    ///
+    /// Like `approx_div`, the capability is not a free pass: with no hardware estimate
+    /// `rsqrt()` *is* `ONE / sqrt()`, so multiplying by it would be a square root, a
+    /// divide and a multiply for a doubly-rounded answer. The exact form below is both
+    /// cheaper and better there.
+    ///
+    /// # Why there is no Newton step with the numerator in it
+    ///
+    /// The obvious wish is a refinement that corrects the whole quotient rather than just
+    /// the root. There is not one, and both halves of that are worth recording because
+    /// both look like they should work.
+    ///
+    /// **Refining an estimate cannot see the numerator.** Newton for
+    /// `$r \approx 1/\sqrt{b}$` is `$r' = r(3 - br^2)/2$`, whose correction factor is built
+    /// from `b` and `r` alone. Carrying `a` through it as `$y = ar$`,
+    /// `$y' = y(3 - br^2)/2$` leaves the rounding of `$ar$` uncorrected, because the
+    /// residual has no term that knows about `a`. An iteration that does see it means solving
+    /// `$f(y) = b - a^2/y^2$`, whose step is `$y(3a^2 - by^2)/(2a^2)$`: it reintroduces a
+    /// division by `$a^2$`, and squaring the numerator overflows on inputs where the
+    /// function itself is perfectly finite.
+    ///
+    /// **A Karp-Markstein correction on the exact path buys nothing here.** The tempting
+    /// form is `$r = 1/s$`, `$y = ar$`, `$e = a - sy$` (exact under a true FMA),
+    /// `$y' = y + re$`, the standard trick for recovering a correctly rounded quotient. It
+    /// measured **bit-identical to `self / s` on 4096 random inputs**, because a hardware
+    /// divide *already* returns the correctly rounded `$a/s$`. The trick exists for
+    /// machines that synthesize division from a reciprocal, and on every backend here
+    /// `divps`/`fdiv` is already the thing it reconstructs. A divide, three operations and
+    /// an overflow guard for zero gain.
+    ///
+    /// What neither form can reach is the half ulp already inside `s` itself, which
+    /// `$a/s$` inherits. Removing *that* means compensating the root, which is
+    /// double-double work and belongs to `Reference` rather than to this function.
+    ///
+    /// What knowing the numerator *does* buy is scheduling: it is folded into the
+    /// estimate before the correction multiply (`$y = (ar)(3 - br^2)/2$` rather than
+    /// `$a \cdot r(3 - br^2)/2$`), so `$ar$` issues in parallel with `$r^2$` and the
+    /// post-`rsqrt` dependency chain is one multiply shorter, at the same instruction
+    /// count and the same one interior rounding.
+    #[inline(always)]
+    fn approx_div_sqrt<P: Policy>(self, denom: Self) -> Self {
+        if const {
+            P::POLICY.precision.ge(PrecisionPolicy::Best)
+                || matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
+                || !Self::HAS_APPROX_RSQRT
+        } {
+            return self / denom.sqrt();
+        }
+
+        // `rsqrt` and the Newton step are written out here rather than delegated to
+        // `inverse_sqrt`, deliberately. That method carries its own `Best`/`Preserve`
+        // escapes and its own capability gate, so composing the two would make one answer
+        // depend on two independent policy ladders, and a tier could silently take an
+        // exact route inside an approximate one. The gate above is the only gate.
+        //
+        // `HAS_APPROX_RSQRT` is already known true here: the exact route above claims
+        // every backend without an estimate, so this really is the hardware instruction.
+        //
+        // The numerator is folded in BEFORE the correction multiply, not after: `ar` and
+        // `y0.square()` depend only on `y0`, so they issue in parallel and the post-rsqrt
+        // chain is square -> fma -> mul rather than square -> fma -> mul -> mul. Same
+        // instruction count, one multiply shorter in latency. Accuracy is unchanged, since
+        // both spellings carry one interior rounding (`round(a*r)*u` vs `round(r*u)*a`),
+        // and for a power-of-two numerator (the hypot kernels) `a * y0` is exact.
+        let y0 = denom.rsqrt();
+        let ar = self * y0;
+        let mut y = ar;
+
+        if const { P::POLICY.precision.gt(PrecisionPolicy::Worst) } {
+            // One iteration of Newton's method, the same step `inverse_sqrt_internal`
+            // takes, scaled through by the numerator: y' = (a y)(3 - b y^2)/2.
+            let nx2 = denom.scale(const { <Self::Element as FloatElement>::ConstRatio::<{ -1 }, { 2 }>::VALUE });
+            let threehalfs = Self::splat(const { <Self::Element as FloatElement>::ConstRatio::<{ 3 }, { 2 }>::VALUE });
+
+            y = ar * y0.square().mul_adde(nx2, threehalfs);
+
+            if const { P::POLICY.check_overflow } {
+                // The step is only valid where the estimate is finite and nonzero, which
+                // is exactly the interior of the domain. At both ends it manufactures a
+                // NaN out of a correct answer:
+                //
+                //   b = 0    -> y0 = +inf, and the step is inf * (inf * -0.0 + 1.5)
+                //   b = inf  -> y0 = 0,    and the step is 0   * (0   * -inf + 1.5)
+                //
+                // Both are `inf * NaN`. The raw `a * y0` is already exactly right in both
+                // cases (`a/sqrt(0)` is a signed infinity, `a/sqrt(inf)` is a signed
+                // zero), so keep it rather than patching the result afterwards. The
+                // condition is still built from `y0`: `ar` mixes in the numerator's own
+                // zeros and infinities, which are interior points, not step failures.
+                //
+                // This is the same failure mode `inverse_sqrt_internal` documents for a
+                // denormal operand, one step further out: there the estimate itself is
+                // wrong, here the estimate is right and the refinement breaks it.
+                y = y0.is_finite().bitandnot(y0.is_zero()).select(y, ar);
+            }
+        }
+
+        y
     }
 
     /// `numer / sum(1/x_i)` the direct way, backing both
@@ -749,7 +992,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
     fn inv_sum_inv_direct<P: Policy, const N: usize>(mut values: [Self; N], numer: Self) -> Self {
         let mut i = 0;
         while i < N {
-            values[i] = Self::reciprocal::<P>(values[i]);
+            values[i] = Self::approx_reciprocal::<P>(values[i]);
             i += 1;
         }
 
@@ -761,19 +1004,61 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
     }
 
     #[inline(always)]
-    fn harmonic_mean<P: Policy, const N: usize>(values: [Self; N]) -> Self {
+    fn harmonic_mean_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
         let n = Self::splat(Self::Element::from_int(N as crate::LargeInt));
         Self::inv_sum_inv_direct::<P, N>(values, n)
     }
 
     #[inline(always)]
-    fn inv_sum_inv<P: Policy, const N: usize>(values: [Self; N]) -> Self {
+    fn inv_sum_inv_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
         Self::inv_sum_inv_direct::<P, N>(values, Self::ONE)
+    }
+
+    /// `$1/\sum_i 1/x_i$` over a runtime-length slice.
+    ///
+    /// [`inv_sum_inv_direct`](Self::inv_sum_inv_direct) with the array pass rewritten as a
+    /// slice pass: one reciprocal per element, one sum, one divide. Read that function for
+    /// the zero-input behavior, which is inherited here unchanged.
+    ///
+    /// No composite overrides `inv_sum_inv_n`, so there is nothing for a runtime-length form
+    /// to inherit by routing back through the const kernel, and routing through it would
+    /// only add an inversion per batch. Real vectors, which *do* want something else, take
+    /// `generic::inv_sum_inv_slice_internal` via the `ps`/`pd` override instead.
+    ///
+    /// The empty sum of reciprocals is `0`, so the answer is `numer / 0`, matching the const
+    /// form at `N = 0` and the real-vector slice form.
+    #[inline(always)]
+    fn inv_sum_inv<P: Policy>(values: &[Self]) -> Self {
+        let mut acc = Self::ZERO;
+        for &v in values {
+            acc += Self::approx_reciprocal::<P>(v);
+        }
+
+        Self::approx_div::<P>(Self::ONE, acc)
+    }
+
+    /// `$N/\sum_i 1/x_i$` over a runtime-length slice.
+    ///
+    /// `N` is the only thing the harmonic mean adds to
+    /// [`inv_sum_inv`](Self::inv_sum_inv), and it cannot be folded in per chunk without
+    /// counting the padding, so it is applied once at the end. The mean of no values is
+    /// `$0 \cdot \infty =$` NaN, which is the empty-average convention rather than an
+    /// invented value.
+    #[inline(always)]
+    fn harmonic_mean<P: Policy>(values: &[Self]) -> Self {
+        let n = Self::splat(Self::Element::from_int(values.len() as crate::LargeInt));
+
+        n * Self::inv_sum_inv::<P>(values)
     }
 
     #[inline(always)]
     fn reciprocal_adde<P: Policy>(self, a: Self) -> Self {
-        if const { Self::HAS_APPROX_RCP && P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+        // See `reciprocal`. Same two escapes, same reasons, same split over which
+        // condition belongs to the policy and which to the capability.
+        if const {
+            P::POLICY.precision.ge(PrecisionPolicy::Best)
+                || matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
+        } {
             return Self::ONE / self + a;
         }
 
@@ -798,7 +1083,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
         let mut res = Self::ONE;
 
         let mut e = if e < 0 {
-            x = Self::reciprocal::<P>(x);
+            x = Self::approx_reciprocal::<P>(x);
 
             e.wrapping_neg() as u32
         } else {
@@ -827,7 +1112,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
         let mut x = self;
         let mut res = Self::ONE;
 
-        x = e.is_negative().select(Self::reciprocal::<P>(x), x);
+        x = e.is_negative().select(Self::approx_reciprocal::<P>(x), x);
         e = e.abs();
 
         loop {
@@ -1024,7 +1309,32 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     #[inline(always)]
     fn powf_m1<P: Policy>(self, e: Self) -> Self {
         // x^e - 1 = expm1(e * ln(x)); avoids the outer cancellation of pow(x, e) - 1.
-        let l = Self::ln::<P>(self);
+        //
+        // At `Worst`, take the log as `ln_1p(x - 1)` instead. It is the same value, but
+        // `ln_1p` has a small-argument shortcut this tier badly needs and `ln` does not:
+        // the `Worst` log is a linear function of the bit pattern with ~0.04 ABSOLUTE
+        // error, and near x = 1, which is where this whole function lives, that leaves
+        // roughly a constant 0.0397 instead of the true small value. `ln(1.000189)` at
+        // `UltraPerformance` gives **3.986e-02** against a true 1.889e-04, which made
+        // `powf_m1(1.000189, 4.857)` return 0.214 where 9.18e-04 was wanted.
+        //
+        // One subtract, at one tier, and the hot `ln` path is untouched, since `ln` is
+        // called from far more places than this and the low tiers cannot afford extra
+        // cycles. `(x - 1) + 1` recovers `x` to one rounding, nothing against this tier's
+        // own 0.04.
+        //
+        // The tier bump is not new policy, as `powf` already does exactly this ("the
+        // 'Worst' log2 precision is _terrible_, so just use medium to give anything
+        // reasonable back"), and it pays the same price for the same reason: any ABSOLUTE
+        // error `d` in the log becomes a RELATIVE error `e*d` in the result, so the
+        // `Worst` log's 0.04 leaves ~2 bits for an exponent of 5. Before the bump it was
+        // 1.6 bits at its best magnitude, against a 5-bit floor.
+        let l = if const { P::POLICY.precision.eq(PrecisionPolicy::Worst) } {
+            Self::ln_1p::<MediumPrecision<P>>(self - Self::ONE)
+        } else {
+            Self::ln::<P>(self)
+        };
+
         let p = e * l;
 
         // As in `compound`, the residual needs a real FMA. Non-FMA backends keep the
@@ -1188,7 +1498,7 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
 
     #[inline(always)]
     fn log<P: Policy>(self, base: Self) -> Self {
-        Self::ln::<P>(self) / Self::ln::<P>(base)
+        Self::log2::<P>(self) / Self::log2::<P>(base)
     }
 
     /// ln(1 - e^(-x))
@@ -1200,151 +1510,57 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     fn ln1m_expnx_ext<P: Policy>(self, lnx: Self) -> Self;
 }
 
+/// Reduce a slice with `f`, seeded from its first element. The slice must be non-empty.
+///
+/// A serial fold rather than the log-depth `algorithms::reduce_*`: those take an array, and
+/// the whole point of the slice forms is that they do not have one. Dependency depth is the
+/// price of a runtime length, and these are the convenient spelling rather than the fast
+/// path. A caller who wants the tree writes `*_n`.
 #[inline(always)]
-fn hypot_n_impl<E, V, P, const N: usize, const INV: bool>(mut values: [V; N]) -> V
-where
-    E: FloatElement,
-    V: SpecializedSpatialMath<E>,
-    P: Policy,
-{
-    #[cfg(not(target_arch = "spirv"))]
-    if let Some(new_values) = FlushDenormals::<P>::flush_denormals(values) {
-        values = new_values;
+fn fold_slice<V: Copy>(values: &[V], f: impl Fn(V, V) -> V) -> V {
+    let (&first, rest) = values.split_first().expect("fold_slice on an empty slice");
+
+    let mut acc = first;
+    for &v in rest {
+        acc = f(acc, v);
     }
 
-    if const { N == 0 } {
-        if INV {
-            return V::INFINITY; // 1/0 == infinity
-        }
-
-        return V::ZERO;
-    }
-
-    if const { N == 1 } {
-        let mut res = values[0].abs(); // sqrt(x^2) == abs(x)
-
-        if INV {
-            res = res.reciprocal_p::<P>();
-        }
-
-        return res;
-    }
-
-    // special case N=2 which saves a couple instructions
-    if const { N == 2 } {
-        let x = values[0];
-        let y = values[1];
-
-        return if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
-            // Use the worst precision method, which is usually faster
-            let res = x.mul_adde(x, y.square());
-
-            return if INV { res.inverse_sqrt_p::<P>() } else { res.sqrt() };
-        } else {
-            // Use a more precise method
-            let x = x.abs();
-            let y = y.abs();
-
-            let max = x.max(y);
-            let min = x.min(y);
-
-            // guard the all-zero input: max == 0 would make min/max = 0/0 = NaN.
-            // Dividing by 1 instead yields t = 0, so the norm is 0 (and the
-            // inverse norm is +inf), matching the general N-ary path below.
-            let t = min / max.cmp_eq(V::ZERO).select(V::ONE, max);
-
-            let s = t.mul_adde(t, V::ONE); // 1 + t^2
-
-            let mut res;
-            if INV {
-                res = s.inverse_sqrt_p::<P>() / max;
-
-                if const { P::POLICY.check_overflow } {
-                    res = max.is_infinite().select(V::ZERO, res);
-                }
-            } else {
-                res = max * s.sqrt();
-
-                if const { P::POLICY.check_overflow } {
-                    res = max.is_infinite().select(max, res);
-                }
-            }
-
-            res
-        };
-    }
-
-    if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
-        // square each value in place, zero dependencies
-        for value in values.iter_mut() {
-            *value *= *value;
-        }
-
-        crate::math::algorithms::reduce_in_place(&mut values, |a, b| a + b);
-
-        return if INV {
-            values[0].inverse_sqrt_p::<P>()
-        } else {
-            values[0].sqrt()
-        };
-    }
-
-    // high-precision path
-
-    // take absolute value of each element in place, zero dependencies,
-    // since we're squaring anyway this doesn't lose any information
-    for x in &mut values {
-        *x = x.abs();
-    }
-
-    let max_abs = crate::math::algorithms::reduce_array(values, |a, b| a.max(b));
-    let is_zero = max_abs.cmp_eq(V::ZERO);
-
-    let scale = is_zero.select(V::ONE, max_abs.reciprocal_p::<P>());
-
-    for x in &mut values {
-        *x *= scale; // scale to prevent overflow
-        *x = x.square(); // square in place
-    }
-
-    // sum squares in place
-    crate::math::algorithms::reduce_in_place(&mut values, |a, b| a + b);
-
-    let mut res;
-
-    if INV {
-        res = scale * values[0].inverse_sqrt_p::<P>();
-
-        if const { P::POLICY.check_overflow } {
-            res = max_abs.is_infinite().select(V::ZERO, res);
-        }
-    } else {
-        res = max_abs * values[0].sqrt();
-
-        if const { P::POLICY.check_overflow } {
-            res = max_abs.is_infinite().select(max_abs, res);
-        }
-    }
-
-    res
+    acc
 }
 
 pub trait SpecializedSpatialMath<E>: SpecializedCoreMath<E> {
     // type Scalar: SpecializedRealMath<E>;
 
     #[inline(always)]
+    fn hypot_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
+        generic::hypot_n_recip_scaled::<Self, E, P, N, false>(values)
+    }
+
+    /// The two-argument spelling, and nothing more than a spelling.
+    ///
+    /// Both lowerings of `hypot_n` write `N = 2` out as their own arm (the real-vector
+    /// `generic::hypot_n_pow2_scaled` and the composite `generic::hypot_n_recip_scaled`),
+    /// so this delegates rather than carrying a third kernel that would have to be kept in
+    /// step with them. Overriding it in a backend is therefore almost always the wrong
+    /// move: override `hypot_n`'s `N = 2` arm instead, where the N-ary callers benefit too.
+    #[inline(always)]
     fn hypot<P: Policy>(self, y: Self) -> Self {
         Self::hypot_n::<P, 2>([self, y])
     }
 
     #[inline(always)]
-    fn hypot_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
-        hypot_n_impl::<E, Self, P, N, false>(values)
+    fn inv_hypot_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
+        generic::hypot_n_recip_scaled::<Self, E, P, N, true>(values)
     }
 
     #[inline(always)]
-    fn inv_hypot_n<P: Policy, const N: usize>(values: [Self; N]) -> Self {
-        hypot_n_impl::<E, Self, P, N, true>(values)
+    fn hypot_s<P: Policy>(values: &[Self]) -> Self {
+        generic::hypot_slice_recip_scaled::<Self, E, P, false>(values)
+    }
+
+    #[inline(always)]
+    fn inv_hypot<P: Policy>(values: &[Self]) -> Self {
+        generic::hypot_slice_recip_scaled::<Self, E, P, true>(values)
     }
 
     fn l1_norm<P: Policy>(self) -> Self;
@@ -1573,6 +1789,58 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     }
 
     #[inline(always)]
+    fn logsumexp<P: Policy>(values: &[Self]) -> Self {
+        // [`logsumexp_n`](Self::logsumexp_n) with the array passes rewritten as slice
+        // passes. Every step below is that function's (the shared max, the `ln_1p` split
+        // that drops exactly one dominant term, the `used` tie-breaker, the non-finite max
+        // select) and is documented there rather than repeated here. The tree
+        // reductions become serial folds, which is the whole cost of a runtime length.
+        let Some((&first, rest)) = values.split_first() else {
+            // The empty sum is 0, and ln(0) = -inf.
+            return Self::NEG_INFINITY;
+        };
+
+        if rest.is_empty() {
+            return first;
+        }
+
+        if rest.len() == 1 {
+            return Self::logaddexp::<P>(first, rest[0]);
+        }
+
+        let m = fold_slice(values, |a, b| a.max(b));
+
+        let mut acc = Self::ZERO;
+        let mut r;
+
+        if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+            for &v in values {
+                acc += Self::exp::<P>(v - m);
+            }
+
+            r = m + Self::ln::<P>(acc);
+        } else {
+            let mut used = <Self::Mask as GenericMask>::FALSY;
+
+            for &v in values {
+                let d = v - m;
+                let dominant = d.cmp_eq(Self::ZERO).bitandnot(used);
+
+                used |= dominant;
+                acc += Self::exp::<P>(d).nz(dominant);
+            }
+
+            r = m + Self::ln_1p::<P>(acc);
+        }
+
+        if const { P::POLICY.check_overflow } {
+            r = m.is_finite().select(r, m);
+        }
+
+        r
+    }
+
+    #[inline(always)]
     fn logsumexp_n<P: Policy, const N: usize>(mut values: [Self; N]) -> Self {
         // The empty sum is 0, and ln(0) = -inf: the identity element of logaddexp,
         // so folding logsumexp_n over any partition of the inputs agrees.
@@ -1739,7 +2007,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
 
                 (bar, xa * bar)
             } else {
-                (ba.reciprocal_p::<P>(), xa / ba)
+                (ba.approx_reciprocal_p::<P>(), xa / ba)
             };
         }
 
@@ -1794,7 +2062,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
                 bar = ba.rcp();
                 bar_a = bar * a;
             } else {
-                bar = ba.reciprocal_p::<P>();
+                bar = ba.approx_reciprocal_p::<P>();
                 bar_a = a / ba;
             }
 
@@ -1900,7 +2168,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         let d = e.exp_p::<P>() + Self::ONE;
 
         // 1/(exp(e) + 1), it's important this is done in extra precision
-        let mut res = d.reciprocal_p::<ExtraPrecision<P>>();
+        let mut res = d.approx_reciprocal_p::<ExtraPrecision<P>>();
 
         let overflow = e.is_infinite();
 
@@ -1922,7 +2190,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     #[inline(always)]
     fn smooth_interpolator_inverse<P: Policy>(y: Self, edges: Option<(Self, Self)>, k: Self) -> Self {
         // k ln(1/y - 1)
-        let l = k * (y.reciprocal_p::<P>() - Self::ONE).ln_p::<P>();
+        let l = k * (y.approx_reciprocal_p::<P>() - Self::ONE).ln_p::<P>();
 
         // ((l + 2) - sqrt(l^2 + 4)) / 2l
         let a = l + Self::TWO;

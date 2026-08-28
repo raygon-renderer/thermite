@@ -112,7 +112,7 @@ fn reduces_to_chebyshev_t_at_minus_half_weights() {
         for &x in &XS {
             let v = D::splat(x);
             let jac = v.jacobi(D::splat(-0.5), D::splat(-0.5), n, 0).extract::<0>();
-            let cheb = v.chebyshev::<1, 8>(&coeffs).extract::<0>();
+            let cheb = v.chebyshev_n::<1, 8>(&coeffs).extract::<0>();
             let want = ratio * cheb;
             assert!(
                 (jac - want).abs() <= 1e-12 * want.abs().max(1.0),

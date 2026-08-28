@@ -30,10 +30,10 @@ fn close(name: &str, got: f64, want: f64, tol: f64) {
 }
 
 fn hm<const N: usize>(xs: [f64; N]) -> f64 {
-    D::harmonic_mean(xs.map(D::splat)).extract::<0>()
+    D::harmonic_mean_n(xs.map(D::splat)).extract::<0>()
 }
 fn isi<const N: usize>(xs: [f64; N]) -> f64 {
-    D::inv_sum_inv(xs.map(D::splat)).extract::<0>()
+    D::inv_sum_inv_n(xs.map(D::splat)).extract::<0>()
 }
 
 #[test]
@@ -79,7 +79,7 @@ fn matches_the_reference() {
     );
 
     // f32 too, on a range it can hold.
-    let got = F::harmonic_mean([1.0f32, 2.0, 4.0].map(F::splat)).extract::<0>() as f64;
+    let got = F::harmonic_mean_n([1.0f32, 2.0, 4.0].map(F::splat)).extract::<0>() as f64;
     close("f32 hm", got, 1.7142857142857142, 8.0 * f32::EPSILON as f64);
 }
 
@@ -179,7 +179,7 @@ fn lanes_stay_independent() {
     let a = [1.0, 0.0, 1e-320, f64::INFINITY];
     let b = [2.0, 3.0, 1.0, 4.0];
 
-    let got = D4::harmonic_mean([D4::new(a), D4::new(b)]);
+    let got = D4::harmonic_mean_n([D4::new(a), D4::new(b)]);
     for lane in 0..4 {
         assert_eq!(got.as_slice()[lane], hm([a[lane], b[lane]]), "lane {lane}");
     }
@@ -194,8 +194,8 @@ fn wide_backend_agrees_with_scalar() {
     let a = [1.0, 0.0, 1e-320, 6.0];
     let b = [2.0, 3.0, 1.0, 3.0];
 
-    let h = W::harmonic_mean([W::from_slice(&a), W::from_slice(&b)]).into_array();
-    let s = W::inv_sum_inv([W::from_slice(&a), W::from_slice(&b)]).into_array();
+    let h = W::harmonic_mean_n([W::from_slice(&a), W::from_slice(&b)]).into_array();
+    let s = W::inv_sum_inv_n([W::from_slice(&a), W::from_slice(&b)]).into_array();
 
     for lane in 0..4 {
         assert_eq!(h.as_slice()[lane], hm([a[lane], b[lane]]), "wide hm lane {lane}");

@@ -267,7 +267,7 @@ pub trait SpecializedCompensatedSpecialMath<E>: Sized {
             i += 1;
         }
 
-        // Stirling: (z - 1/2) ln z - z + ln(2pi)/2 + poly(1/z^2)/z
+        // Stirling: (z - 1/2) ln z - z + ln(2pi)/2 + poly_n(1/z^2)/z
         let w = one / (z * z);
         let poly = stirling_series::<Compensated<Self>>(w);
 
@@ -427,7 +427,7 @@ pub trait SpecializedCompensatedSpecialMath<E>: Sized {
         let ax = x.abs();
         let is_small = ax.cmp_le(one);
 
-        let p = Self::langevin_small_poly(x * x);
+        let p = Self::langevin_small_poly_n(x * x);
         let l_small = x * p;
         let mut dl = l_small.nmul_add(l_small, p.nmul_add(one + one, one));
         let mut l = if const { ONE_MINUS } { one - l_small } else { l_small };
@@ -462,7 +462,7 @@ pub trait SpecializedCompensatedSpecialMath<E>: Sized {
         let one = <Compensated<Self> as NumericVector>::ONE;
         let is_small = x.cmp_le(one);
 
-        let p = Self::langevin_small_poly(x * x);
+        let p = Self::langevin_small_poly_n(x * x);
         let l = x * p;
         let mut r = l - y;
         let mut dl = l.nmul_add(l, p.nmul_add(one + one, one));
@@ -479,7 +479,7 @@ pub trait SpecializedCompensatedSpecialMath<E>: Sized {
     /// Minimax fit of `L(x)/x` in `x^2` on `[0, 1]` at double-double (relative error
     /// `3e-36`, `crates/thermite-special/scripts/langevin_coeffs_dd.py`), Horner.
     #[inline(always)]
-    fn langevin_small_poly(t: Compensated<Self>) -> Compensated<Self>
+    fn langevin_small_poly_n(t: Compensated<Self>) -> Compensated<Self>
     where
         Compensated<Self>: CompensatedGammaOps,
     {

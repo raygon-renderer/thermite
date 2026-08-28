@@ -431,34 +431,70 @@ decl_math! {
             /// `const N: usize` so that a coefficient table can be supplied by a type that
             /// knows its own length only as an associated type. Literal call sites spell it
             /// [`GenericArray::from_array`].
-            fn poly_primal[N: ArrayLength][N](self: Self, coeffs: &GenericArray<Self::Primal, N>) -> Self;
+            fn poly_n_primal[N: ArrayLength][N](self: Self, coeffs: &GenericArray<Self::Primal, N>) -> Self;
 
             /// [`poly_rev`](Self::poly_rev) with the coefficients held in [`Primal`](Self::Primal) form.
             ///
-            /// Same trade as [`poly_primal`](Self::poly_primal) (the constants carry no
+            /// Same trade as [`poly_n_primal`](Self::poly_n_primal) (the constants carry no
             /// augmented fields to store or add), with the coefficients in reverse order.
-            fn poly_rev_primal[N: ArrayLength][N](self: Self, coeffs: &GenericArray<Self::Primal, N>) -> Self;
+            fn poly_rev_n_primal[N: ArrayLength][N](self: Self, coeffs: &GenericArray<Self::Primal, N>) -> Self;
+
+            /// [`poly_n_primal`](Self::poly_n_primal) over a runtime-length slice.
+            ///
+            /// A plain slice rather than a `GenericArray`, since the length is no longer
+            /// carried in the type, which is also why this one has no reason to reach for
+            /// `typenum`. Same primal-Horner step and the same saving on the addend. What
+            /// the runtime length costs is the unrolling and, for real vectors, the ILP
+            /// lowering, exactly as in [`poly`](Self::poly).
+            ///
+            /// The empty polynomial is `0`.
+            #[skip_dispatch] fn poly_primal[][](self: Self, coeffs: &[Self::Primal]) -> Self;
+
+            /// [`poly_rev_n_primal`](Self::poly_rev_n_primal) over a runtime-length slice.
+            ///
+            /// Same trade as [`poly_primal`](Self::poly_primal), coefficients descending.
+            #[skip_dispatch] fn poly_rev_primal[][](self: Self, coeffs: &[Self::Primal]) -> Self;
         }
 
         /// Computes the polynomial with the given coefficients at `self`.
         ///
         /// This will use fused multiply-add instructions where available for improved performance and accuracy, but
         /// falls back to standard operations if not.
-        #[skip_dispatch] fn poly[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+        ///
+        /// If you know the length of your coefficient array at compile time,
+        /// **strongly** consider using [`poly_n`](Self::poly_n) instead,
+        /// which can be optimized more aggressively.
+        #[skip_dispatch] fn poly[][](self: Self, coeffs: &[Self::Element]) -> Self;
 
         /// Computes the polynomial with the given coefficients at `self`, but with the coefficients in reverse order.
         ///
         /// This will use fused multiply-add instructions where available for improved performance and accuracy, but
         /// falls back to standard operations if not.
-        #[skip_dispatch] fn poly_rev[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
-
-        /// Computes the ratio of two polynomials at `self`, given the numerator and denominator coefficients.
         ///
-        /// Equivalent to `poly(numerator) / poly(denominator)`, but with improved numerical stability in some cases.
+        /// If you know the length of your coefficient array at compile time,
+        /// **strongly** consider using [`poly_rev_n`](Self::poly_rev_n) instead,
+        /// which can be optimized more aggressively.
+        #[skip_dispatch] fn poly_rev[][](self: Self, coeffs: &[Self::Element]) -> Self;
+
+        /// Computes the polynomial with the given coefficients at `self`.
         ///
         /// This will use fused multiply-add instructions where available for improved performance and accuracy, but
         /// falls back to standard operations if not.
-        #[skip_dispatch] fn poly_rational[const N: usize, const D: usize][N, D](
+        #[skip_dispatch] fn poly_n[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+
+        /// Computes the polynomial with the given coefficients at `self`, but with the coefficients in reverse order.
+        ///
+        /// This will use fused multiply-add instructions where available for improved performance and accuracy, but
+        /// falls back to standard operations if not.
+        #[skip_dispatch] fn poly_rev_n[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+
+        /// Computes the ratio of two polynomials at `self`, given the numerator and denominator coefficients.
+        ///
+        /// Equivalent to `poly_n(numerator) / poly_n(denominator)`, but with improved numerical stability in some cases.
+        ///
+        /// This will use fused multiply-add instructions where available for improved performance and accuracy, but
+        /// falls back to standard operations if not.
+        #[skip_dispatch] fn poly_rational_n[const N: usize, const D: usize][N, D](
             self: Self,
             numerator: &[Self::Element; N],
             denominator: &[Self::Element; D],
@@ -466,9 +502,14 @@ decl_math! {
 
         /// Returns the multiplicative inverse of `self`, which is `1 / self`.
         ///
+        /// `approx_` because the fast precision tiers take the hardware reciprocal
+        /// estimate (refined by one Newton step above `Worst`) where one exists. `Best`
+        /// and above, `Preserve` denormal policies, and backends without an estimate all
+        /// get the exact `1 / self`.
+        ///
         /// If using the policy version, you may select lower precision policies for extra performance,
         /// at the cost of accuracy.
-        fn reciprocal[][](self: Self) -> Self;
+        fn approx_reciprocal[][](self: Self) -> Self;
 
         /// Returns the result of dividing `self` by `divisor`, i.e., `self / divisor`.
         ///
@@ -476,6 +517,24 @@ decl_math! {
         /// optimized to use approximate reciprocal and multiplication for better
         /// performance, at the cost of accuracy.
         fn approx_div[][](self: Self, divisor: Self) -> Self;
+
+        /// Returns `$a/\sqrt{b}$`, spelled `a.approx_div_sqrt(b)`, as one kernel rather
+        /// than a divide bolted onto a square root.
+        ///
+        /// Reach for this wherever a quantity is normalized by a root: a direction
+        /// divided by its length, a value divided by a standard deviation, a weight
+        /// divided by `$\sqrt{n}$`. Writing `a / b.sqrt()` gets the same answer at the
+        /// top precision tier and a strictly worse one everywhere else, because the
+        /// separate spelling cannot use the hardware reciprocal-square-root estimate.
+        ///
+        /// Depending on the precision policy and available features this is either a
+        /// multiply by the hardware reciprocal-square-root estimate (refined by one Newton
+        /// step above the lowest tier), or an exact square root and divide. At `Best` and
+        /// above it is exactly `a / b.sqrt()`, since a hardware divide already returns that
+        /// correctly rounded and there is nothing left for the kernel to add.
+        ///
+        /// `$b = 0$` gives infinity and `$b < 0$` gives NaN, inherited from the root.
+        fn approx_div_sqrt[][](self: Self, denom: Self) -> Self;
 
         /// `$ab - cd$`, spelled `a.difference_of_products(b, c, d)`, evaluated so the
         /// two products cannot cancel catastrophically.
@@ -538,11 +597,22 @@ decl_math! {
         ///
         /// A zero anywhere in the input gives `0`, which is the limit rather than a special
         /// case. An infinite element simply contributes nothing.
-        fn harmonic_mean[const N: usize][N](values: [Self; N]) -> Self;
+        fn harmonic_mean_n[const N: usize][N](values: [Self; N]) -> Self;
+
+        /// [`harmonic_mean_n`](CoreMath::harmonic_mean_n) over a runtime-length slice.
+        ///
+        /// Same evaluation and same edge cases. The length simply is not a constant, so the
+        /// loops cannot unroll and the reduction is serial rather than log-depth. If you know
+        /// the count at compile time, prefer
+        /// [`harmonic_mean_n`](CoreMath::harmonic_mean_n).
+        ///
+        /// The mean of no values is `NaN` (`0/0`), matching the empty-average convention
+        /// rather than inventing a value.
+        #[skip_dispatch] fn harmonic_mean[][](values: &[Self]) -> Self;
 
         /// `$1 / \sum_i 1/x_i$`, the reciprocal of the sum of reciprocals of `N` values.
         ///
-        /// [`harmonic_mean`](CoreMath::harmonic_mean) without the `N`, and the quantity most
+        /// [`harmonic_mean_n`](CoreMath::harmonic_mean_n) without the `N`, and the quantity most
         /// physical "combine these" laws actually want: resistors in parallel, capacitors in
         /// series, spring compliances, the reduced mass `$m_1 m_2/(m_1+m_2)$` of a two-body
         /// problem, thermal contact conductances, and the effective conductivity of a layered
@@ -554,16 +624,25 @@ decl_math! {
         /// the harmonic mean of them is `$x$`.
         ///
         /// Same scaled evaluation and same edge cases as
-        /// [`harmonic_mean`](CoreMath::harmonic_mean).
-        fn inv_sum_inv[const N: usize][N](values: [Self; N]) -> Self;
+        /// [`harmonic_mean_n`](CoreMath::harmonic_mean_n).
+        fn inv_sum_inv_n[const N: usize][N](values: [Self; N]) -> Self;
+
+        /// [`inv_sum_inv_n`](CoreMath::inv_sum_inv_n) over a runtime-length slice.
+        ///
+        /// Same evaluation and same edge cases as
+        /// [`harmonic_mean`](CoreMath::harmonic_mean), with the same loss of unrolling. The
+        /// empty input gives `$1/0 =$` infinity, the identity of the parallel-combination
+        /// law this implements.
+        #[skip_dispatch] fn inv_sum_inv[][](values: &[Self]) -> Self;
 
         /// Returns the inverse square root of `self`, which is `1 / sqrt(self)`.
         ///
         /// If using the policy version, you may select lower precision policies for extra performance,
         /// at the cost of accuracy.
         fn inverse_sqrt[][](self: Self) -> Self;
+
         /// Returns `self` raised to the signed integer power of `e`.
-        fn powi[][](self: Self, e: i32) -> Self;
+        #[skip_dispatch] fn powi[][](self: Self, e: i32) -> Self;
 
         /// Returns `self` raised to the signed integer power of each element in `e`.
         fn powiv[][](self: Self, e: Self::Signed) -> Self;
@@ -846,6 +925,8 @@ decl_math! {
         fn log1pmx[][](self: Self) -> Self;
 
         /// Returns the logarithm of `self` with respect to the given `base`.
+        ///
+        /// This is simply a convenience method for `self.log2() / base.log2()`.
         fn log[][](self: Self, base: Self) -> Self;
 
         /// Returns the logarithm of `self` with respect to the given integer base `N`.
@@ -887,13 +968,18 @@ decl_math! {
         /// This is not higher performance than the naive implementation, but is more resistant to overflow and underflow.
         /// If using the worst precision policy, it becomes equivalent to the naive implementation.
         ///
-        /// Check out [`hypot_n`](SpatialMath::hypot_n) for a more general version that computes the hypotenuse of N values.
+        /// Check out [`hypot_n`](SpatialMath::hypot_n) for N values known at compile time,
+        /// and [`hypot_s`](SpatialMath::hypot_s) for a runtime-length slice.
         fn hypot[][](self: Self, other: Self) -> Self;
 
         /// Computes the Euclidean norm (hypotenuse) of N values, i.e., `$\sqrt{x_1^2 + x_2^2 + \dots + x_N^2}$`.
         ///
         /// This is typically higher performance than naively computing the sum of squares and then taking the square root,
         /// especially for larger N, and is more resistant to overflow and underflow when using average or higher precision policies.
+        ///
+        /// `N = 2` is written out as its own arm in every lowering, so
+        /// [`hypot`](SpatialMath::hypot) is this function at that length rather than a
+        /// separate kernel.
         fn hypot_n[const N: usize][N](values: [Self; N]) -> Self;
 
         /// Computes the inverse Euclidean norm (inverse hypotenuse) of N values, i.e., `$1/\sqrt{x_1^2 + x_2^2 + \dots + x_N^2}$`.
@@ -903,6 +989,22 @@ decl_math! {
         ///
         /// At lower precision policies, we can take advantage of fast approximate inverse square root implementations for better performance.
         fn inv_hypot_n[const N: usize][N](values: [Self; N]) -> Self;
+
+        /// [`hypot_n`](SpatialMath::hypot_n) over a runtime-length slice.
+        ///
+        /// Same scaling and the same range safety. The length simply is not a constant, so
+        /// the two passes cannot unroll and the `N = 1`/`N = 2` shortcuts are runtime
+        /// branches. If you know the count at compile time, prefer
+        /// [`hypot_n`](SpatialMath::hypot_n).
+        ///
+        /// The norm of no values is `0`.
+        #[skip_dispatch] fn hypot_s[][](values: &[Self]) -> Self;
+
+        /// [`inv_hypot_n`](SpatialMath::inv_hypot_n) over a runtime-length slice.
+        ///
+        /// Same trade as [`hypot_s`](SpatialMath::hypot_s). The inverse norm of no
+        /// values is infinity, matching `1/0`.
+        #[skip_dispatch] fn inv_hypot[][](values: &[Self]) -> Self;
 
         /// L1 Norm, or the "Manhattan" distance from the origin.
         ///
@@ -1008,6 +1110,17 @@ decl_math! {
         /// assert!((y.extract::<0>() - 1001.4076059644443).abs() < 1e-12);
         /// ```
         fn logsumexp_n[const N: usize][N](values: [Self; N]) -> Self;
+
+        /// [`logsumexp_n`](RealMath::logsumexp_n) over a runtime-length slice.
+        ///
+        /// Same shifted evaluation and the same overflow safety. The length simply is not a
+        /// constant, so the max and the sum are serial folds rather than tree reductions and
+        /// the `N = 1`/`N = 2` shortcuts are runtime branches. If you know the count at
+        /// compile time, prefer [`logsumexp_n`](RealMath::logsumexp_n).
+        ///
+        /// The empty input gives `-inf`, the identity of `logaddexp`, so folding this over
+        /// any partition of the inputs agrees.
+        #[skip_dispatch] fn logsumexp[][](values: &[Self]) -> Self;
 
         /// Returns `$\ln(e^{a} - e^{b})$` where `a = self` and `b = other`, computed in a
         /// numerically stable way that avoids overflow.

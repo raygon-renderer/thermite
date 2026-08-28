@@ -1,6 +1,6 @@
 //! `atan2` quadrant handling.
 //!
-//! REGRESSION (found 2026-08-15 by the thermite-interval ulp sweep, which
+//! REGRESSION (found by the thermite-interval ulp sweep, which
 //! measured "1.4e16 ulp error" against this function and turned out to be
 //! measuring the reference, not the kernel): the +-pi offset applied for
 //! `x < 0` had its SIGN chosen by the sign of `x` rather than of `y`, so every

@@ -581,7 +581,20 @@ decl_math! {
         /// Same range as [`hermite_function`](SpecialMath::hermite_function): the coefficients are
         /// pre-scaled by half of the Gaussian and the outer factor carries the other half, so the
         /// running Clenshaw values grow no faster than `$e^{x^2/4}$`.
-        #[skip_dispatch] fn hermite_function_series[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+        #[skip_dispatch] fn hermite_function_series_n[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+
+        /// [`hermite_function_series_n`](SpecialMath::hermite_function_series_n) over a
+        /// runtime-length coefficient slice.
+        ///
+        /// Same recurrence, same pre-scaling, same range. The length is the only difference,
+        /// and it costs real work rather than only unrolling: the recurrence coefficients
+        /// `$\sqrt{2/(k+1)}$` and `$\sqrt{k/(k+1)}$` fold to literals when `N` is a constant
+        /// and become per-step square roots when it is not. Prefer the const form when the
+        /// degree is known.
+        ///
+        /// An empty coefficient slice is `0`, where the const form rejects `N = 0` at compile
+        /// time.
+        #[skip_dispatch] fn hermite_function_series[][](self: Self, coeffs: &[Self::Element]) -> Self;
 
         /// Computes the generalized (associated) [Laguerre polynomial](https://en.wikipedia.org/wiki/Laguerre_polynomials)
         /// `$L_N^{(\alpha)}(x)$`, where `x` is `self` and `N` is the polynomial degree.
@@ -702,14 +715,31 @@ decl_math! {
         /// with `$l_k^{(\alpha)}$` as in [`laguerre_function`](SpecialMath::laguerre_function).
         /// Clenshaw's backward recurrence, same range as the single function; `N` is the
         /// coefficient count and `N = 0` is rejected.
-        #[skip_dispatch] fn laguerre_function_series[const N: usize][N](self: Self, alpha: Self, coeffs: &[Self::Element; N]) -> Self;
+        #[skip_dispatch] fn laguerre_function_series_n[const N: usize][N](self: Self, alpha: Self, coeffs: &[Self::Element; N]) -> Self;
+
+        /// [`laguerre_function_series_n`](SpecialMath::laguerre_function_series_n) over a
+        /// runtime-length coefficient slice.
+        ///
+        /// Same recurrence, same pre-scaling, same range. The per-step weights are computed
+        /// rather than folded, as in
+        /// [`hermite_function_series`](SpecialMath::hermite_function_series). An empty
+        /// coefficient slice is `0`.
+        #[skip_dispatch] fn laguerre_function_series[][](self: Self, alpha: Self, coeffs: &[Self::Element]) -> Self;
 
         /// [`laguerre_function_series`](SpecialMath::laguerre_function_series) at a scalar integer
         /// weight, in the same relation to it as
         /// [`laguerre_function_i`](SpecialMath::laguerre_function_i) is to
         /// [`laguerre_function`](SpecialMath::laguerre_function). See there for what the integer
         /// form buys.
-        #[skip_dispatch] fn laguerre_function_series_i[const N: usize][N](self: Self, alpha: i32, coeffs: &[Self::Element; N]) -> Self;
+        #[skip_dispatch] fn laguerre_function_series_i_n[const N: usize][N](self: Self, alpha: i32, coeffs: &[Self::Element; N]) -> Self;
+
+        /// [`laguerre_function_series_i_n`](SpecialMath::laguerre_function_series_i_n) over a
+        /// runtime-length coefficient slice.
+        ///
+        /// The `_n` is the coefficient count and the `_i` is the integer weight, in that
+        /// order because the length is the newer axis, and both mean what they do everywhere else.
+        /// An empty coefficient slice is `0`.
+        #[skip_dispatch] fn laguerre_function_series_i[][](self: Self, alpha: i32, coeffs: &[Self::Element]) -> Self;
 
         /// Evaluates a finite series of [Chebyshev polynomials](https://en.wikipedia.org/wiki/Chebyshev_polynomials)
         /// of the `K`-th kind at `x = self`:
@@ -779,7 +809,17 @@ decl_math! {
         ///
         /// `Complex` and the composite arithmetics keep the plain recurrence at every policy,
         /// since Reinsch needs a real `copysign` and a meaningful nearest endpoint.
-        #[skip_dispatch] fn chebyshev[const K: usize, const N: usize][K, N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+        #[skip_dispatch] fn chebyshev_n[const K: usize, const N: usize][K, N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+
+        /// [`chebyshev_n`](SpecialMath::chebyshev_n) over a runtime-length coefficient slice.
+        ///
+        /// `K` stays a const generic, since it selects *which* Chebyshev kind, not how many
+        /// coefficients, and there are exactly four. Only the length becomes dynamic.
+        ///
+        /// Same recurrence and the same `Best`-precision Reinsch form near `$x = \pm 1$`; what
+        /// the runtime length costs is the unrolling and the folded `coeffs` indices. An empty
+        /// coefficient slice is `0`.
+        #[skip_dispatch] fn chebyshev[const K: usize][K](self: Self, coeffs: &[Self::Element]) -> Self;
 
         /// Computes the Gaussian function with amplitude `a` and standard deviation `c`, defined as `$a\, e^{-\frac{1}{2}(x/c)^2}$`.
         ///
@@ -831,7 +871,16 @@ decl_math! {
         /// Plain Clenshaw at every policy: the endpoint cancellation that `chebyshev` treats
         /// under `Best` precision exists here too (`$P_n(1) = 1$` for every `n`), but its
         /// Reinsch-style rewrite for the Legendre ratios has not been derived or measured.
-        #[skip_dispatch] fn legendre_series[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+        #[skip_dispatch] fn legendre_series_n[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+
+        /// [`legendre_series_n`](SpecialMath::legendre_series_n) over a runtime-length
+        /// coefficient slice.
+        ///
+        /// Plain Clenshaw here too. The recurrence ratios `$(2k+1)/(k+1)$` and `$k/(k+1)$` are
+        /// literals only when `N` is a constant, so this pays a division per step where the
+        /// const form pays none, the widest const-versus-slice gap of the series family.
+        /// An empty coefficient slice is `0`.
+        #[skip_dispatch] fn legendre_series[][](self: Self, coeffs: &[Self::Element]) -> Self;
 
         /// Computes the [Zernike](https://en.wikipedia.org/wiki/Zernike_polynomials) radial
         /// polynomial `$R_n^m(\rho)$`, where `rho` is `self`.

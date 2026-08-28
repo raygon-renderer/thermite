@@ -154,7 +154,7 @@ instruction count. LLVM can't do these (FP is non-associative without fast-math)
 - **Hoist work independent of the latest-arriving input** so the result is one FMA
   past it.
 - **Hoist reciprocals**: compute `1/x` once, multiply -- division latency dwarfs
-  multiply. Share one `reciprocal_p`/`inverse_sqrt_p` between code paths that divide
+  multiply. Share one `approx_reciprocal_p`/`inverse_sqrt_p` between code paths that divide
   by the same root.
 - **Two quotients, one divide**: `(x/p, y/q) = (x*q*r, y*p*r)` with `r = 1/(p*q)`.
   Any function returning a pair of ratios should pay one division, and a constant
@@ -207,7 +207,7 @@ The enemy is **catastrophic cancellation**.
   the converged values.
 - Switch to a small-argument series where a closed form cancels, with a branchless
   `select` crossover.
-- Accuracy is **policy-gated**: `reciprocal_p`/`inverse_sqrt_p`/transcendentals are
+- Accuracy is **policy-gated**: `approx_reciprocal_p`/`inverse_sqrt_p`/transcendentals are
   exact under `Precision`, approximate under perf policies. If a kernel needs one
   exact, say so and test it under the precision policy.
 

@@ -414,7 +414,7 @@ macro_rules! math_suite {
                     |e: f32| if e.is_finite() { e % 4.0 } else { 2.0 }
                 );
 
-                // --- additional transcendentals (this session) ---
+                // --- additional transcendentals ---
                 let pidom = |x: f32| if x.is_finite() { x % 30.0 } else { 1.0 };
                 let tanpidom = |x: f32| if x.is_finite() { x % 0.4 } else { 0.1 }; // away from ±0.5 poles
                 math_unary!(
@@ -809,7 +809,7 @@ macro_rules! math_suite {
                     |e: f64| if e.is_finite() { e % 4.0 } else { 2.0 }
                 );
 
-                // --- additional transcendentals (this session) ---
+                // --- additional transcendentals ---
                 let pidom = |x: f64| if x.is_finite() { x % 30.0 } else { 1.0 };
                 let tanpidom = |x: f64| if x.is_finite() { x % 0.4 } else { 0.1 }; // away from ±0.5 poles
                 math_unary!(
@@ -1043,6 +1043,50 @@ macro_rules! math_unary_p {
     }};
 }
 
+/// Like `math_binary!` but calls a policy variant `<reg>.$pm::<$policy>(other)`.
+///
+/// **The absence of this macro shipped two bugs.** The policy sweep below covered unary
+/// and tuple-returning functions only, so `atan2` and `hypot`, the two binary math
+/// functions in the tree, were tested at `DefaultPolicy` and nowhere else. Both turned out
+/// to be broken at exactly the tiers nothing exercised: `atan2` divided `max/min` instead
+/// of `min/max` below `Average` and returned the complement of the answer, and `hypot`
+/// used a naive sum of squares at `Worst` that overflowed above ~1e19 and flushed to zero
+/// below ~1e-19.
+///
+/// Any new N-argument shape needs its own `_p` variant here at the same time, or it
+/// inherits the same blind spot.
+macro_rules! math_binary_p {
+    ($label:expr, $reg:ty, $elem:ty, $pm:ident, $policy:ty, $oracle:expr, $tol:expr, $da:expr, $db:expr) => {{
+        let mut rng = harness::rng();
+        let lanes = <Vector<$reg> as GenericVector>::LANES;
+        let da: fn($elem) -> $elem = $da;
+        let db: fn($elem) -> $elem = $db;
+        let oracle: fn($elem, $elem) -> $elem = $oracle;
+        let xs = harness::corpus::<$elem>(lanes, &mut rng);
+        let ys = harness::corpus::<$elem>(lanes, &mut rng);
+        for (rx, ry) in xs.iter().zip(ys.iter()) {
+            let a: Vec<$elem> = rx.iter().map(|&x| da(x)).collect();
+            let b: Vec<$elem> = ry.iter().map(|&y| db(y)).collect();
+            let got = Vector::<$reg>(harness::make_array::<$reg>(&a))
+                .$pm::<$policy>(Vector::<$reg>(harness::make_array::<$reg>(&b)))
+                .into_array();
+            for ((&g, &x), &y) in got.iter().zip(a.iter()).zip(b.iter()) {
+                let want = oracle(x, y);
+                if !close(g as f64, want as f64, $tol) {
+                    panic!(
+                        "{} [{} <{}>]: a={x:?} b={y:?}
+  got  = {g:?}
+  want = {want:?} (libm)",
+                        $label,
+                        stringify!($pm),
+                        stringify!($policy)
+                    );
+                }
+            }
+        }
+    }};
+}
+
 /// Like `math_tuple!` but calls a policy variant `<reg>.$pm::<$policy>()`.
 macro_rules! math_tuple_p {
     ($label:expr, $reg:ty, $elem:ty, $pm:ident, $policy:ty, $o0:expr, $o1:expr, $tol:expr, $domain:expr) => {{
@@ -1237,7 +1281,7 @@ macro_rules! f32_policy_fns {
             $tol,
             small
         );
-        math_unary_p!($bl, $reg, f32, reciprocal_p, $policy, |x: f32| 1.0 / x, $tol, recipdom);
+        math_unary_p!($bl, $reg, f32, approx_reciprocal_p, $policy, |x: f32| 1.0 / x, $tol, recipdom);
         math_tuple_p!($bl, $reg, f32, sin_cos_p, $policy, libm::sinf, libm::cosf, $tol, ang);
         math_tuple_p!(
             $bl,
@@ -1282,6 +1326,67 @@ macro_rules! f32_policy_fns {
             |x: f32| libm::logf(x) / libm::logf(3.0),
             $tol,
             pos
+        );
+        // The two binary math functions, at every tier. See `math_binary_p!` for why
+        // these were missing. `safe` keeps both operands away from the denormal band,
+        // matching the default suite's treatment.
+        let safe = |x: f32| {
+            if !x.is_finite() || x == 0.0 {
+                1.0
+            } else if x.abs() < 1e-30 {
+                x.signum() * 1e-30
+            } else {
+                x
+            }
+        };
+        math_binary_p!($bl, $reg, f32, atan2_p, $policy, libm::atan2f, $tol, safe, safe);
+        math_binary_p!($bl, $reg, f32, hypot_p, $policy, libm::hypotf, $tol, safe, safe);
+        // Added after an audit found 34 functions with `P::POLICY.precision`
+        // branches and no tier-specific test at all. These four are the ones with a
+        // direct libm oracle. `tan` in particular has its own float32 Medium branch, the
+        // same shape that made `atan2` wrong.
+        // `tan` gets its OWN domain, not the shared `ang`. It has poles, so a coarse
+        // range reduction produces an unbounded relative error there and the failure
+        // measures conditioning rather than the kernel: measured
+        // `tan(532.5) = -32896` against libm's -22115.8 at `UltraPerformance`, which is
+        // an ordinary argument error amplified by proximity to a pole. Restricted to
+        // (-0.7, 0.7), well inside the first branch, which is what a smoke gate wants.
+        let tanang = |x: f32| if x.is_finite() { (x % 1.4) * 0.5 } else { 0.3 };
+        math_unary_p!($bl, $reg, f32, tan_p, $policy, libm::tanf, $tol, tanang);
+        math_unary_p!($bl, $reg, f32, log10_p, $policy, libm::log10f, $tol, pos);
+        math_unary_p!(
+            $bl,
+            $reg,
+            f32,
+            inverse_sqrt_p,
+            $policy,
+            |x: f32| 1.0 / libm::sqrtf(x),
+            $tol,
+            pos
+        );
+        // Both operands kept well inside range. The two tiers with
+        // `check_overflow = false` SATURATE near MAX instead of returning infinity, by
+        // design, so a domain that reaches the overflow boundary tests that documented
+        // trade rather than the kernel. Before this was narrowed,
+        // `powf(FLT_MAX, 2.997)` gave 1.70e38 where libm gives `inf`.
+        let powbase = |x: f32| {
+            if x.is_finite() && x != 0.0 {
+                (x.abs() % 1e3) + 1e-3
+            } else {
+                2.0
+            }
+        };
+        let powexp = |x: f32| if x.is_finite() { (x % 4.0).clamp(-4.0, 4.0) } else { 1.0 };
+        math_binary_p!(
+            $bl,
+            $reg,
+            f32,
+            powf_p,
+            $policy,
+            |a: f32, b: f32| libm::powf(a, b),
+            $tol,
+            powbase,
+            powexp
         );
     }};
 }
@@ -1409,7 +1514,7 @@ macro_rules! f64_policy_fns {
             $tol,
             |x: f64| if x.is_finite() { x % 200.0 } else { 1.0 }
         );
-        math_unary_p!($bl, $reg, f64, reciprocal_p, $policy, |x: f64| 1.0 / x, $tol, recipdom);
+        math_unary_p!($bl, $reg, f64, approx_reciprocal_p, $policy, |x: f64| 1.0 / x, $tol, recipdom);
         math_tuple_p!($bl, $reg, f64, sin_cos_p, $policy, libm::sin, libm::cos, $tol, ang);
         math_tuple_p!(
             $bl,
@@ -1454,6 +1559,62 @@ macro_rules! f64_policy_fns {
             |x: f64| libm::log(x) / libm::log(3.0),
             $tol,
             pos
+        );
+        // See the f32 block. Same two functions, same reason.
+        let safe = |x: f64| {
+            if !x.is_finite() || x == 0.0 {
+                1.0
+            } else if x.abs() < 1e-250 {
+                x.signum() * 1e-250
+            } else {
+                x
+            }
+        };
+        math_binary_p!($bl, $reg, f64, atan2_p, $policy, libm::atan2, $tol, safe, safe);
+        math_binary_p!($bl, $reg, f64, hypot_p, $policy, libm::hypot, $tol, safe, safe);
+        // See the f32 block.
+        // `tan` gets its OWN domain, not the shared `ang`. It has poles, so a coarse
+        // range reduction produces an unbounded relative error there and the failure
+        // measures conditioning rather than the kernel: measured
+        // `tan(532.5) = -32896` against libm's -22115.8 at `UltraPerformance`, which is
+        // an ordinary argument error amplified by proximity to a pole. Restricted to
+        // (-0.7, 0.7), well inside the first branch, which is what a smoke gate wants.
+        let tanang = |x: f64| if x.is_finite() { (x % 1.4) * 0.5 } else { 0.3 };
+        math_unary_p!($bl, $reg, f64, tan_p, $policy, libm::tan, $tol, tanang);
+        math_unary_p!($bl, $reg, f64, log10_p, $policy, libm::log10, $tol, pos);
+        math_unary_p!(
+            $bl,
+            $reg,
+            f64,
+            inverse_sqrt_p,
+            $policy,
+            |x: f64| 1.0 / libm::sqrt(x),
+            $tol,
+            pos
+        );
+        // Both operands kept well inside range. The two tiers with
+        // `check_overflow = false` SATURATE near MAX instead of returning infinity, by
+        // design, so a domain that reaches the overflow boundary tests that documented
+        // trade rather than the kernel. Before this was narrowed,
+        // `powf(FLT_MAX, 2.997)` gave 1.70e38 where libm gives `inf`.
+        let powbase = |x: f64| {
+            if x.is_finite() && x != 0.0 {
+                (x.abs() % 1e3) + 1e-3
+            } else {
+                2.0
+            }
+        };
+        let powexp = |x: f64| if x.is_finite() { (x % 4.0).clamp(-4.0, 4.0) } else { 1.0 };
+        math_binary_p!(
+            $bl,
+            $reg,
+            f64,
+            powf_p,
+            $policy,
+            |a: f64, b: f64| libm::pow(a, b),
+            $tol,
+            powbase,
+            powexp
         );
     }};
 }

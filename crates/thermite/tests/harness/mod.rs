@@ -438,14 +438,8 @@ macro_rules! diff_varshift {
             let sh: Vec<UE> = (0..lanes).map(|_| rng.random::<UE>() % bits).collect();
             let ut_sh = $crate::harness::make_array::<UUT>(&sh);
             let rf_sh = $crate::harness::make_array::<URF>(&sh);
-            let got = $crate::harness::read::<$ut>(&<$ut>::$method(
-                $crate::harness::make_array::<$ut>(&input),
-                ut_sh,
-            ));
-            let want = $crate::harness::read::<$rf>(&<$rf>::$method(
-                $crate::harness::make_array::<$rf>(&input),
-                rf_sh,
-            ));
+            let got = $crate::harness::read::<$ut>(&<$ut>::$method($crate::harness::make_array::<$ut>(&input), ut_sh));
+            let want = $crate::harness::read::<$rf>(&<$rf>::$method($crate::harness::make_array::<$rf>(&input), rf_sh));
             $crate::harness::assert_lanes_eq(
                 concat!($label, " [", stringify!($method), "]"),
                 &[input.as_slice()],

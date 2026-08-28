@@ -200,8 +200,8 @@ mod wide {
 fn harmonic_mean_and_inv_sum_inv() {
     use thermite::math::CoreMath;
 
-    let hm = C::harmonic_mean([c(1.0), c(2.0), c(4.0)]);
-    let si = C::inv_sum_inv([c(1.0), c(2.0), c(4.0)]);
+    let hm = C::harmonic_mean_n([c(1.0), c(2.0), c(4.0)]);
+    let si = C::inv_sum_inv_n([c(1.0), c(2.0), c(4.0)]);
 
     // 3/(1 + 1/2 + 1/4) = 12/7, and a seventh is where a double-double should earn its keep.
     let want_hm = 12.0 / 7.0;
@@ -214,8 +214,8 @@ fn harmonic_mean_and_inv_sum_inv() {
 
     // The factor of N, the identity that separates the two functions.
     let x = 3.0;
-    let hm = C::harmonic_mean([c(x), c(x), c(x)]);
-    let si = C::inv_sum_inv([c(x), c(x), c(x)]);
+    let hm = C::harmonic_mean_n([c(x), c(x), c(x)]);
+    let si = C::inv_sum_inv_n([c(x), c(x), c(x)]);
     assert!((hm.value().extract::<0>() - x).abs() < 1e-15);
     assert!((si.value().extract::<0>() - x / 3.0).abs() < 1e-15);
 
@@ -225,7 +225,7 @@ fn harmonic_mean_and_inv_sum_inv() {
     // `inf * 0 = NaN`, and the error term poisons the result from there. Same shape as
     // `Complex`, for a different reason, and inherited from the arithmetic rather than
     // introduced here.
-    let hz = C::harmonic_mean([c(0.0), c(1.0)]);
+    let hz = C::harmonic_mean_n([c(0.0), c(1.0)]);
     assert!(
         hz.value().extract::<0>().is_nan(),
         "a zero element gives NaN on Compensated"
@@ -237,7 +237,7 @@ fn harmonic_mean_and_inv_sum_inv() {
     // The compensated part should be carrying real information, not just tracking the f64
     // result: recomputing in plain f64 and comparing to the double-double value shows the
     // low word is doing something.
-    let hm = C::harmonic_mean([c(1.0), c(3.0), c(7.0)]);
+    let hm = C::harmonic_mean_n([c(1.0), c(3.0), c(7.0)]);
     let plain = 3.0 / (1.0 + 1.0 / 3.0 + 1.0 / 7.0);
     assert!(
         (hm.value().extract::<0>() - plain).abs() < 1e-14,

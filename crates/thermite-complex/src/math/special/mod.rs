@@ -271,7 +271,7 @@ where
     /// default itself falls back to it at lower precision policies.
     #[inline(always)]
     fn logistic_sigmoid<P: Policy>(self) -> Self {
-        (Self::ONE + (-self).exp_p::<P>()).reciprocal_p::<P>()
+        (Self::ONE + (-self).exp_p::<P>()).approx_reciprocal_p::<P>()
     }
 
     /// `$\frac{1}{k}\ln(1 + e^{kz})$`
@@ -478,7 +478,7 @@ where
     let gh = V::from_primal(l.g) - V::HALF;
     let zgh = Complex::new(w.re + gh, w.im);
 
-    let lanczos = w.poly_rev_primal_p::<P, _>(&l.p_rev) / w.poly_rev_primal_p::<P, _>(&l.q_rev);
+    let lanczos = w.poly_rev_n_primal_p::<P, _>(&l.p_rev) / w.poly_rev_n_primal_p::<P, _>(&l.q_rev);
 
     // zgh^(w - 1/2) * e^(-zgh) * lanczos_sum(w), with the two exponentials folded into
     // one: exp((w - 1/2) ln(zgh) - zgh).
@@ -523,7 +523,7 @@ where
     let b = Complex::new(w.re - V::HALF, w.im);
     let a = Complex::new(b.re + V::from_primal(l.g), b.im).ln_p::<P>() - Complex::ONE;
 
-    let s = w.poly_primal_p::<P, _>(&l.p_expg_scaled) / w.poly_primal_p::<P, _>(&l.q);
+    let s = w.poly_n_primal_p::<P, _>(&l.p_expg_scaled) / w.poly_n_primal_p::<P, _>(&l.q);
 
     let res = a * b + s.ln_p::<P>();
 
@@ -572,7 +572,7 @@ where
     let xm1 = w - Complex::ONE;
     let u = (xm1 * xm1).finv_p::<P>();
 
-    let psi = xm1.ln_p::<P>() + (xm1 + xm1).finv_p::<P>() - u * u.poly_primal_p::<P, _>(&p_large);
+    let psi = xm1.ln_p::<P>() + (xm1 + xm1).finv_p::<P>() - u * u.poly_n_primal_p::<P, _>(&p_large);
 
     let total = acc + psi;
 

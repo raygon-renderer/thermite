@@ -74,6 +74,8 @@ where
             let mut k = j.cmp_lt(zf) & is_int;
 
             while k.any() {
+                V::_loop_hint();
+
                 int_res = k.select(int_res * j, int_res);
                 j += V::ONE;
                 k = j.cmp_lt(zf) & is_int;
@@ -90,7 +92,7 @@ where
     let gh = V::splat(l.g) - V::HALF;
 
     // Uses the leading-term-first (reversed) Lanczos arrays - see `Lanczos`.
-    let lanczos_sum = z.poly_rev_p::<P, _>(&l.p_rev) / z.poly_rev_p::<P, _>(&l.q_rev);
+    let lanczos_sum = z.poly_rev_n_p::<P, _>(&l.p_rev) / z.poly_rev_n_p::<P, _>(&l.q_rev);
 
     let zgh = z + gh;
     let lzgh = zgh.ln_p::<P>();
@@ -108,12 +110,36 @@ where
         lanczos_sum * (-zgh).exp_p::<P>()
     };
 
-    let normal_res = very_large.select(h * h, h) * denom;
+    // ASSOCIATION IS LOAD-BEARING. `h` is the half-exponent power precisely so that
+    // `zgh^(z - 1/2)` never forms as one value, and `h * h` forms it anyway: at
+    // z = 142.75 (f64) that is 10^308.8, an overflow to +inf, and `denom` (~1e-64,
+    // which would have brought it back into range) arrives too late to help. Fold
+    // `denom` in BETWEEN the two halves. Same instruction count as `(h * h) * denom`.
+    let hd = h * denom;
+    let mut normal_res = very_large.select(hd * h, hd);
+
+    if const { P::POLICY.check_overflow } {
+        // Past `int_cap` the answer exceeds the format, and the arithmetic above cannot
+        // say so on its own: `h` overflows to `inf` while `denom` underflows to 0, and
+        // `inf * 0` is NaN. Measured before this guard: `tgamma(1e30)` and `tgamma(inf)`
+        // returned **NaN**, as did everything above ~300 (f64) and ~100 (f32).
+        //
+        // `int_cap` is 172 / 36, the first integer whose factorial overflows, and the
+        // true overflow points are 171.624 and 35.040, so this cannot clip a finite
+        // result. The interval between is handled by the arithmetic, which reaches `inf`
+        // there without help.
+        //
+        // Correct for the reflected lanes too, and not by accident: a reflected result is
+        // `-pi / res`, so driving `res` to infinity gives -0.0, which is the right
+        // saturation for `Gamma` of a large negative non-integer. A NaN input compares
+        // false and passes through untouched.
+        normal_res = z.cmp_ge(V::splat(int_cap)).select(V::INFINITY, normal_res);
+    }
 
     // Tiny
     if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
         let is_tiny = z.cmp_lt(V::SQRT_EPSILON);
-        let tiny_res = z.reciprocal_p::<P>() - V::EULER_GAMMA;
+        let tiny_res = z.approx_reciprocal_p::<P>() - V::EULER_GAMMA;
         res *= is_tiny.select(tiny_res, normal_res);
     } else {
         res *= normal_res;
@@ -169,7 +195,7 @@ where
     let b = z - V::HALF;
     let g = V::splat(l.g);
 
-    let mut lanczos_sum = z.poly_rational_p::<P, _, _>(&l.p_expg_scaled, &l.q);
+    let mut lanczos_sum = z.poly_rational_n_p::<P, _, _>(&l.p_expg_scaled, &l.q);
 
     // Full A term
     let mut a = (b + g).ln_p::<P>() - V::ONE;
@@ -179,7 +205,7 @@ where
         let is_not_tiny = z.cmp_ge(V::SQRT_EPSILON);
 
         // shove the tiny result into the log down below
-        lanczos_sum = is_not_tiny.select(lanczos_sum, z.reciprocal_p::<P>() - V::EULER_GAMMA);
+        lanczos_sum = is_not_tiny.select(lanczos_sum, z.approx_reciprocal_p::<P>() - V::EULER_GAMMA);
 
         // force multiplier to zero for tiny case, allowing the modified
         // lanczos sum and ln(t) to be combined for cheap
@@ -222,8 +248,8 @@ where
     // if a < b then swap
     let (a, b) = (a.max(b), a.min(b));
 
-    let mut result = a.poly_rational_p::<P, _, _>(&l.p_expg_scaled, &l.q)
-        * (b.poly_rational_p::<P, _, _>(&l.p_expg_scaled, &l.q) / c.poly_rational_p::<P, _, _>(&l.p_expg_scaled, &l.q));
+    let mut result = a.poly_rational_n_p::<P, _, _>(&l.p_expg_scaled, &l.q)
+        * (b.poly_rational_n_p::<P, _, _>(&l.p_expg_scaled, &l.q) / c.poly_rational_n_p::<P, _, _>(&l.p_expg_scaled, &l.q));
 
     let gh = V::splat(l.g) - V::HALF;
 

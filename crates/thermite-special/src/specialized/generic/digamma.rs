@@ -62,12 +62,14 @@ where
     // lane, so one loop handles both with a single division per iteration.
     let mut active = (x.cmp_gt(V::TWO) | x.cmp_lt(V::ONE)) & !large;
     while active.any() {
+        V::_loop_hint();
+
         // sign(x-1) is +1 above the interval (walk down: x -= 1, add +1/(x-1)) and
         // -1 below it (walk up: x += 1, add -1/x). The reciprocal point is the smaller
         // of {x, x-sign}: x-1 when walking down, x when walking up.
         let sign = (x - V::ONE).signum();
         let xs = x.sub_c(active, sign); // step toward [1, 2]; inactive lanes keep x
-        let term = sign * x.min(xs).reciprocal_p::<P>();
+        let term = sign * x.min(xs).approx_reciprocal_p::<P>();
         result = result.add_c(active, term);
         x = xs;
         active = (x.cmp_gt(V::TWO) | x.cmp_lt(V::ONE)) & !large;
@@ -84,15 +86,15 @@ where
         g -= V::splat(t.roots[i]);
         i += 1;
     }
-    let r = xm1.poly_p::<P, _>(&t.p_12) / xm1.poly_p::<P, _>(&t.q_12);
+    let r = xm1.poly_n_p::<P, _>(&t.p_12) / xm1.poly_n_p::<P, _>(&t.q_12);
     let rational = g * (V::splat(t.y) + r);
 
     // --- Asymptotic expansion for x >= 10 (large lanes) ---
     // ln(x-1) + 1/(2(x-1)) - z*P(z), with the trailing product fused into an FMA.
-    let z = (xm1 * xm1).reciprocal_p::<P>();
+    let z = (xm1 * xm1).approx_reciprocal_p::<P>();
     let asymptotic = z.nmul_adde(
-        z.poly_p::<P, _>(&t.p_large),
-        xm1.ln_p::<P>() + (xm1 + xm1).reciprocal_p::<P>(),
+        z.poly_n_p::<P, _>(&t.p_large),
+        xm1.ln_p::<P>() + (xm1 + xm1).approx_reciprocal_p::<P>(),
     );
 
     // both paths share the accumulated recurrence term

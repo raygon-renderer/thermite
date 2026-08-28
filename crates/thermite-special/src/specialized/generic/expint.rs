@@ -297,6 +297,8 @@ where
     let mut i = 1u32;
 
     while i <= CF_MAX_ITER {
+        V::_loop_hint();
+
         // a_i = -i(n + i - 1)
         let a = V::splat(E::from_int(
             -(i as thermite::LargeInt) * (n_large - 1 + i as thermite::LargeInt),
@@ -361,7 +363,7 @@ where
     if const { N == 0 } {
         let mut result = x_ex;
         // E_{-1}(x) = e^-x (1 + 1/x) / x
-        let mut prev = x_ex * (V::ONE + x.reciprocal_p::<P>());
+        let mut prev = x_ex * (V::ONE + x.approx_reciprocal_p::<P>());
 
         if const { P::POLICY.check_overflow } {
             let x_is_zero = x.is_zero();
@@ -378,17 +380,17 @@ where
 
     let is_large = x.cmp_gt(V::ONE);
 
-    let inv_x = x.reciprocal_p::<P>();
+    let inv_x = x.approx_reciprocal_p::<P>();
 
     // Coefficients from Boost.Math expint_1_rational<double> (John Maddock, BSL-1.0)
     let mut e_n = x
-        .poly_rev_p::<P, _>(&E::SMALL_N)
-        .approx_div_p::<P>(x.poly_rev_p::<P, _>(&E::SMALL_D));
+        .poly_rev_n_p::<P, _>(&E::SMALL_N)
+        .approx_div_p::<P>(x.poly_rev_n_p::<P, _>(&E::SMALL_D));
 
     // Coefficients from Boost.Math expint_1_rational<double> (John Maddock, BSL-1.0)
     let large_e1 = inv_x
-        .poly_rev_p::<P, _>(&E::LARGE_N)
-        .approx_div_p::<P>(inv_x.poly_rev_p::<P, _>(&E::LARGE_D));
+        .poly_rev_n_p::<P, _>(&E::LARGE_N)
+        .approx_div_p::<P>(inv_x.poly_rev_n_p::<P, _>(&E::LARGE_D));
 
     // Equation and constant from Boost.Math expint_1_rational<double> (John Maddock, BSL-1.0)
     e_n += x - x.ln_p::<P>() - V::splat(E::ASYMPTOTIC_CONST);

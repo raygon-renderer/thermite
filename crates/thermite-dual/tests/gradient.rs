@@ -306,6 +306,83 @@ fn hypot_gradient_at_origin_is_finite() {
     }
 }
 
+/// The slice-taking `hypot_s`/`inv_hypot` are a second implementation of the analytic
+/// gradient, so both of the const form's properties have to be pinned on them separately:
+/// the ordinary gradient, and the origin guard.
+///
+/// Without the override these route through the trait default, which is a dual square, a
+/// dual sum and a dual sqrt, correct away from the origin and `0/0` at it.
+#[test]
+fn slice_hypot_gradient_matches_the_const_form() {
+    let x = D::variable(V::splat(3.0), 0);
+    let y = D::variable(V::splat(4.0), 1);
+
+    // h = 5; dh/dx = x/h = 0.6, dh/dy = y/h = 0.8.
+    let h = D::hypot_s(&[x, y]);
+    assert!(close(h.re.extract::<0>(), 5.0, 1e-12));
+    assert!(close(h.dual[0].extract::<0>(), 0.6, 1e-12));
+    assert!(close(h.dual[1].extract::<0>(), 0.8, 1e-12));
+
+    // ih = 1/5; d(1/h)/dx = -x/h^3 = -3/125, and -4/125 for y.
+    let ih = D::inv_hypot(&[x, y]);
+    assert!(close(ih.re.extract::<0>(), 0.2, 1e-12));
+    assert!(close(ih.dual[0].extract::<0>(), -3.0 / 125.0, 1e-12));
+    assert!(close(ih.dual[1].extract::<0>(), -4.0 / 125.0, 1e-12));
+
+    // Agreement with the const form it mirrors, at a length the const form can also take.
+    let hn = D::hypot_n([x, y]);
+    assert!(close(h.re.extract::<0>(), hn.re.extract::<0>(), 1e-15));
+    for k in 0..2 {
+        assert!(close(h.dual[k].extract::<0>(), hn.dual[k].extract::<0>(), 1e-15));
+    }
+}
+
+#[test]
+fn slice_hypot_gradient_at_origin_is_finite() {
+    let x = D::variable(V::splat(0.0), 0);
+    let y = D::variable(V::splat(0.0), 1);
+
+    let h = D::hypot_s(&[x, y]);
+    assert!(close(h.re.extract::<0>(), 0.0, 1e-12));
+
+    let ih = D::inv_hypot(&[x, y]);
+    assert!(ih.re.extract::<0>().is_infinite(), "1/0 is the norm's inverse at the origin");
+
+    for k in 0..2 {
+        let d = h.dual[k].extract::<0>();
+        assert!(!d.is_nan(), "hypot_s gradient at origin was NaN (k={k})");
+        assert!(close(d, 0.0, 1e-12), "hypot_s gradient at origin = {d}");
+
+        let d = ih.dual[k].extract::<0>();
+        assert!(!d.is_nan(), "inv_hypot gradient at origin was NaN (k={k})");
+        assert!(close(d, 0.0, 1e-12), "inv_hypot gradient at origin = {d}");
+    }
+}
+
+/// Longer than any const form here, and the gradient is still the analytic one: for `n`
+/// equal components `v`, `||v|| = v sqrt(n)` and each partial is `1/sqrt(n)`.
+#[test]
+fn slice_hypot_gradient_over_a_long_slice() {
+    let vars = [D::variable(V::splat(2.0), 0), D::variable(V::splat(2.0), 1)];
+
+    for n in [3usize, 8, 9, 65] {
+        let arr: Vec<D> = (0..n).map(|i| vars[i % 2]).collect();
+        let h = D::hypot_s(&arr);
+
+        let want = 2.0 * (n as f64).sqrt();
+        assert!(close(h.re.extract::<0>(), want, 1e-12), "n = {n}");
+
+        // Each variable appears in ceil(n/2) or floor(n/2) terms, and every term is 2, so
+        // d||v||/dx_k = (count_k * 2) / ||v||.
+        for k in 0..2 {
+            let count = (n + 1 - k) / 2;
+            let want = (count as f64 * 2.0) / (2.0 * (n as f64).sqrt());
+            let got = h.dual[k].extract::<0>();
+            assert!(close(got, want, 1e-12), "n = {n}, k = {k}: {got} vs {want}");
+        }
+    }
+}
+
 #[test]
 fn abs_derivative_sign() {
     // d/dx |x| = sign(x): +1 for x>0, -1 for x<0.
@@ -555,7 +632,7 @@ fn harmonic_mean_gradient() {
     // so if the min-scaled path ever reached this type, `m` would drag one input's
     // derivative into the result. It must not: composites take the direct form.
     fn hm2<W: FloatVector + CoreMath>(a: W, b: W) -> W {
-        W::harmonic_mean([a, b])
+        W::harmonic_mean_n([a, b])
     }
 
     for &(a, b) in &[(1.0_f64, 2.0_f64), (3.0, 3.0), (0.25, 8.0), (2.0, 1.0)] {
@@ -587,7 +664,7 @@ fn harmonic_mean_gradient() {
 
     // inv_sum_inv is the same function over N, so its gradient is too.
     fn si2<W: FloatVector + CoreMath>(a: W, b: W) -> W {
-        W::inv_sum_inv([a, b])
+        W::inv_sum_inv_n([a, b])
     }
     let (a, b) = (1.0_f64, 3.0_f64);
     let r = si2.ad([V::splat(a), V::splat(b)]);

@@ -121,7 +121,10 @@ fn f32_oracle_matches_hardware() {
         let c = f32::from_bits(c_bits);
         let want = hw_fma32(bad_a, bad_b, c);
         let got = oracle_fma32(bad_a, bad_b, c);
-        assert!(bit_eq32(got, want), "oracle({bad_a:e}, {bad_b:e}, {c:e}) = {got:e}, hw = {want:e}");
+        assert!(
+            bit_eq32(got, want),
+            "oracle({bad_a:e}, {bad_b:e}, {c:e}) = {got:e}, hw = {want:e}"
+        );
     }
 
     let mut rng = XorShift(0x9E37_79B9_7F4A_7C15);
@@ -129,7 +132,11 @@ fn f32_oracle_matches_hardware() {
         // Alternate between full-range draws and the subnormal-product zone.
         let emag = if i % 2 == 0 { 126 } else { 70 };
         let a = rng.f32_ranged(emag);
-        let b = if i % 2 == 0 { rng.f32_ranged(emag) } else { rng.f32_ranged(126 - 60) * f32::from_bits(0x0080_0000) };
+        let b = if i % 2 == 0 {
+            rng.f32_ranged(emag)
+        } else {
+            rng.f32_ranged(126 - 60) * f32::from_bits(0x0080_0000)
+        };
         let c = rng.f32_ranged(126);
 
         let want = hw_fma32(a, b, c);
@@ -154,11 +161,15 @@ macro_rules! check_backend {
             use $backend::*;
 
             fn emul64(a: f64, b: f64, c: f64) -> f64 {
-                f64x2::splat(a).mul_add(f64x2::splat(b), f64x2::splat(c)).extract::<0>()
+                f64x2::splat(a)
+                    .mul_add(f64x2::splat(b), f64x2::splat(c))
+                    .extract::<0>()
             }
 
             fn emul32(a: f32, b: f32, c: f32) -> f32 {
-                f32x4::splat(a).mul_add(f32x4::splat(b), f32x4::splat(c)).extract::<0>()
+                f32x4::splat(a)
+                    .mul_add(f32x4::splat(b), f32x4::splat(c))
+                    .extract::<0>()
             }
 
             fn assert_case64(a: f64, b: f64, c: f64, tag: &str) {
@@ -213,7 +224,15 @@ macro_rules! check_backend {
                     return;
                 }
 
-                let low_bits = [0u64, 1, (1 << 26) - 1, 1 << 26, (1 << 26) + 1, (1 << 27) - 1, 0x0555_5555];
+                let low_bits = [
+                    0u64,
+                    1,
+                    (1 << 26) - 1,
+                    1 << 26,
+                    (1 << 26) + 1,
+                    (1 << 27) - 1,
+                    0x0555_5555,
+                ];
                 let multipliers = [
                     f64::from_bits(0x3ff0_0000_0000_0001),
                     f64::from_bits(0x3fef_ffff_ffff_ffff),
@@ -259,7 +278,12 @@ macro_rules! check_backend {
                 // Subnormal / tiny c against ordinary products.
                 for c in [subn, -subn, subn2, -subn2, f64::MIN_POSITIVE, 0.0, -0.0] {
                     assert_case64(1.5, 3.0, c, "subnormal c");
-                    assert_case64(2.0_f64.powi(-500), 2.0_f64.powi(480), c, "tiny product, subnormal c");
+                    assert_case64(
+                        2.0_f64.powi(-500),
+                        2.0_f64.powi(480),
+                        c,
+                        "tiny product, subnormal c",
+                    );
                 }
 
                 // Zero a or b with every flavor of c.
@@ -283,7 +307,14 @@ macro_rules! check_backend {
 
                 // Around the gate boundary Ea + Eb = BIAS + p = 1076: products with
                 // representable and non-representable error terms.
-                for (ea, eb) in [(538i32, 538i32), (537, 538), (537, 537), (100, 976), (100, 975), (-500, 1576)] {
+                for (ea, eb) in [
+                    (538i32, 538i32),
+                    (537, 538),
+                    (537, 537),
+                    (100, 976),
+                    (100, 975),
+                    (-500, 1576),
+                ] {
                     let a = f64::from_bits((((ea + 1023) as u64) << 52) | 0x000f_ffff_fc00_0001);
                     let b = f64::from_bits((((eb + 1023) as u64) << 52) | 0x0000_0000_0400_0001);
                     for c in [0.0, a * b * -1.0, 1.0, subn] {
@@ -308,9 +339,9 @@ macro_rules! check_backend {
                     (1.0, f64::NAN, 2.0),
                     (1.0, 2.0, f64::NAN),
                     (f64::MAX, 2.0, f64::NEG_INFINITY),
-                    (f64::MAX, 2.0, -f64::MAX),          // spurious: true result is MAX, t_h overflows
-                    (f64::MAX, 1.5, -f64::MAX),          // spurious: true result is MAX / 2
-                    (f64::MAX, 2.0, 0.0),                // genuine overflow
+                    (f64::MAX, 2.0, -f64::MAX), // spurious: true result is MAX, t_h overflows
+                    (f64::MAX, 1.5, -f64::MAX), // spurious: true result is MAX / 2
+                    (f64::MAX, 2.0, 0.0),       // genuine overflow
                     (f64::MAX, f64::MAX, f64::NEG_INFINITY),
                     // Split-carry corruption: MAX has an all-ones significand, so the
                     // integer-add split rounds a_hi to infinity while u_h stays finite.
@@ -321,7 +352,7 @@ macro_rules! check_backend {
                     (f64::MAX, 1.0, -f64::MAX),
                     (f64::MAX, 1.0, -f64::MAX / 2.0),
                     (-f64::MAX, 1.0, f64::MAX / 2.0),
-                    (6.69692879491417e299, 3.0, 1.0),    // old Veltkamp-overflow threshold
+                    (6.69692879491417e299, 3.0, 1.0), // old Veltkamp-overflow threshold
                     (f64::MAX, 0.5, 1.0),
                     (1.7e308, 1e-8, 2.0),
                 ];
@@ -342,7 +373,11 @@ macro_rules! check_backend {
                 let pairs: &[([f64; 2], [f64; 2], [f64; 2])] = &[
                     ([1.5, f64::from_bits(1)], [3.0, 0.5], [0.25, 1.0]),
                     ([f64::MAX, 3.0], [2.0, 7.0], [-f64::MAX, 2.0]),
-                    ([f64::NAN, 1.0 + 2.0_f64.powi(-27)], [1.0, 1.0 - 2.0_f64.powi(-27)], [1.0, -2.0_f64.powi(-150)]),
+                    (
+                        [f64::NAN, 1.0 + 2.0_f64.powi(-27)],
+                        [1.0, 1.0 - 2.0_f64.powi(-27)],
+                        [1.0, -2.0_f64.powi(-150)],
+                    ),
                 ];
 
                 for &(av, bv, cv) in pairs {
@@ -379,7 +414,13 @@ macro_rules! check_backend {
                 for e in -1080..=-1010i32 {
                     let ea = e / 2;
                     let eb = e - ea;
-                    for mant in [0u64, 1, 0x000f_ffff_ffff_ffff, 0x0008_0000_0000_0001, 0x0000_0000_5555_5555] {
+                    for mant in [
+                        0u64,
+                        1,
+                        0x000f_ffff_ffff_ffff,
+                        0x0008_0000_0000_0001,
+                        0x0000_0000_5555_5555,
+                    ] {
                         let a = f64::from_bits((((ea + 1023) as u64) << 52) | mant);
                         let b = f64::from_bits(((eb + 1023) as u64) << 52);
                         for c in [
@@ -399,11 +440,21 @@ macro_rules! check_backend {
                 // Exact half-min-subnormal products: RN ties to zero (even), and
                 // one ulp of product mantissa must tip it to the min subnormal.
                 assert_case64(2.0_f64.powi(-537), 2.0_f64.powi(-538), 0.0, "half-min tie");
-                assert_case64(-(2.0_f64.powi(-537)), 2.0_f64.powi(-538), 0.0, "half-min tie, negative");
+                assert_case64(
+                    -(2.0_f64.powi(-537)),
+                    2.0_f64.powi(-538),
+                    0.0,
+                    "half-min tie, negative",
+                );
                 let just_over = f64::from_bits((((-537 + 1023) as u64) << 52) | 1);
                 assert_case64(just_over, 2.0_f64.powi(-538), 0.0, "just over half-min");
                 // And a tiny same-sign c must break the tie upward.
-                assert_case64(2.0_f64.powi(-537), 2.0_f64.powi(-538), 2.0_f64.powi(-1074), "half-min tie + c");
+                assert_case64(
+                    2.0_f64.powi(-537),
+                    2.0_f64.powi(-538),
+                    2.0_f64.powi(-1074),
+                    "half-min tie + c",
+                );
 
                 // Tiny-times-tiny: subnormal inputs normalize exactly.
                 let sub_a = f64::from_bits(0x000f_ffff_ffff_ffff);
@@ -418,7 +469,9 @@ macro_rules! check_backend {
                 // with hardware regardless of which internal regime fires).
                 let ta = 2.0_f64.powi(-500);
                 let tb = 2.0_f64.powi(-600); // product 2^-1100, K ~ -1100
-                for ec in [-1074i32, -1022, -960, -900, -880, -870, -860, -700, -300, 0, 300, 1023] {
+                for ec in [
+                    -1074i32, -1022, -960, -900, -880, -870, -860, -700, -300, 0, 300, 1023,
+                ] {
                     let c = if ec < -1022 {
                         f64::from_bits(1u64 << (ec + 1074))
                     } else {
@@ -455,10 +508,10 @@ macro_rules! check_backend {
                 // UP: min-normal's mantissa is even), or stay top-subnormal.
                 let min_sub = f64::from_bits(1);
                 for b in [
-                    1.0 - 2.0_f64.powi(-52),        // below halfway: top subnormal
-                    1.0 - 3.0 * 2.0_f64.powi(-54),  // between: rounds by position
-                    1.0 - 2.0_f64.powi(-53),        // exact midpoint: tie to even = min-normal
-                    1.0 - 2.0_f64.powi(-54),        // above halfway: min-normal
+                    1.0 - 2.0_f64.powi(-52),       // below halfway: top subnormal
+                    1.0 - 3.0 * 2.0_f64.powi(-54), // between: rounds by position
+                    1.0 - 2.0_f64.powi(-53),       // exact midpoint: tie to even = min-normal
+                    1.0 - 2.0_f64.powi(-54),       // above halfway: min-normal
                 ] {
                     for c in [0.0, min_sub, -min_sub] {
                         assert_case64(f64::MIN_POSITIVE, b, c, "min-normal boundary");
@@ -501,7 +554,12 @@ macro_rules! check_backend {
                 // libm `fma_underflow`: subnormal c nearly cancelling a
                 // subnormal-range product. The signed-zero outcome is decided by
                 // the sub-subnormal residual.
-                assert_case64(1.1102230246251565e-16, -9.812526705433188e-305, 1.0894e-320, "libm fma_underflow");
+                assert_case64(
+                    1.1102230246251565e-16,
+                    -9.812526705433188e-305,
+                    1.0894e-320,
+                    "libm fma_underflow",
+                );
 
                 // libm `fma_segfault` shapes (historical scalbn overflow crash).
                 assert_case64(
@@ -572,7 +630,7 @@ macro_rules! check_backend {
                         0 => 0.0,
                         1 => -0.0,
                         2 => f64::from_bits(rng.next() & 0x000f_ffff_ffff_ffff), // subnormal
-                        3 => -(a * b), // force cancellation
+                        3 => -(a * b),                                           // force cancellation
                         _ => rng.f64_ranged(emag),
                     };
 
@@ -652,7 +710,11 @@ macro_rules! check_backend {
                     for (got, want, tag) in [
                         (va.mul_sub(vb, vc).extract::<0>(), hw_fma64(a, b, -c), "mul_sub"),
                         (va.nmul_add(vb, vc).extract::<0>(), hw_fma64(-a, b, c), "nmul_add"),
-                        (va.nmul_sub(vb, vc).extract::<0>(), hw_fma64(-a, b, -c), "nmul_sub"),
+                        (
+                            va.nmul_sub(vb, vc).extract::<0>(),
+                            hw_fma64(-a, b, -c),
+                            "nmul_sub",
+                        ),
                     ] {
                         assert!(
                             super::bit_eq64(got, want),
@@ -678,7 +740,10 @@ macro_rules! check_backend {
                     let c = f32::from_bits(c_bits);
                     let want = hw_fma32(bad_a, bad_b, c);
                     let got = emul32(bad_a, bad_b, c);
-                    assert!(super::bit_eq32(got, want), "libm-bug pair, c={c:e}: got {got:e}, hw {want:e}");
+                    assert!(
+                        super::bit_eq32(got, want),
+                        "libm-bug pair, c={c:e}: got {got:e}, hw {want:e}"
+                    );
                 }
 
                 // f32 midpoint analogue of the f64 case.
@@ -687,7 +752,10 @@ macro_rules! check_backend {
                 for c in [2.0_f32.powi(-120), -2.0_f32.powi(-120), 0.0, -0.0] {
                     let want = hw_fma32(a, b, c);
                     let got = emul32(a, b, c);
-                    assert!(super::bit_eq32(got, want), "f32 midpoint, c={c:e}: got {got:e}, hw {want:e}");
+                    assert!(
+                        super::bit_eq32(got, want),
+                        "f32 midpoint, c={c:e}: got {got:e}, hw {want:e}"
+                    );
                 }
 
                 let mut rng = super::XorShift(0xC0FF_EE12_3456_789B);
@@ -747,7 +815,10 @@ macro_rules! check_backend {
                 for &(a, b, c) in cases {
                     let want = hw_fma32(a, b, c);
                     let got = emul32(a, b, c);
-                    assert!(super::bit_eq32(got, want), "f32 specials ({a:e}, {b:e}, {c:e}): got {got:e}, hw {want:e}");
+                    assert!(
+                        super::bit_eq32(got, want),
+                        "f32 specials ({a:e}, {b:e}, {c:e}): got {got:e}, hw {want:e}"
+                    );
                 }
             }
         }

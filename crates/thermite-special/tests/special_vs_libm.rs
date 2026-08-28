@@ -110,6 +110,166 @@ fn tgamma_f64() {
     sweep_f64!("tgamma", tgamma, libm::tgamma, 0.1, 8.0, 1.0e-6);
 }
 
+// The large-argument branch of `tgamma`, which no other test reaches.
+//
+// `tgamma_impl` splits `zgh^(z - 1/2)` into a half-exponent `h` so the full power
+// never forms, then folds the tiny `denom` in BETWEEN the two halves. Associating
+// it as `(h * h) * denom` instead overflows to +inf from x = 142.75 (f64) and
+// x = 27.25 (f32) upward, the whole top third of the finite domain, and that
+// shipped, because every sweep above stops at x = 8.
+//
+// Both tiers are checked on purpose. `Precision` has the exact factorial loop, so
+// it is correct at integer arguments even when the split is broken, so only the
+// non-integers expose it. `DefaultPolicy` has no such loop and fails everywhere.
+// Testing the top tier alone would have caught three quarters of the bug.
+#[test]
+fn tgamma_f64_large_argument() {
+    // 171.61 is the last finite Gamma in f64.
+    sweep_f64!("tgamma", tgamma, libm::tgamma, 140.0, 171.6, 1.0e-6);
+
+    // `sweep_f64!` takes an `ident`, so the policy form is spelled out.
+    let n = 4000usize;
+    let mut buf = [0.0f64; 4];
+    let mut i = 0;
+    while i < n {
+        for k in 0..4 {
+            let t = ((i + k) as f64) / (n as f64);
+            buf[k] = 140.0 + t * 31.6;
+        }
+        let got = f64x4::new(buf).tgamma_p::<Precision>().into_array();
+        for k in 0..4 {
+            let want = libm::tgamma(buf[k]);
+            assert!(
+                close(got[k], want, 1.0e-9),
+                "tgamma f64 Precision @ x={}: got {}, libm {}",
+                buf[k],
+                got[k],
+                want
+            );
+        }
+        i += 4;
+    }
+}
+
+#[test]
+fn tgamma_f32_large_argument() {
+    // 34.65 is the last finite Gamma in f32.
+    sweep_f32!("tgamma", tgamma, libm::tgammaf, 25.0, 34.6, 3.0e-3);
+
+    let n = 4000usize;
+    let mut buf = [0.0f32; 8];
+    let mut i = 0;
+    while i < n {
+        for k in 0..8 {
+            let t = ((i + k) as f32) / (n as f32);
+            buf[k] = 25.0 + t * 9.6;
+        }
+        let got = f32x8::new(buf).tgamma_p::<Precision>().into_array();
+        for k in 0..8 {
+            let want = libm::tgammaf(buf[k]);
+            assert!(
+                close(got[k] as f64, want as f64, 3.0e-3),
+                "tgamma f32 Precision @ x={}: got {}, libm {}",
+                buf[k],
+                got[k],
+                want
+            );
+        }
+        i += 8;
+    }
+}
+
+// Past the overflow point the answer IS infinity, and this is not something the
+// arithmetic can reach on its own: `h` overflows while `denom` underflows, and
+// `inf * 0` is NaN. Before the guard, `tgamma(1e30)` and `tgamma(inf)` both returned
+// NaN, as did everything above ~300 (f64) and ~100 (f32).
+//
+// `DefaultPolicy` and `Precision` both check overflow, so both must produce it.
+#[test]
+fn tgamma_overflows_to_infinity() {
+    let big64 = [180.0f64, 300.0, 1.0e10, 1.0e30, 1.0e300, f64::INFINITY];
+    for chunk in big64.chunks(4) {
+        let mut buf = [200.0f64; 4];
+        buf[..chunk.len()].copy_from_slice(chunk);
+
+        for (name, got) in [
+            ("DefaultPolicy", f64x4::new(buf).tgamma().into_array()),
+            ("Precision", f64x4::new(buf).tgamma_p::<Precision>().into_array()),
+        ] {
+            for (i, v) in got.iter().enumerate() {
+                assert!(
+                    v.is_infinite() && v.is_sign_positive(),
+                    "f64 {name}: tgamma({}) = {v}, want +inf",
+                    buf[i]
+                );
+            }
+        }
+    }
+
+    let big32 = [40.0f32, 100.0, 1.0e10, 1.0e30, 3.0e38, f32::INFINITY, 60.0, 500.0];
+    for (name, got) in [
+        ("DefaultPolicy", f32x8::new(big32).tgamma().into_array()),
+        ("Precision", f32x8::new(big32).tgamma_p::<Precision>().into_array()),
+    ] {
+        for (i, v) in got.iter().enumerate() {
+            assert!(
+                v.is_infinite() && v.is_sign_positive(),
+                "f32 {name}: tgamma({}) = {v}, want +inf",
+                big32[i]
+            );
+        }
+    }
+}
+
+// The guard sits at `int_cap` (172 / 36) while the true overflow points are 171.624 and
+// 35.040. The gap is covered by the arithmetic, not by the guard, so it needs its own
+// check, since a guard placed one integer too low would silently clip finite answers here.
+#[test]
+fn tgamma_is_finite_right_up_to_the_overflow_point() {
+    let last64 = [171.0f64, 171.5, 171.6, 171.62];
+    for (name, got) in [
+        ("DefaultPolicy", f64x4::new(last64).tgamma().into_array()),
+        ("Precision", f64x4::new(last64).tgamma_p::<Precision>().into_array()),
+    ] {
+        for (i, v) in got.iter().enumerate() {
+            assert!(v.is_finite(), "f64 {name}: tgamma({}) = {v}, want finite", last64[i]);
+            assert!(close(*v, libm::tgamma(last64[i]), 1.0e-6), "f64 {name}: tgamma({})", last64[i]);
+        }
+    }
+
+    let last32 = [34.0f32, 34.5, 34.9, 35.0, 35.02, 33.0, 32.0, 30.0];
+    for (name, got) in [
+        ("DefaultPolicy", f32x8::new(last32).tgamma().into_array()),
+        ("Precision", f32x8::new(last32).tgamma_p::<Precision>().into_array()),
+    ] {
+        for (i, v) in got.iter().enumerate() {
+            assert!(v.is_finite(), "f32 {name}: tgamma({}) = {v}, want finite", last32[i]);
+            assert!(
+                close(*v as f64, libm::tgammaf(last32[i]) as f64, 3.0e-3),
+                "f32 {name}: tgamma({}) = {v}",
+                last32[i]
+            );
+        }
+    }
+}
+
+// Reflected lanes: `Gamma` of a large negative non-integer is far below the smallest
+// subnormal, so saturating to zero is the right answer. The overflow guard drives the
+// reflected divisor to infinity, which lands there. Checked because it is a
+// consequence of the guard rather than something written directly.
+#[test]
+fn tgamma_of_large_negative_saturates_to_zero() {
+    let neg = [-180.5f64, -200.25, -1.0e10 - 0.5, -400.75];
+    for (name, got) in [
+        ("DefaultPolicy", f64x4::new(neg).tgamma().into_array()),
+        ("Precision", f64x4::new(neg).tgamma_p::<Precision>().into_array()),
+    ] {
+        for (i, v) in got.iter().enumerate() {
+            assert!(*v == 0.0, "f64 {name}: tgamma({}) = {v}, want +-0", neg[i]);
+        }
+    }
+}
+
 #[test]
 fn lgamma_f32() {
     sweep_f32!("lgamma", lgamma, libm::lgammaf, 0.1, 40.0, 3.0e-3);

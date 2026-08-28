@@ -95,6 +95,59 @@ where
     p1 * f
 }
 
+/// Runtime-length form of [`hermite_function_series`].
+///
+/// A genuine port of the recurrence rather than a fold over the const kernel: a series
+/// carries `k`-dependent state and does not partition the way the slice reductions in
+/// `thermite` do. Both forms must be edited together.
+///
+/// Same pre-scaling by `f`, same seed, same final factor. Read [`hermite_function_series`]
+/// for why the split is there. The runtime length costs the unrolling and turns `a_k`,
+/// `b_{k+1}` into per-step square roots of a ratio rather than folded literals, which is
+/// the expensive part here.
+///
+/// The empty series is `0`, where the const form refuses to compile.
+#[inline(always)]
+pub fn hermite_function_series_slice<P, E, V>(x: V, coeffs: &[E]) -> V
+where
+    P: Policy,
+    E: FloatElement,
+    V: FloatVector<Element = E> + SpecializedTranscendentalMath<E>,
+{
+    let n = coeffs.len();
+
+    if n == 0 {
+        return V::ZERO;
+    }
+
+    let (f, g0) = seed::<P, E, V>(x);
+
+    if n == 1 {
+        return (f * V::splat(coeffs[0])) * g0;
+    }
+
+    let sqrt2_x = V::SQRT_2 * x;
+    let fcn1 = f * V::splat(coeffs[n - 1]);
+
+    if n == 2 {
+        return sqrt2_x.mul_adde(fcn1, f * V::splat(coeffs[0])) * g0;
+    }
+
+    let mut y2 = fcn1;
+    let mut y1 = (x * V::splat(a::<E>(n - 2))).mul_adde(fcn1, f * V::splat(coeffs[n - 2]));
+
+    let mut k = n - 2;
+    while k > 1 {
+        k -= 1;
+        let ax = x * V::splat(a::<E>(k));
+        let yk = ax.mul_adde(y1, y2.mul_adde(V::splat(b::<E>(k + 1)), f * V::splat(coeffs[k])));
+        y2 = y1;
+        y1 = yk;
+    }
+
+    sqrt2_x.mul_adde(y1, y2.mul_adde(-V::FRAC_1_SQRT_2, f * V::splat(coeffs[0]))) * g0
+}
+
 /// Clenshaw summation of a Hermite-function series, `$\sum_{k=0}^{N-1} c_k \psi_k(x)$`.
 ///
 /// Runs Clenshaw over `h_k = psi_k / psi_0`, whose recurrence is the same as `psi_k`'s, and

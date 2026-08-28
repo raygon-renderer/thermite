@@ -201,7 +201,7 @@ impl<V: RealFloatVector> SpecializedComplexMath<Complex<V::Element>> for Complex
     fn logr<P: Policy>(self, base: V) -> Self {
         // log_b(z) = ln(z) / ln(b); one real reciprocal, then scale both components.
         let (r, theta) = self.to_polar_p::<P>();
-        let d = base.ln_p::<P>().reciprocal_p::<P>();
+        let d = base.ln_p::<P>().approx_reciprocal_p::<P>();
 
         Self::new(r.ln_p::<P>() * d, theta * d)
     }
@@ -215,7 +215,7 @@ impl<V: RealFloatVector> SpecializedComplexMath<Complex<V::Element>> for Complex
         // `Div<V>` is already a reciprocal-and-scale, so the quotient form spent
         // two divisions computing the same 1/|z| twice. `digamma` calls this in a
         // loop.
-        let inv = self.norm_p::<P>().reciprocal_p::<P>();
+        let inv = self.norm_p::<P>().approx_reciprocal_p::<P>();
 
         self.conj() * inv * inv
     }
@@ -249,7 +249,7 @@ impl<V: RealFloatVector> SpecializedCoreMath<Complex<V::Element>> for Complex<V>
     /// `mul_adde(re, m.re, nmul_adde(im, m.im, a))` is two FMAs where multiply-then-add
     /// is an FMA, a multiply and an add. That saves one instruction per Horner step,
     /// measured at 48 vs 60 vector ops over a 13-term complex polynomial
-    /// (`bin/poly_primal_probe`). It also rounds once less.
+    /// (`bin/poly_n_primal_probe`). It also rounds once less.
     #[inline(always)]
     fn mul_add_primal<P: Policy>(self, m: Self, a: Self::Primal) -> Self {
         let re = self.re.mul_adde(m.re, self.im.nmul_adde(m.im, V::from_primal(a)));
@@ -271,7 +271,7 @@ impl<V: RealFloatVector> SpecializedCoreMath<Complex<V::Element>> for Complex<V>
     /// `P(z)/Q(z)` only by `z^(D-N)`, corrected below), so this is a conditioning fix,
     /// not a correctness one, except where the wrong choice overflows outright.
     #[inline(always)]
-    fn poly_rational<P: Policy, const N: usize, const D: usize>(
+    fn poly_rational_n<P: Policy, const N: usize, const D: usize>(
         self,
         numerator: &[Complex<V::Element>; N],
         denominator: &[Complex<V::Element>; D],
@@ -279,8 +279,8 @@ impl<V: RealFloatVector> SpecializedCoreMath<Complex<V::Element>> for Complex<V>
         let x = self;
 
         if const { P::POLICY.precision.le(thermite::math::policy::PrecisionPolicy::Average) } {
-            let n = SpecializedCoreMath::poly::<P, N>(x, numerator);
-            let d = SpecializedCoreMath::poly::<P, D>(x, denominator);
+            let n = SpecializedCoreMath::poly_n::<P, N>(x, numerator);
+            let d = SpecializedCoreMath::poly_n::<P, D>(x, denominator);
 
             return n.approx_div_p::<P>(d);
         }
@@ -291,8 +291,8 @@ impl<V: RealFloatVector> SpecializedCoreMath<Complex<V::Element>> for Complex<V>
         let mut d0 = Self::EMPTY;
 
         if const { P::POLICY.avoid_branching } || !invert.all() {
-            n0 = SpecializedCoreMath::poly::<P, N>(x, numerator);
-            d0 = SpecializedCoreMath::poly::<P, D>(x, denominator);
+            n0 = SpecializedCoreMath::poly_n::<P, N>(x, numerator);
+            d0 = SpecializedCoreMath::poly_n::<P, D>(x, denominator);
         }
 
         let mut z = Self::EMPTY;
@@ -300,9 +300,9 @@ impl<V: RealFloatVector> SpecializedCoreMath<Complex<V::Element>> for Complex<V>
         let mut d1 = Self::EMPTY;
 
         if const { P::POLICY.avoid_branching } || invert.any() {
-            z = SpecializedCoreMath::reciprocal::<P>(x);
-            n1 = SpecializedCoreMath::poly_rev::<P, N>(z, numerator);
-            d1 = SpecializedCoreMath::poly_rev::<P, D>(z, denominator);
+            z = SpecializedCoreMath::approx_reciprocal::<P>(x);
+            n1 = SpecializedCoreMath::poly_rev_n::<P, N>(z, numerator);
+            d1 = SpecializedCoreMath::poly_rev_n::<P, D>(z, denominator);
         }
 
         let n = invert.select(n1, n0);
@@ -328,7 +328,7 @@ impl<V: RealFloatVector> SpecializedCoreMath<Complex<V::Element>> for Complex<V>
     #[inline(always)]
     fn inverse_sqrt<P: Policy>(self) -> Self {
         let s = self.sqrt();
-        let inv = self.norm_p::<P>().reciprocal_p::<P>();
+        let inv = self.norm_p::<P>().approx_reciprocal_p::<P>();
 
         Complex::new(s.re * inv, -(s.im * inv))
     }
@@ -795,7 +795,7 @@ impl<V: RealFloatVector> SpecializedTranscendentalMath<Complex<V::Element>> for 
         // const operation that arm expands to.
         let n = V::splat(<V::Element as FloatElement>::from_int(N as thermite::LargeInt));
 
-        Self::from_polar_p::<P>(r.powf_p::<P>(n.reciprocal_p::<P>()), theta / n)
+        Self::from_polar_p::<P>(r.powf_p::<P>(n.approx_reciprocal_p::<P>()), theta / n)
     }
 
     /// The principal natural logarithm: `ln(z) = ln|z| + i*arg(z)`.
