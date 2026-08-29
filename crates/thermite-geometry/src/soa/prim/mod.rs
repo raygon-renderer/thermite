@@ -10,13 +10,19 @@
 pub mod bounds;
 pub mod matrix;
 pub mod point;
+pub mod quaternion;
 pub mod ray;
+pub mod tangent;
+pub mod transform;
 pub mod vector;
 
 pub use bounds::Bounds;
-pub use matrix::Matrix;
+pub use matrix::{Matrix, gamma};
 pub use point::Point;
-pub use ray::{Ray, RayRecord};
+pub use quaternion::Quaternion;
+pub use ray::{Ray, RayError, RayRecord};
+pub use tangent::TangentFrame;
+pub use transform::Transform;
 pub use vector::Vector;
 
 pub type Point2<V> = Point<V, 2>;

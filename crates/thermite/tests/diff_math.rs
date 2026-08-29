@@ -480,7 +480,7 @@ macro_rules! math_suite {
                 );
                 // `reciprocal` flushes subnormals (1/denormal -> inf) under Performance, so
                 // keep the domain to normal values (same reasoning as the `safe` domain).
-                math_unary!($bl, R, f32, reciprocal, |x: f32| 1.0 / x, TOL_F32, |x: f32| {
+                math_unary!($bl, R, f32, approx_reciprocal, |x: f32| 1.0 / x, TOL_F32, |x: f32| {
                     let v = x % 1e3;
                     if v.is_normal() { v } else { 1.0 }
                 });
@@ -870,7 +870,7 @@ macro_rules! math_suite {
                     TOL_F64,
                     |x: f64| if x.is_finite() { x % 200.0 } else { 1.0 }
                 );
-                math_unary!($bl, R, f64, reciprocal, |x: f64| 1.0 / x, TOL_F64, |x: f64| {
+                math_unary!($bl, R, f64, approx_reciprocal, |x: f64| 1.0 / x, TOL_F64, |x: f64| {
                     let v = x % 1e3;
                     if v.is_normal() { v } else { 1.0 }
                 });

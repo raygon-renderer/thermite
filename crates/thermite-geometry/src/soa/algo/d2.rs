@@ -1,6 +1,6 @@
 use thermite::{math::SpatialMath, prelude::*};
 
-use crate::prim::{Point2, Vector, Vector2, vector::VectorOps};
+use crate::soa::prim::{Point2, Vector, Vector2, vector::VectorOps};
 
 /// Computes the point on the ellipse defined by the radii `e` that is closest
 /// to the given point `p`.
@@ -9,7 +9,7 @@ use crate::prim::{Point2, Vector, Vector2, vector::VectorOps};
 #[inline(always)]
 pub fn point_on_ellipse<V: FloatVector + SpatialMath>(p: Point2<V>, e: Vector2<V>) -> Point2<V> {
     let p_abs: Vector2<V> = p.abs().into();
-    let ei = e.reciprocal();
+    let ei = e.approx_reciprocal();
     let e2 = e * e;
     let ve = ei * Vector2::new([e2[0] - e2[1], e2[1] - e2[0]]);
 

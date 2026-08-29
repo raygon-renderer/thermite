@@ -10,5 +10,8 @@ authors.workspace = true
 description = "SIMD geometry primitives built on Thermite"
 publish = false                                            # not ready for release yet
 
+[package.metadata.docs.rs]
+rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
+
 [dependencies]
 thermite = { workspace = true }

@@ -1,18 +1,18 @@
 //! AoS <-> SoA loads for the geometry primitives.
 //!
-//! `Point`/`Vector` are `N` components; a `Ray` is two records of `N` (origin,
+//! `Point`/`Vector` are `N` components, and a `Ray` is two records of `N` (origin,
 //! direction). The contract, over a span of `LANES` records:
 //!
 //!   load_interleaved:   self.0[c].extract(lane) == ptr[lane * N + c]
 //!   store_interleaved:  the exact inverse
 //!
 //! Every component of every record carries a distinct tag, because a transpose
-//! that crossed two components - or, for a ray, swapped origin and direction -
+//! that crossed two components, or for a ray swapped origin and direction,
 //! would still produce perfectly plausible geometry. Only exact routing checks
 //! catch it.
 
 use thermite::prelude::*;
-use thermite_geometry::prim::{Point, Ray, RayRecord, Vector as GVector};
+use thermite_geometry::soa::prim::{Point, Ray, RayRecord, Vector as GVector};
 
 /// Distinct, exactly-representable value for (record index, component index).
 fn tag(record: usize, comp: usize) -> f32 {
@@ -40,7 +40,7 @@ macro_rules! check_vector {
             }
         }
 
-        // Points share the implementation; check one to pin the contract.
+        // Points share the implementation, so check one to pin the contract.
         let p = unsafe { Point::<V, $n>::load_interleaved(src.as_ptr() as *const f32) };
         for c in 0..$n {
             for lane in 0..lanes {
@@ -61,7 +61,7 @@ macro_rules! check_ray {
         let lanes = <V as GenericVector>::LANES;
 
         // Origin components tagged 0..N, direction components N..2N, so a swap of
-        // the two records - or of any pair of components - is caught exactly.
+        // the two records, or of any pair of components, is caught exactly.
         let src: Vec<RayRecord<f32, $n>> = (0..lanes)
             .map(|r| RayRecord {
                 origin: core::array::from_fn(|c| tag(r, c)),
