@@ -50,7 +50,7 @@
 //! ```
 //! use thermite::prelude::*;
 //! use thermite::math::policy::DefaultPolicy;
-//! use thermite_geometry::prim::Vector2;
+//! use thermite_geometry::soa::prim::Vector2;
 //! use thermite_sdf::{SDF, Voronoi, VoronoiEdges, SinHash, HoskinsHash};
 //!
 //! // Cheap 1-ring cellular noise: approximate, but ~2.8x fewer cells in 2D.
@@ -75,7 +75,7 @@ use thermite::mask::{GenericMask as _, GenericSelectable as _};
 use thermite::math::RealMathWithPolicy;
 use thermite::math::policy::{DefaultPolicy, Policy};
 
-use thermite_geometry::prim::{Vector, vector::VectorOps as _};
+use thermite_geometry::soa::prim::{Vector, vector::VectorOps as _};
 
 use crate::consts::{frac, vint};
 use crate::hash::{SinHash, VectorHash};
@@ -451,7 +451,7 @@ mod tests {
     use super::*;
     use crate::hash::HoskinsHash;
     use thermite::prelude::*;
-    use thermite_geometry::prim::{Vector2, Vector3};
+    use thermite_geometry::soa::prim::{Vector2, Vector3};
 
     type V = thermite::Vector<f32>;
 

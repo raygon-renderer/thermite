@@ -81,7 +81,7 @@
 use thermite::math::RealMathWithPolicy;
 use thermite::math::policy::Policy;
 
-use thermite_geometry::prim::Vector;
+use thermite_geometry::soa::prim::Vector;
 
 use crate::consts::{frac, vint};
 use crate::{SdfVector};
@@ -350,7 +350,7 @@ mod tests {
     use crate::{FbmDetail, SDF, Sphere3D, Voronoi};
     use thermite::math::policy::DefaultPolicy;
     use thermite::prelude::*;
-    use thermite_geometry::prim::{Vector2, Vector3};
+    use thermite_geometry::soa::prim::{Vector2, Vector3};
 
     type V = thermite::Vector<f32>;
 

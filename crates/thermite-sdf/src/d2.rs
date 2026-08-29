@@ -11,8 +11,8 @@ use thermite::math::policy::DefaultPolicy;
 use thermite::math::{RealMathWithPolicy, TranscendentalMathWithPolicy};
 use thermite::prelude::*;
 
-use thermite_geometry::algo::d2::point_on_ellipse;
-use thermite_geometry::prim::{Bounds, Point2, Vector, Vector2, vector::VectorOps as _};
+use thermite_geometry::soa::algo::d2::point_on_ellipse;
+use thermite_geometry::soa::prim::{Bounds, Point2, Vector, Vector2, vector::VectorOps as _};
 
 use crate::consts::{cint, frac};
 use crate::{BoundedSdf, GradientSdf, SDF, SdfConsts, SdfVector, unit_or_zero};
@@ -738,7 +738,7 @@ impl<V: SdfVector> BoundedSdf<V, 2> for Heart2D {
 /// Ellipse with semi-axes `ab = (a, b)`.
 ///
 /// Uses the iterative closest-point-on-ellipse solver from
-/// [`thermite_geometry::algo::d2`].
+/// [`thermite_geometry::soa::algo::d2`].
 #[derive(Debug, Clone, Copy)]
 pub struct Ellipse2D<V: SdfVector> {
     pub ab: Vector2<V>,

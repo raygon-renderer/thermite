@@ -23,7 +23,7 @@
 //!
 //! [`Repetition`]: crate::ops::Repetition
 
-use thermite_geometry::prim::{Bounds, Matrix, Vector, Vector3, vector::VectorOps as _};
+use thermite_geometry::soa::prim::{Bounds, Matrix, Vector, Vector3, vector::VectorOps as _};
 
 use thermite::math::TranscendentalMath;
 
@@ -265,7 +265,7 @@ mod tests {
     use crate::ops::FiniteDiff;
     use crate::{Box2D, Box3D, Circle2D, Sphere3D};
     use core::f32::consts::PI;
-    use thermite_geometry::prim::{Vector2, Vector3};
+    use thermite_geometry::soa::prim::{Vector2, Vector3};
 
     type V = thermite::Vector<f32>;
     fn vs(x: f32) -> V {

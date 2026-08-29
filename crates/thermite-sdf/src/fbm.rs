@@ -25,7 +25,7 @@
 //! ```
 //! use thermite::prelude::*;
 //! use thermite::math::policy::DefaultPolicy;
-//! use thermite_geometry::prim::Vector3;
+//! use thermite_geometry::soa::prim::Vector3;
 //! use thermite_sdf::{FbmDetail, SDF, Sphere3D};
 //! use thermite_sdf::{SinHash, HoskinsHash, IqRotation, GivensRotation, BoxCell};
 //!
@@ -56,7 +56,7 @@ use core::marker::PhantomData;
 use thermite::math::RealMathWithPolicy;
 use thermite::math::policy::{DefaultPolicy, Policy};
 
-use thermite_geometry::prim::{Vector, vector::VectorOps as _};
+use thermite_geometry::soa::prim::{Vector, vector::VectorOps as _};
 
 use crate::consts::frac;
 use crate::hash::{LatticeHash, SinHash};

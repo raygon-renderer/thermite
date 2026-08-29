@@ -24,7 +24,7 @@ use thermite::math::TranscendentalMathWithPolicy;
 use thermite::math::policy::Policy;
 use thermite::prelude::*;
 
-use thermite_geometry::prim::{Bounds, Vector, Vector2, vector::VectorOps as _};
+use thermite_geometry::soa::prim::{Bounds, Vector, Vector2, vector::VectorOps as _};
 
 use crate::consts::cint;
 use crate::d2::{Ellipse2D, ParabolaSegment2D, Rhombus2D};
@@ -773,7 +773,7 @@ mod tests {
 
     #[test]
     fn box_is_dimension_generic() {
-        use thermite_geometry::prim::Vector as NV;
+        use thermite_geometry::soa::prim::Vector as NV;
         let b = NBox {
             b: NV::<V, 3>::new([vv(1.0), vv(1.0), vv(1.0)]),
         };

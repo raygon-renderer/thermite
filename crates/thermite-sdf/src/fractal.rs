@@ -23,7 +23,7 @@ use thermite::math::policy::policies::ExtraPrecision;
 use thermite::math::policy::{DefaultPolicy, Policy};
 use thermite::prelude::*;
 
-use thermite_geometry::prim::{Bounds, Vector, Vector2, Vector3, vector::VectorOps as _};
+use thermite_geometry::soa::prim::{Bounds, Vector, Vector2, Vector3, vector::VectorOps as _};
 
 use crate::consts::{cint, frac, vint};
 use crate::ops::FiniteDiff;
@@ -400,7 +400,7 @@ impl<V: SdfVector + RealMathWithPolicy, P: Policy> BoundedSdf<V, 3> for Mandelbu
         };
 
         let r = (k - V::ONE)
-            .reciprocal_p::<ExtraPrecision<P>>()
+            .approx_reciprocal_p::<ExtraPrecision<P>>()
             .exp2_p::<ExtraPrecision<P>>();
 
         Bounds::symmetric(Vector3::splat(r))
@@ -1033,7 +1033,7 @@ mod tests {
 
     #[test]
     fn julia2d_c0_is_unit_circle() {
-        use thermite_geometry::prim::Vector2 as V2;
+        use thermite_geometry::soa::prim::Vector2 as V2;
         let p2 = |x: f32, y: f32| V2::<V>::new([vv(x), vv(y)]);
         // c = 0 -> the 2D Julia set is the unit circle.
         let j = Julia2D::<V>::new(p2(0.0, 0.0), 64);
@@ -1053,7 +1053,7 @@ mod tests {
 
     #[test]
     fn configurable_bailout() {
-        use thermite_geometry::prim::Vector2 as V2;
+        use thermite_geometry::soa::prim::Vector2 as V2;
         let p2 = |x: f32, y: f32| V2::<V>::new([vv(x), vv(y)]);
 
         // Default is the historical 256; with_bailout overrides it.
@@ -1079,7 +1079,7 @@ mod tests {
 
     #[test]
     fn mandelbrot2d_sanity() {
-        use thermite_geometry::prim::Vector2 as V2;
+        use thermite_geometry::soa::prim::Vector2 as V2;
         let p2 = |x: f32, y: f32| V2::<V>::new([vv(x), vv(y)]);
         let m = Mandelbrot2D::<V>::new(80);
         // origin and (-1,0) are in the set (never escape) -> 0
@@ -1096,7 +1096,7 @@ mod tests {
 
     #[test]
     fn menger_and_carpet() {
-        use thermite_geometry::prim::Vector2 as V2;
+        use thermite_geometry::soa::prim::Vector2 as V2;
         let p2 = |x: f32, y: f32| V2::<V>::new([vv(x), vv(y)]);
 
         let m = MengerSponge { iterations: 3 };

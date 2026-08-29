@@ -13,7 +13,7 @@ use thermite::math::TranscendentalMathWithPolicy;
 use thermite::math::policy::DefaultPolicy;
 use thermite::prelude::*;
 
-use thermite_geometry::prim::{Bounds, Vector, Vector2, vector::VectorOps as _};
+use thermite_geometry::soa::prim::{Bounds, Vector, Vector2, vector::VectorOps as _};
 
 use crate::consts::{cint, frac, vint};
 use crate::d2_linf::{BoundedLinfSdf, GradientLinfSdf, LinfSdf};

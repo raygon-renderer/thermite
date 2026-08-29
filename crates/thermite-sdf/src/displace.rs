@@ -45,7 +45,7 @@
 //! [`BoundedSdf`]: crate::BoundedSdf
 //! [`GradientSdf`]: crate::GradientSdf
 
-use thermite_geometry::prim::Vector3;
+use thermite_geometry::soa::prim::Vector3;
 
 use crate::{SDF, SdfVector};
 
@@ -130,7 +130,7 @@ mod tests {
     use super::*;
     use crate::{Plane3D, Sphere3D};
     use thermite::prelude::*;
-    use thermite_geometry::prim::Vector3;
+    use thermite_geometry::soa::prim::Vector3;
 
     type V = thermite::Vector<f32>;
 

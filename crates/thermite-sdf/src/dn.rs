@@ -16,7 +16,7 @@
 
 use thermite::prelude::*;
 
-use thermite_geometry::prim::{Bounds, Vector, vector::VectorOps as _};
+use thermite_geometry::soa::prim::{Bounds, Vector, vector::VectorOps as _};
 
 use crate::{BoundedSdf, GradientSdf, SDF, SdfVector, unit_or_zero};
 

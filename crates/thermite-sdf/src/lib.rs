@@ -1,3 +1,5 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 //! Generic, ISA-portable signed-distance fields (2D and 3D) built on Thermite.
 //!
 //! Shapes are organised by a three-trait hierarchy:
@@ -18,7 +20,7 @@ use thermite::mask::GenericMask as _;
 
 pub use thermite::math::SpatialMath as SdfVector;
 
-use thermite_geometry::prim::{Bounds, Vector};
+use thermite_geometry::soa::prim::{Bounds, Vector};
 
 /// `v / len`, returning the zero vector instead of `NaN` when `len == 0`.
 ///
@@ -106,7 +108,7 @@ pub trait BoundedSdf<V: SdfVector, const N: usize>: SDF<V, N> {
 mod tests {
     use super::*;
     use thermite::prelude::*;
-    use thermite_geometry::prim::{Vector2, Vector3};
+    use thermite_geometry::soa::prim::{Vector2, Vector3};
 
     /// 1-lane scalar vector, the simplest concrete `FloatVector`.
     type V = thermite::Vector<f32>;
@@ -430,7 +432,7 @@ mod tests {
             }
         }
         // N-D CrossPolytope override too
-        use thermite_geometry::prim::Vector as NV;
+        use thermite_geometry::soa::prim::Vector as NV;
         let cp = CrossPolytope { s: v(1.0) };
         let q4 = NV::<V, 4>::new([v(0.5), v(-0.3), v(0.7), v(-0.2)]);
         for k in 0..4 {
@@ -607,7 +609,7 @@ mod tests {
     // the generic BoundedSdf containment is sanity-checked.
     #[test]
     fn nd_primitives() {
-        use thermite_geometry::prim::Vector as NV;
+        use thermite_geometry::soa::prim::Vector as NV;
         let p4 = |a, b, c, d| NV::<V, 4>::new([v(a), v(b), v(c), v(d)]);
         let p5 = |a, b, c, d, e| NV::<V, 5>::new([v(a), v(b), v(c), v(d), v(e)]);
 
@@ -688,7 +690,7 @@ mod tests {
         };
         assert!(s(b4.eval(p4(0.0, 0.0, 0.0, 0.0))) < 0.0);
         assert!(s(b4.eval(p4(3.0, 3.0, 3.0, 3.0))) > 0.0);
-        let bb: thermite_geometry::prim::Bounds<V, 4> = b4.aabb();
+        let bb: thermite_geometry::soa::prim::Bounds<V, 4> = b4.aabb();
         assert!((s(bb.0[3][1]) - 1.0).abs() < 1e-6); // +w extent == half-extent
     }
 
@@ -1157,7 +1159,7 @@ mod tests {
         assert!((s(bb.0[0][0]) + 1.0).abs() < 1e-5 && (s(bb.0[0][1]) - 1.0).abs() < 1e-5);
 
         // every sampled curve point lies inside the (closed) box
-        let inside = |bb: &thermite_geometry::prim::Bounds<V, 2>, q: Vector2<V>| {
+        let inside = |bb: &thermite_geometry::soa::prim::Bounds<V, 2>, q: Vector2<V>| {
             s(q[0]) >= s(bb.0[0][0]) - 1e-5
                 && s(q[0]) <= s(bb.0[0][1]) + 1e-5
                 && s(q[1]) >= s(bb.0[1][0]) - 1e-5
@@ -1185,7 +1187,7 @@ mod tests {
         assert!(s(cb.0[1][0]) > -1.0 + 1e-3 && s(cb.0[1][1]) < 2.0 - 1e-3);
 
         // 3D-generic path: a planar quadratic in xy with z fixed gives a flat box.
-        use thermite_geometry::prim::Vector as NV;
+        use thermite_geometry::soa::prim::Vector as NV;
         let q3 = |x, y, z| NV::<V, 3>::new([v(x), v(y), v(z)]);
         let bb3 = quadratic_bezier_aabb(q3(-1.0, 0.0, 0.5), q3(0.0, 1.5, 0.5), q3(1.0, 0.0, 0.5));
         assert!((s(bb3.0[2][0]) - 0.5).abs() < 1e-6 && (s(bb3.0[2][1]) - 0.5).abs() < 1e-6);
@@ -1867,7 +1869,7 @@ mod tests {
         assert!(kernel_differs, "Cubic kernel should change the field vs Quadratic");
 
         // 4D carved detail on a hypersphere host (cost 2^4 = 16 corners/octave).
-        use thermite_geometry::prim::Vector as NV;
+        use thermite_geometry::soa::prim::Vector as NV;
         let p4 = |a, b, c, d| NV::<V, 4>::new([v(a), v(b), v(c), v(d)]);
         let ball4 = NSphere { radius: v(1.5) };
         let eroded4 = FbmDetail::<V, _>::carved(ball4).with_hash(HoskinsHash);
