@@ -73,7 +73,7 @@ macro_rules! suite {
             let _ = (0.5 as $e).scalar_ln_1p();
             let _ = x.scalar_to_degrees();
             let _ = x.scalar_to_radians();
-            let _ = x.scalar_reciprocal();
+            let _ = x.scalar_approx_reciprocal();
             let _ = x.scalar_powf(2.0 as $e);
             let _ = x.scalar_lerp(0.0 as $e, 10.0 as $e);
 
