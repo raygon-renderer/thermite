@@ -33,7 +33,7 @@ type F = Vector<f32>;
 /// Whether the scalar seed fuses. False on baseline x86, true on AArch64 and under
 /// `RUSTFLAGS="-C target-feature=+fma"`. Both arms are tested wherever the property
 /// holds unconditionally. This only gates the claims that differ by lowering.
-const SEED_FUSES: bool = <D as MulAddExt>::HAS_TRUE_FMA;
+const SEED_FUSES: bool = matches!(<D as MulAddExt>::HAS_NATIVE_FMA, thermite::tribool::True);
 
 /// Operand pairs whose product is not exactly representable, so a lowering that
 /// rounds one side and not the other cannot accidentally pass. The last pair sits

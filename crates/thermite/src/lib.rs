@@ -132,6 +132,7 @@ pub mod features {
 pub extern crate bitvec;
 pub extern crate const_default;
 pub extern crate generic_array;
+pub extern crate tribool;
 
 pub use thermite_macros::{HasIsa, dispatch, dispatch_dyn};
 

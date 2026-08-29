@@ -389,8 +389,9 @@ impl SignedRegister for F64x2Wasm {
 
 #[thermite_macros::inline_always]
 impl FloatRegister for F64x2Wasm {
-    // No way to know if FMA is supported at compile time
-    const HAS_TRUE_FMA: bool = false;
+    // Fusing is a per-instance engine choice, detected at runtime by the
+    // relaxed-madd canary (polyfills/math.rs), so a const cannot know it.
+    const HAS_NATIVE_FMA: tribool::Tribool = tribool::Indeterminate;
 
     type Bits = super::U64x2Wasm;
     type SignedBits = super::I64x2Wasm;

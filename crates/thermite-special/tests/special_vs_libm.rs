@@ -233,7 +233,11 @@ fn tgamma_is_finite_right_up_to_the_overflow_point() {
     ] {
         for (i, v) in got.iter().enumerate() {
             assert!(v.is_finite(), "f64 {name}: tgamma({}) = {v}, want finite", last64[i]);
-            assert!(close(*v, libm::tgamma(last64[i]), 1.0e-6), "f64 {name}: tgamma({})", last64[i]);
+            assert!(
+                close(*v, libm::tgamma(last64[i]), 1.0e-6),
+                "f64 {name}: tgamma({})",
+                last64[i]
+            );
         }
     }
 

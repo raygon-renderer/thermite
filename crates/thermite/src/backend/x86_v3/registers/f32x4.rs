@@ -463,7 +463,7 @@ impl SignedRegister for F32x4V3 {
 
 #[thermite_macros::inline_always]
 impl FloatRegister for F32x4V3 {
-    const HAS_TRUE_FMA: bool = true;
+    const HAS_NATIVE_FMA: tribool::Tribool = tribool::True;
 
     type Bits = super::U32x4V3;
     type SignedBits = super::I32x4V3;

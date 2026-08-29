@@ -99,8 +99,11 @@ Two families, four signs each:
   **bit-identical to a hardware FMA for every input** -- unconditionally, no
   feature changes it, never scalar, never `libm`. Slower than the `e` forms
   (roughly 2-4x a plain multiply-add). So non-`e` forms are a full **accuracy
-  guarantee** even without hardware FMA; gate on `V::HAS_TRUE_FMA` only to
-  avoid the *emulation cost*.
+  guarantee** even without hardware FMA; gate on
+  `matches!(V::HAS_NATIVE_FMA, tribool::True)` only to avoid the *emulation cost*.
+  (`HAS_NATIVE_FMA` is a `Tribool`: `True`/`False`/`Indeterminate`, the last
+  meaning runtime-decided, as on wasm. Exactness-by-uniform-rounding arguments
+  gate on `matches!(.., tribool::False)` instead.)
 
 Detail and ILP techniques: [performance.md](performance.md).
 

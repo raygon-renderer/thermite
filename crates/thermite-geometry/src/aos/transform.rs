@@ -90,9 +90,7 @@ impl<S: Simd3Vectors, E: AosFloat<S>> Transform<S, E> {
     pub fn scale(axes: V3<S, E>) -> Self {
         let zero = <V3<S, E> as NumericVector>::ZERO;
 
-        let rcp = axes
-            .cmp_eq(zero)
-            .select(zero, <V3<S, E> as NumericVector>::ONE / axes);
+        let rcp = axes.cmp_eq(zero).select(zero, <V3<S, E> as NumericVector>::ONE / axes);
 
         Self {
             forward: Matrix4::from_scale(axes),

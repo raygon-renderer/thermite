@@ -203,11 +203,7 @@ impl<S: Simd3Vectors, E: AosFloat<S>> Ray3<S, E> {
     /// every step after the first, which is exactly when a spawned ray starts
     /// re-hitting its own surface.
     #[inline(always)]
-    pub fn transform_propagate_error(
-        self,
-        m: &Matrix4<S, E>,
-        error: RayError3<S, E>,
-    ) -> (Self, RayError3<S, E>) {
+    pub fn transform_propagate_error(self, m: &Matrix4<S, E>, error: RayError3<S, E>) -> (Self, RayError3<S, E>) {
         let (d, de) = transform_vector_propagate_error(m, self.direction, error.dir);
         let (o, oe) = transform_point_propagate_error(m, self.origin, error.pos);
 
@@ -282,10 +278,7 @@ fn transform_vector_with_error<S: Simd3Vectors, E: AosFloat<S>>(
 /// The translation column contributes because the point's implicit `w = 1`
 /// multiplies it.
 #[inline(always)]
-fn transform_point_with_error<S: Simd3Vectors, E: AosFloat<S>>(
-    m: &Matrix4<S, E>,
-    p: V3<S, E>,
-) -> (V3<S, E>, V3<S, E>) {
+fn transform_point_with_error<S: Simd3Vectors, E: AosFloat<S>>(m: &Matrix4<S, E>, p: V3<S, E>) -> (V3<S, E>, V3<S, E>) {
     let abs_p = p.abs();
     let [c0, c1, c2] = m.linear().map(|c| c.abs());
     let c3 = m.translation().abs();
@@ -359,21 +352,13 @@ impl<S: Simd3Vectors, E: AosFloat<S>> Matrix4<S, E> {
 
     /// Transforms a point and bounds the floating-point error of the result.
     #[inline(always)]
-    pub fn transform_point_propagate_error(
-        &self,
-        p: V3<S, E>,
-        error: V3<S, E>,
-    ) -> (V3<S, E>, V3<S, E>) {
+    pub fn transform_point_propagate_error(&self, p: V3<S, E>, error: V3<S, E>) -> (V3<S, E>, V3<S, E>) {
         transform_point_propagate_error(self, p, error)
     }
 
     /// Transforms a direction carrying an error interval, propagating it.
     #[inline(always)]
-    pub fn transform_vector_propagate_error(
-        &self,
-        v: V3<S, E>,
-        error: V3<S, E>,
-    ) -> (V3<S, E>, V3<S, E>) {
+    pub fn transform_vector_propagate_error(&self, v: V3<S, E>, error: V3<S, E>) -> (V3<S, E>, V3<S, E>) {
         transform_vector_propagate_error(self, v, error)
     }
 

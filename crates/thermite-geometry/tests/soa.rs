@@ -6,11 +6,7 @@
 
 use thermite::prelude::*;
 
-use thermite_geometry::soa::prim::{
-    Bounds, Matrix, Point, Vector as GVector,
-    matrix::gamma,
-    vector::VectorOps as _,
-};
+use thermite_geometry::soa::prim::{Bounds, Matrix, Point, Vector as GVector, matrix::gamma, vector::VectorOps as _};
 
 /// 1-lane scalar vector, the simplest concrete `FloatVector`.
 type V = thermite::Vector<f32>;
@@ -451,7 +447,8 @@ fn matrix_determinant() {
 
     // A singular matrix (two identical columns) must report det == 0 and fail
     // try_invert rather than silently returning garbage.
-    let singular = Matrix::<V, 3, 3>::new([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0], [4.0, 5.0, 7.0]].map(|c: [f32; 3]| c.map(v)));
+    let singular =
+        Matrix::<V, 3, 3>::new([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0], [4.0, 5.0, 7.0]].map(|c: [f32; 3]| c.map(v)));
 
     assert!(close(s(singular.determinant()), 0.0));
     assert!(!singular.try_invert().1.all());
@@ -480,7 +477,10 @@ fn matrix_transforms() {
     assert_point3(composed.transform_point(pt3(1.0, 1.0, 1.0)), [12.0, 23.0, 34.0]);
 
     // The affine inverse undoes it.
-    assert_point3(composed.invert().transform_point(pt3(12.0, 23.0, 34.0)), [1.0, 1.0, 1.0]);
+    assert_point3(
+        composed.invert().transform_point(pt3(12.0, 23.0, 34.0)),
+        [1.0, 1.0, 1.0],
+    );
 
     // The Mul operators agree with the named methods.
     assert_point3(m * pt3(1.0, 2.0, 3.0), [11.0, 22.0, 33.0]);
@@ -643,7 +643,10 @@ fn axis_aligned_rays_hit_on_a_wide_backend() {
         // The zero components must be infinities, never NaN.
         for c in 0..3 {
             let v = inv[c].extract::<0>();
-            assert!(!v.is_nan(), "inv_direction component {c} is NaN for dir ({dx}, {dy}, {dz})");
+            assert!(
+                !v.is_nan(),
+                "inv_direction component {c} is NaN for dir ({dx}, {dy}, {dz})"
+            );
         }
 
         let (t_min, t_max, hit) = ray.intersects_aabb_mask(&boxed, &inv);
@@ -677,7 +680,12 @@ fn offset_origin_escapes_the_surface() {
 
     // A ray leaving along the normal is pushed to the +y side...
     let out = Ray::offset_origin(p, error, normal, normal);
-    assert!(s(out[1]) > s(p[1]), "offset must move off the surface: {} vs {}", s(out[1]), s(p[1]));
+    assert!(
+        s(out[1]) > s(p[1]),
+        "offset must move off the surface: {} vs {}",
+        s(out[1]),
+        s(p[1])
+    );
 
     // ... and one leaving into the surface, to the -y side. The side test is on
     // `direction`, so a transmitted ray needs nothing special at the call site.
@@ -746,11 +754,7 @@ fn offset_origin_diverges_per_lane() {
         let normal = SoaVector::<W, 3>::new([W::splat(0.0), W::splat(1.0), W::splat(0.0)]);
 
         // Lanes 0 and 2 reflect (leave along +n), and lanes 1 and 3 transmit.
-        let dir = SoaVector::<W, 3>::new([
-            W::splat(0.0),
-            W::from_slice(&[1.0, -1.0, 1.0, -1.0]),
-            W::splat(0.0),
-        ]);
+        let dir = SoaVector::<W, 3>::new([W::splat(0.0), W::from_slice(&[1.0, -1.0, 1.0, -1.0]), W::splat(0.0)]);
 
         let out = Ray::offset_origin(p, err, normal, dir);
 
@@ -784,10 +788,7 @@ fn is_identity_detects_every_entry() {
             let mut m = Matrix::<V, 4, 4>::IDENTITY;
             m.0[c][r] += v(0.5);
 
-            assert!(
-                !m.is_identity(tol).all(),
-                "a deviation at ({r}, {c}) must be detected"
-            );
+            assert!(!m.is_identity(tol).all(), "a deviation at ({r}, {c}) must be detected");
         }
     }
 }
@@ -806,7 +807,14 @@ fn matrix4_times_vector3_ignores_translation() {
 
     assert_vec3(m * v3, [1.0, 2.0, 3.0]);
     // ... and it agrees with the named method.
-    assert_vec3(m * v3, [s(m.transform_vector(v3)[0]), s(m.transform_vector(v3)[1]), s(m.transform_vector(v3)[2])]);
+    assert_vec3(
+        m * v3,
+        [
+            s(m.transform_vector(v3)[0]),
+            s(m.transform_vector(v3)[1]),
+            s(m.transform_vector(v3)[2]),
+        ],
+    );
 
     // A 4x3 (compact affine) matrix works too, and its first three rows are what
     // the product reads.
@@ -869,9 +877,7 @@ fn adjugate_matches_the_flat_reference() {
 
         // The crate exposes the adjugate through `invert`, which divides by the
         // determinant, so multiply it back out to recover the adjugate itself.
-        let m = Matrix::<V, 4, 4>::new(core::array::from_fn(|c| {
-            core::array::from_fn(|r| v(raw[c * 4 + r]))
-        }));
+        let m = Matrix::<V, 4, 4>::new(core::array::from_fn(|c| core::array::from_fn(|r| v(raw[c * 4 + r]))));
 
         let det = s(m.determinant());
 

@@ -5,7 +5,7 @@
 //! NaN for operands whose true product is an ordinary finite number.
 //!
 //! This only ever affected targets WITHOUT hardware FMA, because `two_prod` takes an FMA
-//! fast path when `HAS_TRUE_FMA` and never splits at all. The x86_v1 (SSE2) and x86_v2
+//! fast path when `HAS_NATIVE_FMA` is `True` and never splits at all. The x86_v1 (SSE2) and x86_v2
 //! (SSE4.2) backends are exactly that case, so they are what these tests pin.
 
 #![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -72,7 +72,10 @@ mod sse2 {
     #[test]
     fn f64x2_two_prod_survives_large_operands() {
         assert!(
-            !<f64x2 as thermite::vector::ops::MulAddExt>::HAS_TRUE_FMA,
+            matches!(
+                <f64x2 as thermite::vector::ops::MulAddExt>::HAS_NATIVE_FMA,
+                thermite::tribool::False
+            ),
             "x86_v1 must not have hardware FMA, or this test proves nothing"
         );
 
@@ -94,7 +97,10 @@ mod sse2 {
 
     #[test]
     fn f32x4_two_prod_survives_large_operands() {
-        assert!(!<f32x4 as thermite::vector::ops::MulAddExt>::HAS_TRUE_FMA);
+        assert!(matches!(
+            <f32x4 as thermite::vector::ops::MulAddExt>::HAS_NATIVE_FMA,
+            thermite::tribool::False
+        ));
 
         for (a, b) in [(F32_THRESH * 2.0, 3.0f32), (f32::MAX, 0.5), (-f32::MAX, 0.25)] {
             let (p, e) = <f32x4 as ScalarValue>::two_prod(f32x4::splat(a), f32x4::splat(b));
@@ -157,8 +163,8 @@ mod sse2 {
 /// The limit belongs to the SPLIT, so it only exists where `two_prod` splits. With true
 /// FMA there is no split and the error term comes back finite and exact, which is why
 /// this needs the gate below rather than an unconditional assertion. Without it the test
-/// fails under `-C target-cpu=x86-64-v3` (and on aarch64, where `HAS_TRUE_FMA` is
-/// unconditionally true) while passing at the SSE2 baseline the rest of the file pins.
+/// fails under `-C target-cpu=x86-64-v3` (and on aarch64, where `HAS_NATIVE_FMA` is
+/// unconditionally `True`) while passing at the SSE2 baseline the rest of the file pins.
 #[test]
 fn f64_product_at_max_is_the_documented_limit() {
     use thermite::vector::ops::MulAddExt;
@@ -167,7 +173,7 @@ fn f64_product_at_max_is_the_documented_limit() {
 
     assert_eq!(p, f64::MAX, "the value is still correct");
 
-    if <f64 as MulAddExt>::HAS_TRUE_FMA {
+    if matches!(<f64 as MulAddExt>::HAS_NATIVE_FMA, thermite::tribool::True) {
         assert_eq!(e, f64::MAX.mul_add(1.0, -p), "the FMA path has no split, so no limit");
     } else {
         assert!(

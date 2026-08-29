@@ -60,12 +60,13 @@ cfg_select! {
 /// Deliberately reads **baseline** target features only, on every rung. The `nightly`
 /// and `std` rungs lower `mul_add` through `llvm.fma`, which becomes `vfmadd*` inside a
 /// feature-enabled function but an out-of-line soft-float call outside one; a `const`
-/// cannot tell which it will be. Thermite's kernels treat `HAS_TRUE_FMA == true` as a
+/// cannot tell which it will be. Thermite's kernels treat `HAS_NATIVE_FMA == True` as a
 /// promise that the FMA is *fast*, so the promise is only made where the baseline keeps
-/// it unconditionally.
+/// it unconditionally. Never `Indeterminate` here: the baseline either proves the
+/// instruction or it does not.
 ///
-/// AArch64 is unconditionally true: AdvSIMD, and with it `fmadd`, is mandatory there.
-pub const HAS_TRUE_FMA: bool = cfg!(any(
+/// AArch64 is unconditionally `True`: AdvSIMD, and with it `fmadd`, is mandatory there.
+pub const HAS_NATIVE_FMA: tribool::Tribool = tribool::Tribool::boolean(cfg!(any(
     all(any(target_arch = "x86", target_arch = "x86_64"), target_feature = "fma"),
     all(target_arch = "aarch64", target_feature = "neon"),
-));
+)));

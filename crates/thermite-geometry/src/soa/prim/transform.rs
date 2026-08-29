@@ -313,10 +313,7 @@ impl<V: RealMath> Transform<V> {
 
         let (right, right_norm) = up.cross(dir).normalize_norm();
 
-        let ok = dir_norm.cmp_gt(V::ZERO)
-            & dir_norm.is_finite()
-            & right_norm.cmp_gt(V::ZERO)
-            & right_norm.is_finite();
+        let ok = dir_norm.cmp_gt(V::ZERO) & dir_norm.is_finite() & right_norm.cmp_gt(V::ZERO) & right_norm.is_finite();
 
         // Re-derived rather than taken from `up`, which is only a hint and need
         // not be perpendicular to `dir`.

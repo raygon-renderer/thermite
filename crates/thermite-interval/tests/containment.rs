@@ -176,7 +176,7 @@ fn tightest_preserves_exactness() {
     assert!(lo < 3.75 && hi > 3.75);
 
     // ...but its residual mul stays exact when hardware FMA is present. On
-    // the scalar test backend HAS_TRUE_FMA may be false, so only assert
+    // the scalar test backend HAS_NATIVE_FMA may be False, so only assert
     // containment there.
     let (lo, hi) = bounds(xb * iv(2.0, 2.0));
     assert!(lo <= 3.0 && hi >= 3.0);

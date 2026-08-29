@@ -1635,7 +1635,7 @@ where
 
     const HAS_APPROX_RCP: bool = R::HAS_APPROX_RCP;
     const HAS_APPROX_RSQRT: bool = R::HAS_APPROX_RSQRT;
-    const HAS_TRUE_FMA: bool = R::HAS_TRUE_FMA;
+    const HAS_NATIVE_FMA: tribool::Tribool = R::HAS_NATIVE_FMA;
 
     const NATIVE_CAP: NativeCapability = R::NATIVE_CAP;
 

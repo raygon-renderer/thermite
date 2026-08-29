@@ -243,4 +243,3 @@ where
 
     near.select(series, far)
 }
-

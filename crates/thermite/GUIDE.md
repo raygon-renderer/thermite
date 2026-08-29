@@ -795,8 +795,10 @@ There are two multiply-add families, told apart by a trailing `e`:
 The `e` therefore decides only what happens on hardware that lacks FMA. Reach for
 `mul_add` when you're accumulating and the rounding matters, and `mul_adde` when you just
 want the instruction wherever it exists. If you're unsure, take `mul_adde`, then gate the
-accuracy-critical path on `V::HAS_TRUE_FMA` behind an `if const` if measurement says it
-matters.
+accuracy-critical path on `matches!(V::HAS_NATIVE_FMA, tribool::True)` behind an `if const`
+if measurement says it matters. (`HAS_NATIVE_FMA` is a re-exported [`tribool::Tribool`], not
+a bool: `True` = fused single instructions, `False` = definitely unfused, and `Indeterminate`
+= decided at runtime, as on wasm where the engine's relaxed madd may or may not fuse.)
 
 On hardware without FMA, `mul_add` and family lower to a vectorized round-to-odd
 emulation that is correctly rounded (bit-identical to a true fused multiply-add for
@@ -1225,7 +1227,7 @@ Capability constants resolve at compile time inside the dispatched context, so a
 on one costs nothing and lets a single generic body pick the right algorithm per backend:
 
 ```rust,ignore
-if const { V::HAS_TRUE_FMA } {
+if const { matches!(V::HAS_NATIVE_FMA, tribool::True) } {
     an = an.mul_add(quarter, lambda * quarter);  // fusing is safe, the hardware has it
 } else {
     an = (an + lambda) * quarter;                // the extra multiply would be wasted above

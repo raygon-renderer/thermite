@@ -33,7 +33,7 @@
 //! on the integer ALUs while the branchless one puts 3.00 uOps on each of FP0-FP3, the
 //! exact ports the surrounding SIMD work needs.
 //!
-//! This rung is never trusted for [`HAS_TRUE_FMA`](super::HAS_TRUE_FMA), which stays
+//! This rung is never trusted for [`HAS_NATIVE_FMA`](super::HAS_NATIVE_FMA), which stays
 //! baseline-gated.
 //!
 //! # `outline_scalar_math`

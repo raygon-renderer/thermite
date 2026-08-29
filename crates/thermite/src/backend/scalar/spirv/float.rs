@@ -177,7 +177,7 @@ impl FloatRegister for [<f $width>] {
     type ExtendedPrecision = f64;
 
     // GPU hardware always has FMA via GLSLstd450.
-    const HAS_TRUE_FMA: bool = true;
+    const HAS_NATIVE_FMA: tribool::Tribool = tribool::True;
 
     const HALF:         Self = 0.5;
     const NEG_ZERO:     Self = -0.0;

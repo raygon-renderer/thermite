@@ -175,7 +175,7 @@ unstable and ARMv7 NEON has no `f64` lanes. RISC-V V hasn't been started.
 
 The `avx512-tier1` through `avx512-tier3` features select which AVX-512 tier
 the in-progress x86-v4 backend compiles to (tier 1 is the Skylake-SP set, the
-floor - there is no Knights Landing tier). The backend has no registers yet,
+floor, and there is no Knights Landing tier). The backend has no registers yet,
 so today they change no codegen and AVX-512 hardware runs the AVX2 backend.
 
 ## The crates

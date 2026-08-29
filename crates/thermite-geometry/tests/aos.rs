@@ -10,8 +10,7 @@
 use thermite::{prelude::*, simd::Simd3Vectors};
 
 use thermite_geometry::aos::{
-    self, AosFloat, Bounds3, Matrix4, Quaternion, Ray3, RayError3, TangentFrame, Transform,
-    Vector3Ext as _,
+    self, AosFloat, Bounds3, Matrix4, Quaternion, Ray3, RayError3, TangentFrame, Transform, Vector3Ext as _,
     matrix::gamma,
 };
 
@@ -173,7 +172,10 @@ fn matrix_compose_and_invert() {
     let inv = m.invert().expect("scale-then-translate is invertible");
 
     // The inverse really is the inverse.
-    assert_v3(inv.transform_point(m.transform_point(v3(5.0, -2.0, 0.5))), [5.0, -2.0, 0.5]);
+    assert_v3(
+        inv.transform_point(m.transform_point(v3(5.0, -2.0, 0.5))),
+        [5.0, -2.0, 0.5],
+    );
     assert!((m * inv).is_identity(1e-5));
 
     // A singular matrix is reported rather than silently producing infinities.
@@ -210,7 +212,11 @@ fn matrix_transform_normal_uses_the_cofactor() {
     let t2 = m.transform_vector(tangent);
 
     // Perpendicularity survives, the whole point of the inverse-transpose.
-    assert!(close(n2.dot3(t2), 0.0), "normal must stay perpendicular: {}", n2.dot3(t2));
+    assert!(
+        close(n2.dot3(t2), 0.0),
+        "normal must stay perpendicular: {}",
+        n2.dot3(t2)
+    );
 
     // Transforming it as a direction would NOT preserve that.
     assert!(!close(m.transform_vector(n).dot3(t2), 0.0));
@@ -223,7 +229,12 @@ fn matrix_transform_normal_uses_the_cofactor() {
 fn matrix_batch_transform_matches_the_scalar_one() {
     let m = M4::from_translation(v3(1.0, -2.0, 0.5)) * M4::from_scale(v3(2.0, 3.0, 4.0));
 
-    let pts = [v3(1.0, 1.0, 1.0), v3(0.0, 0.0, 0.0), v3(-1.0, 2.0, -3.0), v3(5.0, 5.0, 5.0)];
+    let pts = [
+        v3(1.0, 1.0, 1.0),
+        v3(0.0, 0.0, 0.0),
+        v3(-1.0, 2.0, -3.0),
+        v3(5.0, 5.0, 5.0),
+    ];
 
     let batched = m.transform_points(pts);
 
@@ -250,7 +261,10 @@ fn quaternion_rotation_basics() {
     assert_v3(q.rotate_vector::<false>(v3(1.0, 0.0, 0.0)), [0.0, 1.0, 0.0]);
 
     // The identity does nothing.
-    assert_v3(Quat::IDENTITY.rotate_vector::<false>(v3(1.0, 2.0, 3.0)), [1.0, 2.0, 3.0]);
+    assert_v3(
+        Quat::IDENTITY.rotate_vector::<false>(v3(1.0, 2.0, 3.0)),
+        [1.0, 2.0, 3.0],
+    );
 
     // The inverse undoes it.
     let v = v3(0.3, -0.7, 1.1);
@@ -270,7 +284,12 @@ fn quaternion_matrix_round_trip() {
     let back = Quat::from_matrix(&m);
 
     // q and -q are the same rotation, so compare the action, not the components.
-    for v in [v3(1.0, 0.0, 0.0), v3(0.0, 1.0, 0.0), v3(0.0, 0.0, 1.0), v3(1.0, 2.0, 3.0)] {
+    for v in [
+        v3(1.0, 0.0, 0.0),
+        v3(0.0, 1.0, 0.0),
+        v3(0.0, 0.0, 1.0),
+        v3(1.0, 2.0, 3.0),
+    ] {
         assert_v3_eq(back.rotate_vector::<false>(v), q.rotate_vector::<false>(v));
         // ... and the matrix agrees with the quaternion it came from.
         assert_v3_eq(m.transform_vector(v), q.rotate_vector::<false>(v));
@@ -294,7 +313,10 @@ fn quaternion_axis_angle_round_trip() {
 
     // The axis-angle *vector* form round-trips too.
     let q2 = Quat::from_axis_angle(axis * V3::splat(angle));
-    assert_v3_eq(q2.rotate_vector::<false>(v3(1.0, 1.0, 1.0)), q.rotate_vector::<false>(v3(1.0, 1.0, 1.0)));
+    assert_v3_eq(
+        q2.rotate_vector::<false>(v3(1.0, 1.0, 1.0)),
+        q.rotate_vector::<false>(v3(1.0, 1.0, 1.0)),
+    );
 }
 
 #[test]
@@ -457,7 +479,11 @@ fn transform_pairs_forward_and_inverse() {
 
     // A zero axis collapses rather than producing infinities.
     let degenerate = Transform::<S, f32>::scale(v3(1.0, 0.0, 1.0));
-    assert!(arr(degenerate.inverse.transform_point(v3(1.0, 1.0, 1.0))).iter().all(|c| c.is_finite()));
+    assert!(
+        arr(degenerate.inverse.transform_point(v3(1.0, 1.0, 1.0)))
+            .iter()
+            .all(|c| c.is_finite())
+    );
 
     // Composition applies rhs first, and the inverses compose in reverse.
     let composed = t * s;
@@ -638,7 +664,12 @@ fn ray_offset_origin_escapes_the_surface() {
 
     // A ray leaving along the normal is pushed to the +y side.
     let out = Ray3::<S, f32>::offset_origin(p, error, normal, normal);
-    assert!(out[1] > p[1], "offset must move off the surface: {} vs {}", out[1], p[1]);
+    assert!(
+        out[1] > p[1],
+        "offset must move off the surface: {} vs {}",
+        out[1],
+        p[1]
+    );
 
     // A ray leaving into the surface is pushed the other way.
     let into = Ray3::<S, f32>::offset_origin(p, error, normal, -normal);
@@ -661,8 +692,7 @@ mod cross_layout {
     use super::*;
 
     use thermite_geometry::soa::prim::{
-        Bounds as SoaBounds, Matrix as SoaMatrix, Point as SoaPoint, Vector as SoaVector,
-        vector::VectorOps as _,
+        Bounds as SoaBounds, Matrix as SoaMatrix, Point as SoaPoint, Vector as SoaVector, vector::VectorOps as _,
     };
 
     /// 1-lane SoA vectors, so a lane reads back as a plain scalar.
@@ -735,10 +765,7 @@ mod cross_layout {
 
         // ... including the total-internal-reflection case, where both give zero.
         let steep = [3.0f32.sqrt() / 2.0, -0.5, 0.0];
-        let (asteep, ssteep) = (
-            v3(steep[0], steep[1], steep[2]),
-            soa_vec(steep[0], steep[1], steep[2]),
-        );
+        let (asteep, ssteep) = (v3(steep[0], steep[1], steep[2]), soa_vec(steep[0], steep[1], steep[2]));
 
         agree(
             arr(asteep.refract(an, 2.0)),
@@ -756,11 +783,8 @@ mod cross_layout {
         let aos_m = M4::from_translation(v3(translation[0], translation[1], translation[2]))
             * M4::from_scale(v3(scale[0], scale[1], scale[2]));
 
-        let soa_m = SoaMatrix::<L, 4, 4>::from_translation(soa_vec(
-            translation[0],
-            translation[1],
-            translation[2],
-        )) * SoaMatrix::<L, 4, 4>::from_scale(soa_vec(scale[0], scale[1], scale[2]));
+        let soa_m = SoaMatrix::<L, 4, 4>::from_translation(soa_vec(translation[0], translation[1], translation[2]))
+            * SoaMatrix::<L, 4, 4>::from_scale(soa_vec(scale[0], scale[1], scale[2]));
 
         for p in [[1.0f32, 1.0, 1.0], [0.0, 0.0, 0.0], [-3.0, 2.5, 7.0]] {
             agree(
@@ -807,10 +831,7 @@ mod cross_layout {
 
         let aos_b = Bounds3::<S, f32>::new(v3(lo[0], lo[1], lo[2]), v3(hi[0], hi[1], hi[2]));
 
-        let soa_b = SoaBounds::<L, 3>::from_corners(
-            soa_vec(lo[0], lo[1], lo[2]),
-            soa_vec(hi[0], hi[1], hi[2]),
-        );
+        let soa_b = SoaBounds::<L, 3>::from_corners(soa_vec(lo[0], lo[1], lo[2]), soa_vec(hi[0], hi[1], hi[2]));
 
         assert!(close(aos_b.volume(), soa_b.volume().extract::<0>()), "volume");
         assert!(
@@ -832,11 +853,7 @@ mod cross_layout {
 
         // Corner order must match, or a transform_bounds would silently differ.
         for i in 0..8u8 {
-            agree(
-                arr(aos_b.vertex(i)),
-                soa_pt_arr(soa_b.vertex(i as usize)),
-                "vertex",
-            );
+            agree(arr(aos_b.vertex(i)), soa_pt_arr(soa_b.vertex(i as usize)), "vertex");
         }
 
         let p = [2.0f32, -7.0, 0.0];
@@ -990,7 +1007,12 @@ fn decompose_round_trips_through_recomposition() {
 
         let rebuilt = M4::from_translation(dt) * dr.to_matrix() * scale4;
 
-        for p in [v3(1.0, 0.0, 0.0), v3(0.0, 1.0, 0.0), v3(1.0, 2.0, 3.0), v3(-2.0, 0.5, 1.0)] {
+        for p in [
+            v3(1.0, 0.0, 0.0),
+            v3(0.0, 1.0, 0.0),
+            v3(1.0, 2.0, 3.0),
+            v3(-2.0, 0.5, 1.0),
+        ] {
             let want = m.transform_point(p);
             let got = rebuilt.transform_point(p);
 
@@ -1028,12 +1050,7 @@ fn decompose_detects_mirroring() {
 
 #[test]
 fn quaternion_exp_log_round_trip() {
-    for raw in [
-        [0.0f32, 0.0, 0.0],
-        [0.5, 0.0, 0.0],
-        [0.3, -0.7, 1.1],
-        [0.0, 2.0, 0.0],
-    ] {
+    for raw in [[0.0f32, 0.0, 0.0], [0.5, 0.0, 0.0], [0.3, -0.7, 1.1], [0.0, 2.0, 0.0]] {
         let rotation_vector = v3(raw[0], raw[1], raw[2]);
 
         // log(exp(v)) == v for any rotation vector shorter than a half turn.
@@ -1065,10 +1082,7 @@ fn quaternion_log_is_the_difference_between_orientations() {
     let rebuilt = Quat::exp(delta) * a;
 
     for probe in [v3(1.0, 0.0, 0.0), v3(0.0, 1.0, 0.0)] {
-        assert_v3_eq(
-            rebuilt.rotate_vector::<false>(probe),
-            b.rotate_vector::<false>(probe),
-        );
+        assert_v3_eq(rebuilt.rotate_vector::<false>(probe), b.rotate_vector::<false>(probe));
     }
 }
 

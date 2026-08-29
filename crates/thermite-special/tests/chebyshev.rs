@@ -421,7 +421,7 @@ fn f32_precision_policy_also_tightens_the_endpoint_envelope() {
     // f64 grid appears to show.
     //
     // The margin depends on how the scalar backend lowers `mul_adde`: without a baseline
-    // FMA (x86 default) the worst kind still gains 2.78x, but where HAS_TRUE_FMA fuses it
+    // FMA (x86 default) the worst kind still gains 2.78x, but where HAS_NATIVE_FMA fuses it
     // (aarch64, x86 with -C target-feature=+fma) the single fused rounding helps Clenshaw's
     // `2x*b + (c - b_2)` step more than it helps Reinsch, and K=1 narrows to 1.72x. Both
     // lowerings are deterministic, so 1.5x sits inside both measured margins. A lost

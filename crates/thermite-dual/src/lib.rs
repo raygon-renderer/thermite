@@ -4,6 +4,7 @@
 
 use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 
+use thermite::tribool::{self, Tribool};
 use thermite::vector::ops::{MulAddAssignExt, MulAddExt, Square};
 
 pub mod ad;
@@ -454,7 +455,7 @@ where
 // so each part folds into two nested FMAs.
 //
 // There is no "true" hardware FMA for a multidual (each derivative part rounds
-// independently), so `HAS_TRUE_FMA` is false; the `_e` variants use the inner
+// independently), so `HAS_NATIVE_FMA` is `False`; the `_e` variants use the inner
 // estimating FMA while the exact variants use the inner exact FMA.
 
 macro_rules! dual_fma {
@@ -479,7 +480,7 @@ macro_rules! dual_fma {
 impl<V: DualValue, const N: usize> MulAddExt<Self, Self> for Dual<V, N> {
     type Output = Self;
 
-    const HAS_TRUE_FMA: bool = false;
+    const HAS_NATIVE_FMA: Tribool = tribool::False;
 
     dual_fma! {
         mul_add   => mul_add,   mul_add,   mul_add;

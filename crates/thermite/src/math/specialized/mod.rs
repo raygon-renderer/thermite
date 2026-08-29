@@ -530,7 +530,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
     fn difference_of_products<P: Policy>(self, b: Self, c: Self, d: Self) -> Self {
         let (a, cd) = (self, c * d);
 
-        if const { !Self::HAS_TRUE_FMA } {
+        if const { !matches!(Self::HAS_NATIVE_FMA, tribool::True) } {
             a * b - cd
         } else if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
             a.mul_sub(b, cd)
@@ -543,7 +543,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
     fn sum_of_products<P: Policy>(self, b: Self, c: Self, d: Self) -> Self {
         let (a, cd) = (self, c * d);
 
-        if const { !Self::HAS_TRUE_FMA } {
+        if const { !matches!(Self::HAS_NATIVE_FMA, tribool::True) } {
             a * b + cd
         } else if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
             a.mul_add(b, cd)
@@ -1282,7 +1282,8 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
         // which without FMA hardware would mean emulated FMA, never used in these
         // kernels. Non-FMA backends keep the uncorrected form (mean ~3.5 vs ~1.8 ulp
         // over a dense sweep) rather than pay the emulation.
-        if const { P::POLICY.precision.le(PrecisionPolicy::Average) || !Self::HAS_TRUE_FMA } {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) || !matches!(Self::HAS_NATIVE_FMA, tribool::True) }
+        {
             return Self::exp::<P>(p);
         }
 
@@ -1339,7 +1340,8 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
 
         // As in `compound`, the residual needs a real FMA. Non-FMA backends keep the
         // uncorrected form rather than pay emulation.
-        if const { P::POLICY.precision.le(PrecisionPolicy::Average) || !Self::HAS_TRUE_FMA } {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) || !matches!(Self::HAS_NATIVE_FMA, tribool::True) }
+        {
             return Self::exp_m1::<P>(p);
         }
 
@@ -1364,7 +1366,8 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
 
         // As in `compound`, the Dekker residual needs a real FMA; non-FMA backends keep the
         // uncorrected form rather than pay emulation.
-        if const { P::POLICY.precision.le(PrecisionPolicy::Average) || !Self::HAS_TRUE_FMA } {
+        if const { P::POLICY.precision.le(PrecisionPolicy::Average) || !matches!(Self::HAS_NATIVE_FMA, tribool::True) }
+        {
             return Self::exp_m1::<P>(p);
         }
 

@@ -542,7 +542,7 @@ where
         let half_c = c * Self::HALF; // 0.5 * (1 + erf(ax/sqrt(2)))
 
         let y = x * half_c;
-        let dy = if V::HAS_TRUE_FMA {
+        let dy = if matches!(V::HAS_NATIVE_FMA, thermite::tribool::True) {
             (alpha_x * Self::FRAC_1_SQRT_TAU).mul_add(exp_neg_ax2, half_c)
         } else {
             half_c + alpha_x * Self::FRAC_1_SQRT_TAU * exp_neg_ax2
@@ -607,7 +607,7 @@ fn erf_d_internal<V: FloatVectorWithBits<Element = f64>, P: Policy, const C: boo
 
     if !C {
         e.nmul_adde(m, V::ONE) ^ sign
-    } else if const { V::HAS_TRUE_FMA } {
+    } else if const { matches!(V::HAS_NATIVE_FMA, thermite::tribool::True) } {
         // exploit instruction-level parallelism if FMA is available
         x0.select_negative(m.nmul_add(e, V::TWO), m * e)
     } else {

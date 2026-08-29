@@ -1064,7 +1064,7 @@ where
 
     type ExtendedPrecision = ReducedRegister<R::ExtendedPrecision, N>;
 
-    const HAS_TRUE_FMA: bool = R::HAS_TRUE_FMA;
+    const HAS_NATIVE_FMA: tribool::Tribool = R::HAS_NATIVE_FMA;
     const HALF: Storage<Self> = Self(R::HALF, PhantomData);
     const NEG_ZERO: Storage<Self> = Self(R::NEG_ZERO, PhantomData);
     const INFINITY: Storage<Self> = Self(R::INFINITY, PhantomData);

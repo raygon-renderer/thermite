@@ -592,7 +592,7 @@ where
 
     let neg_eighth: V = thermite::const_splat!(f32: -0.125);
 
-    if const { V::HAS_TRUE_FMA } {
+    if const { matches!(V::HAS_NATIVE_FMA, thermite::tribool::True) } {
         // z*-1/8 can be computed earlier,
         // so despite this having the same number of
         // instructions as the non-FMA version, it will
@@ -1058,7 +1058,7 @@ where
         let alpha_x_scaled = x.scale(FloatConsts::FRAC_1_SQRT_TAU);
 
         let y = x * half_c;
-        let dy = if V::HAS_TRUE_FMA {
+        let dy = if matches!(V::HAS_NATIVE_FMA, thermite::tribool::True) {
             alpha_x_scaled.mul_add(exp_neg_ax2, half_c)
         } else {
             half_c + alpha_x_scaled * exp_neg_ax2
@@ -1134,7 +1134,7 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
                 let y = tn.rcp();
                 let k = tn.nmul_adde(y, V::TWO);
 
-                if V::HAS_TRUE_FMA {
+                if matches!(V::HAS_NATIVE_FMA, thermite::tribool::True) {
                     sign.select_negative(y.nmul_add(k, V::TWO), y * k)
                 } else {
                     let erfc_pos = y * k;
@@ -1187,7 +1187,9 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
         let e = exp_neg_x2 * t;
 
         if const { C } {
-            if const { V::HAS_TRUE_FMA && P::POLICY.precision.lt(PrecisionPolicy::Average) } {
+            if const {
+                matches!(V::HAS_NATIVE_FMA, thermite::tribool::True) && P::POLICY.precision.lt(PrecisionPolicy::Average)
+            } {
                 return sign.select_negative(e.nmul_add(m, V::TWO), e * m);
             }
 

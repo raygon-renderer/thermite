@@ -9,8 +9,7 @@
 use thermite::prelude::*;
 
 use thermite_geometry::soa::prim::{
-    Bounds, Matrix, Point, Quaternion, Ray, TangentFrame, Transform, Vector as GVector,
-    ray::RayOps as _,
+    Bounds, Matrix, Point, Quaternion, Ray, TangentFrame, Transform, Vector as GVector, ray::RayOps as _,
     vector::VectorOps as _,
 };
 
@@ -75,7 +74,10 @@ fn quaternion_basics() {
 
     // The conjugate of a unit quaternion is the inverse rotation.
     assert_vec3(rot.conjugate().rotate_vector(vec3(0.0, 1.0, 0.0)), [1.0, 0.0, 0.0]);
-    assert_vec3((rot * rot.conjugate()).rotate_vector(vec3(1.0, 2.0, 3.0)), [1.0, 2.0, 3.0]);
+    assert_vec3(
+        (rot * rot.conjugate()).rotate_vector(vec3(1.0, 2.0, 3.0)),
+        [1.0, 2.0, 3.0],
+    );
 
     // A degenerate quaternion has no direction, so try_normalize must give the
     // identity rather than NaN.

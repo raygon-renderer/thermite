@@ -403,7 +403,10 @@ where
     #[inline(always)]
     fn inv_langevin_1m<P: Policy>(self) -> Self {
         let x = self.re.inv_langevin_1m_p::<P>();
-        self.chain(x, -langevin_deriv::<P, V>(x, V::ONE - self.re).approx_reciprocal_p::<P>())
+        self.chain(
+            x,
+            -langevin_deriv::<P, V>(x, V::ONE - self.re).approx_reciprocal_p::<P>(),
+        )
     }
 
     #[inline(always)]

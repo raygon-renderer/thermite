@@ -94,9 +94,7 @@ pub trait AosFloat<S: Simd3Vectors>: FloatElement {
     type V3: LinAlg3Vector<Element = Self, Lanes = U3> + SpatialMath + SwizzleVector;
 
     /// The 4-lane register: a matrix column, a quaternion, or a homogeneous point.
-    type V4: LinAlg4Vector<Element = Self, Lanes = U4>
-        + ExtendVector<Self::V3, Element = Self>
-        + SwizzleVector;
+    type V4: LinAlg4Vector<Element = Self, Lanes = U4> + ExtendVector<Self::V3, Element = Self> + SwizzleVector;
 }
 
 impl<S: Simd3Vectors<f32x3: SpatialMath>> AosFloat<S> for f32 {

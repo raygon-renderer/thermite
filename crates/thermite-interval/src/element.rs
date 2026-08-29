@@ -15,6 +15,7 @@ use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAss
 
 use thermite::LargeInt;
 use thermite::element::{Element, FloatElement, SignedElement};
+use thermite::tribool::{self, Tribool};
 
 /// Bound shorthand for the scalar element form.
 pub trait ScalarFloat:
@@ -282,7 +283,7 @@ where
 impl<E: ScalarFloat> thermite::vector::ops::MulAddExt<Self, Self> for IntervalElem<E> {
     type Output = Self;
 
-    const HAS_TRUE_FMA: bool = false;
+    const HAS_NATIVE_FMA: Tribool = tribool::False;
 
     #[inline(always)] fn mul_add(self, m: Self, a: Self) -> Self { self * m + a }
     #[inline(always)] fn mul_sub(self, m: Self, a: Self) -> Self { self * m - a }

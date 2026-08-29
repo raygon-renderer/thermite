@@ -47,7 +47,7 @@ fn lag<const N: usize>(x: f64, alpha: f64) -> f64 {
 // --- Values against the exact rational recurrence ---
 
 // The bound depends on how the scalar backend lowers `mul_adde`: unfused (x86 baseline)
-// every probe lands under 1e-14, but where HAS_TRUE_FMA fuses it (aarch64, x86 with
+// every probe lands under 1e-14, but where HAS_NATIVE_FMA fuses it (aarch64, x86 with
 // -C target-feature=+fma) the degree-12 recurrence rounds differently and
 // L_12^(2)(0.5) measures 1.62e-14. Both lowerings are deterministic.
 macro_rules! check {

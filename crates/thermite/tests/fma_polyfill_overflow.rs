@@ -29,7 +29,7 @@ macro_rules! check_backend {
             #[test]
             fn mul_add_stays_finite_for_large_operands() {
                 assert!(
-                    !<f64x2 as MulAddExt>::HAS_TRUE_FMA,
+                    !matches!(<f64x2 as MulAddExt>::HAS_NATIVE_FMA, thermite::tribool::True),
                     "this backend must lack hardware FMA, or the test proves nothing"
                 );
 

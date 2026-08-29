@@ -317,12 +317,7 @@ where
 ///
 /// The empty series is `0`, where the const form refuses to compile.
 #[inline(always)]
-pub fn laguerre_function_series_slice<P, E, V, const INT_ALPHA: bool>(
-    x: V,
-    alpha: V,
-    alpha_int: i32,
-    coeffs: &[E],
-) -> V
+pub fn laguerre_function_series_slice<P, E, V, const INT_ALPHA: bool>(x: V, alpha: V, alpha_int: i32, coeffs: &[E]) -> V
 where
     P: Policy,
     E: FloatElement,

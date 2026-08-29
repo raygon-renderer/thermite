@@ -63,7 +63,6 @@ impl<V: RealPrimalMath<Element: BernoulliNumbers>> BernoulliSequence<V> {
     pub const fn new(b1: V::Element) -> Self {
         Self { idx: 0, b1 }
     }
-
 }
 
 impl<V: RealPrimalMath<Element: BernoulliNumbers>> Iterator for BernoulliSequence<V> {

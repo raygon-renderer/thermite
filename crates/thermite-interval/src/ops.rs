@@ -14,6 +14,7 @@
 use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 
 use thermite::prelude::*;
+use thermite::tribool::{self, Tribool};
 use thermite::vector::ops::{AddSubExt, MulAddExt, Square};
 
 use crate::round::{
@@ -88,7 +89,7 @@ impl<V: IntervalFloatVector, W: WideningPolicy> Interval<V, W> {
     pub fn mul_interval(self, rhs: Self) -> Self {
         let poison = self.is_empty() | rhs.is_empty();
 
-        let res = if const { residual_mul::<W>(V::HAS_TRUE_FMA) } {
+        let res = if const { residual_mul::<W>(matches!(V::HAS_NATIVE_FMA, tribool::True)) } {
             // Widen each product in each direction first, then min/max: every
             // widened-down product is <= its exact product, so the min of the
             // four encloses the exact min (and symmetrically for max).
@@ -217,7 +218,7 @@ impl<V: IntervalFloatVector, W: WideningPolicy> Interval<V, W> {
         let mig = self.mignitude();
         let mag = self.magnitude();
 
-        let res = if const { residual_mul::<W>(V::HAS_TRUE_FMA) } {
+        let res = if const { residual_mul::<W>(matches!(V::HAS_NATIVE_FMA, tribool::True)) } {
             let (pl, rl) = two_square(mig);
             let (ph, rh) = two_square(mag);
             Self::from_bounds_unchecked(
@@ -252,7 +253,7 @@ impl<V: IntervalFloatVector, W: WideningPolicy> Interval<V, W> {
         let sl = lo_in.sqrt();
         let sh = self.hi.sqrt();
 
-        let res = if const { residual_mul::<W>(V::HAS_TRUE_FMA) } {
+        let res = if const { residual_mul::<W>(matches!(V::HAS_NATIVE_FMA, tribool::True)) } {
             // s*s = p + e exactly, and p - x is exact near sqrt (Sterbenz), so
             // r = (p - x) + e is the exact s*s - x. NOTE the sign convention
             // flip versus two_sum residuals: here r > 0 means s > sqrt(x)
@@ -426,7 +427,7 @@ where
 impl<V: IntervalFloatVector, W: WideningPolicy> MulAddExt<Self, Self> for Interval<V, W> {
     type Output = Self;
 
-    const HAS_TRUE_FMA: bool = V::HAS_TRUE_FMA;
+    const HAS_NATIVE_FMA: Tribool = V::HAS_NATIVE_FMA;
 
     #[inline(always)] fn mul_add(self, m: Self, a: Self) -> Self { self * m + a }
     #[inline(always)] fn mul_sub(self, m: Self, a: Self) -> Self { self * m - a }

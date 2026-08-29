@@ -93,7 +93,7 @@ included, at roughly 2-4x the cost of a plain multiply-add (llvm-mca znver3:
 ~19-24 cycles rthr per 128-bit vector vs ~5-9 for the old faithful-only Dekker
 path, since deleted -- bodies in git history). So: **reach for
 the `e` variants by default for speed**; `mul_add` is a full accuracy guarantee on
-every backend, gated behind `HAS_TRUE_FMA` only when you want to dodge the
+every backend, gated behind `matches!(.., tribool::True)` on `HAS_NATIVE_FMA` only when you want to dodge the
 emulation *cost*. If you truly need extra precision, pulling in
 `thermite-compensated` directly is often cleaner than leaning on FMA alone.
 
@@ -102,7 +102,7 @@ accuracy: if the plain spelling would **share** the product you are folding
 (`t3 - a*s` and `t3 + a*s` both want `a*s`), the non-FMA lowering of two folds
 recomputes it. Fold ungated when the product appears once; gate when it would be shared.
 See [optimization-pass.md](optimization-pass.md) sec 1 - and sec 2 for why gating on a
-`Complex<V>` or `Dual<V, N>`'s own `HAS_TRUE_FMA` (always `false`) is a trap.
+`Complex<V>` or `Dual<V, N>`'s own `HAS_NATIVE_FMA` (always `False`) is a trap.
 
 ## 2. Fold negations into constants
 
@@ -128,7 +128,7 @@ Capability constants resolve at compile time inside the dispatcher's
 code:
 
 ```rust
-if const { V::HAS_TRUE_FMA } {
+if const { matches!(V::HAS_NATIVE_FMA, tribool::True) } {
     let lq = lambda * quarter;
     an = an.mul_add(quarter, lq);   // always-fused is SAFE here: HW FMA is proven
 } else {

@@ -73,8 +73,9 @@ sequences per backend at zero runtime cost ([performance.md](performance.md) sec
 
 - `FloatVector::HAS_APPROX_RCP`, `HAS_APPROX_RSQRT` -- `rcp`/`rsqrt` are real
   approximate-reciprocal instructions (true for f32 on x86) vs `1.0/x` fallbacks.
-- `MulAddExt::HAS_TRUE_FMA` (on the FMA ops) -- `mul_adde` lowers to a real fused
-  instruction.
+- `MulAddExt::HAS_NATIVE_FMA` (on the FMA ops) -- a `tribool::Tribool`, not a bool:
+  `True` = `mul_adde` lowers to a real fused instruction, `False` = definitely
+  unfused, `Indeterminate` = runtime-decided (wasm relaxed madd).
 - `BitshiftVector::HAS_TRUE_SHIFTV`, `HAS_WIDE_BYTE_SHIFTS` -- variable / byte
   shift hardware support.
 

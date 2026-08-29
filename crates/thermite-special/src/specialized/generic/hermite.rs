@@ -40,7 +40,7 @@ where
     let q = x * x;
     let mut f = (q * neg_quarter).exp_p::<P>();
 
-    if const { P::POLICY.precision.ge(PrecisionPolicy::Best) && V::HAS_TRUE_FMA } {
+    if const { P::POLICY.precision.ge(PrecisionPolicy::Best) && matches!(V::HAS_NATIVE_FMA, thermite::tribool::True) } {
         // e^{-(q + q_lo)/4} = f * (1 - q_lo/4) to first order, and q_lo/4 is at most an ulp of
         // q/4 so the second-order term is below working precision. Guarded on a finite
         // square: past overflow f is already the correct zero and the residual is NaN.

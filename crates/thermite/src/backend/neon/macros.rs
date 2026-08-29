@@ -1296,7 +1296,7 @@ macro_rules! neon_float_register {
             #[thermite_macros::inline_always]
             impl FloatRegister for $reg {
                 // AdvSIMD FMLA is a true fused multiply-add.
-                const HAS_TRUE_FMA: bool = true;
+                const HAS_NATIVE_FMA: tribool::Tribool = tribool::True;
 
                 type Bits = $bits;
                 type SignedBits = $sbits;

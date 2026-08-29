@@ -380,11 +380,7 @@ fn nudge<V: SpatialMathWithPolicy>(d: Vector<V, 3>, o: Point<V, 3>, oe: Vector<V
 /// [`nudge`], then scale the direction to unit length, also returning that length so
 /// the caller can rescale its own `t` values.
 #[inline(always)]
-fn nudge_and_normalize<V: SpatialMathWithPolicy>(
-    d: Vector<V, 3>,
-    o: Point<V, 3>,
-    oe: Vector<V, 3>,
-) -> (Ray<V, 3>, V) {
+fn nudge_and_normalize<V: SpatialMathWithPolicy>(d: Vector<V, 3>, o: Point<V, 3>, oe: Vector<V, 3>) -> (Ray<V, 3>, V) {
     let ray = nudge(d, o, oe);
 
     let length_sq = d.norm_sqr();

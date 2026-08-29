@@ -268,7 +268,7 @@ macro_rules! impl_float_element {
                     type Output = Self;
 
                     // GPU hardware always has FMA
-                    const HAS_TRUE_FMA: bool = true;
+                    const HAS_NATIVE_FMA: tribool::Tribool = tribool::True;
 
                     #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op3::<Self, Self, Self, Self, {crate::backend::spirv::arch::glsl::FMA}, false>(self, rhs, acc) } }
                     #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { unsafe { crate::backend::spirv::arch::glsl_op3::<Self, Self, Self, Self, {crate::backend::spirv::arch::glsl::FMA}, false>(self, rhs, -acc) } }
@@ -299,7 +299,7 @@ macro_rules! impl_float_element {
                 impl MulAddExt for $t {
                     type Output = Self;
 
-                    const HAS_TRUE_FMA: bool = arch::HAS_TRUE_FMA;
+                    const HAS_NATIVE_FMA: tribool::Tribool = arch::HAS_NATIVE_FMA;
 
                     #[inline(always)] fn mul_add(self, rhs: Self, acc: Self) -> Self { arch::[<fma $($f)?>](self, rhs, acc) }
                     #[inline(always)] fn mul_sub(self, rhs: Self, acc: Self) -> Self { arch::[<fma $($f)?>](self, rhs, -acc) }
@@ -308,10 +308,10 @@ macro_rules! impl_float_element {
 
                     // Only worth the FMA when it is a single instruction; without one the
                     // estimating forms must stay as separate multiply and add.
-                    #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * rhs + acc } else { <Self as MulAddExt>::mul_add(self, rhs, acc) } }
-                    #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * rhs - acc } else { <Self as MulAddExt>::mul_sub(self, rhs, acc) } }
-                    #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { acc - self * rhs } else { <Self as MulAddExt>::nmul_add(self, rhs, acc) } }
-                    #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { if !<Self as MulAddExt>::HAS_TRUE_FMA { self * -rhs - acc } else { <Self as MulAddExt>::nmul_sub(self, rhs, acc) } }
+                    #[inline(always)] fn mul_adde(self, rhs: Self, acc: Self) -> Self { if !matches!(<Self as MulAddExt>::HAS_NATIVE_FMA, tribool::True) { self * rhs + acc } else { <Self as MulAddExt>::mul_add(self, rhs, acc) } }
+                    #[inline(always)] fn mul_sube(self, rhs: Self, acc: Self) -> Self { if !matches!(<Self as MulAddExt>::HAS_NATIVE_FMA, tribool::True) { self * rhs - acc } else { <Self as MulAddExt>::mul_sub(self, rhs, acc) } }
+                    #[inline(always)] fn nmul_adde(self, rhs: Self, acc: Self) -> Self { if !matches!(<Self as MulAddExt>::HAS_NATIVE_FMA, tribool::True) { acc - self * rhs } else { <Self as MulAddExt>::nmul_add(self, rhs, acc) } }
+                    #[inline(always)] fn nmul_sube(self, rhs: Self, acc: Self) -> Self { if !matches!(<Self as MulAddExt>::HAS_NATIVE_FMA, tribool::True) { self * -rhs - acc } else { <Self as MulAddExt>::nmul_sub(self, rhs, acc) } }
                 }
             }
         }

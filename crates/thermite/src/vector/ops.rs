@@ -308,11 +308,14 @@ macro_rules! mul_add_ext {
             /// The result of the fused operation.
             type Output;
 
-            /// Indicates whether the implementation uses true fused-multiply-add instructions.
+            /// Whether the implementation uses native fused-multiply-add instructions,
+            /// as three-valued logic: `True` = fused single instructions, `False` =
+            /// definitely separate multiply and add, `Indeterminate` = decided at
+            /// runtime (e.g. the wasm relaxed-madd canary).
             ///
-            /// Non-`e` variants will always be accurate, regardless of this flag, but the `e` variants
-            /// will fallback to separate multiply and add operations if this is false.
-            const HAS_TRUE_FMA: bool;
+            /// Non-`e` variants are always correctly rounded regardless, but the `e`
+            /// variants fall back to separate multiply and add unless this is `True`.
+            const HAS_NATIVE_FMA: tribool::Tribool;
 
             $(
                 $(#[$meta])*
@@ -323,7 +326,7 @@ macro_rules! mul_add_ext {
         impl<R: FloatRegister> MulAddExt<Self, Self> for Vector<R> {
             type Output = Self;
 
-            const HAS_TRUE_FMA: bool = R::HAS_TRUE_FMA;
+            const HAS_NATIVE_FMA: tribool::Tribool = R::HAS_NATIVE_FMA;
 
             $(#[inline(always)] fn $name(self, a: Self, b: Self) -> Self::Output { Vector(R::$name(self.0, a.0, b.0)) } )*
         }
@@ -331,7 +334,7 @@ macro_rules! mul_add_ext {
         /// Provides assignment variants of the fused multiply-add operations from [`MulAddExt`].
         ///
         /// Unlike regular assignment traits, this does require `MulAddExt` as a supertrait,
-        /// so we can access the associated `HAS_TRUE_FMA` constant.
+        /// so we can access the associated `HAS_NATIVE_FMA` constant.
         pub trait MulAddAssignExt<A = Self, B = Self>: MulAddExt<A, B> {
             $(
                 $(#[$meta])*

@@ -907,9 +907,10 @@ impl<V: SpatialMathWithPolicy> Matrix<V, 4, 4> {
         let mut error = [V::ZERO; 3];
 
         for r in 0..3 {
-            error[r] = self.0[0][r]
-                .abs()
-                .mul_adde(v[0].abs(), self.0[1][r].abs().mul_adde(v[1].abs(), self.0[2][r].abs() * v[2].abs()));
+            error[r] = self.0[0][r].abs().mul_adde(
+                v[0].abs(),
+                self.0[1][r].abs().mul_adde(v[1].abs(), self.0[2][r].abs() * v[2].abs()),
+            );
         }
 
         (self.transform_vector(v), Vector(error) * gamma::<V>(3))
@@ -926,10 +927,9 @@ impl<V: SpatialMathWithPolicy> Matrix<V, 4, 4> {
         for r in 0..3 {
             error[r] = self.0[0][r].abs().mul_adde(
                 p[0].abs(),
-                self.0[1][r].abs().mul_adde(
-                    p[1].abs(),
-                    self.0[2][r].abs().mul_adde(p[2].abs(), self.0[3][r].abs()),
-                ),
+                self.0[1][r]
+                    .abs()
+                    .mul_adde(p[1].abs(), self.0[2][r].abs().mul_adde(p[2].abs(), self.0[3][r].abs())),
             );
         }
 
@@ -940,11 +940,7 @@ impl<V: SpatialMathWithPolicy> Matrix<V, 4, 4> {
     ///
     /// `error' = gamma(3) * sum_j |M_rj| |p_j| + (1 + gamma(3)) * sum_j |M_rj| e_j`
     #[inline(always)]
-    pub fn transform_point_propagate_error(
-        &self,
-        p: Point<V, 3>,
-        error: Vector<V, 3>,
-    ) -> (Point<V, 3>, Vector<V, 3>) {
+    pub fn transform_point_propagate_error(&self, p: Point<V, 3>, error: Vector<V, 3>) -> (Point<V, 3>, Vector<V, 3>) {
         let (out, from_p) = self.transform_point_with_error(p);
 
         let mut from_e = [V::ZERO; 3];

@@ -320,7 +320,7 @@ The `x86_v4` backend is generic over those tiers rather than being four
 backends: `X86V4<F: Avx512Features>` (`backend/x86_v4/mod.rs`), where
 `Avx512Features` is a const-per-extension trait implemented by the ZSTs
 `Tier1..Tier4`. Register code forks on `if const { F::AVX512VBMI }` and folds at
-monomorphization, exactly like `HAS_TRUE_FMA`. Two rules: ask about a *feature*,
+monomorphization, exactly like `HAS_NATIVE_FMA`. Two rules: ask about a *feature*,
 never `TIER`, so adding a rung never changes what an existing fork means; and a
 const being `true` does not make the intrinsic callable -- the
 `#[target_feature]` set in `thermite-macros/src/dispatch.rs` must enable the same
@@ -536,7 +536,7 @@ backends:
    `thermite-dual` and `thermite-compensated` (6c) -- or generic code at those
    types fails to compile / hits `todo!()`.
 6. Accuracy-test under multiple policies, incl. an f32 case for any
-   `HAS_APPROX_*`/`HAS_TRUE_FMA` branch.
+   `HAS_APPROX_*`/`HAS_NATIVE_FMA` branch.
 
 ---
 
@@ -582,7 +582,7 @@ fn cbrt<P: Policy>(self) -> Self {
     ui = (ui + V::Bits::splat(0x80000000)) & V::Bits::splat(0xffffffffc0000000);
     t  = Self::from_bits(ui);
 
-    let r = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !Self::HAS_TRUE_FMA } {
+    let r = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) || !matches!(Self::HAS_NATIVE_FMA, tribool::True) } {
         let xtt = x / (t * t);                                // exact form: 5 ops, 2 divisions
         (xtt - t) / ((t + t) + xtt)
     } else {
@@ -601,7 +601,7 @@ fn cbrt<P: Policy>(self) -> Self {
 What to copy:
 
 - **`if const { P::POLICY.precision.ge(...) }`** forks codegen at compile time.
-  The `Best` branch also fires when `!HAS_TRUE_FMA` (fast form relies on fused
+  The `Best` branch also fires when `HAS_NATIVE_FMA` is not `True` (fast form relies on fused
   `mul_add`). Note the deliberate mix: `mul_add` (always-fused) inside the
   FMA-gated branch, `mul_adde` (estimating) for the final unconditional step.
 - **`P::POLICY.check_overflow`** gates NaN/inf/zero handling (perf policies drop
@@ -827,7 +827,7 @@ workflow deploys docs (KaTeX header) for the `rewrite` branch.
   feature was REMOVED (there was nothing left to trade, and the libm f32 chain
   it selected carries a known subnormal bug). So `mul_add` is a full
   *accuracy* guarantee without hardware FMA; gate behind
-  `if const { V::HAS_TRUE_FMA }` only to avoid the *emulation* cost. The `cbrt`
+  `if const { matches!(V::HAS_NATIVE_FMA, tribool::True) }` only to avoid the *emulation* cost. The `cbrt`
   kernel uses always-fused `mul_add` inside the FMA-gated branch and estimating
   `mul_adde` for the final unconditional step
   ([performance.md](performance.md) secs 1-2). For genuine double-double

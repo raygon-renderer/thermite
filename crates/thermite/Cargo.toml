@@ -111,7 +111,7 @@ outline_scalar_math = []
 # rung of the scalar float ladder (`element::float::arch`) with std's methods instead of
 # `libm`: they lower to generic LLVM intrinsics, which ARE selected with the enclosing
 # function's target features, so scalar math inside a `#[dispatch]` trampoline can still
-# reach one instruction. Capability consts like `HAS_TRUE_FMA` stay baseline-gated
+# reach one instruction. Capability consts like `HAS_NATIVE_FMA` stay baseline-gated
 # regardless - std cannot promise which side of that it will land on.
 std = ["num-traits/std"]
 partial-ord = []         # Implements PartialOrd for Vector, only if all lanes are that order
@@ -179,6 +179,7 @@ paste = "1.0.15"
 hexf = "0.2.1"
 num-traits = { version = "0.2.19", default-features = false }
 rustversion = "1"
+tribool = { version = "0.4", default-features = false }
 libm = { version = "0.2.13", default-features = false, features = ["arch"] }
 rand = { version = "0.10", optional = true, default-features = false }
 

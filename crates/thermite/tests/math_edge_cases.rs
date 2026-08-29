@@ -537,7 +537,12 @@ fn wrap_angle_large_args<S: Simd>(name: &str) {
     // The full range needs single-rounded products, which only FMA hardware
     // provides (emulated FMA is never used in these kernels); the non-FMA split
     // path degrades gradually out here but must stay confined to [-pi, pi).
-    if const { <Vd<S> as MulAddExt<Vd<S>, Vd<S>>>::HAS_TRUE_FMA } {
+    if const {
+        matches!(
+            <Vd<S> as MulAddExt<Vd<S>, Vd<S>>>::HAS_NATIVE_FMA,
+            thermite::tribool::True
+        )
+    } {
         for (x, want) in [
             (1e15 + 1.0, 3.1096981170701125979f64),
             (5e15 + 1.0, -1.0178800290086099643),

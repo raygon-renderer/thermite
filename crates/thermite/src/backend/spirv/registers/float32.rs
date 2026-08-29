@@ -448,7 +448,7 @@ macro_rules! decl_f32xN {
             type ExtendedPrecision = $name;
 
             // GLSL Fma is a true fused multiply-add on all GPU hardware.
-            const HAS_TRUE_FMA: bool = true;
+            const HAS_NATIVE_FMA: tribool::Tribool = tribool::True;
 
             const HALF:         Self = Self { $($f: 0.5,)* };
             const NEG_ZERO:     Self = Self { $($f: -0.0,)* };

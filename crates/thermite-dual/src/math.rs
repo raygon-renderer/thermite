@@ -607,9 +607,7 @@ impl<V: DualMathVector, const N: usize> SpecializedSpatialMath<Dual<V::Element, 
 /// inline form is `generic::hypot_slice_pow2_scaled`'s: max, scale, sum of scaled squares,
 /// root, with `INV` fused into `inverse_sqrt` so the norm is never formed.
 #[inline(always)]
-fn slice_hypot<V: DualMathVector, const N: usize, P: Policy, const INV: bool>(
-    values: &[Dual<V, N>],
-) -> Dual<V, N> {
+fn slice_hypot<V: DualMathVector, const N: usize, P: Policy, const INV: bool>(values: &[Dual<V, N>]) -> Dual<V, N> {
     let Some((&first, rest)) = values.split_first() else {
         // The empty norm is 0 (and 1/0 is infinity), with a zero gradient either way.
         let re = if INV { V::INFINITY } else { V::ZERO };

@@ -80,9 +80,7 @@ impl<S: Simd3Vectors, E: AosFloat<S>> Matrix4<S, E> {
     /// From 16 scalars in **column-major** order: the first four are column 0.
     #[inline(always)]
     pub fn from_array(m: [E; 16]) -> Self {
-        Self(core::array::from_fn(|c| {
-            V4::<S, E>::from_slice(&m[c * 4..c * 4 + 4])
-        }))
+        Self(core::array::from_fn(|c| V4::<S, E>::from_slice(&m[c * 4..c * 4 + 4])))
     }
 
     /// Element `$(row, col)$`.

@@ -4,27 +4,42 @@
 /// 4x4 det/inverse picks one form at monomorphization.
 ///
 /// The accurate form recovers the rounding that `c * d` discarded
-/// (`nmul_add(c, d, cd)` = `round(cd) - cd`, the pbrt sign convention) and adds it
-/// back. Same algorithm as `LinAlg3Register::cross3<FAST = false>`. It costs two extra
-/// ops per site and buys the property the whole thing exists for: a 2x2 minor of a
+/// (`mul_sube(c, d, cd)` = `c*d - round(cd)`, subtracted, where pbrt computes the
+/// opposite sign and adds it) and folds it back in. Same algorithm as
+/// `LinAlg3Register::cross3<FAST = false>`. It costs two extra ops per site and
+/// buys the property the whole thing exists for: a 2x2 minor of a
 /// rank-deficient matrix comes back as exactly zero.
 ///
-/// `FAST` (and any register without a real FMA) takes `mul_sube` instead. Which
-/// of the two lowerings that picks does not matter here, because both are
-/// acceptable under `FAST` and without FMA the naive one is the only option:
+/// Only the estimating madd-family `_e` ops appear in the accurate arm, so it
+/// NEVER lowers to the emulated FMA: where they fuse the residual is exact,
+/// and where a wasm relaxed madd turns out unfused the residual computes as
+/// fl(cd) - fl(cd) = exactly 0, degrading to the naive difference, which
+/// keeps the exact self-minor for free. Keeping both ops on `mul_sube` (one
+/// wasm instruction) matters: `nmul_adde` is a different relaxed instruction
+/// the spec would let an engine fuse differently, breaking the cancellation.
 ///
-/// - no FMA -> `a*b - c*d`, two roundings that cancel, so a self-minor is still
+/// `FAST` (and any register whose `HAS_NATIVE_FMA` is definitely unfused) takes
+/// `mul_sube` instead. Which of the two lowerings that picks does not matter
+/// here, because both are acceptable under `FAST` and on a definitely-unfused
+/// register the naive one is the only option:
+///
+/// - unfused -> `a*b - c*d`, two roundings that cancel, so a self-minor is still
 ///   exactly zero. Only general cancellation suffers.
-/// - FMA -> `fma(a, b, -cd)`, one op cheaper again, but `a*b` stays exact while
+/// - fused -> `fma(a, b, -cd)`, one op cheaper again, but `a*b` stays exact while
 ///   `c*d` rounds, so a self-minor comes back as the discarded rounding rather
 ///   than zero. That is the edge case `FAST` buys its performance with.
+///
+/// Runtime-decided fusing (`HAS_NATIVE_FMA` = `Indeterminate`, the wasm
+/// relaxed-madd canary) must NOT take the single-`mul_sube` arm at `FAST = false`:
+/// a fusing engine turns it into the broken mixed case above. It takes the
+/// accurate arm, which is exact whichever way the engine resolves (see above).
 macro_rules! dop {
     ($a:expr, $b:expr, $c:expr, $d:expr) => {{
         let (a, b, c, d) = ($a, $b, $c, $d);
         let cd = Self::mul(c, d);
 
-        if const { Self::HAS_TRUE_FMA && !FAST } {
-            Self::add(Self::mul_sub(a, b, cd), Self::nmul_add(c, d, cd))
+        if const { !FAST && !matches!(Self::HAS_NATIVE_FMA, tribool::False) } {
+            Self::sub(Self::mul_sube(a, b, cd), Self::mul_sube(c, d, cd))
         } else {
             Self::mul_sube(a, b, cd)
         }

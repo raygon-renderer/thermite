@@ -67,11 +67,18 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> {
         type ZXYW<R> = <<R as CoreRegister>::Lanes as ValidLinAlg3Length<R>>::ZXYW;
         type YZXW<R> = <<R as CoreRegister>::Lanes as ValidLinAlg3Length<R>>::YZXW;
 
-        if !FAST {
-            // Kahan's compensated difference of products: `err` recovers the rounding
-            // that `c * d` discarded and adds it back, so the two sides cancel exactly.
-            // Needs a real FMA to be worth anything, and degrades to the naive form
-            // without one, which has the same exactness property for free.
+        if const { !FAST && !matches!(Self::HAS_NATIVE_FMA, tribool::False) } {
+            // Kahan's compensated difference of products, built from the estimating
+            // `_e` forms so it NEVER lowers to the emulated FMA. Where they fuse
+            // (`True` backends, fusing wasm engines) `err` recovers the rounding
+            // `c * d` discarded, so the two sides cancel exactly. Where a wasm
+            // relaxed madd turns out unfused, `err` computes as fl(cd) - fl(cd) =
+            // exactly 0 and this degrades to the naive form, which keeps the
+            // self-cross-is-zero property for free. Both residual ops stay in the
+            // madd family (`mul_sube`, never `nmul_adde`), so one engine-level
+            // fusing decision covers the whole arm (see `quat4_product`).
+            // Definitely-unfused backends skip to the fast arm below instead of
+            // paying the dead residual ops.
             let a = Self::permutev_const::<YZXW<Self>>(lhs); // [y, z, x]
             let b = Self::permutev_const::<ZXYW<Self>>(rhs); // [z, x, y]
             let c = Self::permutev_const::<ZXYW<Self>>(lhs); // [z, x, y]
@@ -79,10 +86,10 @@ pub trait LinAlg3Register: FloatRegister<Lanes: ValidLinAlg3Length<Self>> {
 
             let cd = Self::mul(c, d);
 
-            let err = Self::nmul_add(c, d, cd);
-            let dop = Self::mul_sub(a, b, cd);
+            let err = Self::mul_sube(c, d, cd); // fused: c*d - fl(cd), exact; unfused: 0
+            let dop = Self::mul_sube(a, b, cd);
 
-            Self::add(dop, err)
+            Self::sub(dop, err)
         } else {
             let lhszxy = Self::permutev_const::<ZXYW<Self>>(lhs);
             let rhszxy = Self::permutev_const::<ZXYW<Self>>(rhs);
@@ -415,10 +422,23 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
     /// (p99 1.22 vs 1.23, max 2.20 vs 2.43). Cost on AVX2+FMA: 30 instructions
     /// against 23.
     ///
-    /// On backends without a true FMA, `FAST = false` routes to the fast arm:
-    /// the compensation residuals would be identically zero there, and the
-    /// fast arm's unfused degradation already cancels the conjugate exactly
-    /// (all products rounded), so the identity holds on every backend.
+    /// On backends whose `HAS_NATIVE_FMA` is definitely unfused (`Tribool::False`),
+    /// `FAST = false` routes to the fast arm: its `mul_adde`s degrade to plain
+    /// multiply-adds there, so all products are rounded and the conjugate
+    /// cancels exactly for free. When fusing is only decided at runtime
+    /// (`Indeterminate`, the wasm relaxed-madd canary), the fast arm is NOT
+    /// safe (a fusing engine makes each cancelling pair one exact product
+    /// against one rounded), so it takes the compensated arm instead. That arm
+    /// is built entirely from the estimating `_e` forms, so it NEVER lowers to
+    /// the emulated FMA. Where the instruction fuses, the residuals are exact
+    /// and the compensation is full. Where a relaxed madd turns out unfused,
+    /// the residuals compute as fl(t) - fl(t) = exactly 0 and the arm degrades
+    /// to the regrouped all-rounded sum, which still cancels the conjugate
+    /// exactly. Every `_e` op in the arm stays in the madd family (`mul_adde`/
+    /// `mul_sube`, which share one wasm instruction) so a single engine-level
+    /// fusing decision covers all of them. `nmul_adde` is a different relaxed
+    /// instruction the spec would let an engine fuse differently, which would
+    /// break a cancelling pair. So the identity holds on every backend.
     ///
     /// The regrouping is the load-bearing part. In the component-broadcast
     /// decomposition the three vector lanes cancel across three *different*
@@ -436,7 +456,7 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
 
         let w = Self::broadcast::<3>(lhs);
 
-        if const { FAST || !Self::HAS_TRUE_FMA } {
+        if const { FAST || matches!(Self::HAS_NATIVE_FMA, tribool::False) } {
             let x = Self::broadcast::<0>(lhs);
             let y = Self::broadcast::<1>(lhs);
             let z = Self::broadcast::<2>(lhs);
@@ -488,14 +508,18 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
             // group comes out exactly zero. This is `cross3::<false>`'s scheme,
             // extended to the w-mixing group.
             //
-            // This branch requires HAS_TRUE_FMA (gated above). Without it the
-            // residuals would compute as fl(ab) - fl(ab) = exactly zero, leaving
-            // only this arm's addition tree over the same four rounded products
-            // the FAST arm degrades to. Measured a dead tie on random inputs
-            // and ~13% better mean error near cancellation (tails identical),
-            // so it is not worth the extra shuffles on legacy backends. The conjugate
-            // identity stays exact on the non-FMA route regardless, because
-            // all-rounded products cancel as fl(t) vs fl(-t) in any tree.
+            // This branch runs unless HAS_NATIVE_FMA is Tribool::False (gated
+            // above), and uses ONLY the estimating madd-family `_e` ops, one
+            // instruction on every backend that reaches it, never the emulated
+            // FMA. Fused (True backends, fusing wasm engines): residuals exact,
+            // full compensation. Unfused relaxed madd: residuals exactly 0, the
+            // arm degrades to the regrouped all-rounded sum, and the conjugate
+            // still cancels (fl(t) vs fl(-t) within each group). Definitely-
+            // unfused backends skip it entirely: the FAST arm is cheaper, its
+            // all-rounded products already cancel the conjugate exactly, and
+            // away from cancellation the degraded form measured a dead tie on
+            // random inputs (~13% better mean error near cancellation, tails
+            // identical), not worth this arm's extra shuffles.
 
             // [ x1,  y1, z1, -x1]
             let a1 = Self::bitxor(
@@ -516,16 +540,20 @@ pub trait LinAlg4Register: LinAlg3Register<Lanes = typenum::U4> {
 
             // Group 1: w1*rhs + a1*b1.
             let t1 = Self::mul(a1, b1);
-            let e1 = Self::mul_sub(a1, b1, t1); // a1*b1 - fl(a1*b1), exact
-            let s1 = Self::mul_add(w, rhs, t1);
+            let e1 = Self::mul_sube(a1, b1, t1); // fused: a1*b1 - fl(a1*b1), exact; unfused: 0
+            let s1 = Self::mul_adde(w, rhs, t1);
 
-            // Group 2: a2*b2 - c2*d2 (Kahan difference of products).
+            // Group 2: a2*b2 - c2*d2 (Kahan difference of products). The
+            // residual is `mul_sube(c2, d2, t2)` = c2*d2 - fl(c2*d2) and gets
+            // SUBTRACTED below, rather than `nmul_adde` of the opposite sign
+            // added. Same value, but it keeps the arm madd-family-pure (see
+            // the doc comment on why that matters for wasm).
             let t2 = Self::mul(c2, d2);
-            let e2 = Self::nmul_add(c2, d2, t2); // fl(c2*d2) - c2*d2, exact
-            let s2 = Self::mul_sub(a2, b2, t2);
+            let e2 = Self::mul_sube(c2, d2, t2); // fused: c2*d2 - fl(c2*d2), exact; unfused: 0
+            let s2 = Self::mul_sube(a2, b2, t2);
 
-            // Group-wise so each (s, e) pair's exact zero survives the final add.
-            Self::add(Self::add(s1, e1), Self::add(s2, e2))
+            // Group-wise so each group's exact zero survives the final combine.
+            Self::add(Self::add(s1, e1), Self::sub(s2, e2))
         }
     }
 

@@ -538,11 +538,14 @@ fn real_scaling_agrees_with_the_widened_form() {
     // inner vector's true-FMA capability. The complex-by-complex one cannot: each
     // component is a sum of two products, so it rounds more than once.
     assert_eq!(
-        <C as MulAddExt<V, C>>::HAS_TRUE_FMA,
-        <V as MulAddExt<V, V>>::HAS_TRUE_FMA,
+        <C as MulAddExt<V, C>>::HAS_NATIVE_FMA,
+        <V as MulAddExt<V, V>>::HAS_NATIVE_FMA,
         "complex-by-real FMA is exactly the inner FMA, per component"
     );
-    assert!(!<C as MulAddExt<C, C>>::HAS_TRUE_FMA);
+    assert!(matches!(
+        <C as MulAddExt<C, C>>::HAS_NATIVE_FMA,
+        thermite::tribool::False
+    ));
 }
 
 /// The masked `_c`/`_m`/`_z` forms are promised against a real RHS too.
@@ -647,7 +650,10 @@ fn inv_hypot_is_the_reciprocal_norm() {
     let (a, b, cc, d) = (3.0, 4.0, 5.0, 12.0);
     let want = 1.0 / (25.0f64 + 169.0).sqrt();
 
-    let got = parts(<C as SpatialMathWithPolicy>::inv_hypot_n_p::<Precision, 2>([c(a, b), c(cc, d)]));
+    let got = parts(<C as SpatialMathWithPolicy>::inv_hypot_n_p::<Precision, 2>([
+        c(a, b),
+        c(cc, d),
+    ]));
 
     assert!(
         (got.0 - want).abs() < 1e-12 && got.1.abs() < 1e-12,
@@ -719,10 +725,14 @@ fn harmonic_mean_and_inv_sum_inv() {
         let (hr, hi) = (got_hm.re.extract::<0>(), got_hm.im.extract::<0>());
         let (sr, si) = (got_isi.re.extract::<0>(), got_isi.im.extract::<0>());
 
-        assert!((hr - want_hm.re).abs() < 1e-12 && (hi - want_hm.im).abs() < 1e-12,
-            "harmonic_mean({z0}, {z1}): got {hr}+{hi}i want {want_hm}");
-        assert!((sr - want_isi.re).abs() < 1e-12 && (si - want_isi.im).abs() < 1e-12,
-            "inv_sum_inv({z0}, {z1}): got {sr}+{si}i want {want_isi}");
+        assert!(
+            (hr - want_hm.re).abs() < 1e-12 && (hi - want_hm.im).abs() < 1e-12,
+            "harmonic_mean({z0}, {z1}): got {hr}+{hi}i want {want_hm}"
+        );
+        assert!(
+            (sr - want_isi.re).abs() < 1e-12 && (si - want_isi.im).abs() < 1e-12,
+            "inv_sum_inv({z0}, {z1}): got {sr}+{si}i want {want_isi}"
+        );
     }
 
     // The defining factor of N still holds on Complex: N copies give z and z/N.
@@ -739,7 +749,10 @@ fn harmonic_mean_and_inv_sum_inv() {
     // exactly what the crate's own division does, which the second assertion pins.
     let zero = c(0.0, 0.0);
     let hz = C::harmonic_mean_n([zero, c(1.0, 1.0)]);
-    assert!(hz.re.extract::<0>().is_nan(), "a zero element gives NaN on Complex, not 0");
+    assert!(
+        hz.re.extract::<0>().is_nan(),
+        "a zero element gives NaN on Complex, not 0"
+    );
 
     let recip = C::ONE / zero;
     assert!(recip.re.extract::<0>().is_nan(), "because 1/0 is itself NaN here");

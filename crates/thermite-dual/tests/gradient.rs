@@ -346,7 +346,10 @@ fn slice_hypot_gradient_at_origin_is_finite() {
     assert!(close(h.re.extract::<0>(), 0.0, 1e-12));
 
     let ih = D::inv_hypot(&[x, y]);
-    assert!(ih.re.extract::<0>().is_infinite(), "1/0 is the norm's inverse at the origin");
+    assert!(
+        ih.re.extract::<0>().is_infinite(),
+        "1/0 is the norm's inverse at the origin"
+    );
 
     for k in 0..2 {
         let d = h.dual[k].extract::<0>();

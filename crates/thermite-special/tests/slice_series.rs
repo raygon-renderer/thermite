@@ -114,9 +114,17 @@ fn laguerre_function_series_slice_is_bit_identical() {
                 let c: [f64; $n] = core::array::from_fn(|i| C[i]);
                 let a = D::splat($alpha);
 
-                let want = v.laguerre_function_series_n_p::<Precision, $n>(a, &c).extract::<0>();
-                let got = v.laguerre_function_series_p::<Precision>(a, &c[..]).extract::<0>();
-                assert_eq!(got, want, "laguerre_function_series n={} alpha={} at x={x}", $n, $alpha);
+                let want = v
+                    .laguerre_function_series_n_p::<Precision, $n>(a, &c)
+                    .extract::<0>();
+                let got = v
+                    .laguerre_function_series_p::<Precision>(a, &c[..])
+                    .extract::<0>();
+                assert_eq!(
+                    got, want,
+                    "laguerre_function_series n={} alpha={} at x={x}",
+                    $n, $alpha
+                );
             }};
         }
 
@@ -138,9 +146,17 @@ fn laguerre_function_series_i_slice_is_bit_identical() {
             ($n:literal, $alpha:literal) => {{
                 let c: [f64; $n] = core::array::from_fn(|i| C[i]);
 
-                let want = v.laguerre_function_series_i_n_p::<Precision, $n>($alpha, &c).extract::<0>();
-                let got = v.laguerre_function_series_i_p::<Precision>($alpha, &c[..]).extract::<0>();
-                assert_eq!(got, want, "laguerre_function_series_i n={} alpha={} at x={x}", $n, $alpha);
+                let want = v
+                    .laguerre_function_series_i_n_p::<Precision, $n>($alpha, &c)
+                    .extract::<0>();
+                let got = v
+                    .laguerre_function_series_i_p::<Precision>($alpha, &c[..])
+                    .extract::<0>();
+                assert_eq!(
+                    got, want,
+                    "laguerre_function_series_i n={} alpha={} at x={x}",
+                    $n, $alpha
+                );
             }};
         }
 

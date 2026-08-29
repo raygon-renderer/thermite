@@ -4,6 +4,7 @@
 
 use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 
+use thermite::tribool::{self, Tribool};
 use thermite::vector::ops::{MulAddAssignExt, MulAddExt, Square};
 
 pub mod math;
@@ -354,7 +355,7 @@ macro_rules! complex_real_fma {
 impl<V: RealValue> MulAddExt<V, Self> for Complex<V> {
     type Output = Self;
 
-    const HAS_TRUE_FMA: bool = <V as MulAddExt<V, V>>::HAS_TRUE_FMA;
+    const HAS_NATIVE_FMA: Tribool = <V as MulAddExt<V, V>>::HAS_NATIVE_FMA;
 
     complex_real_fma!(mul_add, mul_sub, nmul_add, nmul_sub, mul_adde, mul_sube, nmul_adde, nmul_sube);
 }
@@ -393,7 +394,7 @@ impl_assign! {
 //
 // i.e. two nested FMAs of the inner type per component. Composing the complex Mul
 // and Add instead would round the product first. Each component still rounds more
-// than once, so HAS_TRUE_FMA is false.
+// than once, so HAS_NATIVE_FMA is False.
 
 // The eight methods are the (product sign, addend sign) pairs over the exact or
 // the estimating inner FMA. Both negations fold into the inner FMA's sign bits.
@@ -421,7 +422,7 @@ impl<V: RealValue> MulAddExt<Self, Self> for Complex<V> {
 
     // A complex "FMA" rounds each component several times whatever the inner FMA
     // does. It is never a single-rounding operation.
-    const HAS_TRUE_FMA: bool = false;
+    const HAS_NATIVE_FMA: Tribool = tribool::False;
 
     complex_mul_add! {
         mul_add   => false, false, mul_add,  nmul_add;

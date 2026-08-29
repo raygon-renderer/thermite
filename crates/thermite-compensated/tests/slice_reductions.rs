@@ -30,7 +30,11 @@ fn val(x: C) -> f64 {
 }
 
 fn rel(got: f64, want: f64) -> f64 {
-    if want == 0.0 { got.abs() } else { ((got - want) / want).abs() }
+    if want == 0.0 {
+        got.abs()
+    } else {
+        ((got - want) / want).abs()
+    }
 }
 
 /// The slice form is a serial fold where the const form is a log-depth tree, so the two
@@ -92,10 +96,7 @@ fn inv_hypot_keeps_the_const_form_range() {
         !forward.is_finite(),
         "the forward norm is expected to saturate here; got {forward}"
     );
-    assert!(
-        !(1.0 / forward).is_normal(),
-        "so its reciprocal is the wrong answer"
-    );
+    assert!(!(1.0 / forward).is_normal(), "so its reciprocal is the wrong answer");
 
     let inv = val(C::inv_hypot(&arr));
     let want = val(C::inv_hypot_n(arr));
@@ -107,10 +108,7 @@ fn inv_hypot_keeps_the_const_form_range() {
 
     // Subnormal, so the agreement is coarse by construction. The point is that both are
     // the same small number rather than one of them being zero.
-    assert!(
-        rel(inv, want) < 1e-9,
-        "inv_hypot = {inv}, inv_hypot_n = {want}"
-    );
+    assert!(rel(inv, want) < 1e-9, "inv_hypot = {inv}, inv_hypot_n = {want}");
 }
 
 /// Lengths well past any const instantiation, against closed forms rather than against the

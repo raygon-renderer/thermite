@@ -20,7 +20,7 @@
 //! bounded on `FloatVectorWithBits`, so none of them applies over C even where the
 //! coefficients do.
 
+pub mod bernoulli;
 pub mod gamma;
 pub mod primal;
 pub mod weideman;
-pub mod bernoulli;

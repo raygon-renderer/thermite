@@ -3276,7 +3276,35 @@ pub trait FloatRegister:
     /// this type should be the same as `Self` as a safe fallback.
     type ExtendedPrecision: FloatRegister<Lanes = Self::Lanes> + CastRegister<Self>;
 
-    const HAS_TRUE_FMA: bool;
+    /// FMA capability of this register, as three-valued logic:
+    ///
+    /// - `True`: `mul_add`/`mul_adde` and family are a single fused instruction
+    ///   (one rounding), and fast.
+    /// - `False`: the estimating `_e` variants (`mul_adde` etc.) are DEFINITELY
+    ///   unfused: a plain multiply then add, two roundings, on every input.
+    /// - `Indeterminate`: fusing is resolved at runtime, not compile time. The
+    ///   wasm backend is the canonical case: `relaxed_madd` may be either, fixed
+    ///   per instance and detected by a one-time canary (see
+    ///   `backend/wasm/polyfills/math.rs`). `mul_add` stays correctly rounded
+    ///   either way, but `mul_adde` may or may not fuse.
+    ///
+    /// Gate on `matches!(.., Tribool::True)` for cost decisions ("is the fused
+    /// arm cheap here?") and on `matches!(.., Tribool::False)` for
+    /// uniform-rounding exactness arguments ("do two products round identically
+    /// so their difference cancels?"). Treating `Indeterminate` as unfused is
+    /// the bug class that broke `quat4_product::<false>`'s conjugate exactness
+    /// on fusing wasm engines.
+    ///
+    /// Contract for `Indeterminate` backends: `mul_adde` and `mul_sube` must
+    /// share ONE fusing decision (on wasm both lower to the same relaxed madd).
+    /// Compensated kernels rely on that to stay exact whichever way the engine
+    /// resolves (their residuals are either all exact or all zero), and they
+    /// avoid `nmul_adde` in those arms because it is a different relaxed
+    /// instruction the spec allows to resolve independently.
+    ///
+    /// The vector layer forwards this verbatim as
+    /// [`MulAddExt::HAS_NATIVE_FMA`](crate::vector::ops::MulAddExt::HAS_NATIVE_FMA).
+    const HAS_NATIVE_FMA: tribool::Tribool;
 
     const HALF: Storage<Self>;
     const NEG_ZERO: Storage<Self>;
@@ -3547,7 +3575,7 @@ pub trait FloatRegister:
     }
 
     #[conditional] fn mul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        if Self::HAS_TRUE_FMA {
+        if matches!(Self::HAS_NATIVE_FMA, tribool::True) {
             Self::mul_add(lhs, rhs, acc)
         } else {
             Self::add(Self::mul(lhs, rhs), acc)
@@ -3555,7 +3583,7 @@ pub trait FloatRegister:
     }
 
     #[conditional] fn mul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        if Self::HAS_TRUE_FMA {
+        if matches!(Self::HAS_NATIVE_FMA, tribool::True) {
             Self::mul_sub(lhs, rhs, acc)
         } else {
             Self::sub(Self::mul(lhs, rhs), acc)
@@ -3563,7 +3591,7 @@ pub trait FloatRegister:
     }
 
     #[conditional] fn nmul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        if Self::HAS_TRUE_FMA {
+        if matches!(Self::HAS_NATIVE_FMA, tribool::True) {
             Self::nmul_add(lhs, rhs, acc)
         } else {
             Self::sub(acc, Self::mul(lhs, rhs))
@@ -3571,7 +3599,7 @@ pub trait FloatRegister:
     }
 
     #[conditional] fn nmul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> {
-        if Self::HAS_TRUE_FMA {
+        if matches!(Self::HAS_NATIVE_FMA, tribool::True) {
             Self::nmul_sub(lhs, rhs, acc)
         } else {
             Self::mul_sube(Self::neg(lhs), rhs, acc)
@@ -3749,7 +3777,7 @@ pub trait FloatRegister:
     }
 
     fn mix(a: Storage<Self>, b: Storage<Self>, t: Storage<Self>) -> Storage<Self> {
-        if const { Self::HAS_TRUE_FMA } {
+        if const { matches!(Self::HAS_NATIVE_FMA, tribool::True) } {
             Self::mul_add(Self::sub(b, a), t, a) // a + (b - a) * t
         } else {
             let t0 = Self::sub(Self::ONE, t); // 1 - t

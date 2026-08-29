@@ -527,7 +527,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         let mut y2 = V::EMPTY;
 
         if const { P::POLICY.avoid_branching } || !x_small.all() {
-            let x21 = if const { V::HAS_TRUE_FMA } {
+            let x21 = if const { matches!(V::HAS_NATIVE_FMA, tribool::True) } {
                 x.mul_add(x, V::ONE)
             } else {
                 x2 + V::ONE
@@ -972,7 +972,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
         // pre-scaled value, restructures the kernel for one policy corner.
         if const {
             P::POLICY.precision.ge(PrecisionPolicy::Best)
-                || !Self::HAS_TRUE_FMA
+                || !matches!(Self::HAS_NATIVE_FMA, tribool::True)
                 || matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
         } {
             let mut td: Self::ExtendedPrecision = t.cast();
@@ -1186,7 +1186,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
         // Cody-Waite against the TRUE 2 pi. See the f64 twin in `pd.rs` for the full
         // story. fl32(2 pi) is 2 pi to only half an f32 ulp (1.7e-7), so a fused
         // `x - n * TAU` alone drifts by `n * 1.7e-7`.
-        let mut r = if const { Self::HAS_TRUE_FMA } {
+        let mut r = if const { matches!(Self::HAS_NATIVE_FMA, tribool::True) } {
             // Two fused steps (the estimating forms are single instructions here, so
             // emulated FMA is never used): tau_hi = fl32(2 pi), tau_lo the next 24 bits.
             let tau_hi: V = crate::const_splat!(f32: hexf::hexf32!("0x1.921fb60000000p+2"));
@@ -1411,13 +1411,15 @@ pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f
         // Ulp figures below are against mpmath, 400 points per binade, in ulp of the
         // output scale.
         is_large = xa.cmp_gt(crate::const_splat!(<V> = <V: FloatVector> f32: {
-            match V::HAS_TRUE_FMA {
+            match V::HAS_NATIVE_FMA {
                 // Cody-Waite holds 0.5-0.7 ulp through 2^19, then 2.5 ulp at
                 // 2^20, 18 at 2^21, 394 at 2^22 and 387 at 2^23.
-                true => 1048576.0, // 2^20
+                tribool::True => 1048576.0, // 2^20
                 // Same shape, milder: clean through 2^12, then 1.6 / 4.1 / 8.0 /
-                // 8.0 ulp across 2^13..2^16.
-                false => 8192.0, // 2^13
+                // 8.0 ulp across 2^13..2^16. Indeterminate lands here too: the
+                // thresholds are compile-time, so only the definitely-fused
+                // budget may assume the fused reduction.
+                _ => 8192.0, // 2^13
             }
         }));
 
@@ -1450,7 +1452,7 @@ pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f
         let dp3f = crate::const_splat!(f32: 3.77476681023836135864E-8 * 2.0);
         let dp4f = crate::const_splat!(f32: 1.28164145962728071027E-12 * 2.0);
 
-        if const { V::HAS_TRUE_FMA } {
+        if const { matches!(V::HAS_NATIVE_FMA, tribool::True) } {
             // dp1f + dp2f is exact in f32; three chained FMAs
             y.nmul_add(dp4f, y.nmul_add(dp3f, y.nmul_add(dp2f + dp1f, xa)))
         } else {
@@ -1511,7 +1513,7 @@ fn sin_cos_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const PI
             crate::const_splat!(f32: FRAC_1_PI / 2.0)
         };
 
-        return if const { V::HAS_TRUE_FMA && V::ISA.has_instruction_level_parallelism() } {
+        return if const { matches!(V::HAS_NATIVE_FMA, tribool::True) && V::ISA.has_instruction_level_parallelism() } {
             // if FMA is available, we can improve ILP by doing product with m in parallel
             (
                 inner::<V>(xx.mul_sub(m, V::HALF) - (xx * m).floor()), // sine
@@ -1588,7 +1590,7 @@ fn asin_f_internal<P: Policy, V: FloatVectorWithBits<Element = f32>, const ACOS:
         let a1 = m.poly_rev_n_p::<P, _>(&[-0.02164095, 0.077980478, -0.213300989, FRAC_PI_2]);
 
         if ACOS {
-            if const { V::HAS_TRUE_FMA && V::ISA.has_instruction_level_parallelism() } {
+            if const { matches!(V::HAS_NATIVE_FMA, tribool::True) && V::ISA.has_instruction_level_parallelism() } {
                 // if FMA is available we can at least exploit instruction-level parallelism
                 return x.select_negative(a0.nmul_add(a1, V::PI), a0 * a1);
             }

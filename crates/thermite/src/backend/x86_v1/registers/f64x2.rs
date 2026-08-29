@@ -409,7 +409,7 @@ impl SignedRegister for F64x2V1 {
 
 #[thermite_macros::inline_always]
 impl FloatRegister for F64x2V1 {
-    const HAS_TRUE_FMA: bool = false;
+    const HAS_NATIVE_FMA: tribool::Tribool = tribool::False;
 
     type Bits = super::U64x2V1;
     type SignedBits = super::I64x2V1;

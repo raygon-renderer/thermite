@@ -10,6 +10,7 @@ use thermite::Swizzle;
 use thermite::element::SignedElement;
 use thermite::generic_array::GenericArray;
 use thermite::register::SwizzleIndices;
+use thermite::tribool::{self, Tribool};
 use thermite::vector::{NewConst, NewVector, SplatConst, SplatVector, VectorValue, const_splat};
 use thermite::{LargeInt, mask::GenericSelectable, prelude::*};
 
@@ -43,7 +44,7 @@ pub mod specialized;
 /// splitting constant can be provided. It just doesn't make much sense
 /// on anything but scalar-like floating point types.
 ///
-/// If the type has true FMA support, as indicated by `MulAddExt::HAS_TRUE_FMA`,
+/// If the type has native FMA support, as indicated by `MulAddExt::HAS_NATIVE_FMA`,
 /// the splitting constant is never used, so it can be a dummy value in that case.
 pub trait ScalarValue:
     Copy + NumOps + NumAssignOps + MulAddExt<Output = Self> + Neg<Output = Self> + consts::SplitFloatConsts<Self>
@@ -190,7 +191,7 @@ pub trait ScalarValue:
     #[inline(always)]
     fn two_prod(a: Self, b: Self) -> (Self, Self) {
         // fast path if we have FMA available
-        if Self::HAS_TRUE_FMA {
+        if matches!(Self::HAS_NATIVE_FMA, tribool::True) {
             let p = a * b;
             let e = a.mul_sub(b, p);
 
@@ -214,7 +215,7 @@ pub trait ScalarValue:
     #[inline(always)]
     fn square(a: Self) -> (Self, Self) {
         // fast path if we have FMA available
-        if Self::HAS_TRUE_FMA {
+        if matches!(Self::HAS_NATIVE_FMA, tribool::True) {
             let p = a * a;
             let e = a.mul_sub(a, p);
 
@@ -461,7 +462,7 @@ where
 // impl<V: ScalarValue> ScalarValue for Compensated<V> {
 //     const SPLITTER: Self = const {
 //         assert!(
-//             V::HAS_TRUE_FMA,
+//             matches!(V::HAS_NATIVE_FMA, tribool::True),
 //             "Compensated<S> requires true FMA support to implement ScalarValue"
 //         );
 
@@ -1131,7 +1132,7 @@ impl<V: ScalarValue> MulAddExt<Self, Self> for Compensated<V> {
 
     // Compensated mul-add is always accurate, and have the same code paths,
     // so we can just set this to true.
-    const HAS_TRUE_FMA: bool = true;
+    const HAS_NATIVE_FMA: Tribool = tribool::True;
 
     #[inline(always)]
     fn mul_add(self, b: Self, c: Self) -> Self {
@@ -1167,7 +1168,7 @@ impl<V: ScalarValue> MulAddExt<Self, Self> for Compensated<V> {
 impl<V: ScalarValue> MulAddExt<V, Self> for Compensated<V> {
     type Output = Self;
 
-    const HAS_TRUE_FMA: bool = true;
+    const HAS_NATIVE_FMA: Tribool = tribool::True;
 
     #[inline(always)]
     fn mul_add(self, b: V, c: Self) -> Self::Output {
@@ -1201,7 +1202,7 @@ impl<V: ScalarValue> MulAddExt<V, Self> for Compensated<V> {
 impl<V: ScalarValue> MulAddExt<Self, V> for Compensated<V> {
     type Output = Self;
 
-    const HAS_TRUE_FMA: bool = true;
+    const HAS_NATIVE_FMA: Tribool = tribool::True;
 
     #[inline(always)]
     fn mul_add(self, a: Self, b: V) -> Self::Output {

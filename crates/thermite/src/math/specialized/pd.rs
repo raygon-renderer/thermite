@@ -98,7 +98,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedRealMath<f64> for V {
         // single-rounded for free), it is that TAU is only 2 pi to half an ulp, so even a
         // perfectly fused `x - n * TAU` drifts by `n * 2.45e-16`. That is 0.04 rad by
         // x = 1e15, a WRONG angle once it crosses the +-pi seam.
-        let mut r = if const { Self::HAS_TRUE_FMA } {
+        let mut r = if const { matches!(Self::HAS_NATIVE_FMA, tribool::True) } {
             // Two fused steps: tau_hi is fl(2 pi) == TAU (full mantissa, so the FMA
             // multiplies it exactly), tau_lo the next 53 bits, together 2 pi to ~1e-32
             // relative. The estimating forms ARE single fused instructions on this
@@ -917,7 +917,7 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
         // the matching note in `ps.rs`.
         let r = if const {
             P::POLICY.precision.ge(PrecisionPolicy::Best)
-                || !Self::HAS_TRUE_FMA
+                || !matches!(Self::HAS_NATIVE_FMA, tribool::True)
                 || matches!(P::POLICY.denormal_behavior, DenormalBehavior::Preserve)
         } {
             // original form, 5 simple ops, 2 divisions. Every intermediate is
@@ -1650,32 +1650,33 @@ pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f
         // output scale.
         is_large = xa.cmp_gt(if const { P::POLICY.precision.gt(PrecisionPolicy::Average) } {
             crate::const_splat!(<V> = <V: FloatVectorWithBits> f64: {
-                match V::HAS_TRUE_FMA {
+                match V::HAS_NATIVE_FMA {
                     // Cody-Waite holds 0.5-0.7 ulp through 2^48 and spikes in the
                     // 2^49 binade (7-77 ulp, sample-dependent, the error is
                     // spiky). Hand off at 2^49.
-                    true => 562949953421312.0, // 2^49
+                    tribool::True => 562949953421312.0, // 2^49
                     // Measured 0.5-0.7 ulp all the way to this limit with no
                     // degradation. Possibly conservative, since the truncated-split
                     // path is documented valid to |x| ~ 3.4e9, but handing off early
-                    // only costs speed.
-                    false => 1e7,
+                    // only costs speed. Indeterminate takes this arm too (the
+                    // threshold is compile-time, so only definitely-fused may assume it).
+                    _ => 1e7,
                 }
             })
         } else {
             crate::const_splat!(<V> = <V: FloatVectorWithBits> f64: {
-                match V::HAS_TRUE_FMA {
+                match V::HAS_NATIVE_FMA {
                     // Unclamped Cody-Waite still delivers ~35 bits through the
                     // 2^51 binade and detonates at 2^52 (2.1e5 ulp -> 8.6e15 ulp).
                     // 2^52 is also where consecutive f64 values become >= 1 apart
                     // and the quotient stops being representable at all.
-                    true => 4503599627370496.0, // 2^52
+                    tribool::True => 4503599627370496.0, // 2^52
                     // NOT a validity limit: without FMA there is no cliff to find.
                     // Error grows strictly proportional to x (5.3e11 ulp at 2^40,
                     // doubling per binade) right up to 2^52. This is a BITS BUDGET,
                     // where 1e13 corresponds to roughly 11 bits of the result, and
-                    // it is a choice rather than a measurement.
-                    false => 1e13,
+                    // it is a choice rather than a measurement. Indeterminate too.
+                    _ => 1e13,
                 }
             })
         });
@@ -1705,7 +1706,7 @@ pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f
     // x = pi * (xa - y * 0.5)
     let mut x = if PI {
         y.nmul_adde(V::HALF, xa).scale(FloatConsts::PI)
-    } else if const { V::HAS_TRUE_FMA } {
+    } else if const { matches!(V::HAS_NATIVE_FMA, tribool::True) } {
         // if true FMA is available, we only have to do two FMAs
         y.nmul_add(dp3, y.nmul_add(dp2 + dp1, xa))
     } else {

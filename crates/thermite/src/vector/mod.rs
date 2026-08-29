@@ -2865,7 +2865,7 @@ pub trait FloatVector: SignedVector<Element: FloatElement>
     /// Sterbenz's lemma). Both keep full relative accuracy in the small result.
     #[inline(always)]
     fn one_minus_sq(self) -> Self {
-        if const { Self::HAS_TRUE_FMA } {
+        if const { matches!(Self::HAS_NATIVE_FMA, tribool::True) } {
             // FMA: 1 - self*self formed from the exact product with a single rounding.
             self.nmul_add(self, Self::ONE)
         } else {

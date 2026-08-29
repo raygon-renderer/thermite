@@ -181,7 +181,7 @@ where
         // (v + lambda)/4 == v/4 + lambda/4; with true FMA, premultiplying lambda lets each update
         // be a single fused `v.mul_adde(1/4, lambda/4)`. Without FMA that extra mul is wasted, so
         // keep the plain add-then-scale form there.
-        if const { V::HAS_TRUE_FMA } {
+        if const { matches!(V::HAS_NATIVE_FMA, thermite::tribool::True) } {
             let lq = lambda * quarter;
             an = an.mul_add(quarter, lq);
             xn = xn.mul_add(quarter, lq);
@@ -272,7 +272,7 @@ where
         let lambda = rx.mul_adde(ry + rz, ry * rz); // rx*(ry+rz) + ry*rz; 2-deep vs serial FMA chain
         sum += fac / (rz * (zn + lambda));
         // (v + lambda)/4 as a fused FMA when available (see carlson_rf).
-        if const { V::HAS_TRUE_FMA } {
+        if const { matches!(V::HAS_NATIVE_FMA, thermite::tribool::True) } {
             let lq = lambda * quarter;
             an = an.mul_add(quarter, lq);
             xn = xn.mul_add(quarter, lq);
@@ -558,7 +558,7 @@ where
 
         let lambda = rx.mul_adde(ry + rz, ry * rz); // rx*(ry+rz) + ry*rz; 2-deep vs serial FMA chain
         // (v + lambda)/4 as a fused FMA when available (see carlson_rf).
-        if const { V::HAS_TRUE_FMA } {
+        if const { matches!(V::HAS_NATIVE_FMA, thermite::tribool::True) } {
             let lq = lambda * quarter;
             an = an.mul_add(quarter, lq);
             xn = xn.mul_add(quarter, lq);

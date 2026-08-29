@@ -12,7 +12,7 @@ them.
 
 1. **Read the actual API, do not recall it.** `grep` for the sign conventions
    (`mul_sube = a*b - c`, `nmul_adde = c - a*b`, `nmul_sube = -a*b - c`), for where
-   `HAS_TRUE_FMA` is defined *for the type you are gating on*, and for which constants
+   `HAS_NATIVE_FMA` is defined *for the type you are gating on*, and for which constants
    exist (`FRAC_1_2` yes, `FOUR` no). Two of the three "simple mistakes" in a typical
    pass are a mis-remembered sign or a constant that does not exist.
 2. **Write the op-count table first.** For each kernel: multiplies, adds, FMAs, divides,
@@ -53,15 +53,17 @@ including folds that were already free.
 
 ## 2. Composite types report no FMA. Gate on the inner real type.
 
-`Complex<V>`, `Dual<V, N>` and other composites set `HAS_TRUE_FMA = false` at their own
-layer, because a composite FMA rounds each component more than once. If your kernel is
-generic over `T` and instantiated at `Complex<V>`, `if const { T::HAS_TRUE_FMA }` takes the
+`Complex<V>`, `Dual<V, N>` and other composites set `HAS_NATIVE_FMA = tribool::False` at
+their own layer, because a composite FMA rounds each component more than once. If your
+kernel is generic over `T` and instantiated at `Complex<V>`, gating on `T`'s flag takes the
 non-fused arm on AVX2 with a real FMA sitting right there.
 
 Fix: write the component-wise pieces against the real `V` and gate on that:
 
 ```rust
-const fn has_fma<V: RealFloatVector>() -> bool { <V as MulAddExt<V, V>>::HAS_TRUE_FMA }
+const fn has_fma<V: RealFloatVector>() -> bool {
+    matches!(<V as MulAddExt<V, V>>::HAS_NATIVE_FMA, tribool::True)
+}
 ```
 
 Corollary: a "shared generic body over `T`" that serves both real and complex

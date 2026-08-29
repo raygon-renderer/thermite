@@ -119,7 +119,7 @@ fn reaches_degrees_the_raw_polynomial_cannot() {
     }
 }
 
-/// The Best-tier Dekker residual on `x^2` is gated on `HAS_TRUE_FMA`, which the scalar
+/// The Best-tier Dekker residual on `x^2` is gated on `HAS_NATIVE_FMA`, which the scalar
 /// `Vector<f64>` does not report in a default build, though the AVX2 backend does. Measured on it,
 /// the residual takes `psi_300(20.7)` from 49 to 2 ulp and `psi_1000(38.9)` from 132 to
 /// under 1, and does nothing at integer `x`, whose square is exact. So this test runs on

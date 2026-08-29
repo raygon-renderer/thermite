@@ -16,21 +16,48 @@
 
 use thermite::backend::x86_v3::prelude::*;
 use thermite::math::CoreMathWithPolicy;
-use thermite::math::policy::{DefaultPolicy, DenormalBehavior, Policy, PolicyParameters, PrecisionPolicy};
 use thermite::math::policy::policies::{HighPerformance, Performance, Precision, Reference, Size, UltraPerformance};
+use thermite::math::policy::{DefaultPolicy, DenormalBehavior, Policy, PolicyParameters, PrecisionPolicy};
 
 macro_rules! for_each_tier {
     // `$ti` is the tier's index into `TIER_NAMES`, owned by the macro so call sites
     // don't carry a manual counter whose last increment trips `unused_assignments`.
     (|$p:ident, $ti:ident| $body:block) => {{
         let mut $ti = 0;
-        { type $p = UltraPerformance; $body }
-        { $ti += 1; type $p = HighPerformance; $body }
-        { $ti += 1; type $p = Performance; $body }
-        { $ti += 1; type $p = Size; $body }
-        { $ti += 1; type $p = DefaultPolicy; $body }
-        { $ti += 1; type $p = Precision; $body }
-        { $ti += 1; type $p = Reference; $body }
+        {
+            type $p = UltraPerformance;
+            $body
+        }
+        {
+            $ti += 1;
+            type $p = HighPerformance;
+            $body
+        }
+        {
+            $ti += 1;
+            type $p = Performance;
+            $body
+        }
+        {
+            $ti += 1;
+            type $p = Size;
+            $body
+        }
+        {
+            $ti += 1;
+            type $p = DefaultPolicy;
+            $body
+        }
+        {
+            $ti += 1;
+            type $p = Precision;
+            $body
+        }
+        {
+            $ti += 1;
+            type $p = Reference;
+            $body
+        }
     }};
 }
 
@@ -49,7 +76,11 @@ const TIER_NAMES: [&str; 7] = [
 const TOL_F32: [f32; 7] = [1.0e-2, 1.0e-5, 1.0e-5, 1.0e-6, 1.0e-6, 1.0e-6, 1.0e-6];
 
 fn rel(got: f64, want: f64) -> f64 {
-    if want == 0.0 { got.abs() } else { ((got - want) / want).abs() }
+    if want == 0.0 {
+        got.abs()
+    } else {
+        ((got - want) / want).abs()
+    }
 }
 
 /// Ordinary arguments, every tier, against a binary64 oracle.
@@ -106,7 +137,9 @@ fn the_best_tier_is_exactly_the_naive_spelling() {
             continue;
         }
 
-        let kernel = f32x8::splat(a).approx_div_sqrt_p::<Precision>(f32x8::splat(b)).extract::<0>();
+        let kernel = f32x8::splat(a)
+            .approx_div_sqrt_p::<Precision>(f32x8::splat(b))
+            .extract::<0>();
         let naive = (f32x8::splat(a) / f32x8::splat(b).sqrt()).extract::<0>();
 
         assert_eq!(
@@ -156,7 +189,9 @@ fn the_two_spellings_diverge_only_in_the_subnormal_tail() {
                 }
 
                 let split = (f32x8::splat(s) * f32x8::splat(acc).inverse_sqrt_p::<Precision>()).extract::<0>();
-                let fused = f32x8::splat(s).approx_div_sqrt_p::<Precision>(f32x8::splat(acc)).extract::<0>();
+                let fused = f32x8::splat(s)
+                    .approx_div_sqrt_p::<Precision>(f32x8::splat(acc))
+                    .extract::<0>();
 
                 let want = s as f64 / (acc as f64).sqrt();
                 if want == 0.0 || !want.is_finite() {
@@ -220,16 +255,35 @@ fn inverse_sqrt_edges_follow_the_overflow_policy() {
         };
 
         if exact || guarded || !refines {
-            assert!(f(0.0).is_infinite() && f(0.0) > 0.0, "{}: 1/sqrt(0) = {}", TIER_NAMES[ti], f(0.0));
-            assert_eq!(f(f32::INFINITY), 0.0, "{}: 1/sqrt(inf) = {}", TIER_NAMES[ti], f(f32::INFINITY));
+            assert!(
+                f(0.0).is_infinite() && f(0.0) > 0.0,
+                "{}: 1/sqrt(0) = {}",
+                TIER_NAMES[ti],
+                f(0.0)
+            );
+            assert_eq!(
+                f(f32::INFINITY),
+                0.0,
+                "{}: 1/sqrt(inf) = {}",
+                TIER_NAMES[ti],
+                f(f32::INFINITY)
+            );
         } else {
-            assert!(f(0.0).is_nan(), "{}: unguarded refinement gives NaN at 0", TIER_NAMES[ti]);
+            assert!(
+                f(0.0).is_nan(),
+                "{}: unguarded refinement gives NaN at 0",
+                TIER_NAMES[ti]
+            );
         }
 
         // The interior is untouched by the guard.
-        assert!((f(4.0) - 0.5).abs() < 1e-3, "{}: 1/sqrt(4) = {}", TIER_NAMES[ti], f(4.0));
+        assert!(
+            (f(4.0) - 0.5).abs() < 1e-3,
+            "{}: 1/sqrt(4) = {}",
+            TIER_NAMES[ti],
+            f(4.0)
+        );
         assert!(f(-1.0).is_nan(), "{}: 1/sqrt(-1) should be NaN", TIER_NAMES[ti]);
-
     });
 }
 
@@ -237,7 +291,14 @@ fn inverse_sqrt_edges_follow_the_overflow_policy() {
 /// takes an exact route and the two spellings should agree closely throughout.
 #[test]
 fn f64_is_accurate_at_every_tier() {
-    let cases: [(f64, f64); 6] = [(1.0, 2.0), (3.0, 7.0), (-5.0, 11.0), (1e-100, 3.0), (1e100, 3.0), (2.5, 1e-300)];
+    let cases: [(f64, f64); 6] = [
+        (1.0, 2.0),
+        (3.0, 7.0),
+        (-5.0, 11.0),
+        (1e-100, 3.0),
+        (1e100, 3.0),
+        (2.5, 1e-300),
+    ];
 
     for_each_tier!(|P, ti| {
         for &(a, b) in &cases {
@@ -305,8 +366,11 @@ fn edge_cases_follow_the_overflow_policy() {
         // A quotient large enough to overflow saturates to infinity rather than wrapping
         // or NaN-ing, on every tier, since nothing in the refinement touches this.
         let over = f(f32::MAX, 1e-30);
-        assert!(over.is_infinite() && over > 0.0, "{}: overflow gave {over}", TIER_NAMES[ti]);
-
+        assert!(
+            over.is_infinite() && over > 0.0,
+            "{}: overflow gave {over}",
+            TIER_NAMES[ti]
+        );
     });
 }
 
@@ -376,22 +440,40 @@ fn approx_reciprocal_edges_follow_strict_ieee754() {
 /// compiled out in favor of the real divide, asserted on both sides here.
 #[test]
 fn approx_div_denormal_divisor_follows_strict_ieee754() {
-    let f = |a: f32, b: f32| f32x8::splat(a).approx_div_p::<FlushWorst>(f32x8::splat(b)).extract::<0>();
+    let f = |a: f32, b: f32| {
+        f32x8::splat(a)
+            .approx_div_p::<FlushWorst>(f32x8::splat(b))
+            .extract::<0>()
+    };
 
     // A normal divisor is fine on both sides (to estimate accuracy, ~12 bits).
     assert!((f(1.0, 4.0) - 0.25).abs() < 1e-3, "1/4 = {}", f(1.0, 4.0));
 
     let denormal = 1e-39f32;
-    assert!(denormal != 0.0 && !denormal.is_normal(), "test constant must be subnormal");
+    assert!(
+        denormal != 0.0 && !denormal.is_normal(),
+        "test constant must be subnormal"
+    );
 
     if cfg!(feature = "strict_ieee754") {
         // The real divide: IEEE everywhere, including the denormal divisor.
         assert_eq!(f(0.0, denormal), 0.0, "strict: 0/denormal");
         let q = f(1e-3, denormal);
-        assert!(q.is_finite() && (q / 1e36 - 1.0).abs() < 1e-6, "strict: 1e-3/1e-39 = {q}");
+        assert!(
+            q.is_finite() && (q / 1e36 - 1.0).abs() < 1e-6,
+            "strict: 1e-3/1e-39 = {q}"
+        );
     } else {
         // The estimate saw zero: documented, not accidental.
-        assert!(f(0.0, denormal).is_nan(), "0 * inf estimate gives NaN, got {}", f(0.0, denormal));
-        assert!(f(1e-3, denormal).is_infinite(), "estimate gives inf, got {}", f(1e-3, denormal));
+        assert!(
+            f(0.0, denormal).is_nan(),
+            "0 * inf estimate gives NaN, got {}",
+            f(0.0, denormal)
+        );
+        assert!(
+            f(1e-3, denormal).is_infinite(),
+            "estimate gives inf, got {}",
+            f(1e-3, denormal)
+        );
     }
 }

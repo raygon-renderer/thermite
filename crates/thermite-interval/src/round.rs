@@ -37,7 +37,7 @@ pub(crate) fn two_sum<V: IntervalFloatVector>(a: V, b: V) -> (V, V) {
 /// FMA when available and the Veltkamp-split construction otherwise, so the
 /// residual is NEVER silently zero (a hand-rolled `mul_adde(b, -p)` would be
 /// exactly that trap on non-FMA backends). The mul tier still gates residual
-/// on `HAS_TRUE_FMA` as a _performance_ choice (the split form is ~17 ops),
+/// on `HAS_NATIVE_FMA` as a _performance_ choice (the split form is ~17 ops),
 /// but correctness no longer depends on the gate.
 #[inline(always)]
 pub(crate) fn two_prod<V: IntervalFloatVector>(a: V, b: V) -> (V, V) {

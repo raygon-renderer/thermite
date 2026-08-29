@@ -225,7 +225,7 @@ impl FloatRegister for [<f $width>] {
     type SignedBits = [<i $width>];
     type ExtendedPrecision = f64;
 
-    const HAS_TRUE_FMA: bool = crate::element::float::arch::HAS_TRUE_FMA;
+    const HAS_NATIVE_FMA: tribool::Tribool = crate::element::float::arch::HAS_NATIVE_FMA;
 
     const HALF: Storage<Self> = 0.5;
     const NEG_ZERO: Storage<Self> = -0.0;

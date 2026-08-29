@@ -249,7 +249,8 @@ where
     let (a, b) = (a.max(b), a.min(b));
 
     let mut result = a.poly_rational_n_p::<P, _, _>(&l.p_expg_scaled, &l.q)
-        * (b.poly_rational_n_p::<P, _, _>(&l.p_expg_scaled, &l.q) / c.poly_rational_n_p::<P, _, _>(&l.p_expg_scaled, &l.q));
+        * (b.poly_rational_n_p::<P, _, _>(&l.p_expg_scaled, &l.q)
+            / c.poly_rational_n_p::<P, _, _>(&l.p_expg_scaled, &l.q));
 
     let gh = V::splat(l.g) - V::HALF;
 

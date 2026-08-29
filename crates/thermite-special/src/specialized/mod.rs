@@ -250,7 +250,10 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
                 // D = 1 / (b - |a|*D_prev)  [note: subtraction because a is negative]
                 let d_denom = neg_a_k.nmul_adde(cf_d, b_k); // b - |a|*D
-                let new_d = d_denom.cmp_eq(Self::ZERO).select(tiny, d_denom).approx_reciprocal_p::<P>();
+                let new_d = d_denom
+                    .cmp_eq(Self::ZERO)
+                    .select(tiny, d_denom)
+                    .approx_reciprocal_p::<P>();
 
                 // C = b - |a|/C_prev  [same sign flip]
                 let new_c = b_k - neg_a_k / cf_c;
@@ -1260,7 +1263,7 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
     fn algebraic_swish<P: Policy>(self) -> Self {
         let x = self;
 
-        if const { Self::HAS_TRUE_FMA } {
+        if const { matches!(Self::HAS_NATIVE_FMA, thermite::tribool::True) } {
             // rsqrt is about 30% faster than sqrt+div, even with the extra
             // newton iteration merged in.
             // Capability only, with no denormal-policy gate, and deliberately: the
@@ -1562,7 +1565,7 @@ pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> + PrimalPr
     fn algebraic_swish_d<P: Policy>(self) -> (Self, Self) {
         let x = self;
 
-        if const { Self::HAS_TRUE_FMA } {
+        if const { matches!(Self::HAS_NATIVE_FMA, thermite::tribool::True) } {
             // Capability only, with no denormal-policy gate, and deliberately: the
             // argument is `a = x*x + 1`, which is >= 1 for every finite `x`, so it can
             // never be subnormal and the denormal-as-zero behaviour of `rsqrt` cannot

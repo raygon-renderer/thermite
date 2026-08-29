@@ -142,7 +142,11 @@ fn even_quotients_enclose_straddling_intervals() {
 fn atanhc_is_empty_off_its_domain() {
     for (lo, hi) in [(1.5, 2.5), (-3.0, -1.0), (1.0, 4.0)] {
         let r = iv::<Tightest>(lo, hi).atanhc();
-        assert!(r.is_empty().all(), "atanhc over [{lo}, {hi}] should be empty: {:?}", bounds(r));
+        assert!(
+            r.is_empty().all(),
+            "atanhc over [{lo}, {hi}] should be empty: {:?}",
+            bounds(r)
+        );
     }
 }
 
@@ -694,14 +698,8 @@ fn low_policy_tiers_still_contain() {
         let q: I<Tightest> = pt(y);
         let cy = C::new(V1::splat(y));
         for (tier, got) in [
-            (
-                "Medium",
-                p.hypot_p::<MediumPrecision<DefaultPolicy>>(q),
-            ),
-            (
-                "Worst",
-                p.hypot_p::<WorstPrecision<DefaultPolicy>>(q),
-            ),
+            ("Medium", p.hypot_p::<MediumPrecision<DefaultPolicy>>(q)),
+            ("Worst", p.hypot_p::<WorstPrecision<DefaultPolicy>>(q)),
         ] {
             assert!(
                 contains_dd(got, cx.hypot(cy)),

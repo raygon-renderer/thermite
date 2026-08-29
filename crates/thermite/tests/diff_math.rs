@@ -480,10 +480,18 @@ macro_rules! math_suite {
                 );
                 // `reciprocal` flushes subnormals (1/denormal -> inf) under Performance, so
                 // keep the domain to normal values (same reasoning as the `safe` domain).
-                math_unary!($bl, R, f32, approx_reciprocal, |x: f32| 1.0 / x, TOL_F32, |x: f32| {
-                    let v = x % 1e3;
-                    if v.is_normal() { v } else { 1.0 }
-                });
+                math_unary!(
+                    $bl,
+                    R,
+                    f32,
+                    approx_reciprocal,
+                    |x: f32| 1.0 / x,
+                    TOL_F32,
+                    |x: f32| {
+                        let v = x % 1e3;
+                        if v.is_normal() { v } else { 1.0 }
+                    }
+                );
                 math_unary!(
                     $bl,
                     R,
@@ -870,10 +878,18 @@ macro_rules! math_suite {
                     TOL_F64,
                     |x: f64| if x.is_finite() { x % 200.0 } else { 1.0 }
                 );
-                math_unary!($bl, R, f64, approx_reciprocal, |x: f64| 1.0 / x, TOL_F64, |x: f64| {
-                    let v = x % 1e3;
-                    if v.is_normal() { v } else { 1.0 }
-                });
+                math_unary!(
+                    $bl,
+                    R,
+                    f64,
+                    approx_reciprocal,
+                    |x: f64| 1.0 / x,
+                    TOL_F64,
+                    |x: f64| {
+                        let v = x % 1e3;
+                        if v.is_normal() { v } else { 1.0 }
+                    }
+                );
                 math_unary!(
                     $bl,
                     R,
@@ -1281,7 +1297,16 @@ macro_rules! f32_policy_fns {
             $tol,
             small
         );
-        math_unary_p!($bl, $reg, f32, approx_reciprocal_p, $policy, |x: f32| 1.0 / x, $tol, recipdom);
+        math_unary_p!(
+            $bl,
+            $reg,
+            f32,
+            approx_reciprocal_p,
+            $policy,
+            |x: f32| 1.0 / x,
+            $tol,
+            recipdom
+        );
         math_tuple_p!($bl, $reg, f32, sin_cos_p, $policy, libm::sinf, libm::cosf, $tol, ang);
         math_tuple_p!(
             $bl,
@@ -1514,7 +1539,16 @@ macro_rules! f64_policy_fns {
             $tol,
             |x: f64| if x.is_finite() { x % 200.0 } else { 1.0 }
         );
-        math_unary_p!($bl, $reg, f64, approx_reciprocal_p, $policy, |x: f64| 1.0 / x, $tol, recipdom);
+        math_unary_p!(
+            $bl,
+            $reg,
+            f64,
+            approx_reciprocal_p,
+            $policy,
+            |x: f64| 1.0 / x,
+            $tol,
+            recipdom
+        );
         math_tuple_p!($bl, $reg, f64, sin_cos_p, $policy, libm::sin, libm::cos, $tol, ang);
         math_tuple_p!(
             $bl,

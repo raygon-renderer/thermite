@@ -104,4 +104,3 @@ where
     m.cmp_eq(V::INFINITY)
         .select(V::INFINITY, m.cmp_eq(V::ZERO).select(V::ZERO, r))
 }
-
