@@ -7,10 +7,10 @@
 //! `x = 2` and the seed crossover at `y = 0.85` (dense oracle points on both sides), the
 //! pole sweep `y = 1 - 2^-k`, and the composites (`Dual` derivatives, `Compensated`
 //! precision).
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #![allow(clippy::excessive_precision)]
 
-use thermite::backend::x86_v3::prelude::*;
+include!("common/wide.rs");
+
 use thermite::math::policy::policies::{HighPerformance, Performance, Precision, Reference, UltraPerformance};
 use thermite_compensated::Compensated;
 use thermite_dual::Dual;

@@ -1197,7 +1197,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
         }
 
         // Cody-Waite against the TRUE 2 pi. See the f64 twin in `pd.rs` for the full
-        // story. fl32(2 pi) is 2 pi to only half an f32 ulp (1.7e-7), so a fused
+        // explanation. fl32(2 pi) is 2 pi to only half an f32 ulp (1.7e-7), so a fused
         // `x - n * TAU` alone drifts by `n * 1.7e-7`.
         let mut r = if const { matches!(Self::HAS_NATIVE_FMA, tribool::True) } {
             // Two fused steps (the estimating forms are single instructions here, so

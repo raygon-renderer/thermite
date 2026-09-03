@@ -18,6 +18,8 @@ use thermite::math::policy::policies::{BestPrecision, MediumPrecision, WorstPrec
 use thermite::prelude::*;
 use thermite_special::{SpecialMath, SpecialMathWithPolicy};
 
+include!("common/wide.rs");
+
 type D = Vector<f64>;
 type F = Vector<f32>;
 
@@ -386,11 +388,10 @@ fn recurrence_identity_holds_across_the_split() {
 
 // --- a wide backend, to be sure nothing is scalar-only ---
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn wide_backend_agrees_with_scalar() {
     use thermite::simd::Simd;
-    type W = Vector<<thermite::backend::x86_v3::X86V3 as Simd>::f64x4>;
+    type W = Vector<<Wide as Simd>::f64x4>;
 
     // Mixed lanes on both sides of the split, so both arms run in one call.
     let zs = [-7.5, -0.5, 1.9, 30.0];

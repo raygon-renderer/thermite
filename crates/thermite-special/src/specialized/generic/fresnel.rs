@@ -95,7 +95,7 @@ where
     rem2(rem2(p * V::HALF) + rem2(e * V::HALF))
 }
 
-/// `(C(x), S(x))`.
+/// `(S(x), C(x))`, in SciPy's order.
 ///
 /// `cheb_c` and `cheb_s` are Chebyshev coefficients for `C(x)/x` and `S(x)/x^3` in
 /// `w = x^4` mapped onto `[-1, 1]` by `w*map - 1`. `aux_p` and `aux_q` are ascending
@@ -125,7 +125,7 @@ where
         let (c, s) = fresnel_small::<P, E, V, NC, NS>(ax, q, map, cheb_c, cheb_s);
         // Both functions are odd and both are positive for x > 0, so the sign is a
         // copysign rather than a branch. It carries -0.0 through unchanged.
-        return (c.copysign(x), s.copysign(x));
+        return (s.copysign(x), c.copysign(x));
     }
 
     // One division for the whole branch: r = 1/(pi x^2), and then
@@ -154,7 +154,7 @@ where
     c = done.select(V::HALF, c);
     s = done.select(V::HALF, s);
 
-    (c.copysign(x), s.copysign(x))
+    (s.copysign(x), c.copysign(x))
 }
 
 /// `(C, S)` from the Chebyshev series in `w = x^4`, for `|x|` under the crossover.

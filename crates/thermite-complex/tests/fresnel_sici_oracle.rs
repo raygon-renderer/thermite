@@ -83,7 +83,7 @@ fn fresnel_matches_complex_erf_on_the_45_degree_ray() {
     for &x in &[
         0.05, 0.25, 0.5, 1.0, 1.5, 2.0, 2.5, 2.5265, 2.53, 2.8, 3.0, 4.0, 5.0, 6.0, 8.0,
     ] {
-        let (gc, gs) = V::splat(x).fresnel();
+        let (gs, gc) = V::splat(x).fresnel();
         let (gc, gs) = (gc.extract::<0>(), gs.extract::<0>());
 
         // (1+i)/2 * erf(z), z = sqrt(pi)(1-i)x/2
@@ -132,7 +132,7 @@ fn the_branches_meet_continuously() {
         for &d in &[-eps, eps] {
             let x = x0 + d;
             if x0 < 5.0 {
-                let (gc, gs) = V::splat(x).fresnel();
+                let (gs, gc) = V::splat(x).fresnel();
                 let (er, ei) = parts(c(k * x, -k * x).erf_p::<Precision>());
                 agree(
                     "C across",

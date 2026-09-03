@@ -12,6 +12,8 @@ use thermite::math::policy::policies::BestPrecision;
 use thermite::prelude::*;
 use thermite_special::{RealSpecialMath, RealSpecialMathWithPolicy};
 
+include!("common/wide.rs");
+
 include!("bessel_ratio_ref/table.rs");
 
 type D = Vector<f64>;
@@ -130,11 +132,8 @@ fn f32_default() {
 }
 
 /// A packet of consecutive indices is the rule: every lane bit-identical to a splat.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn packet_is_the_rule() {
-    use thermite::backend::x86_v3::prelude::*;
-
     let n = 11u32;
     let ks = f64x4::new([0.0, 1.0, 2.0, 3.0]);
     let (x, w) = ks.gauss_legendre(n);

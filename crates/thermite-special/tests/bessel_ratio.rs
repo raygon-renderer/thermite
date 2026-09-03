@@ -14,6 +14,8 @@ use thermite::prelude::*;
 use thermite_special::bessel::{I, Scaled};
 use thermite_special::{RealSpecialMath, RealSpecialMathWithPolicy};
 
+include!("common/wide.rs");
+
 include!("bessel_ratio_ref/table.rs");
 
 type D = Vector<f64>;
@@ -206,11 +208,8 @@ fn complement_f64() {
 }
 
 /// Every arm in one packet, each lane bit-identical to a splat of itself.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn packets_mix_arms_bit_exactly() {
-    use thermite::backend::x86_v3::prelude::*;
-
     let nus = f64x4::new([1.0, 1.5, 25.0, 150.0]);
     let xs = [0.5f64, 3.0, 40.0, 1e4];
     let got = f64x4::new(xs).bessel_ratio::<I>(nus).into_array();

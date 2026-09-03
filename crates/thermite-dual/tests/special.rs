@@ -1083,9 +1083,9 @@ fn newton_inverses_differentiate_implicitly() {
 fn fresnel_value_and_derivative() {
     for &x in &[0.25f64, 1.3, 2.5265, 3.0, 7.5] {
         let v = D::variable(V::splat(x), 0);
-        let (c, s) = v.fresnel();
+        let (s, c) = v.fresnel();
 
-        let (rc, rs) = V::splat(x).fresnel();
+        let (rs, rc) = V::splat(x).fresnel();
         assert!(close(c.re.extract::<0>(), rc.extract::<0>(), 1e-15), "C value at {x}");
         assert!(close(s.re.extract::<0>(), rs.extract::<0>(), 1e-15), "S value at {x}");
 
@@ -1104,7 +1104,7 @@ fn fresnel_value_and_derivative() {
 fn fresnel_derivative_phase_survives_large_arguments() {
     for &x in &[123.4567f64, 1234.5678, 98765.4321] {
         let v = D::variable(V::splat(x), 0);
-        let (c, s) = v.fresnel();
+        let (s, c) = v.fresnel();
         let (dc, ds) = (c.dual[0].extract::<0>(), s.dual[0].extract::<0>());
         assert!(dc.abs() <= 1.0 + 1e-12 && ds.abs() <= 1.0 + 1e-12, "amplitude at {x}");
         // cos^2 + sin^2 = 1 is the phase-independent invariant, and fails loudly

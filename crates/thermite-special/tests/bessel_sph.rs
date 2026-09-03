@@ -24,6 +24,8 @@ use thermite::prelude::*;
 use thermite_special::bessel::{I, J, K, Scaled, Y};
 use thermite_special::{BesselOrder, SpecialMathWithPolicy};
 
+include!("common/wide.rs");
+
 type V = Vector<f64>;
 type S = <V as GenericVector>::Signed;
 
@@ -557,11 +559,8 @@ fn the_unscaled_modified_spherical_forms_agree() {
 /// At real register width, with a different recurrence arm in each lane: `Vector<f64>` is the
 /// one-lane scalar seed, so a packet test against it proves nothing about the masks.
 #[test]
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn a_mixed_packet_agrees_with_its_lanes() {
-    use thermite::backend::x86_v3::X86V3;
-
-    type W = Vector<<X86V3 as Simd>::f64x4>;
+    type W = Vector<<Wide as Simd>::f64x4>;
 
     // Order 4: lanes 0 and 1 take the downward arm (x < n), lanes 2 and 3 the forward one.
     let x = W::splat(0.5).insert::<1>(2.0).insert::<2>(20.0).insert::<3>(90.0);

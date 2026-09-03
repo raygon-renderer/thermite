@@ -21,6 +21,8 @@ use thermite::prelude::*;
 use thermite_special::bessel::{I, J, K, Scaled, Y};
 use thermite_special::{BesselOrder, SpecialMathWithPolicy};
 
+include!("common/wide.rs");
+
 type V = Vector<f64>;
 type S = <V as GenericVector>::Signed;
 
@@ -265,11 +267,8 @@ fn an_even_numerator_reaches_the_integer_kernel() {
 /// lane. `Vector<f64>` is the one-lane scalar seed, so a packet test written against it is a
 /// single lane and proves nothing about the masks.
 #[test]
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn a_mixed_packet_agrees_with_its_lanes() {
-    use thermite::backend::x86_v3::X86V3;
-
-    type W = Vector<<X86V3 as Simd>::f64x4>;
+    type W = Vector<<Wide as Simd>::f64x4>;
     type WS = <W as GenericVector>::Signed;
 
     // Lane 0 and 1 take the forward arm (order under x), lane 2 and 3 the downward one.

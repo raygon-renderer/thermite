@@ -300,7 +300,7 @@ fn the_1p_forms_keep_small_arguments_the_shifted_spelling_loses() {
         }
     }
 
-    // The other end of the same story: an ordinary argument with a tiny lambda, where the
+    // The other end of the same cancellation: an ordinary argument with a tiny lambda, where the
     // result is near zero and `pow(...) - 1` cancels instead.
     for &x in &[0.5_f64, 3.0] {
         for &l in &[1e-12_f64, 1e-18, 1e-300] {

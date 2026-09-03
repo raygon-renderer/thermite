@@ -17,6 +17,8 @@ use thermite::math::policy::policies::{AveragePrecision, BestPrecision, MediumPr
 use thermite::prelude::*;
 use thermite_special::{SpecialMath, SpecialMathWithPolicy};
 
+include!("common/wide.rs");
+
 type D = Vector<f64>;
 type F = Vector<f32>;
 
@@ -197,11 +199,10 @@ fn asymptotic_tail_and_special_values() {
 }
 
 /// A wide backend, with lanes on both sides of the sign branch in one call.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn wide_backend_agrees_with_scalar() {
     use thermite::simd::Simd;
-    type W = Vector<<thermite::backend::x86_v3::X86V3 as Simd>::f64x4>;
+    type W = Vector<<Wide as Simd>::f64x4>;
 
     let xs = [-2.0, 0.5, 27.0, 1e6];
     let got = W::from_slice(&xs).erfcx().into_array();

@@ -18,6 +18,8 @@ use thermite::simd::Simd;
 
 use thermite_special::{RealSpecialMathWithPolicy, SpecialMathWithPolicy};
 
+include!("common/wide.rs");
+
 /// Spread over the interesting structure: negative reflection, the poles at the
 /// non-positive integers, the lgamma zeros at 1 and 2, and ordinary values.
 const PROBES: &[f64] = &[
@@ -201,7 +203,5 @@ mod composed_f32 {
 f32_suite!(scalar_f32, Vector<f32>);
 f64_suite!(scalar_f64, Vector<f64>);
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-f32_suite!(wide_f32, Vector<<thermite::backend::x86_v3::X86V3 as Simd>::f32x8>);
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-f64_suite!(wide_f64, Vector<<thermite::backend::x86_v3::X86V3 as Simd>::f64x4>);
+f32_suite!(wide_f32, Vector<<Wide as Simd>::f32x8>);
+f64_suite!(wide_f64, Vector<<Wide as Simd>::f64x4>);

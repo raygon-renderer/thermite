@@ -23,6 +23,8 @@ use thermite::prelude::*;
 use thermite_compensated::Compensated;
 use thermite_special::{RealSpecialMath, RealSpecialMathWithPolicy, ScalarSpecialMath, SpecialMath};
 
+include!("common/wide.rs");
+
 include!("ndtr_ref/table.rs");
 
 type D = Vector<f64>;
@@ -388,9 +390,18 @@ fn identities() {
                 "logerfc at {x}"
             );
         } else {
+            // `ln(erfc(x))` is the ill-conditioned spelling wherever erfc is near 1: one ulp
+            // of erfc lands as `1/|ln erfc|` ulps of its log, ~89x at |x| = 0.01. The gate
+            // carries that factor, so it measures `logerfc` and not the conditioning of what
+            // it is compared against. (Measured: 11.8 ulp at x = -0.01 where the scalar
+            // `mul_adde` fuses, which is 0.13 ulp of erfc itself.)
+            let amp = (1.0f64 / ln_erfc.abs()).max(1.0);
+            let got = v.logerfc().extract::<0>();
             assert!(
-                ulps(v.logerfc().extract::<0>(), ln_erfc, EPS64) <= 4.0,
-                "logerfc at {x}"
+                ulps(got, ln_erfc, EPS64) <= 4.0 * amp,
+                "logerfc at {x}: {got} vs ln(erfc) {ln_erfc}, {} ulp (gate {})",
+                ulps(got, ln_erfc, EPS64),
+                4.0 * amp
             );
         }
         // logerfc(x) = log_ndtr(-sqrt 2 x) + ln 2. Both sides pass through erf's absolute
@@ -421,13 +432,10 @@ fn scalar_surface() {
 /// `Vector<f64>` is one lane, so everything above exercises one arm per call. A real
 /// packet carries every arm at once, and each lane must be bit-identical to a uniform
 /// packet of that lane's value on the same backend: the same operations run either way,
-/// only the branch skips differ. (A different backend is a different FMA story, so the
+/// only the branch skips differ. (A different backend may have different FMA, so the
 /// baseline is a splat, not the 1-lane vector.)
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn packet_mixes_every_arm_bit_exactly() {
-    use thermite::backend::x86_v3::prelude::*;
-
     for xs in [
         [-30.0f64, -0.3, 0.3, 30.0],
         [-8.0, -2.0, 0.7, 6.0],

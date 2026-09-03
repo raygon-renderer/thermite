@@ -177,7 +177,7 @@ where
             )
             .0;
         };
-        // `I_{-n} = I_n` for integer `n`, so magnitude is the whole story and no sign is owed
+        // `I_{-n} = I_n` for integer `n`, so only the magnitude matters and no sign is owed
         // afterwards. `J`/`Y` below are the ones that reflect.
         let nf = Self::from_signed_integer(n).abs();
         let v = generic::bessel::ik::bessel_iv_impl::<P, f32, _, _, _, _, SCALED>(

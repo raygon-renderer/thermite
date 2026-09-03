@@ -1187,12 +1187,11 @@ thermite::math_traits! {
         #[doc(alias = "log_erfc")]
         fn logerfc(self) -> Self;
 
-        /// The Fresnel integrals `$C(x) = \int_0^x \cos(\pi t^2/2)\,dt$` and
-        /// `$S(x) = \int_0^x \sin(\pi t^2/2)\,dt$`, together.
+        /// The Fresnel integrals `$S(x) = \int_0^x \sin(\pi t^2/2)\,dt$` and
+        /// `$C(x) = \int_0^x \cos(\pi t^2/2)\,dt$`, together.
         ///
-        /// **Returns `(C, S)`. SciPy's `fresnel` returns them the other way round**, as
-        /// `(S, C)`. This order is the one the names are usually written in, and the
-        /// divergence is deliberate.
+        /// **Returns `(S, C)`**, the same order as SciPy's `fresnel` and this crate's own
+        /// [`sici`](RealSpecialMath::sici).
         ///
         /// Both are odd, both tend to `1/2`, and both stay in `[0.32, 0.72]` past the
         /// first oscillation. Measured against a 45-digit oracle over `x` from `1e-4` to
@@ -1200,7 +1199,7 @@ thermite::math_traits! {
         /// `1e7`.
         ///
         /// The phase `$\pi x^2/2$` is carried in two words and reduced exactly, which is
-        /// not a refinement but the whole large-argument accuracy story: computed the
+        /// not a refinement but the whole of the large-argument accuracy: computed the
         /// obvious way as `x*x*0.5`, the phase is already 5.3e-6 wrong at `x = 98765` and
         /// returns the wrong _sign_ by `$x \approx 10^9$`, and since `C` and `S` are
         /// `1/2` plus a term of size `$1/(\pi x)$` that error lands straight on the

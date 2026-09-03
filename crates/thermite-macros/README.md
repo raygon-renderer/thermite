@@ -40,8 +40,8 @@ The remaining exports (`#[register_trait]`, `#[double_pump_impl]`,
 `#[inline_always]`) are internal codegen helpers used to build Thermite's
 own backends and trait hierarchy.
 
-See the [thermite documentation](https://docs.rs/thermite) for the full story
-on dispatch and the vector trait system.
+See the [thermite documentation](https://docs.rs/thermite) for the full explanation
+of dispatch and the vector trait system.
 
 ## License
 

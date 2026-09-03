@@ -5,9 +5,8 @@
 //! `diff_math` gate: catch structural bugs (wrong sign, wrong identity, NaN
 //! for a finite result, backend divergence), not audit ULPs. The default
 //! `Performance` policy is in effect, so the bound is deliberately generous.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+include!("common/wide.rs");
 
-use thermite::backend::x86_v3::prelude::*;
 use thermite::math::policy::DefaultPolicy;
 use thermite::math::policy::policies::Precision;
 use thermite_special::{

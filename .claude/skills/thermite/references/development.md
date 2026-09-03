@@ -841,7 +841,7 @@ workflow deploys docs (KaTeX header) for the `rewrite` branch.
   single instruction. Correct, tests pass, catastrophically slow, invisible to
   the type system. Helpers need `#[inline(always)]` (features propagate only via
   inlining; `#[inline]` gets declined), but don't `#[dispatch]` one-liners --
-  that only blocks inlining. Full story: [performance.md](performance.md) sec 0.
+  that only blocks inlining. Full detail: [performance.md](performance.md) sec 0.
 - **`target_feature` codegen traps that pass tests but tank benches:**
   `core::array::map`/`from_fn` and bare closures fail to inline in
   `target_feature` code and fall back to scalar -- hand-roll `while` loops.

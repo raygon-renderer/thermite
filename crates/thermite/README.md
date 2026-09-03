@@ -159,7 +159,7 @@ The x86 backends need no feature at all. `x86_v1`, `x86_v2` and `x86_v3` are
 compiled unconditionally on `x86` and `x86_64`, and `dispatch_dyn!` picks
 between them at runtime, so one binary carries all three.
 
-**AArch64 NEON** is the same story with no flag: AdvSIMD is mandatory in the
+**AArch64 NEON** works the same way with no flag: AdvSIMD is mandatory in the
 architecture, so the backend is gated on `target_arch = "aarch64"` and is always
 compiled there. There is deliberately no `neon` feature, and passing one is an
 error. 32-bit ARM is not supported, since its NEON intrinsics are still unstable

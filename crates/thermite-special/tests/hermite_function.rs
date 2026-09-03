@@ -22,6 +22,8 @@ use thermite::math::policy::policies::Precision;
 use thermite::prelude::*;
 use thermite_special::{SpecialMath, SpecialMathWithPolicy};
 
+include!("common/wide.rs");
+
 type D = Vector<f64>;
 type F = Vector<f32>;
 
@@ -124,12 +126,14 @@ fn reaches_degrees_the_raw_polynomial_cannot() {
 /// the residual takes `psi_300(20.7)` from 49 to 2 ulp and `psi_1000(38.9)` from 132 to
 /// under 1, and does nothing at integer `x`, whose square is exact. So this test runs on
 /// the wide backend and only over the rows whose `x` has a full mantissa.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+// Restricted to the targets whose wide backend reports `HAS_NATIVE_FMA::True`: wasm's relaxed
+// madd is `Indeterminate`, which the residual gate treats as no FMA, so there is nothing to see.
+#[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
 #[test]
 fn precision_policy_recovers_the_gaussian_residual_on_fma_hardware() {
     use thermite::math::policy::policies::Performance;
     use thermite::simd::Simd;
-    type W = Vector<<thermite::backend::x86_v3::X86V3 as Simd>::f64x4>;
+    type W = Vector<<Wide as Simd>::f64x4>;
 
     macro_rules! at {
         ($p:ty, $n:expr, $x:expr) => {

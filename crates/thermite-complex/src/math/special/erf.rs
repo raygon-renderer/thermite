@@ -121,7 +121,7 @@ where
     // `|Im z|` fell through to a series that could not deliver it.
     //
     // Inside the remaining band the series is kept: `w` at `Average` is 4e-10 where the
-    // series is at the last ulp, and near the origin that gap is the whole story.
+    // series is at the last ulp, and near the origin that gap is all that matters.
     // Widening this trades accuracy in the bulk for nothing.
     let cancels = z2
         .re

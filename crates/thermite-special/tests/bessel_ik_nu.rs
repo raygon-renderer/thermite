@@ -20,6 +20,8 @@ use thermite::prelude::*;
 use thermite_special::bessel::{I, J, K, Scaled, Y};
 use thermite_special::{BesselOrder, SpecialMathWithPolicy};
 
+include!("common/wide.rs");
+
 type V = Vector<f64>;
 type S = <V as GenericVector>::Signed;
 
@@ -301,11 +303,8 @@ fn the_unscaled_real_order_forms_agree_with_the_scaled_ones() {
 /// `Vector<f64>` is the one-lane scalar seed, so a packet test written against it proves
 /// nothing about the region masks.
 #[test]
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn a_mixed_packet_agrees_with_its_lanes() {
-    use thermite::backend::x86_v3::X86V3;
-
-    type W = Vector<<X86V3 as Simd>::f64x4>;
+    type W = Vector<<Wide as Simd>::f64x4>;
 
     let x = W::splat(1.0).insert::<1>(5.0).insert::<2>(100.0).insert::<3>(0.5);
     let nus = W::splat(1.0 / 3.0)

@@ -265,7 +265,7 @@ that is.
 
 ### Fewer lanes than the register
 
-Going the other direction has its own story. A two-lane vector on a machine with four-lane
+Going the other direction works differently. A two-lane vector on a machine with four-lane
 registers is not a smaller register, because there is no such thing. It's the full register
 with the upper lanes carried along and ignored.
 

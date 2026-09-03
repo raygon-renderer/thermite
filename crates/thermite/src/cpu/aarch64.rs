@@ -5,8 +5,8 @@
 //! Three tiers, in the order this module tries them:
 //!
 //! 1. **`CTR_EL0`** -- genuinely readable at EL0 on every aarch64, OS or not.
-//!    Gives the cache *line* size and the writeback granule. This is the whole
-//!    story in `no_std`.
+//!    Gives the cache *line* size and the writeback granule. This is all
+//!    `no_std` gets.
 //! 2. **macOS `sysctl`** -- Apple silicon reports per-perflevel cache sizes and
 //!    P/E core counts, the richest of any platform here.
 //! 3. **Linux / Android sysfs** (`std` only) -- `cache/index*` for geometry,

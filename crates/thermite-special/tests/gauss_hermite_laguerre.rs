@@ -10,6 +10,8 @@
 use thermite::prelude::*;
 use thermite_special::RealSpecialMath;
 
+include!("common/wide.rs");
+
 include!("bessel_ratio_ref/table.rs");
 
 type D = Vector<f64>;
@@ -141,7 +143,15 @@ fn edges_and_f32() {
     assert_eq!(x.extract::<0>(), 0.0);
     assert!(rel(w.extract::<0>(), core::f64::consts::PI.sqrt(), f64::EPSILON) <= 1.0);
     let (x, w) = D::splat(0.0).gauss_laguerre(D::splat(2.0), 1);
-    assert_eq!((x.extract::<0>(), w.extract::<0>()), (3.0, 2.0));
+    // The single node is `alpha + 1` and so is exact, but the weight is `Gamma(alpha + 1)`
+    // through the crate's own tgamma, which is a minimax form, not an exact one at the
+    // integers: whether its polynomial fuses (wasm's relaxed madd does) moves it by an ulp.
+    assert_eq!(x.extract::<0>(), 3.0);
+    assert!(
+        rel(w.extract::<0>(), 2.0, f64::EPSILON) <= 2.0,
+        "gauss_laguerre(alpha = 2, n = 1) weight: {}",
+        w.extract::<0>()
+    );
     assert!(D::splat(4.0).gauss_hermite(4).0.extract::<0>().is_nan());
     assert!(
         D::splat(0.0)
@@ -199,11 +209,8 @@ fn edges_and_f32() {
 }
 
 /// A packet of consecutive indices is the rule: every lane bit-identical to a splat.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn packets_are_the_rule() {
-    use thermite::backend::x86_v3::prelude::*;
-
     let n = 9u32;
     let ks = f64x4::new([0.0, 1.0, 4.0, 8.0]);
     let (x, w) = ks.gauss_hermite(n);

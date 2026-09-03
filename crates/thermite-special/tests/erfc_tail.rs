@@ -19,6 +19,8 @@ use thermite::math::policy::policies::BestPrecision;
 use thermite::prelude::*;
 use thermite_special::{SpecialMath, SpecialMathWithPolicy};
 
+include!("common/wide.rs");
+
 include!("erfc_ref/table.rs");
 
 type Best = BestPrecision<DefaultPolicy>;
@@ -77,10 +79,11 @@ fn f64_scalar_lowering() {
     }
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+// x86 and aarch64 only: the assertion below is the point of the test, and wasm's relaxed madd
+// reports `Indeterminate`.
+#[cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
 #[test]
-fn f64_avx2_fma_lowering() {
-    use thermite::backend::x86_v3::prelude::*;
+fn f64_wide_fma_lowering() {
     assert!(matches!(f64x4::HAS_NATIVE_FMA, thermite::tribool::True));
     let def = sweep("f64x4 default", f64::EPSILON, 27.0, |x| {
         f64x4::splat(x).erfc().extract::<0>()
@@ -93,10 +96,8 @@ fn f64_avx2_fma_lowering() {
     }
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
-fn f32_avx2_fma_lowering() {
-    use thermite::backend::x86_v3::prelude::*;
+fn f32_wide_lowering() {
     let eps = f32::EPSILON as f64;
     let def = sweep("f32x8 default", eps, 9.2, |x| {
         f32x8::splat(x as f32).erfc().extract::<0>() as f64

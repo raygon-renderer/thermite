@@ -287,20 +287,31 @@ macro_rules! mixed_packet_test {
     };
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod mixed_x86 {
-    use super::*;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
-    mixed_packet_test!(v3, X86V3, f64x4);
-    mixed_packet_test!(v2, X86V2, f64x2);
-}
-
-#[cfg(target_arch = "aarch64")]
-mod mixed_neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-    mixed_packet_test!(neon, Neon, f64x2);
+core::cfg_select! {
+    any(target_arch = "x86", target_arch = "x86_64") => {
+        mod mixed_x86 {
+            use super::*;
+            use thermite::backend::x86_v2::X86V2;
+            use thermite::backend::x86_v3::X86V3;
+            mixed_packet_test!(v3, X86V3, f64x4);
+            mixed_packet_test!(v2, X86V2, f64x2);
+        }
+    }
+    target_arch = "aarch64" => {
+        mod mixed_neon {
+            use super::*;
+            use thermite::backend::neon::Neon;
+            mixed_packet_test!(neon, Neon, f64x2);
+        }
+    }
+    all(feature = "wasm", any(target_arch = "wasm32", target_arch = "wasm64")) => {
+        mod mixed_wasm {
+            use super::*;
+            use thermite::backend::wasm::Wasm;
+            mixed_packet_test!(wasm, Wasm, f64x2);
+        }
+    }
+    _ => {}
 }
 
 /// The special values, exactly.

@@ -447,7 +447,7 @@ fn ray_tri_glam_soa(rays: &GlamSoaRays, tris: &[Tri], m: &[f32; 16]) -> f32 {
     acc.element_sum()
 }
 
-/// nalgebra's SIMD story: the same `Vector3` code as the scalar version, with
+/// nalgebra's SIMD path: the same `Vector3` code as the scalar version, with
 /// simba's 4-wide lane type as the scalar.
 fn ray_tri_nalgebra_soa(rays: &NaSoaRays, tris: &[NaWideTri], m: &[f32; 16]) -> f32 {
     let m00 = WideF32x4::splat(m[0]);

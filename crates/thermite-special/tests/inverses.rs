@@ -13,6 +13,8 @@ use thermite::math::policy::policies::{BestPrecision, MediumPrecision, WorstPrec
 use thermite::prelude::*;
 use thermite_special::{RealSpecialMath, RealSpecialMathWithPolicy, SpecialMath};
 
+include!("common/wide.rs");
+
 include!("inverses_ref/table.rs");
 
 type D = Vector<f64>;
@@ -199,11 +201,8 @@ fn edges() {
 }
 
 /// Every arm in one packet, each lane bit-identical to a splat of itself.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn packets_mix_arms_bit_exactly() {
-    use thermite::backend::x86_v3::prelude::*;
-
     let ys = [-1e6f64, -700.5, -5.0, -1e-3];
     let got = f64x4::new(ys).inv_log_ndtr().into_array();
     for (k, &y) in ys.iter().enumerate() {

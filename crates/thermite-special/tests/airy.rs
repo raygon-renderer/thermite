@@ -23,6 +23,8 @@ use thermite::prelude::*;
 use thermite_special::SpecialMathWithPolicy;
 use thermite_special::bessel::{Ai, AiPrime, Bi, BiPrime, Scaled};
 
+include!("common/wide.rs");
+
 type V = Vector<f64>;
 
 const EPS: f64 = f64::EPSILON;
@@ -391,11 +393,8 @@ fn the_origin_is_exact_and_its_neighbourhood_is_continuous() {
 /// at it, one above) because `Vector<f64>` is the one-lane scalar seed and a packet test
 /// written against it proves nothing about the branch masks.
 #[test]
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn a_mixed_packet_agrees_with_its_lanes() {
-    use thermite::backend::x86_v3::X86V3;
-
-    type W = Vector<<X86V3 as Simd>::f64x4>;
+    type W = Vector<<Wide as Simd>::f64x4>;
 
     let x = W::splat(-3.0).insert::<1>(0.0).insert::<2>(2.5).insert::<3>(-40.0);
     let (ai, aip, bi, bip) = W::airy_all_p::<Precision, true>(x);

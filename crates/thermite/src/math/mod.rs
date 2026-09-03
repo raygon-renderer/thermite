@@ -320,7 +320,7 @@ thermite_macros::math_traits! {
         /// `$ab - cd$`, spelled `a.difference_of_products(b, c, d)`, evaluated so the
         /// two products cannot cancel catastrophically.
         ///
-        /// Reach for this wherever an expression's correctness story is "the two
+        /// Reach for this wherever an expression's correctness argument is "the two
         /// errors cancel by symmetry": cross products and perp-dots, 2x2
         /// determinants and matrix adjugates, discriminants `$b^2 - 4ac$`, the
         /// `$ac - bd$` of a complex multiply, and every sign test built on one of

@@ -576,10 +576,10 @@ where
     /// `x = 98765` the naive phase is 5.3e-6 off, which is the whole derivative.
     #[inline(always)]
     fn fresnel<P: Policy>(self) -> (Self, Self) {
-        let (c, s) = self.re.fresnel_p::<P>();
+        let (s, c) = self.re.fresnel_p::<P>();
         let (sin_t, cos_t) = thermite_special::specialized::fresnel_phase::<P, E, V>(self.re.abs())
             .sincos_pi_p::<P>();
-        (self.chain(c, cos_t), self.chain(s, sin_t))
+        (self.chain(s, sin_t), self.chain(c, cos_t))
     }
 
     /// `Si' = sin(x)/x` and `Ci' = cos(x)/x`.

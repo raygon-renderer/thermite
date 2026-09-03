@@ -17,6 +17,8 @@ use thermite::math::policy::policies::BestPrecision;
 use thermite::prelude::*;
 use thermite_special::{SpecialMath, SpecialMathWithPolicy};
 
+include!("common/wide.rs");
+
 type D = Vector<f64>;
 type F = Vector<f32>;
 type Best = BestPrecision<DefaultPolicy>;
@@ -118,11 +120,8 @@ fn f32_has_had_the_arm_from_average() {
 
 /// Both arms in one packet, each lane bit-identical to a splat of itself on the same
 /// backend.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[test]
 fn packet_mixes_both_arms_bit_exactly() {
-    use thermite::backend::x86_v3::prelude::*;
-
     let xs = [1e-9f64, -0.3, 0.84, -3.0];
     let got = f64x4::new(xs).erf_p::<Best>().into_array();
     for (k, &x) in xs.iter().enumerate() {

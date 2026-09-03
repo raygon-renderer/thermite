@@ -21,6 +21,8 @@ use thermite::prelude::*;
 use thermite_special::bessel::{I, J, K, Scaled, Y};
 use thermite_special::{BesselOrder, SpecialMathWithPolicy};
 
+include!("common/wide.rs");
+
 type V = Vector<f64>;
 type Vf = Vector<f32>;
 
@@ -450,20 +452,31 @@ macro_rules! mixed_packet_test {
     };
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod mixed_x86 {
-    use super::*;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
-    mixed_packet_test!(v3, X86V3, f64x4);
-    mixed_packet_test!(v2, X86V2, f64x2);
-}
-
-#[cfg(target_arch = "aarch64")]
-mod mixed_neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-    mixed_packet_test!(neon, Neon, f64x2);
+core::cfg_select! {
+    any(target_arch = "x86", target_arch = "x86_64") => {
+        mod mixed_x86 {
+            use super::*;
+            use thermite::backend::x86_v2::X86V2;
+            use thermite::backend::x86_v3::X86V3;
+            mixed_packet_test!(v3, X86V3, f64x4);
+            mixed_packet_test!(v2, X86V2, f64x2);
+        }
+    }
+    target_arch = "aarch64" => {
+        mod mixed_neon {
+            use super::*;
+            use thermite::backend::neon::Neon;
+            mixed_packet_test!(neon, Neon, f64x2);
+        }
+    }
+    all(feature = "wasm", any(target_arch = "wasm32", target_arch = "wasm64")) => {
+        mod mixed_wasm {
+            use super::*;
+            use thermite::backend::wasm::Wasm;
+            mixed_packet_test!(wasm, Wasm, f64x2);
+        }
+    }
+    _ => {}
 }
 
 include!("bessel_ref/table_k.rs");
@@ -543,7 +556,7 @@ fn bessel_k_is_undefined_left_of_the_origin() {
 
 #[test]
 fn bessel_k_scaled_survives_where_unscaled_underflows() {
-    // The mirror of the I story: there the unscaled form overflows, here it underflows to a
+    // The mirror of the `I` case: there the unscaled form overflows, here it underflows to a
     // flat zero while the scaled one stays an ordinary number near sqrt(pi/2x).
     assert!(V::splat(800.0).bessel_n_p::<Precision, K, 0>().extract::<0>() == 0.0);
     let s = V::splat(800.0).bessel_n_p::<Precision, Scaled<K>, 0>().extract::<0>();
@@ -1024,8 +1037,7 @@ fn bessel_runtime_order_handles_mixed_lanes() {
     // The point of the runtime form: different orders in one packet. A single-order packet
     // would pass even if the per-lane masking were broken, since every lane would freeze at the
     // same step.
-    use thermite::backend::x86_v3::X86V3;
-    type W = Vector<<X86V3 as Simd>::f64x4>;
+    type W = Vector<<Wide as Simd>::f64x4>;
     type WS = <W as GenericVector>::Signed;
 
     let x = W::splat(3.0);
@@ -1153,9 +1165,7 @@ fn bessel_order_simplifies_to_the_cheapest_class() {
 /// register width.
 #[test]
 fn bessel_order_downgrade_needs_every_lane() {
-    use thermite::backend::x86_v3::X86V3;
-    use thermite::prelude::*;
-    type W = Vector<<X86V3 as Simd>::f64x4>;
+    type W = Vector<<Wide as Simd>::f64x4>;
     type WS = <W as GenericVector>::Signed;
 
     let all_whole = BesselOrder::<W, WS>::Real(W::splat(2.0).insert::<1>(5.0).insert::<3>(-1.0));
@@ -1290,10 +1300,8 @@ fn bessel_negative_orders_reflect_at_reference() {
 /// the case that matters: the reflection is per-lane, not per-call.
 #[test]
 fn bessel_negative_runtime_orders_match_the_const_form() {
-    use thermite::backend::x86_v3::X86V3;
-    use thermite::prelude::*;
     type S = <V as GenericVector>::Signed;
-    type W = Vector<<X86V3 as Simd>::f64x4>;
+    type W = Vector<<Wide as Simd>::f64x4>;
     type WS = <W as GenericVector>::Signed;
 
     for &x in &[0.75f64, 3.0, 6.5, 20.0] {

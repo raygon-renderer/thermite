@@ -16,7 +16,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "tests", "erfc_ref", "table.rs")
 
 # Offset the grids off the binary lattice: a step of 1/4 gives `x` whose square is exact
-# in f64, which would hide the rounding of `x * x` under the exp, which is the tail's whole story.
+# in f64, which would hide the rounding of `x * x` under the exp, which is all the tail is about.
 xs = sorted(set(
     [float(v) + 0.0137 for v in np.linspace(0.0, 1.0, 21)]
     + [float(v) + 0.0137 for v in np.linspace(1.0, 6.0, 51)]

@@ -1691,7 +1691,7 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
         generic::inverses::wright_omega_impl::<P, _, _>(self)
     }
 
-    /// `(C(x), S(x))`, the Fresnel integrals. See `generic::fresnel`.
+    /// `(S(x), C(x))`, the Fresnel integrals. See `generic::fresnel`.
     ///
     /// The coefficient tables are per-element, so the `ps`/`pd` impls supply them and
     /// every other type gets this default. `Dual` overrides it with the closed-form
@@ -1716,13 +1716,13 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
     /// they do fall out.
     #[inline(always)]
     fn fresnel_c<P: Policy>(self) -> Self {
-        Self::fresnel::<P>(self).0
+        Self::fresnel::<P>(self).1
     }
 
     /// `S(x)` alone. See [`fresnel_c`](Self::fresnel_c).
     #[inline(always)]
     fn fresnel_s<P: Policy>(self) -> Self {
-        Self::fresnel::<P>(self).1
+        Self::fresnel::<P>(self).0
     }
 
     /// `Si(x)` alone. See [`fresnel_c`](Self::fresnel_c) for what is and is not saved.

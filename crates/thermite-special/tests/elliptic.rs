@@ -1089,27 +1089,31 @@ macro_rules! elliptic_tests {
     };
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86 {
-    use super::*;
-    use thermite::backend::x86_v1::X86V1;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
-    elliptic_tests!(v3, X86V3, f32x8, f64x4);
-    elliptic_tests!(v2, X86V2, f32x4, f64x2);
-    elliptic_tests!(v1, X86V1, f32x4, f64x2);
-}
-
-#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-mod wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-    elliptic_tests!(wasm, Wasm, f32x4, f64x2);
-}
-
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-    elliptic_tests!(neon, Neon, f32x4, f64x2);
+core::cfg_select! {
+    any(target_arch = "x86", target_arch = "x86_64") => {
+        mod x86 {
+            use super::*;
+            use thermite::backend::x86_v1::X86V1;
+            use thermite::backend::x86_v2::X86V2;
+            use thermite::backend::x86_v3::X86V3;
+            elliptic_tests!(v3, X86V3, f32x8, f64x4);
+            elliptic_tests!(v2, X86V2, f32x4, f64x2);
+            elliptic_tests!(v1, X86V1, f32x4, f64x2);
+        }
+    }
+    target_arch = "aarch64" => {
+        mod neon {
+            use super::*;
+            use thermite::backend::neon::Neon;
+            elliptic_tests!(neon, Neon, f32x4, f64x2);
+        }
+    }
+    all(feature = "wasm", any(target_arch = "wasm32", target_arch = "wasm64")) => {
+        mod wasm {
+            use super::*;
+            use thermite::backend::wasm::Wasm;
+            elliptic_tests!(wasm, Wasm, f32x4, f64x2);
+        }
+    }
+    _ => {}
 }
