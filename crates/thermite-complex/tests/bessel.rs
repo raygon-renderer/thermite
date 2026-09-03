@@ -7452,9 +7452,16 @@ fn the_negative_real_axis_is_a_branch_cut_with_signed_zero() {
                     "{name}_{nu}(-{x}) above {a:?} vs below {b:?}"
                 );
             }
-            // Whole orders have no cut: I and J are single-valued there.
-            let (a, b) = (je(2.0, above), je(2.0, below));
-            assert!(rel_c(a, b) <= 1e-15, "J_2 has no cut: {:?} vs {:?}", parts(a), parts(b));
+            // Whole orders have no cut: I and J are single-valued there. The two sides still
+            // go through opposite Hankel rotations, so the imaginary part is zero only up to
+            // an ulp of the O(1) intermediate, and it flips sign with the side. Bound that
+            // residue absolutely rather than as a share of |J_2|, which a complex relative
+            // error turns into a 2-ulp swing that lands differently per ISA.
+            let (a, b) = (parts(je(2.0, above)), parts(je(2.0, below)));
+            assert!(
+                (a.0 - b.0).abs() <= 1e-15 * (a.0.abs() + 1.0) && (a.1 - b.1).abs() <= 4e-15,
+                "J_2 has no cut: {a:?} vs {b:?}"
+            );
         }
     }
 }
