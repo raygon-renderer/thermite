@@ -174,7 +174,7 @@ where
 ///     V::splat(sign / (2 * n + 1) as f64)
 /// };
 ///
-/// let sum = match aitken_sum::<V, Precision, _>(V::splat(1e-12), 0, 100_000, leibniz) {
+/// let sum = match aitken_sum::<V, Precision, _>(V::splat(1e-12), GenericMask::TRUTHY, 0, 100_000, leibniz) {
 ///     Ok(v) | Err(v) => v.extract::<0>(),
 /// };
 /// assert!((sum - core::f64::consts::FRAC_PI_4).abs() < 1e-10);
