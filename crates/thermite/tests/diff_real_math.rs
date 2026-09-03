@@ -128,17 +128,17 @@ macro_rules! real_suite {
                     let (vs, s) = mk(&mut rng, -0.5, 1.5);
                     let clamp01 = |v: f64| v.clamp(0.0, 1.0);
                     // N=1: linear (clamped)
-                    close("smoothstep<1>", &rd(vs.smoothstep::<1>(None)), &s.iter().map(|&v| clamp01(v)).collect::<Vec<_>>());
+                    close("smoothstep_n<1>", &rd(vs.smoothstep_n::<1>(None)), &s.iter().map(|&v| clamp01(v)).collect::<Vec<_>>());
                     // N=2: 3t^2 - 2t^3
                     let want: Vec<f64> = s.iter().map(|&v| { let t = clamp01(v); t * t * (3.0 - 2.0 * t) }).collect();
-                    close("smoothstep<2>", &rd(vs.smoothstep::<2>(None)), &want);
+                    close("smoothstep_n<2>", &rd(vs.smoothstep_n::<2>(None)), &want);
                     // derivative of N=2: 6t - 6t^2 (0 in the clamped tails)
                     let want: Vec<f64> = s.iter().map(|&v| { let t = clamp01(v); 6.0 * t * (1.0 - t) }).collect();
-                    close("smoothstep_derivative<2>", &rd(vs.smoothstep_derivative::<2>(None)), &want);
+                    close("smoothstep_derivative_n<2>", &rd(vs.smoothstep_derivative_n::<2>(None)), &want);
 
                     // N=3 "smootherstep": 6t^5 - 15t^4 + 10t^3
                     let want: Vec<f64> = s.iter().map(|&v| { let t = clamp01(v); t * t * t * (t * (t * 6.0 - 15.0) + 10.0) }).collect();
-                    close("smoothstep<3>", &rd(vs.smoothstep::<3>(None)), &want);
+                    close("smoothstep_n<3>", &rd(vs.smoothstep_n::<3>(None)), &want);
 
                     // inverse_smoothstep round-trips smoothstep on [0,1] for N=1,2,3
                     let (vx, _x) = mk(&mut rng, 0.02, 0.98);
@@ -149,19 +149,19 @@ macro_rules! real_suite {
                             assert!((a - b).abs() <= 1.0e-2 + 80.0 * ($rel), "{} {} lane {}: got {} want {}", stringify!($mod), tag, i, a, b);
                         }
                     };
-                    rt(vx.smoothstep::<1>(None).inverse_smoothstep::<1>(None), vx, "inv_smoothstep<1>");
-                    rt(vx.smoothstep::<2>(None).inverse_smoothstep::<2>(None), vx, "inv_smoothstep<2>");
-                    rt(vx.smoothstep::<3>(None).inverse_smoothstep::<3>(None), vx, "inv_smoothstep<3>"); // Newton path
+                    rt(vx.smoothstep_n::<1>(None).inverse_smoothstep_n::<1>(None), vx, "inv_smoothstep<1>");
+                    rt(vx.smoothstep_n::<2>(None).inverse_smoothstep_n::<2>(None), vx, "inv_smoothstep<2>");
+                    rt(vx.smoothstep_n::<3>(None).inverse_smoothstep_n::<3>(None), vx, "inv_smoothstep<3>"); // Newton path
 
                     // with explicit edges [a,b]: smoothstep maps [a,b]->[0,1], inverse maps back
                     let edges = Some((V::splat(-2.0 as $e), V::splat(5.0 as $e)));
                     let (vxe, _) = mk(&mut rng, -1.8, 4.8);
-                    rt(vxe.smoothstep::<2>(edges).inverse_smoothstep::<2>(edges), vxe, "inv_smoothstep<2>+edges");
-                    rt(vxe.smoothstep::<3>(edges).inverse_smoothstep::<3>(edges), vxe, "inv_smoothstep<3>+edges");
+                    rt(vxe.smoothstep_n::<2>(edges).inverse_smoothstep_n::<2>(edges), vxe, "inv_smoothstep<2>+edges");
+                    rt(vxe.smoothstep_n::<3>(edges).inverse_smoothstep_n::<3>(edges), vxe, "inv_smoothstep<3>+edges");
 
                     // N=0 is the (non-invertible) step function, so just exercise both paths
-                    let _ = vx.inverse_smoothstep::<0>(None);
-                    let _ = vx.inverse_smoothstep::<0>(edges);
+                    let _ = vx.inverse_smoothstep_n::<0>(None);
+                    let _ = vx.inverse_smoothstep_n::<0>(edges);
                 }
             }
 
@@ -177,12 +177,12 @@ macro_rules! real_suite {
                     for (i, (&g, &w)) in rd(vx.powiv(e)).iter().zip(&want).enumerate() {
                         assert!((g - w).abs() <= loose * w.abs().max(1.0), "{} powiv lane {}: {} vs {}", stringify!($mod), i, g, w);
                     }
-                    // nth_root::<N> == x^(1/N)
+                    // nth_root_n::<N> == x^(1/N)
                     for (n, root) in [(2i32, 0.5f64), (3, 1.0 / 3.0), (4, 0.25), (5, 0.2)] {
                         let want: Vec<f64> = x.iter().map(|&v| v.powf(root)).collect();
-                        let got = match n { 2 => rd(vx.nth_root::<2>()), 3 => rd(vx.nth_root::<3>()), 4 => rd(vx.nth_root::<4>()), _ => rd(vx.nth_root::<5>()) };
+                        let got = match n { 2 => rd(vx.nth_root_n::<2>()), 3 => rd(vx.nth_root_n::<3>()), 4 => rd(vx.nth_root_n::<4>()), _ => rd(vx.nth_root_n::<5>()) };
                         for (i, (&g, &w)) in got.iter().zip(&want).enumerate() {
-                            assert!((g - w).abs() <= loose * w.abs().max(1.0), "{} nth_root<{}> lane {}: {} vs {}", stringify!($mod), n, i, g, w);
+                            assert!((g - w).abs() <= loose * w.abs().max(1.0), "{} nth_root_n<{}> lane {}: {} vs {}", stringify!($mod), n, i, g, w);
                         }
                     }
                 }

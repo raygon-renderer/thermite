@@ -77,7 +77,7 @@ fn it_matches_the_reference_at_every_order() {
 
         close(
             &format!("E_1({x})"),
-            v.expint_p::<Reference, 1>().extract::<0>(),
+            v.expint_n_p::<Reference, 1>().extract::<0>(),
             e1,
             64.0 * f64::EPSILON,
         );
@@ -87,26 +87,26 @@ fn it_matches_the_reference_at_every_order() {
         // order, so no regime exists where a higher N costs accuracy.
         close(
             &format!("E_2({x})"),
-            v.expint_p::<Reference, 2>().extract::<0>(),
+            v.expint_n_p::<Reference, 2>().extract::<0>(),
             e2,
             64.0 * f64::EPSILON,
         );
         close(
             &format!("E_3({x})"),
-            v.expint_p::<Reference, 3>().extract::<0>(),
+            v.expint_n_p::<Reference, 3>().extract::<0>(),
             e3,
             64.0 * f64::EPSILON,
         );
         let _ = x;
         close(
             &format!("E_5({x})"),
-            v.expint_p::<Reference, 5>().extract::<0>(),
+            v.expint_n_p::<Reference, 5>().extract::<0>(),
             e5,
             64.0 * f64::EPSILON,
         );
         close(
             &format!("E_8({x})"),
-            v.expint_p::<Reference, 8>().extract::<0>(),
+            v.expint_n_p::<Reference, 8>().extract::<0>(),
             e8,
             64.0 * f64::EPSILON,
         );
@@ -136,7 +136,7 @@ fn the_branch_seam_at_one_is_smooth_and_accurate() {
     let mut worst = 0.0_f64;
     for i in 0..=200 {
         let x = 0.5 + 1.0 * (i as f64) / 200.0;
-        let got = D::splat(x).expint_p::<Reference, 1>().extract::<0>();
+        let got = D::splat(x).expint_n_p::<Reference, 1>().extract::<0>();
         let want = series(x);
         let rel = ((got - want) / want).abs();
 
@@ -158,12 +158,12 @@ fn the_policy_tiers_agree_with_each_other() {
     // a future fix that lands on one tier and not the others.
     for &(x, ..) in REF.iter() {
         let v = D::splat(x);
-        let r = v.expint_p::<Reference, 1>().extract::<0>();
+        let r = v.expint_n_p::<Reference, 1>().extract::<0>();
 
         for (tag, got) in [
-            ("Precision", v.expint_p::<Precision, 1>().extract::<0>()),
-            ("Performance", v.expint_p::<Performance, 1>().extract::<0>()),
-            ("default", v.expint::<1>().extract::<0>()),
+            ("Precision", v.expint_n_p::<Precision, 1>().extract::<0>()),
+            ("Performance", v.expint_n_p::<Performance, 1>().extract::<0>()),
+            ("default", v.expint_n::<1>().extract::<0>()),
         ] {
             close(&format!("{tag} vs Reference at x = {x}"), got, r, 1e-12);
         }
@@ -178,9 +178,9 @@ fn the_recurrence_relation_holds() {
         let v = D::splat(x);
         let e = (-x).exp();
 
-        let e1 = v.expint_p::<Reference, 1>().extract::<0>();
-        let e2 = v.expint_p::<Reference, 2>().extract::<0>();
-        let e3 = v.expint_p::<Reference, 3>().extract::<0>();
+        let e1 = v.expint_n_p::<Reference, 1>().extract::<0>();
+        let e2 = v.expint_n_p::<Reference, 2>().extract::<0>();
+        let e3 = v.expint_n_p::<Reference, 3>().extract::<0>();
 
         close(&format!("E_2 from E_1 at {x}"), e2, e - x * e1, 1e-11);
         close(&format!("E_3 from E_2 at {x}"), e3, (e - x * e2) / 2.0, 1e-11);
@@ -190,26 +190,26 @@ fn the_recurrence_relation_holds() {
 #[test]
 fn the_edges_are_the_limits() {
     // E_1(0) diverges; E_n(0) = 1/(n-1) above it.
-    assert_eq!(D::ZERO.expint::<1>().extract::<0>(), f64::INFINITY);
-    close("E_2(0)", D::ZERO.expint::<2>().extract::<0>(), 1.0, 0.0);
-    close("E_3(0)", D::ZERO.expint::<3>().extract::<0>(), 0.5, 0.0);
+    assert_eq!(D::ZERO.expint_n::<1>().extract::<0>(), f64::INFINITY);
+    close("E_2(0)", D::ZERO.expint_n::<2>().extract::<0>(), 1.0, 0.0);
+    close("E_3(0)", D::ZERO.expint_n::<3>().extract::<0>(), 0.5, 0.0);
     close(
         "E_8(0)",
-        D::ZERO.expint::<8>().extract::<0>(),
+        D::ZERO.expint_n::<8>().extract::<0>(),
         1.0 / 7.0,
         4.0 * f64::EPSILON,
     );
 
     // Negative argument is out of domain, and NaN propagates.
-    assert!(D::splat(-1.0).expint::<1>().extract::<0>().is_nan());
-    assert!(D::splat(-0.5).expint::<3>().extract::<0>().is_nan());
-    assert!(D::splat(f64::NAN).expint::<2>().extract::<0>().is_nan());
+    assert!(D::splat(-1.0).expint_n::<1>().extract::<0>().is_nan());
+    assert!(D::splat(-0.5).expint_n::<3>().extract::<0>().is_nan());
+    assert!(D::splat(f64::NAN).expint_n::<2>().extract::<0>().is_nan());
 
     // E_n decreases in x and in n, everywhere.
     for &n_x in &[0.3_f64, 1.0, 1.7, 5.0] {
-        let a = D::splat(n_x).expint_p::<Reference, 2>().extract::<0>();
-        let b = D::splat(n_x + 0.1).expint_p::<Reference, 2>().extract::<0>();
-        let c = D::splat(n_x).expint_p::<Reference, 3>().extract::<0>();
+        let a = D::splat(n_x).expint_n_p::<Reference, 2>().extract::<0>();
+        let b = D::splat(n_x + 0.1).expint_n_p::<Reference, 2>().extract::<0>();
+        let c = D::splat(n_x).expint_n_p::<Reference, 3>().extract::<0>();
 
         assert!(b < a, "E_2 must decrease in x at {n_x}");
         assert!(c < a, "E_3 < E_2 at {n_x}");
@@ -219,8 +219,8 @@ fn the_edges_are_the_limits() {
 #[test]
 fn f32_tracks_the_f64_kernel() {
     for &(x, ..) in REF.iter().filter(|r| r.0 <= 12.0) {
-        let got = F::splat(x as f32).expint_p::<Reference, 1>().extract::<0>() as f64;
-        let want = D::splat(x).expint_p::<Reference, 1>().extract::<0>();
+        let got = F::splat(x as f32).expint_n_p::<Reference, 1>().extract::<0>() as f64;
+        let want = D::splat(x).expint_n_p::<Reference, 1>().extract::<0>();
 
         close(&format!("f32 E_1({x})"), got, want, 64.0 * f32::EPSILON as f64);
     }
@@ -233,12 +233,12 @@ fn lanes_stay_independent_across_the_seam() {
 
     // Two lanes either side of x = 1, so both rational branches run in one packet.
     let xs = [0.25, 0.99, 1.01, 8.0];
-    let got = D4::new(xs).expint_p::<Reference, 3>().into_array();
+    let got = D4::new(xs).expint_n_p::<Reference, 3>().into_array();
 
     for (lane, &x) in xs.iter().enumerate() {
         assert_eq!(
             got.as_slice()[lane],
-            D::splat(x).expint_p::<Reference, 3>().extract::<0>(),
+            D::splat(x).expint_n_p::<Reference, 3>().extract::<0>(),
             "lane {lane} (x = {x})"
         );
     }

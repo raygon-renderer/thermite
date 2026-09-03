@@ -337,7 +337,7 @@ fn powers_compose() {
     assert_close("z^2 == z*z", z.powi(2), oracle(z) * oracle(z), 1e-15);
     assert_close("z^-3", z.powi(-3), oracle(z).powi(-3), 1e-13);
 
-    let r = z.nth_root::<5>();
+    let r = z.nth_root_n::<5>();
     assert_close("nth_root(5)^5 == z", r.powi(5), oracle(z), 1e-10);
 }
 

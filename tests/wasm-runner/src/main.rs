@@ -14,7 +14,9 @@ use wasmtime_wasi::p1::{self, WasiP1Ctx};
 fn main() -> Result<()> {
     let mut args = std::env::args();
     let _runner = args.next();
-    let module_path = args.next().ok_or_else(|| anyhow!("usage: wasm-runner <module.wasm> [args...]"))?;
+    let module_path = args
+        .next()
+        .ok_or_else(|| anyhow!("usage: wasm-runner <module.wasm> [args...]"))?;
     let guest_args: Vec<String> = args.collect();
 
     // SIMD is enabled by default; relaxed-SIMD must be opted in (thermite's wasm registers use

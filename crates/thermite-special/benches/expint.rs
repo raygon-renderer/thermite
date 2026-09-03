@@ -54,7 +54,7 @@ macro_rules! sweep {
             b.iter(|| {
                 let mut acc = V64::ZERO;
                 for &x in black_box(&xs) {
-                    acc += x.expint_p::<Performance, 2>();
+                    acc += x.expint_n_p::<Performance, 2>();
                 }
                 acc
             })
@@ -63,7 +63,7 @@ macro_rules! sweep {
             b.iter(|| {
                 let mut acc = V64::ZERO;
                 for &x in black_box(&xs) {
-                    acc += x.expint_p::<Performance, 3>();
+                    acc += x.expint_n_p::<Performance, 3>();
                 }
                 acc
             })
@@ -72,7 +72,7 @@ macro_rules! sweep {
             b.iter(|| {
                 let mut acc = V64::ZERO;
                 for &x in black_box(&xs) {
-                    acc += x.expint_p::<Performance, 8>();
+                    acc += x.expint_n_p::<Performance, 8>();
                 }
                 acc
             })
@@ -82,7 +82,7 @@ macro_rules! sweep {
             b.iter(|| {
                 let mut acc = V64::ZERO;
                 for &x in black_box(&xs) {
-                    acc += x.expint_p::<HighPerformance, 8>();
+                    acc += x.expint_n_p::<HighPerformance, 8>();
                 }
                 acc
             })
@@ -91,7 +91,7 @@ macro_rules! sweep {
             b.iter(|| {
                 let mut acc = V64::ZERO;
                 for &x in black_box(&xs) {
-                    acc += x.expint_p::<UltraPerformance, 8>();
+                    acc += x.expint_n_p::<UltraPerformance, 8>();
                 }
                 acc
             })

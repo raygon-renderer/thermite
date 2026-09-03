@@ -319,10 +319,17 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
     // division, which is very expensive. Use the inner dedicated `nth_root` for the value
     // and the chain rule: d/dx x^(1/M) = (1/M) x^(1/M - 1) = v / (M*x).
     #[inline(always)]
-    fn nth_root<P: Policy, const M: usize>(self) -> Self {
-        let v = self.re.nth_root_p::<P, M>();
+    fn nth_root_n<P: Policy, const M: usize>(self) -> Self {
+        let v = self.re.nth_root_n_p::<P, M>();
         let m_v = V::splat(<V::Element as FloatElement>::from_int(M as thermite::LargeInt));
         self.chain(v, v / (m_v * self.re))
+    }
+
+    #[inline(always)]
+    fn nth_root<P: Policy>(self, n: u32) -> Self {
+        let v = self.re.nth_root_p::<P>(n);
+        let n_v = V::splat(<V::Element as FloatElement>::from_int(n as thermite::LargeInt));
+        self.chain(v, v / (n_v * self.re))
     }
 
     #[inline(always)]
@@ -375,11 +382,18 @@ impl<V: DualMathVector, const N: usize> SpecializedTranscendentalMath<Dual<V::El
     }
 
     #[inline(always)]
-    fn log_n<P: Policy, const M: usize>(self) -> Self {
-        let v = self.re.log_n_p::<P, M>();
+    fn log_n_n<P: Policy, const M: usize>(self) -> Self {
+        let v = self.re.log_n_n_p::<P, M>();
         // d/dx log_M(x) = 1 / (x ln M)
         let ln_m = V::splat(<V::Element as FloatElement>::from_int(M as thermite::LargeInt)).ln_p::<P>();
         self.chain(v, (self.re * ln_m).approx_reciprocal_p::<P>())
+    }
+
+    #[inline(always)]
+    fn log_n<P: Policy>(self, n: u32) -> Self {
+        let v = self.re.log_n_p::<P>(n);
+        let ln_n = V::splat(<V::Element as FloatElement>::from_int(n as thermite::LargeInt)).ln_p::<P>();
+        self.chain(v, (self.re * ln_n).approx_reciprocal_p::<P>())
     }
 
     #[inline(always)]
@@ -688,10 +702,18 @@ impl<V: DualMathVector, const N: usize> SpecializedRealMath<Dual<V::Element, N>>
     // `smoothstep_derivative` already carries the `1/(b-a)` edge factor, so its reciprocal is the
     // exact `dt/dy` even with edges (which are treated as constant parameters here).
     #[inline(always)]
-    fn inverse_smoothstep<P: Policy, const M: usize>(y: Self, edges: Option<(Self, Self)>) -> Self {
+    fn inverse_smoothstep_n<P: Policy, const M: usize>(y: Self, edges: Option<(Self, Self)>) -> Self {
         let edges_re = edges.map(|(a, b)| (a.re, b.re));
-        let t = y.re.inverse_smoothstep_p::<P, M>(edges_re);
-        let dprime = t.smoothstep_derivative_p::<P, M>(edges_re);
+        let t = y.re.inverse_smoothstep_n_p::<P, M>(edges_re);
+        let dprime = t.smoothstep_derivative_n_p::<P, M>(edges_re);
+        y.chain(t, dprime.approx_reciprocal_p::<P>())
+    }
+
+    #[inline(always)]
+    fn inverse_smoothstep<P: Policy>(y: Self, edges: Option<(Self, Self)>, n: u32) -> Self {
+        let edges_re = edges.map(|(a, b)| (a.re, b.re));
+        let t = y.re.inverse_smoothstep_p::<P>(edges_re, n);
+        let dprime = t.smoothstep_derivative_p::<P>(edges_re, n);
         y.chain(t, dprime.approx_reciprocal_p::<P>())
     }
 }

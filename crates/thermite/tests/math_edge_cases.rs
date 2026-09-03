@@ -453,7 +453,9 @@ fn exp_shoulders_f32<S: Simd>(name: &str) {
 
 fn nth_root_extremes<S: Simd>(name: &str) {
     fn check5<S: Simd>(name: &str, x: f64, want: f64) {
-        let got = Vector::<S::f64x4>::splat(x).nth_root_p::<Precision, 5>().extract::<0>();
+        let got = Vector::<S::f64x4>::splat(x)
+            .nth_root_n_p::<Precision, 5>()
+            .extract::<0>();
         assert!(
             (got - want).abs() <= 1e-12 * want.abs(),
             "[{name}] nth_root5({x:e}): got {got:e}, want {want:e}"
@@ -467,7 +469,11 @@ fn nth_root_extremes<S: Simd>(name: &str) {
 
     // Degenerate inputs: the dimensionless step's q = y^N/x is 0/0 or inf/inf
     // here, and the guard hands back the (already exact) guess instead.
-    let r5 = |x: f64| Vector::<S::f64x4>::splat(x).nth_root_p::<Precision, 5>().extract::<0>();
+    let r5 = |x: f64| {
+        Vector::<S::f64x4>::splat(x)
+            .nth_root_n_p::<Precision, 5>()
+            .extract::<0>()
+    };
     assert!(r5(0.0) == 0.0, "[{name}] nth_root5(0) = 0, got {:e}", r5(0.0));
     assert!(r5(f64::INFINITY).is_infinite(), "[{name}] nth_root5(inf) = inf");
     assert!(
@@ -478,18 +484,18 @@ fn nth_root_extremes<S: Simd>(name: &str) {
 
     // N = 4 takes the same generic arm at Best; N = 7 stresses a higher power.
     let got = Vector::<S::f64x4>::splat(1e300)
-        .nth_root_p::<Precision, 4>()
+        .nth_root_n_p::<Precision, 4>()
         .extract::<0>();
     assert!(
         (got - 1e75).abs() <= 1e-12 * 1e75,
         "[{name}] nth_root4(1e300), got {got:e}"
     );
     let got = Vector::<S::f64x4>::splat(0.0)
-        .nth_root_p::<Precision, 4>()
+        .nth_root_n_p::<Precision, 4>()
         .extract::<0>();
     assert!(got == 0.0, "[{name}] nth_root4(0) = 0, got {got:e}");
     let got = Vector::<S::f64x4>::splat(1e-294)
-        .nth_root_p::<Precision, 7>()
+        .nth_root_n_p::<Precision, 7>()
         .extract::<0>();
     assert!(
         (got - 1e-42).abs() <= 1e-12 * 1e-42,
@@ -498,7 +504,7 @@ fn nth_root_extremes<S: Simd>(name: &str) {
 
     // The default policy shares the fixed arm.
     let got = Vector::<S::f64x4>::splat(1e300)
-        .nth_root_p::<Performance, 5>()
+        .nth_root_n_p::<Performance, 5>()
         .extract::<0>();
     assert!(
         (got - 1e60).abs() <= 1e-9 * 1e60,

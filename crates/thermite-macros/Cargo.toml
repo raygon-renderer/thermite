@@ -25,6 +25,9 @@ proc-macro2 = "1"
 
 [features]
 x86 = []
+# Emit the trace region-marker machinery (enter/exit + operand threading) in
+# the math_traits! forwarder bodies. Off = bodies identical to pre-marker code.
+trace = []
 neon = []
 wasm = []
 spirv = []

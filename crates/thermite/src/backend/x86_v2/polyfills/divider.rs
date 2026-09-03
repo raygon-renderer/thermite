@@ -1,10 +1,7 @@
 use super::*;
 
-// libdivide.h - Optimized integer division
-// https://libdivide.com
-//
-// Copyright (C) 2010 - 2019 ridiculous_fish, <libdivide@ridiculousfish.com>
-// Copyright (C) 2016 - 2019 Kim Walisch, <kim.walisch@gmail.com>
+// Ported from libdivide (https://libdivide.com), dual-licensed zlib / BSL-1.0.
+// Copyright (C) 2010-2019 ridiculous_fish, 2016-2019 Kim Walisch.
 
 #[inline(always)]
 pub unsafe fn _mm_mullhi_epi32x_v2(a: __m128i, b: __m128i) -> __m128i {

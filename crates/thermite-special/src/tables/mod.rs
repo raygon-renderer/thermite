@@ -21,6 +21,13 @@
 //! coefficients do.
 
 pub mod bernoulli;
+pub mod bessel;
+pub mod cot_pi;
+pub mod factorial;
+pub mod fresnel;
 pub mod gamma;
+pub mod lgamma1p;
+pub mod polylog;
 pub mod primal;
+pub mod sici;
 pub mod weideman;

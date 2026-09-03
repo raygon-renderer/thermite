@@ -13,7 +13,7 @@
 //! - `W` governs the interval bookkeeping around it.
 //! - Bridging them: after evaluating the inner kernel at each endpoint, the
 //!   result is widened by that kernel's algorithm error at `P`
-//!   ([`algo_widen`]), then by `W`'s rounding strategy.
+//!   (`algo_widen`), then by `W`'s rounding strategy.
 //!
 //! So `sin_p::<Performance>` on a `Tightest` interval is a cheap value with
 //! an honest (if algorithm-error-dominated) enclosure, while `Precision` on
@@ -22,7 +22,7 @@
 //!
 //! # The algorithm-error bound is MEASURED, not proven
 //!
-//! [`algo_widen`] widens by [`ULP_DEFAULT`] ulps (or a per-function override),
+//! `algo_widen` widens by [`ULP_DEFAULT`] ulps (or a per-function override),
 //! derived from a sweep of every kernel against a `Compensated<Vector<f64>>`
 //! reference over its full domain (`bin/ulp_sweep`). Nearly every
 //! thermite kernel measured at or below 4 ulp, and the margins are that
@@ -447,11 +447,20 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
     }
 
     #[inline(always)]
-    fn log_n<P: Policy, const N: usize>(self) -> Self {
+    fn log_n_n<P: Policy, const N: usize>(self) -> Self {
         let all_np = self.hi.cmp_le(V::ZERO);
         let r = self
             .restrict(V::ZERO, V::INFINITY)
-            .monotone_inc::<P>(|x| x.log_n_p::<KernelPolicy<P>, N>());
+            .monotone_inc::<P>(|x| x.log_n_n_p::<KernelPolicy<P>, N>());
+        Self::from_bounds_unchecked(all_np.select(V::INFINITY, r.lo), all_np.select(V::NEG_INFINITY, r.hi))
+    }
+
+    #[inline(always)]
+    fn log_n<P: Policy>(self, n: u32) -> Self {
+        let all_np = self.hi.cmp_le(V::ZERO);
+        let r = self
+            .restrict(V::ZERO, V::INFINITY)
+            .monotone_inc::<P>(|x| x.log_n_p::<KernelPolicy<P>>(n));
         Self::from_bounds_unchecked(all_np.select(V::INFINITY, r.lo), all_np.select(V::NEG_INFINITY, r.hi))
     }
 
@@ -753,7 +762,7 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
     /// odd root, which is false on a zero-straddling lane, so it would take
     /// `abs()` (`[0, mag]`) and silently drop every negative root.
     #[inline(always)]
-    fn nth_root<P: Policy, const N: usize>(self) -> Self {
+    fn nth_root_n<P: Policy, const N: usize>(self) -> Self {
         if const { N == 0 } {
             return Self::from_bounds_unchecked(V::NEG_INFINITY, V::INFINITY);
         }
@@ -761,9 +770,29 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
             return self;
         }
 
-        let f = |x: V| x.nth_root_p::<KernelPolicy<P>, N>();
+        let f = |x: V| x.nth_root_n_p::<KernelPolicy<P>, N>();
 
         if const { N & 1 == 1 } {
+            self.monotone_inc::<P>(f)
+        } else {
+            let empty = self.hi.cmp_lt(V::ZERO);
+            let r = self.restrict(V::ZERO, V::INFINITY).monotone_inc::<P>(f);
+            Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
+        }
+    }
+
+    #[inline(always)]
+    fn nth_root<P: Policy>(self, n: u32) -> Self {
+        if n == 0 {
+            return Self::from_bounds_unchecked(V::NEG_INFINITY, V::INFINITY);
+        }
+        if n == 1 {
+            return self;
+        }
+
+        let f = |x: V| x.nth_root_p::<KernelPolicy<P>>(n);
+
+        if n & 1 == 1 {
             self.monotone_inc::<P>(f)
         } else {
             let empty = self.hi.cmp_lt(V::ZERO);
@@ -1165,7 +1194,7 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedRealMath<IntervalElem<
     /// inner kernel is called with `None` edges on in-range values, so its
     /// clamp policy no longer matters.
     #[inline(always)]
-    fn smoothstep<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
+    fn smoothstep_n<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
         let mut t = self;
         let mut poison = self.is_empty();
         if let Some((a, b)) = edges {
@@ -1180,12 +1209,35 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedRealMath<IntervalElem<
             .min_interval(Self::from_bounds_unchecked(V::ONE, V::ONE));
 
         let (lo, hi) = algo_widen::<V, P>(
-            t.lo.smoothstep_p::<KernelPolicy<P>, N>(None),
-            t.hi.smoothstep_p::<KernelPolicy<P>, N>(None),
+            t.lo.smoothstep_n_p::<KernelPolicy<P>, N>(None),
+            t.hi.smoothstep_n_p::<KernelPolicy<P>, N>(None),
         );
         // p(0) = 0 and p(1) = 1 exactly for every smoothstep polynomial, so
         // saturated endpoints are pinned rather than smeared by the widening
         // floor. A fully clamped lane is exactly [0, 0] or [1, 1].
+        let lo = t.lo.cmp_eq(V::ONE).select(V::ONE, lo.max(V::ZERO));
+        let hi = t.hi.cmp_eq(V::ZERO).select(V::ZERO, hi.min(V::ONE));
+
+        Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
+    }
+
+    /// [`smoothstep_n`](Self::smoothstep_n) for a runtime degree. Same endpoint map.
+    #[inline(always)]
+    fn smoothstep<P: Policy>(self, edges: Option<(Self, Self)>, n: u32) -> Self {
+        let mut t = self;
+        let mut poison = self.is_empty();
+        if let Some((a, b)) = edges {
+            poison = poison | a.is_empty() | b.is_empty();
+            t = t.sub_interval(a).div_interval(b.sub_interval(a));
+        }
+        let t = t
+            .max_interval(Self::from_bounds_unchecked(V::ZERO, V::ZERO))
+            .min_interval(Self::from_bounds_unchecked(V::ONE, V::ONE));
+
+        let (lo, hi) = algo_widen::<V, P>(
+            t.lo.smoothstep_p::<KernelPolicy<P>>(None, n),
+            t.hi.smoothstep_p::<KernelPolicy<P>>(None, n),
+        );
         let lo = t.lo.cmp_eq(V::ONE).select(V::ONE, lo.max(V::ZERO));
         let hi = t.hi.cmp_eq(V::ZERO).select(V::ZERO, hi.min(V::ONE));
 

@@ -535,20 +535,20 @@ macro_rules! math_suite {
                     $bl,
                     R,
                     f32,
-                    nth_root,
+                    nth_root_n,
                     3,
                     libm::cbrtf,
                     TOL_F32,
                     |x: f32| if x.is_finite() { x % 1e6 } else { 1.0 }
                 );
-                math_unary_cg!($bl, R, f32, nth_root, 2, libm::sqrtf, TOL_F32, pos);
-                math_unary_cg!($bl, R, f32, log_n, 2, libm::log2f, TOL_F32, pos);
-                math_unary_cg!($bl, R, f32, log_n, 10, libm::log10f, TOL_F32, pos);
+                math_unary_cg!($bl, R, f32, nth_root_n, 2, libm::sqrtf, TOL_F32, pos);
+                math_unary_cg!($bl, R, f32, log_n_n, 2, libm::log2f, TOL_F32, pos);
+                math_unary_cg!($bl, R, f32, log_n_n, 10, libm::log10f, TOL_F32, pos);
                 math_unary_cg!(
                     $bl,
                     R,
                     f32,
-                    log_n,
+                    log_n_n,
                     3,
                     |x: f32| libm::logf(x) / libm::logf(3.0),
                     TOL_F32,
@@ -933,20 +933,20 @@ macro_rules! math_suite {
                     $bl,
                     R,
                     f64,
-                    nth_root,
+                    nth_root_n,
                     3,
                     libm::cbrt,
                     TOL_F64,
                     |x: f64| if x.is_finite() { x % 1e6 } else { 1.0 }
                 );
-                math_unary_cg!($bl, R, f64, nth_root, 2, libm::sqrt, TOL_F64, pos);
-                math_unary_cg!($bl, R, f64, log_n, 2, libm::log2, TOL_F64, pos);
-                math_unary_cg!($bl, R, f64, log_n, 10, libm::log10, TOL_F64, pos);
+                math_unary_cg!($bl, R, f64, nth_root_n, 2, libm::sqrt, TOL_F64, pos);
+                math_unary_cg!($bl, R, f64, log_n_n, 2, libm::log2, TOL_F64, pos);
+                math_unary_cg!($bl, R, f64, log_n_n, 10, libm::log10, TOL_F64, pos);
                 math_unary_cg!(
                     $bl,
                     R,
                     f64,
-                    log_n,
+                    log_n_n,
                     3,
                     |x: f64| libm::log(x) / libm::log(3.0),
                     TOL_F64,
@@ -1334,7 +1334,7 @@ macro_rules! f32_policy_fns {
             $bl,
             $reg,
             f32,
-            nth_root_p,
+            nth_root_n_p,
             $policy,
             3,
             libm::cbrtf,
@@ -1345,7 +1345,7 @@ macro_rules! f32_policy_fns {
             $bl,
             $reg,
             f32,
-            log_n_p,
+            log_n_n_p,
             $policy,
             3,
             |x: f32| libm::logf(x) / libm::logf(3.0),
@@ -1576,7 +1576,7 @@ macro_rules! f64_policy_fns {
             $bl,
             $reg,
             f64,
-            nth_root_p,
+            nth_root_n_p,
             $policy,
             3,
             libm::cbrt,
@@ -1587,7 +1587,7 @@ macro_rules! f64_policy_fns {
             $bl,
             $reg,
             f64,
-            log_n_p,
+            log_n_n_p,
             $policy,
             3,
             |x: f64| libm::log(x) / libm::log(3.0),

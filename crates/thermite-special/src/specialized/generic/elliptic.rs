@@ -17,6 +17,7 @@ use thermite::{
 
 use crate::specialized::SpecializedSpecialMath;
 use thermite::math::policy::DenormalBehavior;
+use thermite::{const_element, const_splat};
 
 /// Legendre integral kinds for [`ellint_impl`]'s `KIND` const parameter.
 pub const KIND_F: u8 = 1; // first kind: F(phi, k) / K(k)
@@ -24,16 +25,9 @@ pub const KIND_E: u8 = 2; // second kind: E(phi, k) / E(k)
 pub const KIND_PI: u8 = 3; // third kind: Pi(n, phi, k)
 pub const KIND_D: u8 = 4; // D(phi, k) = (F - E) / k^2
 
-/// The scalar element value of a compile-time rational constant, for `FloatVector::scale`
-/// (`v.scale(sc!(1 / 3))` == `v * c!(1 / 3)`). `scale` lowers to a single `OpVectorTimesScalar`
-/// on SPIR-V instead of splat + multiply, and is identical to the splat-multiply on CPU. Every
-/// function below has `E: FloatElement` in scope, so this resolves at each call site. `c!` (defined
-/// per function) splats the same value for the FMA/vector-operand cases where `scale` does not fit.
-macro_rules! sc {
-    ($n:literal / $d:literal) => {
-        <E as FloatElement>::ConstRatio::<$n, $d>::VALUE
-    };
-}
+// `v.scale(const_element!(ratio <E>: 1 / 3))` is `v * const_splat!(ratio <E>: 1 / 3)` on CPU
+// and a single `OpVectorTimesScalar` on SPIR-V. `const_splat!` is used where the constant is
+// an FMA or vector operand and `scale` does not fit.
 
 /// Complete elliptic integrals of the first and second kind, `(K(k), E(k))`, evaluated
 /// together from a single AGM pass (they share the iteration).
@@ -59,7 +53,7 @@ where
     let mut c = k;
 
     // sum starts with the n = 0 term: 2^{-1} c_0^2 = k^2 / 2.
-    let mut sum = (c * c).scale(sc!(1 / 2));
+    let mut sum = (c * c).scale(const_element!(ratio <E>: 1 / 2));
     let mut pow2 = V::ONE; // 2^{n-1} for the first in-loop term (n = 1) is 2^0 = 1
 
     // AGM converges quadratically, so this is a handful of iterations; the masked break
@@ -69,9 +63,9 @@ where
     loop {
         V::_loop_hint();
 
-        let an = (a + b).scale(sc!(1 / 2));
+        let an = (a + b).scale(const_element!(ratio <E>: 1 / 2));
         let bn = (a * b).sqrt();
-        c = (a - b).scale(sc!(1 / 2));
+        c = (a - b).scale(const_element!(ratio <E>: 1 / 2));
         a = an;
         b = bn;
 
@@ -100,6 +94,91 @@ where
     }
 }
 
+/// The arithmetic-geometric mean `$\mathrm{AGM}(a, b)$` of two non-negative arguments.
+///
+/// The same recurrence [`agm_complete_ke`] runs, without that function's `E` accumulator
+/// and without its `a = 1` starting pin:
+///
+/// ```math
+/// a_{n+1} = \frac{a_n + b_n}{2}, \qquad b_{n+1} = \sqrt{a_n b_n}
+/// ```
+///
+/// Both sequences converge to the common limit quadratically. From an extreme starting
+/// ratio the logarithm of that ratio roughly halves each pass until the two arguments are
+/// within a factor of a few, after which the correct digits double per pass, so the
+/// iteration cap covers the whole representable range with room to spare, and the loop
+/// stays uniform across lanes rather than data-dependent.
+///
+/// Kept beside `agm_complete_ke` on purpose: they are one recurrence, and a change to
+/// either is nearly always a change to both.
+///
+/// # Domain
+///
+/// Defined for `a, b >= 0`, and symmetric in its arguments. A negative argument makes the
+/// geometric mean's sign ambiguous after the first pass (`(a + b)/2` can be negative
+/// while `sqrt(ab)` is not), so negatives give NaN under `check_overflow` rather than a
+/// plausible wrong value. `AGM(a, 0) = 0` for every `a`, a limit the iteration approaches
+/// but cannot reach (`b` is pinned at zero while `a` merely halves), so it is pinned too,
+/// as is `AGM(inf, b) = inf`, which otherwise leaves the loop as `inf - inf`. The one
+/// pairing with no limit at all, a zero against an infinity, is NaN.
+///
+/// # Range
+///
+/// `sqrt(ab)` is formed as a single product, so two arguments both above `sqrt(MAX)`
+/// (about 1.3e154 in binary64, 1.8e19 in binary32) overflow to infinity even though the
+/// mean itself is perfectly representable. The AGM is homogeneous,
+/// `$\mathrm{AGM}(ca, cb) = c\,\mathrm{AGM}(a, b)$`, so a caller working up there should
+/// scale both arguments by a common power of two, which is exact.
+#[inline(always)]
+pub fn agm<P, E, V>(a: V, b: V) -> V
+where
+    P: Policy,
+    E: FloatElement,
+    V: FloatVector<Element = E>,
+{
+    let mut x = a;
+    let mut y = b;
+
+    // The limit sits between the two sequences, roughly at their midpoint, so `x` is off
+    // by about half the _current_ gap, linearly, not quadratically. The test is therefore
+    // on the gap going in, exactly as `agm_complete_ke` tests its `c`: a gap of
+    // `sqrt(eps)` before the pass leaves `eps/2` after it, since one pass squares it
+    // (`x' - y' = (sqrt x - sqrt y)^2 / 2`). Testing the gap coming out instead stops a
+    // whole pass early and costs half the mantissa: measured 5.8e-11 at AGM(1, sqrt 2).
+    let thresh = V::SQRT_EPSILON;
+    let mut iter = 0;
+    loop {
+        V::_loop_hint();
+
+        let gap = x - y;
+
+        let xn = (x + y).scale(const_element!(ratio <E>: 1 / 2));
+        let yn = (x * y).sqrt();
+        x = xn;
+        y = yn;
+
+        iter += 1;
+        if iter >= 24 || gap.abs().cmp_le(x * thresh).all() {
+            break;
+        }
+    }
+
+    if const { P::POLICY.check_overflow } {
+        let zero = a.is_zero() | b.is_zero();
+        let inf = a.is_infinite() | b.is_infinite();
+
+        x = zero.select(V::ZERO, x);
+        x = inf.select(V::INFINITY, x);
+
+        // Negative arguments, and the one indeterminate pairing (a zero against an
+        // infinity), where neither pin above is the limit.
+        let nan = a.cmp_lt(V::ZERO) | b.cmp_lt(V::ZERO) | (zero & inf);
+        x = nan.select(V::NAN, x);
+    }
+
+    x
+}
+
 /// True where at least two of three non-negative arguments are zero, the interior
 /// singularity shared by `R_F`, `R_D` and `R_J`, all of which diverge there while the
 /// duplication loop only walks toward the pole until it hits its iteration cap.
@@ -116,17 +195,26 @@ fn two_or_more_zero<V: FloatVector>(x: V, y: V, z: V) -> V::Mask {
 /// few runtime ops (e.g. the Carlson convergence threshold, three sequential `sqrt`s) become a
 /// constant splat. Declared for `f32`/`f64`; add more element types as needed.
 pub trait EllipticConsts {
-    /// `(3 * eps)^(1/8)` - the relative-deviation threshold at which the Carlson 7th-order Taylor
+    /// `(3 * eps)^(1/8)`: the relative-deviation threshold at which the Carlson 7th-order Taylor
     /// tail (`~deviation^8`) drops below rounding. Equals `sqrt(sqrt(sqrt(eps + eps + eps)))`.
     const CARLSON_THRESH: Self;
+
+    /// `|t|` below which `carlson_rc` takes its 8-term series in `t = (y - x)/x` instead of
+    /// the closed `atan`/`ln` forms. The tail is `t^8/17`, so this is where that drops below
+    /// `eps`: `1/128` at binary32/64 (`1.5e-17`). A wider element type needs it smaller
+    /// (double-double takes `2^-14`), or every `R_J`, which calls `R_C(1, 1 + E_n)` with a
+    /// small `E_n` on every step, is capped at the series' truncation.
+    const RC_SERIES_THRESH: Self;
 }
 
 impl EllipticConsts for f32 {
     const CARLSON_THRESH: f32 = 0.15637917816638947;
+    const RC_SERIES_THRESH: f32 = 0.0078125;
 }
 
 impl EllipticConsts for f64 {
     const CARLSON_THRESH: f64 = 0.012674918778210762;
+    const RC_SERIES_THRESH: f64 = 0.0078125;
 }
 
 /// The Carlson convergence threshold splatted to the vector type `V`.
@@ -150,18 +238,13 @@ where
     E: FloatElement + EllipticConsts,
     V: FloatVector<Element = E>,
 {
-    macro_rules! c {
-        ($n:literal / $d:literal) => {
-            V::splat(<E as FloatElement>::ConstRatio::<$n, $d>::VALUE)
-        };
-    }
-    let quarter = c!(1 / 4);
+    let quarter: V = const_splat!(ratio <E>: 1 / 4);
     let thresh = carlson_thresh::<V>();
 
     let mut xn = x;
     let mut yn = y;
     let mut zn = z;
-    let mut an = (x + y + z).scale(sc!(1 / 3));
+    let mut an = (x + y + z).scale(const_element!(ratio <E>: 1 / 3));
     let a0 = an;
     let mut fmn = V::ONE; // 4^-n
     // Convergence bound. The deviation identity |An - vn| = fmn |A0 - v0| means the current max
@@ -216,13 +299,19 @@ where
     // so the regrouped sum is as accurate as the serial form (corrections never cancel against 1).
     let e2_2 = e2 * e2;
     // Linear:    1 - 1/10 e2 + 1/14 e3
-    let lin = e2.mul_adde(c!(-1 / 10), V::ONE);
-    let lin = e3.mul_adde(c!(1 / 14), lin);
+    let lin = e2.mul_adde(const_splat!(ratio <E>: -1 / 10), V::ONE);
+    let lin = e3.mul_adde(const_splat!(ratio <E>: 1 / 14), lin);
     // Quadratic: 1/24 e2^2 - 3/44 e2 e3 + 3/104 e3^2
-    let quad = (e2 * e3).mul_adde(c!(-3 / 44), e2_2.scale(sc!(1 / 24)));
-    let quad = (e3 * e3).mul_adde(c!(3 / 104), quad);
+    let quad = (e2 * e3).mul_adde(
+        const_splat!(ratio <E>: -3 / 44),
+        e2_2.scale(const_element!(ratio <E>: 1 / 24)),
+    );
+    let quad = (e3 * e3).mul_adde(const_splat!(ratio <E>: 3 / 104), quad);
     // Cubic:     -5/208 e2^3 + 1/16 e2^2 e3
-    let cub = (e2_2 * e3).mul_adde(c!(1 / 16), (e2_2 * e2).scale(sc!(-5 / 208)));
+    let cub = (e2_2 * e3).mul_adde(
+        const_splat!(ratio <E>: 1 / 16),
+        (e2_2 * e2).scale(const_element!(ratio <E>: -5 / 208)),
+    );
 
     let poly = lin + (quad + cub);
     let rf = poly / an.sqrt();
@@ -244,18 +333,13 @@ where
     E: FloatElement + EllipticConsts,
     V: FloatVector<Element = E>,
 {
-    macro_rules! c {
-        ($n:literal / $d:literal) => {
-            V::splat(<E as FloatElement>::ConstRatio::<$n, $d>::VALUE)
-        };
-    }
-    let quarter = c!(1 / 4);
+    let quarter: V = const_splat!(ratio <E>: 1 / 4);
     let thresh = carlson_thresh::<V>();
 
     let mut xn = x;
     let mut yn = y;
     let mut zn = z;
-    let mut an = ((x + y) + (z + z + z)).scale(sc!(1 / 5)); // (x + y + 3z) / 5; grouped for ILP
+    let mut an = ((x + y) + (z + z + z)).scale(const_element!(ratio <E>: 1 / 5)); // (x + y + 3z) / 5; grouped for ILP
     let a0 = an;
     let mut sum = V::ZERO;
     let mut fac = V::ONE; // 4^-n
@@ -295,17 +379,17 @@ where
     let scale = fac / an; // one division, shared by the deviations
     let xd = (a0 - x) * scale;
     let yd = (a0 - y) * scale;
-    let zd = (xd + yd).scale(sc!(-1 / 3));
+    let zd = (xd + yd).scale(const_element!(ratio <E>: -1 / 3));
     let xy = xd * yd;
     let zz = zd * zd;
-    let xy3 = xy.scale(sc!(3 / 1)); // 3 xy, shared by e3 and e4
-    let e2 = zz.mul_adde(c!(-6 / 1), xy); // xy - 6 zz
-    let e3 = zz.mul_adde(c!(-8 / 1), xy3) * zd; // (3 xy - 8 zz) zd
-    let e4 = zz.mul_adde(c!(-3 / 1), xy3) * zz; // (3 xy - 3 zz) zz = 3 (xy - zz) zz
+    let xy3 = xy.scale(const_element!(ratio <E>: 3 / 1)); // 3 xy, shared by e3 and e4
+    let e2 = zz.mul_adde(const_splat!(int <E>: -6), xy); // xy - 6 zz
+    let e3 = zz.mul_adde(const_splat!(int <E>: -8), xy3) * zd; // (3 xy - 8 zz) zd
+    let e4 = zz.mul_adde(const_splat!(int <E>: -3), xy3) * zz; // (3 xy - 3 zz) zz = 3 (xy - zz) zz
     let e5 = xy * (zz * zd);
 
     let taylor = fac * rdj_poly_n::<E, V>(e2, e3, e4, e5) / (an * an.sqrt()); // fac * An^(-3/2) * poly
-    let rd = c!(3 / 1).mul_adde(sum, taylor); // taylor + 3 * sum
+    let rd = sum.mul_adde(const_splat!(int <E>: 3), taylor); // taylor + 3 * sum
 
     if const { P::POLICY.check_overflow } {
         // `z == 0` alone also diverges, but that one arrives on its own: the accumulated
@@ -324,28 +408,29 @@ where
     E: FloatElement,
     V: FloatVector<Element = E>,
 {
-    macro_rules! c {
-        ($n:literal / $d:literal) => {
-            V::splat(<E as FloatElement>::ConstRatio::<$n, $d>::VALUE)
-        };
-    }
     // e2^2 feeds several higher terms; compute once. Then three *independent* FMA chains (by
     // total degree) run in parallel and are summed - a ~7-deep critical path instead of one
     // 12-deep serial Horner chain. The e's are tiny deviations, so the regrouped sum is as
     // accurate as the serial form (the corrections never cancel against the leading 1).
     let e2_2 = e2 * e2;
     // Linear:    1 - 3/14 e2 + 1/6 e3 - 3/22 e4 + 3/26 e5
-    let lin = e2.mul_adde(c!(-3 / 14), V::ONE);
-    let lin = e3.mul_adde(c!(1 / 6), lin);
-    let lin = e4.mul_adde(c!(-3 / 22), lin);
-    let lin = e5.mul_adde(c!(3 / 26), lin);
+    let lin = e2.mul_adde(const_splat!(ratio <E>: -3 / 14), V::ONE);
+    let lin = e3.mul_adde(const_splat!(ratio <E>: 1 / 6), lin);
+    let lin = e4.mul_adde(const_splat!(ratio <E>: -3 / 22), lin);
+    let lin = e5.mul_adde(const_splat!(ratio <E>: 3 / 26), lin);
     // Quadratic: 9/88 e2^2 - 9/52 e2 e3 + 3/40 e3^2 + 3/20 e2 e4
-    let quad = (e2 * e3).mul_adde(c!(-9 / 52), e2_2.scale(sc!(9 / 88)));
-    let quad = (e3 * e3).mul_adde(c!(3 / 40), quad);
-    let quad = (e2 * e4).mul_adde(c!(3 / 20), quad);
+    let quad = (e2 * e3).mul_adde(
+        const_splat!(ratio <E>: -9 / 52),
+        e2_2.scale(const_element!(ratio <E>: 9 / 88)),
+    );
+    let quad = (e3 * e3).mul_adde(const_splat!(ratio <E>: 3 / 40), quad);
+    let quad = (e2 * e4).mul_adde(const_splat!(ratio <E>: 3 / 20), quad);
     // Cubic+:    -1/16 e2^3 + 45/272 e2^2 e3 - 9/68 (e3 e4 + e2 e5)
-    let cub = (e2_2 * e3).mul_adde(c!(45 / 272), (e2_2 * e2).scale(sc!(-1 / 16)));
-    let cub = (e3 * e4 + e2 * e5).mul_adde(c!(-9 / 68), cub);
+    let cub = (e2_2 * e3).mul_adde(
+        const_splat!(ratio <E>: 45 / 272),
+        (e2_2 * e2).scale(const_element!(ratio <E>: -1 / 16)),
+    );
+    let cub = (e3 * e4 + e2 * e5).mul_adde(const_splat!(ratio <E>: -9 / 68), cub);
 
     lin + (quad + cub)
 }
@@ -371,11 +456,6 @@ where
     E: FloatElement + EllipticConsts,
     V: FloatVector<Element = E>,
 {
-    macro_rules! c {
-        ($n:literal / $d:literal) => {
-            V::splat(<E as FloatElement>::ConstRatio::<$n, $d>::VALUE)
-        };
-    }
     let lo = x.min(y).min(z);
     let hi = x.max(y).max(z);
     let mid = (x + y + z) - (lo + hi); // grouped: (x+y+z) and (lo+hi) form in parallel
@@ -385,13 +465,16 @@ where
     let root = (hi * lo / mid).sqrt();
     let prod = (hi - mid) * (lo - mid) * rd;
     // (mid*rf + sqrt(xy/z) - (x-z)(y-z) rd / 3) / 2
-    let rg = prod.mul_adde(c!(-1 / 3), mid.mul_adde(rf, root)).scale(sc!(1 / 2));
+    let rg = prod
+        .mul_adde(const_splat!(ratio <E>: -1 / 3), mid.mul_adde(rf, root))
+        .scale(const_element!(ratio <E>: 1 / 2));
 
     if const { P::POLICY.check_overflow } {
         // Sorted, so `mid == 0` is exactly "two or more arguments are zero". There the general
         // form is 0/0 and `rf`/`rd` are themselves infinite, but the integral is not: it
         // collapses to sqrt(hi)/2.
-        mid.is_zero().select(hi.sqrt().scale(sc!(1 / 2)), rg)
+        mid.is_zero()
+            .select(hi.sqrt().scale(const_element!(ratio <E>: 1 / 2)), rg)
     } else {
         rg
     }
@@ -413,14 +496,9 @@ where
 pub fn carlson_rc<P, E, V>(x: V, y: V) -> V
 where
     P: Policy,
-    E: FloatElement,
+    E: FloatElement + EllipticConsts,
     V: SpecializedSpecialMath<E>,
 {
-    macro_rules! c {
-        ($n:literal / $d:literal) => {
-            V::splat(<E as FloatElement>::ConstRatio::<$n, $d>::VALUE)
-        };
-    }
     let d = y - x;
     let absd = d.abs();
 
@@ -465,11 +543,12 @@ where
 
     let mut res = closed;
 
-    // |t| < 1/128 ~ 0.0078: series is accurate to <1e-16 with these 8 terms, and the closed
-    // forms are already degrading there. Above it the closed forms are accurate. t == 0
-    // (x == y) is covered by the series limit S(0) = 1.
+    // |t| < 1/128 ~ 0.0078 at binary64: series is accurate to <1e-16 with these 8 terms, and
+    // the closed forms are already degrading there. Above it the closed forms are accurate.
+    // t == 0 (x == y) is covered by the series limit S(0) = 1. The threshold is per element
+    // type (`EllipticConsts`) because the tail is the series', not the type's.
 
-    let small = t.abs().cmp_lt(c!(1 / 128));
+    let small = t.abs().cmp_lt(V::splat(E::RC_SERIES_THRESH));
 
     if const { P::POLICY.avoid_branching } || small.any() {
         let series = t.poly_rev_n_p::<P, _>(&[
@@ -505,12 +584,7 @@ where
     E: FloatElement + EllipticConsts,
     V: SpecializedSpecialMath<E>,
 {
-    macro_rules! c {
-        ($n:literal / $d:literal) => {
-            V::splat(<E as FloatElement>::ConstRatio::<$n, $d>::VALUE)
-        };
-    }
-    let quarter = c!(1 / 4);
+    let quarter: V = const_splat!(ratio <E>: 1 / 4);
     let thresh = carlson_thresh::<V>();
 
     // R_J is symmetric in (x, y, z); sort so `hi` is the largest. For p < 0 the integral is
@@ -529,7 +603,7 @@ where
     let mut yn = mid;
     let mut zn = hi;
     let mut pn = p_eff;
-    let mut an = ((lo + mid + hi) + (p_eff + p_eff)).scale(sc!(1 / 5)); // (x + y + z + 2p) / 5; grouped for ILP
+    let mut an = ((lo + mid + hi) + (p_eff + p_eff)).scale(const_element!(ratio <E>: 1 / 5)); // (x + y + z + 2p) / 5; grouped for ILP
     let a0 = an;
     let mut rc_sum = V::ZERO;
     let mut fmn = V::ONE; // 4^-n
@@ -553,7 +627,7 @@ where
         let inner = ry.mul_adde(rz, rx.mul_adde(ry + rz, pn)); // pn + rx(ry+rz) + ry rz
         // 2 * rp * inner / dn, balanced so numerator (rp*inner) and denominator (dn/2) form in
         // parallel before the divide, shortening the critical path.
-        let b = (rp * inner) / dn.scale(sc!(1 / 2));
+        let b = (rp * inner) / dn.scale(const_element!(ratio <E>: 1 / 2));
         rc_sum = (fmn / dn).mul_adde(carlson_rc::<P, E, V>(V::ONE, b), rc_sum); // += (fmn/dn) R_C
 
         let lambda = rx.mul_adde(ry + rz, ry * rz); // rx*(ry+rz) + ry*rz; 2-deep vs serial FMA chain
@@ -584,25 +658,25 @@ where
     let xd = (a0 - lo) * scale;
     let yd = (a0 - mid) * scale;
     let zd = (a0 - hi) * scale;
-    let pd = (xd + yd + zd).scale(sc!(-1 / 2));
+    let pd = (xd + yd + zd).scale(const_element!(ratio <E>: -1 / 2));
     let xyz = xd * yd * zd;
     let pp = pd * pd;
     let ppd = pp * pd; // pd^3, shared by e3 and e4
     let sym = yd.mul_adde(zd, xd * (yd + zd)); // xd*yd + xd*zd + yd*zd
-    let e2 = pp.mul_adde(c!(-3 / 1), sym); // sym - 3 pd^2
+    let e2 = pp.mul_adde(const_splat!(int <E>: -3), sym); // sym - 3 pd^2
     // e2 is the latest-arriving input (it trails the fmn/an divide through pd/pp/sym). Precompute
     // the e2-independent parts of e3/e4 - which LLVM can't hoist itself, FP adds don't reassociate
     // without fast-math - so each e-term is a single FMA past e2 instead of a 2-3 deep chain.
     // e3 = xyz + 2 e2 pd + 4 pd^3
-    let pre3 = ppd.mul_adde(c!(4 / 1), xyz); // 4 pd^3 + xyz
+    let pre3 = ppd.mul_adde(const_splat!(int <E>: 4), xyz); // 4 pd^3 + xyz
     let e3 = e2.mul_adde(pd + pd, pre3); // 2 pd e2 + pre3
     // e4 = (2 xyz + e2 pd + 3 pd^3) pd = e2 pp + (3 pd^3 + 2 xyz) pd
-    let pre4 = ppd.mul_adde(c!(3 / 1), xyz + xyz) * pd; // (3 pd^3 + 2 xyz) pd = 3 pp^2 + 2 xyz pd
+    let pre4 = ppd.mul_adde(const_splat!(int <E>: 3), xyz + xyz) * pd; // (3 pd^3 + 2 xyz) pd = 3 pp^2 + 2 xyz pd
     let e4 = e2.mul_adde(pp, pre4); // e2 pp + pre4
     let e5 = xyz * pp;
 
     let taylor = fmn * rdj_poly_n::<E, V>(e2, e3, e4, e5) / (an * an.sqrt());
-    let rj = c!(6 / 1).mul_adde(rc_sum, taylor); // taylor + 6 * rc_sum
+    let rj = rc_sum.mul_adde(const_splat!(int <E>: 6), taylor); // taylor + 6 * rc_sum
 
     let out = if const { P::POLICY.avoid_branching } || neg.any() {
         // Cauchy PV recombination for p < 0 (Carlson):
@@ -615,7 +689,8 @@ where
         // ((p'-z) R_J - 3 R_F + 3 sqrt(xyz/(xy+p'q)) R_C) / (z+q)
         //   = ((p'-z) R_J + 3 (sqrt(..) R_C - R_F)) / (z+q)
         let root = (xyz / (xy + pq)).sqrt();
-        let val_neg = (p_new - hi).mul_adde(rj, root.mul_sube(rc, rf).scale(sc!(3 / 1))) / (hi + q);
+        let val_neg =
+            (p_new - hi).mul_adde(rj, root.mul_sube(rc, rf).scale(const_element!(ratio <E>: 3 / 1))) / (hi + q);
         neg.select(val_neg, rj)
     } else {
         rj
@@ -662,7 +737,7 @@ where
             let w = k.one_minus_sq(); // 1 - k^2
             let rf = carlson_rf::<P, E, V>(V::ZERO, w, V::ONE);
             let rj = carlson_rj::<P, E, V>(V::ZERO, w, V::ONE, V::ONE - n);
-            n.scale(sc!(1 / 3)).mul_adde(rj, rf) // (n/3) rj + rf
+            n.scale(const_element!(ratio <E>: 1 / 3)).mul_adde(rj, rf) // (n/3) rj + rf
         } else {
             let (kk, ee) = agm_complete_ke::<P, E, V>(k);
             if const { KIND == KIND_F } {
@@ -716,16 +791,16 @@ where
             let pp = n.nmul_adde(s * s, V::ONE);
             let rj = carlson_rj::<P, E, V>(c2, w, V::ONE, pp);
             let s3 = s * s * s;
-            (n.scale(sc!(1 / 3)) * s3).mul_adde(rj, s * rf) // (n/3) s^3 rj + s rf
+            (n.scale(const_element!(ratio <E>: 1 / 3)) * s3).mul_adde(rj, s * rf) // (n/3) s^3 rj + s rf
         } else {
             let rd = carlson_rd::<P, E, V>(c2, w, V::ONE);
             let s3 = s * s * s;
             if const { KIND == KIND_E } {
                 // E(phi, k) = sin(phi) R_F - (k^2 / 3) sin^3(phi) R_D
-                (k2.scale(sc!(1 / 3)) * s3).nmul_adde(rd, s * rf)
+                (k2.scale(const_element!(ratio <E>: 1 / 3)) * s3).nmul_adde(rd, s * rf)
             } else {
                 // D(phi, k) = (1/3) sin^3(phi) R_D
-                s3.scale(sc!(1 / 3)) * rd
+                s3.scale(const_element!(ratio <E>: 1 / 3)) * rd
             }
         };
 
@@ -752,6 +827,146 @@ pub trait CarlsonKind {
     type Output;
     /// Evaluate the integral under precision policy `P`, consuming the request.
     fn eval<P: Policy>(self) -> Self::Output;
+}
+
+/// The Jacobi zeta function `$Z(\varphi, k)$`.
+///
+/// The oscillating part of the incomplete integral of the second kind (what is left of
+/// `$E(\varphi, k)$` once its linear growth is removed):
+///
+/// ```math
+/// Z(\varphi, k) = E(\varphi, k) - \frac{E(k)}{K(k)} F(\varphi, k)
+/// ```
+///
+/// Odd in `phi`, `pi`-periodic, and exactly zero at every multiple of `pi/2`.
+///
+/// That defining difference is **not** how it is evaluated. Both terms grow with `phi` while
+/// `Z` does not, so the subtraction cancels wherever `Z` is small, which is near the zeros,
+/// i.e. everywhere the function is most delicate. The Carlson form used instead has no
+/// subtraction in it at all:
+///
+/// ```math
+/// Z(\varphi, k) = \frac{k^2 \sin\varphi \cos\varphi \sqrt{1 - k^2\sin^2\varphi}}{3 K(k)}
+///                 R_J(0,\ k'^2,\ 1,\ 1 - k^2\sin^2\varphi)
+/// ```
+///
+/// and `$1 - k^2\sin^2\varphi$` is itself formed as `$k'^2 + k^2\cos^2\varphi$`, a sum of two
+/// non-negative terms, so it cannot cancel either. Measured against the defining difference
+/// at 40 digits, worst relative error 3.1e-15 over `k` to 0.999 and `|phi|` to 4.5.
+///
+/// No sign fixup is needed: `sin` is odd and every other factor is even in `phi`, so the
+/// oddness falls out. `k = 1` is the one modulus with no Carlson form (`$k'^2 = 0$` gives
+/// `R_J` two zero arguments and `K` is infinite) and takes the limit
+/// `$\sin\varphi\,\operatorname{sign}(\cos\varphi)$` instead.
+#[inline(always)]
+pub fn jacobi_zeta<P, E, V>(phi: V, k: V) -> V
+where
+    P: Policy,
+    E: FloatElement + EllipticConsts,
+    V: FloatVector<Element = E> + SpecializedSpecialMath<E>,
+{
+    let k2 = k * k;
+    let kp = k.one_minus_sq();
+    let (sin_phi, cos_phi) = phi.sin_cos_p::<P>();
+    let c2 = cos_phi * cos_phi;
+
+    // 1 - k^2 sin^2(phi), written as a sum of non-negative terms so it never cancels.
+    let one_minus_ks2 = k2.mul_adde(c2, kp);
+
+    let (k_complete, _) = agm_complete_ke::<P, E, V>(k);
+    let rj = carlson_rj::<P, E, V>(V::ZERO, kp, V::ONE, one_minus_ks2);
+
+    let num = (k2 * sin_phi * cos_phi * one_minus_ks2.sqrt() * rj).scale(const_element!(ratio <E>: 1 / 3));
+    let mut z = num.approx_div_p::<P>(k_complete);
+
+    if const { P::POLICY.check_overflow } {
+        // k = 1 leaves R_J with two zero arguments and K infinite, so the quotient is NaN
+        // rather than the limit. Mathematica's simplification of Z(phi, 1) is the signed sine.
+        let unit = k.abs().cmp_eq(V::ONE);
+        if const { P::POLICY.avoid_branching } || thermite::unlikely(unit.any()) {
+            z = unit.select(sin_phi.copysign(cos_phi * sin_phi), z);
+        }
+    }
+
+    z
+}
+
+/// Heuman's lambda function `$\Lambda_0(\varphi, k)$`.
+///
+/// ```math
+/// \Lambda_0(\varphi, k) = \frac{2}{\pi}\Big[E(k) F(\varphi, k') + K(k) E(\varphi, k')
+///                                          - K(k) F(\varphi, k')\Big]
+/// ```
+///
+/// with `$k' = \sqrt{1-k^2}$` the complementary modulus. `$\Lambda_0(0, k) = 0$` and
+/// `$\Lambda_0(\pi/2, k) = 1$`, which is what makes it the natural companion to the complete
+/// integral of the third kind. It is also the standard closed form for the off-axis field of a
+/// circular current loop.
+///
+/// Inside `$|\varphi| \le \pi/2$` a Carlson form avoids the three-term difference above:
+///
+/// ```math
+/// \Lambda_0 = \frac{2}{\pi}\frac{k'^2 \sin\varphi\cos\varphi}{\delta}
+///             \left[R_F(0, k'^2, 1) + \frac{k^2}{3\delta^2} R_J(0, k'^2, 1, p)\right],
+/// \qquad \delta^2 = 1 - k'^2\sin^2\varphi
+/// ```
+///
+/// **The parameter `p` is the delicate part.** Its textbook spelling is `$1 - k^2/\delta^2$`,
+/// which is exactly zero at `$\varphi = \pi/2$` and therefore rounds _negative_ just before
+/// it, and a negative fourth argument sends `R_J` into its Cauchy-principal-value branch,
+/// which is a different function. Since `$\delta^2 = k^2 + k'^2\cos^2\varphi$`, the parameter
+/// is identically `$k'^2\cos^2\varphi/\delta^2$`, a ratio of non-negative quantities that is
+/// correct at the endpoint and cannot go negative. Measured against the defining form at 40
+/// digits: 3.6e-15 worst with that spelling, versus a NaN with the textbook one.
+///
+/// Beyond `$|\varphi| > \pi/2$` the Carlson form no longer applies and the identity
+/// `$\Lambda_0 = F(\varphi,k')/K(k') + \tfrac{2}{\pi}K(k) Z(\varphi, k')$` takes over. That
+/// arm costs three more elliptic evaluations, so it is gated on a lane actually needing it:
+/// the function's usual domain is `$[0, \pi/2]$`.
+#[inline(always)]
+pub fn heuman_lambda<P, E, V>(phi: V, k: V) -> V
+where
+    P: Policy,
+    E: FloatElement + EllipticConsts,
+    V: FloatVector<Element = E> + SpecializedSpecialMath<E>,
+{
+    let k2 = k * k;
+    let kp = k.one_minus_sq();
+    let (sin_phi, cos_phi) = phi.sin_cos_p::<P>();
+    let c2 = cos_phi * cos_phi;
+
+    // delta^2 = 1 - k'^2 sin^2(phi) = k^2 + k'^2 cos^2(phi). The same trick as `jacobi_zeta`'s,
+    // with k^2 and k'^2 swapped: two non-negative terms, so no cancellation.
+    let d2 = kp.mul_adde(c2, k2);
+    let delta = d2.sqrt();
+
+    // p = 1 - k^2/delta^2, in the one form that stays non-negative through phi = pi/2. The
+    // subtraction rounds negative just short of the endpoint, and a negative fourth argument
+    // is a different R_J (the Cauchy principal value).
+    let p = (kp * c2).approx_div_p::<P>(d2);
+
+    let rf = carlson_rf::<P, E, V>(V::ZERO, kp, V::ONE);
+    let rj = carlson_rj::<P, E, V>(V::ZERO, kp, V::ONE, p);
+
+    let bracket = rf + (k2 * rj).scale(const_element!(ratio <E>: 1 / 3)).approx_div_p::<P>(d2);
+    let scale = (kp * sin_phi * cos_phi).approx_div_p::<P>(delta * V::FRAC_PI_2);
+    let mut result = scale * bracket;
+
+    // Outside [-pi/2, pi/2] the Carlson form does not hold and the Legendre identity takes
+    // over. Three more elliptic evaluations, so only when a lane is actually out there.
+    let far = phi.abs().cmp_gt(V::FRAC_PI_2);
+    if const { P::POLICY.avoid_branching } || thermite::unlikely(far.any()) {
+        let k_prime = kp.sqrt();
+        let f_inc = ellint_impl::<P, E, V, KIND_F, false>(phi, k_prime, k);
+        let (k_prime_complete, _) = agm_complete_ke::<P, E, V>(k_prime);
+        let (k_complete, _) = agm_complete_ke::<P, E, V>(k);
+
+        let ratio = f_inc.approx_div_p::<P>(k_prime_complete);
+        let zeta = jacobi_zeta::<P, E, V>(phi, k_prime);
+        result = far.select(ratio + (k_complete * zeta).approx_div_p::<P>(V::FRAC_PI_2), result);
+    }
+
+    result
 }
 
 /// Legendre elliptic integral request, dual to [`CarlsonKind`] (see it for the named-field
@@ -894,4 +1109,35 @@ decl_ellint! {
 
     /// Incomplete elliptic integral of the third kind, `Pi(n, phi, k)`.
     struct EllintPiInc { n, phi, k } = [KIND_PI, false](phi, k, n);
+}
+
+/// The members of the elliptic family that are _not_ Legendre integrals and so do not route
+/// through [`ellint_impl`]. Same request-struct shape as [`decl_carlson`], evaluating a free
+/// function of the struct's own fields, but implementing [`EllipticKind`] so they reach callers
+/// through the same `ellint` entry point as their siblings.
+macro_rules! decl_ellint_fn {
+    ($( $(#[$meta:meta])* struct $name:ident { $($field:ident),* } => $func:ident; )*) => {$(
+        request_struct! { $(#[$meta])* $name { $($field),* } }
+
+        impl<E, V> EllipticKind for $name<V>
+        where
+            E: FloatElement + EllipticConsts,
+            V: FloatVector<Element = E> + SpecializedSpecialMath<E>,
+        {
+            type Output = V;
+            #[inline(always)]
+            fn eval<P: Policy>(self) -> V {
+                $func::<P, E, V>($(self.$field),*)
+            }
+        }
+    )*};
+}
+
+decl_ellint_fn! {
+    /// Jacobi zeta `Z(phi, k)`: the oscillating part of `E(phi, k)`. See `jacobi_zeta`.
+    struct JacobiZeta { phi, k } => jacobi_zeta;
+
+    /// Heuman's lambda `Lambda_0(phi, k)`, the complementary-modulus companion to the complete
+    /// integral of the third kind. See `heuman_lambda`.
+    struct HeumanLambda { phi, k } => heuman_lambda;
 }

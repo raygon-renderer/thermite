@@ -1,4 +1,4 @@
-//! Physicists' Hermite polynomials: `hermite::<N>` at a const degree.
+//! Physicists' Hermite polynomials: `hermite_n::<N>` at a const degree.
 //!
 //! `laguerre.rs` already checks that `hermitev` agrees with `hermite` lane by lane, but
 //! that is a consistency check between two kernels: a `hermite` that is simply wrong
@@ -96,7 +96,7 @@ fn every_degree_matches_the_exact_reference() {
     macro_rules! check {
         ($n:literal) => {
             for (j, &x) in XS.iter().enumerate() {
-                let got = D::splat(x).hermite::<$n>().extract::<0>();
+                let got = D::splat(x).hermite_n::<$n>().extract::<0>();
                 close_cond(
                     &format!("H_{}({x})", $n),
                     got,
@@ -113,7 +113,7 @@ fn every_degree_matches_the_exact_reference() {
 #[test]
 fn degree_zero_is_one() {
     for &x in &XS {
-        assert_eq!(D::splat(x).hermite::<0>().extract::<0>(), 1.0);
+        assert_eq!(D::splat(x).hermite_n::<0>().extract::<0>(), 1.0);
     }
 }
 
@@ -146,8 +146,8 @@ fn satisfies_the_two_term_recurrence() {
             for (j, &x) in XS.iter().enumerate() {
                 let v = D::splat(x);
                 let hm = HERMITE[$n - 2][j];
-                let h0 = v.hermite::<$n>().extract::<0>();
-                let hp = v.hermite::<{ $n + 1 }>().extract::<0>();
+                let h0 = v.hermite_n::<$n>().extract::<0>();
+                let hp = v.hermite_n::<{ $n + 1 }>().extract::<0>();
 
                 let residual = hp - 2.0 * x * h0 + 2.0 * ($n as f64) * hm;
                 let bound = f64::EPSILON
@@ -172,8 +172,8 @@ fn parity_follows_the_degree() {
     macro_rules! check {
         ($n:literal) => {
             for &x in &XS {
-                let pos = D::splat(x).hermite::<$n>().extract::<0>();
-                let neg = D::splat(-x).hermite::<$n>().extract::<0>();
+                let pos = D::splat(x).hermite_n::<$n>().extract::<0>();
+                let neg = D::splat(-x).hermite_n::<$n>().extract::<0>();
                 let want = if $n % 2 == 0 { pos } else { -pos };
                 assert!(
                     (neg - want).abs() <= 1e-9 * pos.abs().max(1.0),
@@ -189,11 +189,11 @@ fn parity_follows_the_degree() {
 #[test]
 fn values_at_the_origin_match_the_closed_form() {
     // H_n(0) = 0 for odd n, and (-2)^{n/2} (n-1)!! for even n.
-    assert_eq!(D::splat(0.0).hermite::<0>().extract::<0>(), 1.0);
+    assert_eq!(D::splat(0.0).hermite_n::<0>().extract::<0>(), 1.0);
 
     macro_rules! check {
         ($n:literal) => {{
-            let got = D::splat(0.0).hermite::<$n>().extract::<0>();
+            let got = D::splat(0.0).hermite_n::<$n>().extract::<0>();
             if $n % 2 == 1 {
                 assert!(got.abs() <= 1e-12, "H_{}(0) should vanish, got {got:e}", $n);
             } else {
@@ -223,9 +223,9 @@ fn lanes_carrying_different_arguments_stay_independent() {
     let xs = [XS[0], XS[3], XS[6], XS[8]];
     macro_rules! check {
         ($n:literal) => {{
-            let got = D4::new(xs).hermite::<$n>();
+            let got = D4::new(xs).hermite_n::<$n>();
             for (lane, &x) in xs.iter().enumerate() {
-                let want = D::splat(x).hermite::<$n>().extract::<0>();
+                let want = D::splat(x).hermite_n::<$n>().extract::<0>();
                 assert_eq!(got.as_slice()[lane], want, "H_{} lane {lane} at x={x}", $n);
             }
         }};
@@ -241,7 +241,7 @@ fn f32_tracks_the_same_reference() {
         ($n:literal) => {
             if $n <= 8 {
                 for (j, &x) in XS.iter().enumerate() {
-                    let got = F::splat(x as f32).hermite::<$n>().extract::<0>() as f64;
+                    let got = F::splat(x as f32).hermite_n::<$n>().extract::<0>() as f64;
                     close_cond(
                         &format!("f32 H_{}({x})", $n),
                         got,

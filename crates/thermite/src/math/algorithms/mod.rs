@@ -2,6 +2,12 @@ use crate::mask::GenericMask as _;
 
 use super::*;
 
+// Public so the module docs are reachable: they carry the three-discipline table explaining
+// which driver a given kernel wants, which is the part that is easy to get wrong.
+pub mod iterate;
+
+pub use iterate::{lentz, prod_f, sum_counted, sum_f, sum_pair, sum_pair_counted, sum_ratio};
+
 /// Newton's method for finding roots of a function.
 ///
 /// Returns `(root, converged)`, where `converged` is a per-lane mask: a lane is `true` when it
@@ -27,6 +33,7 @@ use super::*;
 pub fn newtons_method<V: FloatVector, P: Policy, F>(
     mut x: V,
     tolerance: V,
+    active: V::Mask,
     mut bounds: Option<(V, V)>,
     mut f: F,
 ) -> (V, V::Mask)
@@ -57,13 +64,19 @@ where
 
     let mut converged = V::Mask::FALSY;
 
+    if active.none() {
+        return (x, active);
+    }
+
     for _ in 0..P::POLICY.max_iterations {
         V::_loop_hint();
 
         let (y, y_prime) = f(x);
 
         // Lanes within tolerance in function space (|f(x)| <= tolerance) have converged.
-        let mut stop = y.abs().cmp_le(tolerance);
+        // An inactive lane counts as converged so it cannot extend the iteration. Its value
+        // is left wherever it started and must be discarded by the caller.
+        let mut stop = y.abs().cmp_le(tolerance) | !active;
 
         let next_x = if let Some((ref mut min, ref mut max)) = bounds {
             // Shrink-wrap: replace the bound whose sign matches f(x), preserving the bracket.
@@ -121,107 +134,6 @@ where
     (x, converged)
 }
 
-/// Computes the sum of a function `f` evaluated over the range `[start, end)`.
-///
-/// Returns `Ok(sum)` if convergence was achieved within the maximum number of iterations,
-/// otherwise returns `Err(partial_sum)` with the best partial sum computed.
-///
-/// The function `f` is expected to return a value at each provided iteration index.
-///
-/// If using a precision policy of `Best` or higher, modified Kahan summation is employed to reduce numerical error.
-#[inline(always)]
-pub fn sum_f<V: FloatVector, P: Policy, F>(tolerance: V, start: i64, end: i64, mut f: F) -> Result<V, V>
-where
-    F: FnMut(i64) -> V,
-{
-    let mut sum = V::ZERO;
-    let mut c = V::ZERO; // Kahan summation compensation
-    let mut n = start;
-
-    let mut converged = false;
-
-    let mut _iter = 0usize;
-    while _iter < P::POLICY.max_iterations {
-        V::_loop_hint();
-
-        _iter += 1;
-        if n >= end {
-            break;
-        }
-
-        let mut delta = f(n);
-        let abs_delta = delta.abs();
-
-        if abs_delta.cmp_le(tolerance).all() {
-            converged = true;
-            break;
-        }
-
-        let t = sum + delta;
-
-        if const { P::POLICY.use_compensation } {
-            // if |sum| >= |input[i]| then
-            //     c += (sum - t) + input[i] // If sum is bigger, low-order digits of input[i] are lost.
-            // else
-            //     c += (input[i] - t) + sum // Else low-order digits of sum are lost.
-            // endif
-            sum.abs().cmp_lt(abs_delta).swap(&mut sum, &mut delta);
-
-            c += (sum - t) + delta;
-        }
-
-        sum = t;
-        n += 1;
-    }
-
-    if const { P::POLICY.use_compensation } {
-        sum += c; // apply any remaining compensation
-    }
-
-    match converged {
-        true => Ok(sum),
-        false => Err(sum),
-    }
-}
-
-/// Computes the sum of a function `f` evaluated over the range `[start, end)`.
-///
-/// Returns `Ok(sum)` if convergence was achieved within the maximum number of iterations,
-/// otherwise returns `Err(partial_sum)` with the best partial sum computed.
-///
-/// The function `f` is expected to return a value at each provided iteration index.
-#[inline(always)]
-pub fn prod_f<V: FloatVector, P: Policy, F>(tolerance: V, start: i64, end: i64, mut f: F) -> Result<V, V>
-where
-    F: FnMut(i64) -> V,
-{
-    let mut prod = V::ONE;
-    let mut n = start;
-
-    let mut _iter = 0usize;
-    while _iter < P::POLICY.max_iterations {
-        V::_loop_hint();
-
-        _iter += 1;
-        if n >= end {
-            break;
-        }
-
-        let new_prod = prod * f(n);
-
-        let delta = new_prod - prod;
-
-        if delta.abs().cmp_le(tolerance).all() {
-            return Ok(prod);
-        }
-
-        prod = new_prod;
-        n += 1;
-    }
-
-    Err(prod)
-}
-
 /// Accelerates a linearly converging series using Aitken's Δ^2 process.
 ///
 /// Given a term-generating function `f(n)` that produces the n-th term of a series,
@@ -268,10 +180,20 @@ where
 /// assert!((sum - core::f64::consts::FRAC_PI_4).abs() < 1e-10);
 /// ```
 #[inline(always)]
-pub fn aitken_sum<V: FloatVector, P: Policy, F>(tolerance: V, start: i64, end: i64, mut f: F) -> Result<V, V>
+pub fn aitken_sum<V: FloatVector, P: Policy, F>(
+    tolerance: V,
+    active: V::Mask,
+    start: i64,
+    end: i64,
+    mut f: F,
+) -> Result<V, V>
 where
     F: FnMut(i64) -> V,
 {
+    if active.none() {
+        return Ok(V::ZERO);
+    }
+
     let mut sum = V::ZERO;
     let mut c = V::ZERO; // Kahan compensation
 
@@ -345,7 +267,7 @@ where
         // Check convergence: |accelerated - s1_accelerated_prev| <= tolerance
         // We use the simpler check: |d2| <= tolerance (the raw sequence has converged)
         // OR the extrapolated value is stable (|s2 - accelerated| <= tolerance when denom is healthy)
-        if a0.zz(denom_ok).abs().cmp_le(tolerance).all() {
+        if (a0.zz(denom_ok).abs().cmp_le(tolerance) | !active).all() {
             return Ok(best);
         }
 

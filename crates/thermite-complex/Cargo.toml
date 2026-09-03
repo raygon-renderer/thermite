@@ -20,6 +20,7 @@ features = ["std", "compensated", "dual", "special"]
 rustdoc-args = ["--cfg", "docsrs", "--html-in-header", "katex-header.html"]
 
 [features]
+trace = ["thermite/trace"] # Emit trace region markers in the math forwarders (for thermite-trace)
 std = ["thermite/std"]
 wasm = ["thermite/wasm"]
 # Lets a `Dual` be the storage of a `Complex`, i.e. `Complex<Dual<V, N>>`:

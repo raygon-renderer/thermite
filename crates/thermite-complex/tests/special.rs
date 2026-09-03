@@ -160,7 +160,7 @@ fn inherited_polynomial_families() {
 
     // H_3(x) = 8x^3 - 12x
     let want = o * o * o * 8.0 - o * 12.0;
-    assert_close("hermite::<3>", z.hermite::<3>(), want, 1e-13);
+    assert_close("hermite_n::<3>", z.hermite_n::<3>(), want, 1e-13);
 
     // P_2(x) = (3x^2 - 1)/2
     let want = (o * o * 3.0 - Complex64::new(1.0, 0.0)) / 2.0;
@@ -256,12 +256,13 @@ fn erfc_reference_values_in_the_cf_region() {
 // expanding, so testing the recurrence at a single step and the reflection at an
 // interior point exercises identities the code never assumes pointwise.
 
-// `trigamma` lives only on `SpecializedSpecialMath`, and `lambert_w` is on both that
-// and the public `SpecialMath`, so the import is scoped to keep the two unambiguous.
+// `trigamma` is public on `SpecialMath` as of the polygamma arc, so these go through
+// the `_p` public spelling. Importing `SpecializedSpecialMath` here would make every
+// shared method name ambiguous.
 mod trigamma {
     use super::*;
     use thermite::math::policy::DefaultPolicy;
-    use thermite_special::specialized::SpecializedSpecialMath as _;
+    use thermite_special::SpecialMathWithPolicy as _;
 
     #[test]
     fn trigamma_matches_the_real_axis() {
@@ -270,8 +271,8 @@ mod trigamma {
         for k in 0..40 {
             let x = 0.35 + (k as f64) * 0.5;
 
-            let got = c(x, 0.0).trigamma::<DefaultPolicy>();
-            let want = V::splat(x).trigamma::<DefaultPolicy>().extract::<0>();
+            let got = c(x, 0.0).trigamma_p::<DefaultPolicy>();
+            let want = V::splat(x).trigamma_p::<DefaultPolicy>().extract::<0>();
 
             let (re, im) = parts(got);
             assert!(
@@ -287,10 +288,10 @@ mod trigamma {
         // psi_1(z + 1) = psi_1(z) - 1/z^2
         for &(re, im) in &[(0.7, 0.4), (2.5, -1.25), (-3.4, 2.0), (1.0, 8.0), (-0.5, -0.5)] {
             let z = c(re, im);
-            let lhs = c(re + 1.0, im).trigamma::<DefaultPolicy>();
+            let lhs = c(re + 1.0, im).trigamma_p::<DefaultPolicy>();
 
             let zo = Complex64::new(re, im);
-            let rhs = oracle(z.trigamma::<DefaultPolicy>()) - 1.0 / (zo * zo);
+            let rhs = oracle(z.trigamma_p::<DefaultPolicy>()) - 1.0 / (zo * zo);
 
             assert!(
                 close_c(lhs, rhs, 1e-11),
@@ -306,8 +307,8 @@ mod trigamma {
         for &(re, im) in &[(0.3, 0.6), (-1.7, 0.9), (2.2, -1.1), (-4.25, 3.0)] {
             let z = Complex64::new(re, im);
 
-            let lhs =
-                oracle(c(re, im).trigamma::<DefaultPolicy>()) + oracle(c(1.0 - re, -im).trigamma::<DefaultPolicy>());
+            let lhs = oracle(c(re, im).trigamma_p::<DefaultPolicy>())
+                + oracle(c(1.0 - re, -im).trigamma_p::<DefaultPolicy>());
 
             let s = (Complex64::new(std::f64::consts::PI, 0.0) * z).sin();
             let rhs = std::f64::consts::PI * std::f64::consts::PI / (s * s);
@@ -405,17 +406,17 @@ fn lambert_w_branch_point_and_zero() {
 fn trigamma_derivative_through_dual() {
     use thermite::math::policy::DefaultPolicy;
     use thermite_dual::Dual;
-    use thermite_special::specialized::SpecializedSpecialMath as _;
+    use thermite_special::SpecialMathWithPolicy as _;
 
     type D = Dual<Vector<f64>, 1>;
     type CD = Complex<D>;
 
     for &(x, y) in &[(2.5, 1.0), (0.75, -0.5), (-1.6, 2.25)] {
         let z: CD = Complex::new(Dual::variable(V::splat(x), 0), Dual::constant(V::splat(y)));
-        let w = z.trigamma::<DefaultPolicy>();
+        let w = z.trigamma_p::<DefaultPolicy>();
 
         // value agrees with the non-dual routine
-        let plain = c(x, y).trigamma::<DefaultPolicy>();
+        let plain = c(x, y).trigamma_p::<DefaultPolicy>();
         let (pre, pim) = parts(plain);
 
         assert!(
@@ -425,8 +426,8 @@ fn trigamma_derivative_through_dual() {
 
         // derivative against a central difference in the real direction
         let h = 1e-5;
-        let (ap, bp) = parts(c(x + h, y).trigamma::<DefaultPolicy>());
-        let (am, bm) = parts(c(x - h, y).trigamma::<DefaultPolicy>());
+        let (ap, bp) = parts(c(x + h, y).trigamma_p::<DefaultPolicy>());
+        let (am, bm) = parts(c(x - h, y).trigamma_p::<DefaultPolicy>());
         let want = ((ap - am) / (2.0 * h), (bp - bm) / (2.0 * h));
 
         let got = (w.re.dual[0].extract::<0>(), w.im.dual[0].extract::<0>());

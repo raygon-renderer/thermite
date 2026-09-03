@@ -7,15 +7,15 @@
 //! [`Avx512Features`]: one body of register code, with
 //! `if const { F::AVX512VBMI }`-style forks selecting the best encoding the
 //! instantiated tier allows, each with an explicit else fallback. Everything
-//! folds at monomorphization, like the `HAS_TRUE_FMA` / `HAS_APPROX_RCP`
+//! folds at monomorphization, like the `HAS_NATIVE_FMA` / `HAS_APPROX_RCP`
 //! capability gates -- and unlike `cfg` gating, BOTH arms of every fork
 //! compile and type-check on every build, so untaken arms cannot rot and can
 //! even be differentially tested from builds that never select them.
 //!
 //! **Exactly one tier is compiled per build.** The `avx512-tier1..3` crate
 //! features (which chain, so cargo feature unification resolves to the highest
-//! requested) select [`DefaultAvx512`], and dispatch carries the single
-//! [`X86V4Default`] instantiation. Hardware below the compiled tier falls back
+//! requested) select `DefaultAvx512`, and dispatch carries the single
+//! `X86V4Default` instantiation. Hardware below the compiled tier falls back
 //! to the x86-v3 (AVX2) backend; with no tier feature enabled the backend is
 //! not compiled at all and AVX-512 hardware runs x86-v3.
 //!

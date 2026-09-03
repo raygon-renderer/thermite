@@ -4,9 +4,12 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 
+mod coarse_ops;
 mod dispatch;
 mod internal;
 mod late_bound;
+mod math_traits;
+mod region;
 
 /// Compile-time ISA dispatch for functions, `impl` blocks, traits, and modules.
 ///
@@ -358,6 +361,26 @@ pub fn dispatch_dyn(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 #[proc_macro_derive(HasIsa, attributes(isa, thermite))]
 pub fn derive_has_isa(input: TokenStream) -> TokenStream {
     internal::derive_has_isa_inner(input)
+}
+
+/// `math_traits!`: generates the full math-trait family (policy + default
+/// traits, dispatched blanket impls with trace region markers, and the
+/// monolithic scalar aggregate) from real Rust trait declarations. Consumed
+/// by `thermite` and `thermite-special`. See `math_traits.rs` for the
+/// grammar. The region-marker machinery is emitted only when this crate's
+/// `trace` feature is enabled (forwarded by `thermite/trace`).
+#[proc_macro]
+pub fn math_traits(input: TokenStream) -> TokenStream {
+    math_traits::math_traits_inner(input)
+}
+
+/// `coarse_ops!`: generates thermite-trace's `Op` enum and coarse recording
+/// impls from the math surface `math_traits!` exports through the
+/// `__math_surface!` callback chain. See `coarse_ops.rs` for the grammar.
+#[doc(hidden)]
+#[proc_macro]
+pub fn coarse_ops(input: TokenStream) -> TokenStream {
+    coarse_ops::coarse_ops_inner(input)
 }
 
 #[proc_macro_attribute]

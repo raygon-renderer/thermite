@@ -46,6 +46,9 @@ pub trait LogNHelper: FloatConsts + Sized {
     const LOG2_TABLE: [Self; 30];
 
     fn fallback<P: Policy, const N: usize>() -> Self;
+
+    /// `log2(n)` for a base known only at runtime. The runtime twin of [`fallback`](Self::fallback).
+    fn fallback_dyn<P: Policy>(n: u32) -> Self;
 }
 
 macro_rules! impl_log2_table {
@@ -62,6 +65,16 @@ macro_rules! impl_log2_table {
                     _ => libm::log2f(N as f32),
                 }
             }
+
+            #[inline(always)]
+            fn fallback_dyn<P: Policy>(n: u32) -> Self {
+                cfg_select! {
+                    all(feature = "spirv", target_arch = "spirv") => {
+                        Vector::<f32>(n as f32).log2_p::<P>().0
+                    }
+                    _ => libm::log2f(n as f32),
+                }
+            }
         }
 
         impl LogNHelper for f64 {
@@ -74,6 +87,16 @@ macro_rules! impl_log2_table {
                         Vector::<f64>(N as f64).log2_p::<P>().0
                     }
                     _ => libm::log2(N as f64),
+                }
+            }
+
+            #[inline(always)]
+            fn fallback_dyn<P: Policy>(n: u32) -> Self {
+                cfg_select! {
+                    all(feature = "spirv", target_arch = "spirv") => {
+                        Vector::<f64>(n as f64).log2_p::<P>().0
+                    }
+                    _ => libm::log2(n as f64),
                 }
             }
         }
@@ -115,7 +138,25 @@ impl_log2_table![
 ];
 
 #[inline(always)]
-pub fn log_n_internal<V, E: FloatElement + LogNHelper, P, const N: usize>(x: V) -> V
+pub fn log_n_internal<V, E: FloatElement + LogNHelper, P>(x: V, n: u32) -> V
+where
+    V: FloatVectorWithBits<Element = E> + SpecializedTranscendentalMath<E>,
+    P: Policy,
+{
+    // The runtime twin of `log_n_internal_n`: the same arms, chosen by one uniform branch on
+    // the value, and the same table entry, so the two agree to the bit.
+    match n {
+        0 => V::ZERO,
+        1 => FloatVector::INFINITY,
+        2 => V::log2::<P>(x),
+        10 => V::log10::<P>(x),
+        3..=32 => V::log2::<P>(x).scale(E::LOG2_TABLE[n as usize - 3]),
+        _ => V::log2::<P>(x).approx_div_p::<P>(V::splat(E::fallback_dyn::<P>(n))),
+    }
+}
+
+#[inline(always)]
+pub fn log_n_internal_n<V, E: FloatElement + LogNHelper, P, const N: usize>(x: V) -> V
 where
     V: FloatVectorWithBits<Element = E> + SpecializedTranscendentalMath<E>,
     P: Policy,

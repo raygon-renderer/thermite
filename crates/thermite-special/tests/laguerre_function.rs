@@ -1,4 +1,4 @@
-//! Orthonormal generalized Laguerre functions: `laguerre_function::<N>` and
+//! Orthonormal generalized Laguerre functions: `laguerre_function_n::<N>` and
 //! `laguerre_function_series_n::<N>`.
 //!
 //! References come from `scripts/orthonormal_ref.py` (mpmath, three-term recurrence at 400
@@ -49,13 +49,13 @@ macro_rules! for_each_degree {
 fn lf_at(n: usize, alpha: f64, x: f64) -> f64 {
     let (v, a) = (D::splat(x), D::splat(alpha));
     match n {
-        0 => v.laguerre_function::<0>(a),
-        3 => v.laguerre_function::<3>(a),
-        8 => v.laguerre_function::<8>(a),
-        40 => v.laguerre_function::<40>(a),
-        80 => v.laguerre_function::<80>(a),
-        300 => v.laguerre_function::<300>(a),
-        600 => v.laguerre_function::<600>(a),
+        0 => v.laguerre_function_n::<0>(a),
+        3 => v.laguerre_function_n::<3>(a),
+        8 => v.laguerre_function_n::<8>(a),
+        40 => v.laguerre_function_n::<40>(a),
+        80 => v.laguerre_function_n::<80>(a),
+        300 => v.laguerre_function_n::<300>(a),
+        600 => v.laguerre_function_n::<600>(a),
         _ => unreachable!("no const instantiation for degree {n}"),
     }
     .extract::<0>()
@@ -64,13 +64,13 @@ fn lf_at(n: usize, alpha: f64, x: f64) -> f64 {
 fn lf_at_f32(n: usize, alpha: f32, x: f32) -> f32 {
     let (v, a) = (F::splat(x), F::splat(alpha));
     match n {
-        0 => v.laguerre_function::<0>(a),
-        3 => v.laguerre_function::<3>(a),
-        8 => v.laguerre_function::<8>(a),
-        40 => v.laguerre_function::<40>(a),
-        80 => v.laguerre_function::<80>(a),
-        300 => v.laguerre_function::<300>(a),
-        600 => v.laguerre_function::<600>(a),
+        0 => v.laguerre_function_n::<0>(a),
+        3 => v.laguerre_function_n::<3>(a),
+        8 => v.laguerre_function_n::<8>(a),
+        40 => v.laguerre_function_n::<40>(a),
+        80 => v.laguerre_function_n::<80>(a),
+        300 => v.laguerre_function_n::<300>(a),
+        600 => v.laguerre_function_n::<600>(a),
         _ => unreachable!("no const instantiation for degree {n}"),
     }
     .extract::<0>()
@@ -98,7 +98,7 @@ fn matches_mpmath_at_low_degree_over_all_weights() {
                         continue; // alpha < 0 at x = 0 is a genuine pole
                     }
                     let got = D::splat(x)
-                        .laguerre_function::<$n>(D::splat(alpha))
+                        .laguerre_function_n::<$n>(D::splat(alpha))
                         .extract::<0>();
                     close_abs(
                         &format!("l_{}^({alpha})({x})", $n),
@@ -147,10 +147,10 @@ fn agrees_with_the_raw_polynomial_where_both_are_finite() {
                 }
                 let norm = ratio.sqrt();
                 for &x in &LF_XS {
-                    let raw = D::splat(x).laguerre::<$n>(D::splat(alpha)).extract::<0>();
+                    let raw = D::splat(x).laguerre_n::<$n>(D::splat(alpha)).extract::<0>();
                     let want = norm * x.powf(alpha / 2.0) * (-0.5 * x).exp() * raw;
                     let got = D::splat(x)
-                        .laguerre_function::<$n>(D::splat(alpha))
+                        .laguerre_function_n::<$n>(D::splat(alpha))
                         .extract::<0>();
                     // The raw route cancels through the polynomial, so bound by its scale.
                     close_abs(
@@ -177,11 +177,11 @@ fn the_origin_is_right_for_the_ordinary_functions() {
     // (x = 0, alpha = 0) is then exact.
     macro_rules! check {
         ($n:literal) => {{
-            let one = D::ZERO.laguerre_function::<$n>(D::ZERO).extract::<0>();
+            let one = D::ZERO.laguerre_function_n::<$n>(D::ZERO).extract::<0>();
             assert_eq!(one, 1.0, "l_{}^(0)(0)", $n);
             for &alpha in &[0.5f64, 1.0, 2.0] {
                 assert_eq!(
-                    D::ZERO.laguerre_function::<$n>(D::splat(alpha)).extract::<0>(),
+                    D::ZERO.laguerre_function_n::<$n>(D::splat(alpha)).extract::<0>(),
                     0.0,
                     "l_{}^({alpha})(0)",
                     $n
@@ -294,7 +294,9 @@ fn integer_weight_matches_mpmath() {
                     if !want.is_finite() {
                         continue;
                     }
-                    let got = D::splat(x).laguerre_function_i::<$n>(alpha as i32).extract::<0>();
+                    let got = D::splat(x)
+                        .laguerre_function_i_n::<$n>(alpha as i32)
+                        .extract::<0>();
                     close_abs(
                         &format!("l_{}^({alpha})({x}) [i]", $n),
                         got,
@@ -318,8 +320,8 @@ fn integer_weight_agrees_with_the_float_weight() {
             for a in 0..=6i32 {
                 for &x in &LF_XS {
                     let v = D::splat(x);
-                    let want = v.laguerre_function::<$n>(D::splat(a as f64)).extract::<0>();
-                    let got = v.laguerre_function_i::<$n>(a).extract::<0>();
+                    let want = v.laguerre_function_n::<$n>(D::splat(a as f64)).extract::<0>();
+                    let got = v.laguerre_function_i_n::<$n>(a).extract::<0>();
                     close_abs(&format!("l_{}^({a})({x}) i vs f", $n), got, want, 1e-14);
                 }
             }
@@ -337,8 +339,8 @@ fn integer_weight_zero_is_bit_identical_to_the_float_form() {
             for &x in &LF_XS {
                 let v = D::splat(x);
                 assert_eq!(
-                    v.laguerre_function_i::<$n>(0).extract::<0>(),
-                    v.laguerre_function::<$n>(D::ZERO).extract::<0>(),
+                    v.laguerre_function_i_n::<$n>(0).extract::<0>(),
+                    v.laguerre_function_n::<$n>(D::ZERO).extract::<0>(),
                     "l_{}^(0)({x})",
                     $n
                 );
@@ -356,13 +358,13 @@ fn integer_weight_reaches_the_high_degree_rows() {
         }
         let a = alpha as i32;
         let got = match n {
-            0 => D::splat(x).laguerre_function_i::<0>(a),
-            3 => D::splat(x).laguerre_function_i::<3>(a),
-            8 => D::splat(x).laguerre_function_i::<8>(a),
-            40 => D::splat(x).laguerre_function_i::<40>(a),
-            80 => D::splat(x).laguerre_function_i::<80>(a),
-            300 => D::splat(x).laguerre_function_i::<300>(a),
-            600 => D::splat(x).laguerre_function_i::<600>(a),
+            0 => D::splat(x).laguerre_function_i_n::<0>(a),
+            3 => D::splat(x).laguerre_function_i_n::<3>(a),
+            8 => D::splat(x).laguerre_function_i_n::<8>(a),
+            40 => D::splat(x).laguerre_function_i_n::<40>(a),
+            80 => D::splat(x).laguerre_function_i_n::<80>(a),
+            300 => D::splat(x).laguerre_function_i_n::<300>(a),
+            600 => D::splat(x).laguerre_function_i_n::<600>(a),
             _ => unreachable!(),
         }
         .extract::<0>();
@@ -405,15 +407,15 @@ fn integer_series_with_a_unit_coefficient_is_the_single_function() {
                 let v = D::splat(x);
                 let got = v.laguerre_function_series_i_n::<N>(a, &unit).extract::<0>();
                 let want = match k {
-                    0 => v.laguerre_function_i::<0>(a),
-                    1 => v.laguerre_function_i::<1>(a),
-                    2 => v.laguerre_function_i::<2>(a),
-                    3 => v.laguerre_function_i::<3>(a),
-                    4 => v.laguerre_function_i::<4>(a),
-                    5 => v.laguerre_function_i::<5>(a),
-                    6 => v.laguerre_function_i::<6>(a),
-                    7 => v.laguerre_function_i::<7>(a),
-                    _ => v.laguerre_function_i::<8>(a),
+                    0 => v.laguerre_function_i_n::<0>(a),
+                    1 => v.laguerre_function_i_n::<1>(a),
+                    2 => v.laguerre_function_i_n::<2>(a),
+                    3 => v.laguerre_function_i_n::<3>(a),
+                    4 => v.laguerre_function_i_n::<4>(a),
+                    5 => v.laguerre_function_i_n::<5>(a),
+                    6 => v.laguerre_function_i_n::<6>(a),
+                    7 => v.laguerre_function_i_n::<7>(a),
+                    _ => v.laguerre_function_i_n::<8>(a),
                 }
                 .extract::<0>();
                 close_abs(&format!("unit series k={k} a={a} x={x}"), got, want, 1e-14);
@@ -436,7 +438,7 @@ fn integer_weight_f32_tracks_the_reference() {
                         continue;
                     }
                     let got = F::splat(x as f32)
-                        .laguerre_function_i::<$n>(alpha as i32)
+                        .laguerre_function_i_n::<$n>(alpha as i32)
                         .extract::<0>() as f64;
                     close_abs(
                         &format!("f32 l_{}^({alpha})({x}) [i]", $n),
@@ -460,11 +462,11 @@ fn integer_weight_lanes_stay_independent() {
 
     let xs = [LF_XS[1], LF_XS[3], LF_XS[5], LF_XS[7]];
     for a in 0..=4i32 {
-        let got = D4::new(xs).laguerre_function_i::<6>(a);
+        let got = D4::new(xs).laguerre_function_i_n::<6>(a);
         for (lane, &x) in xs.iter().enumerate() {
             assert_eq!(
                 got.as_slice()[lane],
-                D::splat(x).laguerre_function_i::<6>(a).extract::<0>(),
+                D::splat(x).laguerre_function_i_n::<6>(a).extract::<0>(),
                 "a={a} lane={lane}"
             );
         }
@@ -480,8 +482,8 @@ fn integer_weight_product_seed_matches_the_log_seed_across_the_cap() {
     let xs = [0.0, 0.5, 10.0, 100.0, 250.0, 400.0, 1000.0, 3000.0, 5000.0];
     for &a in &[1i32, 2, 3, 28, 29, 30, 31, 100, 169, 170, 171] {
         for &x in &xs {
-            let want = D::splat(x).laguerre_function::<3>(D::splat(a as f64)).extract::<0>();
-            let got = D::splat(x).laguerre_function_i::<3>(a).extract::<0>();
+            let want = D::splat(x).laguerre_function_n::<3>(D::splat(a as f64)).extract::<0>();
+            let got = D::splat(x).laguerre_function_i_n::<3>(a).extract::<0>();
             assert!(
                 got.is_finite() && want.is_finite(),
                 "a={a} x={x}: got {got:?} want {want:?}"
@@ -496,8 +498,8 @@ fn integer_weight_product_seed_matches_the_log_seed_across_the_cap() {
     }
     for &a in &[1i32, 2, 3, 15, 28, 29, 30, 31, 34] {
         for &x in &xs {
-            let want = D::splat(x).laguerre_function::<3>(D::splat(a as f64)).extract::<0>();
-            let got = F::splat(x as f32).laguerre_function_i::<3>(a).extract::<0>() as f64;
+            let want = D::splat(x).laguerre_function_n::<3>(D::splat(a as f64)).extract::<0>();
+            let got = F::splat(x as f32).laguerre_function_i_n::<3>(a).extract::<0>() as f64;
             assert!(got.is_finite(), "f32 a={a} x={x}: got {got:?} want {want:?}");
             close_abs(
                 &format!("f32 l_3^({a})({x}) product vs log seed"),
@@ -516,9 +518,9 @@ fn weights_can_vary_per_lane() {
 
     let alphas = [0.0, 0.5, 1.0, 2.0];
     for &x in &LF_XS[1..] {
-        let got = D4::splat(x).laguerre_function::<6>(D4::new(alphas));
+        let got = D4::splat(x).laguerre_function_n::<6>(D4::new(alphas));
         for (lane, &alpha) in alphas.iter().enumerate() {
-            let want = D::splat(x).laguerre_function::<6>(D::splat(alpha)).extract::<0>();
+            let want = D::splat(x).laguerre_function_n::<6>(D::splat(alpha)).extract::<0>();
             assert_eq!(got.as_slice()[lane], want, "x={x} lane={lane}");
         }
     }
@@ -535,7 +537,7 @@ fn f32_tracks_the_reference_including_high_degree() {
                         continue;
                     }
                     let got = F::splat(x as f32)
-                        .laguerre_function::<$n>(F::splat(alpha as f32))
+                        .laguerre_function_n::<$n>(F::splat(alpha as f32))
                         .extract::<0>() as f64;
                     close_abs(
                         &format!("f32 l_{}^({alpha})({x})", $n),
@@ -594,11 +596,11 @@ fn seed_matches_mpmath_across_its_branches() {
     // under 3.
     for &(alpha, x, want) in LF_SEED.iter() {
         let budget = seed_budget(alpha, x);
-        let got = D::splat(x).laguerre_function::<0>(D::splat(alpha)).extract::<0>();
+        let got = D::splat(x).laguerre_function_n::<0>(D::splat(alpha)).extract::<0>();
         let u = seed_ulps(got, want, f64::EPSILON);
         assert!(u <= budget, "f64 l_0^({alpha})({x}): {u:.1} ulp (budget {budget:.1})");
         if alpha.fract() == 0.0 {
-            let got = D::splat(x).laguerre_function_i::<0>(alpha as i32).extract::<0>();
+            let got = D::splat(x).laguerre_function_i_n::<0>(alpha as i32).extract::<0>();
             let u = seed_ulps(got, want, f64::EPSILON);
             assert!(
                 u <= budget,
@@ -607,7 +609,7 @@ fn seed_matches_mpmath_across_its_branches() {
         }
         if want.abs() > 1e-30 && x < 350.0 {
             let got = F::splat(x as f32)
-                .laguerre_function::<0>(F::splat(alpha as f32))
+                .laguerre_function_n::<0>(F::splat(alpha as f32))
                 .extract::<0>() as f64;
             let u = seed_ulps(got, want, f32::EPSILON as f64);
             assert!(u <= budget, "f32 l_0^({alpha})({x}): {u:.1} ulp (budget {budget:.1})");
@@ -620,7 +622,7 @@ fn seed_matches_mpmath_across_its_branches() {
 #[ignore]
 fn seed_ulp_report() {
     for &(alpha, x, want) in LF_SEED.iter() {
-        let got = D::splat(x).laguerre_function::<0>(D::splat(alpha)).extract::<0>();
+        let got = D::splat(x).laguerre_function_n::<0>(D::splat(alpha)).extract::<0>();
         let bd0 = alpha * (alpha / x).ln() + x - alpha;
         println!(
             "a={alpha:7} x={x:8} bd0={bd0:9.3} f64 {:7.2} ulp",

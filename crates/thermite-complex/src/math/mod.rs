@@ -1,7 +1,3 @@
-// The `fn name[..][..](self: Self, ..)` shape in the `decl_complex_math!` invocation
-// below is the macro DSL's, as in `thermite::math`.
-#![allow(clippy::needless_arbitrary_self_type)]
-
 //! Math kernels for [`Complex`].
 //!
 //! Implements the `Specialized*Math` traits. Complex vectors thereby get
@@ -30,57 +26,10 @@ use self::specialized::{ComplexVector, SpecializedComplexMath};
 use crate::Complex;
 use crate::vector::RealFloatVector;
 
-// A copy of thermite::math's (private) decl_math!, dropping the ScalarMath
-// aggregate, which only makes sense for bare f32/f64. The rest is unchanged, so
-// ComplexMath is generated as TranscendentalMath is, #[dispatch] trampolines and
-// all.
-macro_rules! decl_complex_math {
-    ($(
-        $(#[$trait_meta:meta])*
-        trait $trait:ident<$element:ident> $(: $($bound:ident)&+ )? { $(
-            $(#[$meta:meta])*
-            fn $name:ident [ $($generics:tt)* ][$($generic_names:ident),*]( $($arg_name:ident : $arg_ty:ty),* $(,)?) -> $ret:ty;
-        )*}
-    )*) => {paste::paste! {$(
-        #[doc = "" $trait " math functions with customizable policies."]
-        $(#[$trait_meta])*
-        #[doc = ""]
-        #[doc = "Each function takes a [`Policy`] as its first generic argument. For the"]
-        #[doc = "default-policy versions (same names, no `_p` suffix), see [`" $trait "Math`]."]
-        #[doc = ""]
-        #[doc = "Implemented automatically for every type implementing [`Specialized" $trait "Math`]."]
-        #[thermite::dispatch(Self)]
-        pub trait [<$trait MathWithPolicy>] $(: $($bound +)+)? {$(
-            $(#[$meta])* fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret;
-        )*}
+thermite::math_traits! {
+    #![thermite(thermite)]
+    #![surface(__complex_math_surface)]
 
-        #[doc = "" $trait " math functions using the default policy."]
-        $(#[$trait_meta])*
-        #[doc = ""]
-        #[doc = "Every method here has a counterpart in [`" $trait "MathWithPolicy`] with a `_p`"]
-        #[doc = "suffix that takes an explicit [`Policy`]."]
-        #[doc = ""]
-        #[doc = "Implementors of [`" $trait "MathWithPolicy`] implement this automatically."]
-        #[thermite::dispatch(Self)]
-        pub trait [<$trait Math>]: [<$trait MathWithPolicy>] {$(
-            $(#[$meta])* #[inline(always)] fn $name<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
-            { [<$trait MathWithPolicy>]::[<$name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*) }
-        )*}
-
-        impl<M> [<$trait Math>] for M where M: [<$trait MathWithPolicy>] {}
-
-        // The FloatVector<Element = E> bound is what ties E down, as in core.
-        #[thermite::dispatch(Self)]
-        impl<E: $element, V: FloatVector<Element = E> + $($($bound +)+)?> [<$trait MathWithPolicy>] for V
-            where V: [<Specialized $trait Math>]<E>
-        {$(
-            $(#[$meta])* #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
-            { <V as [<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*) }
-        )*})*
-    }};
-}
-
-decl_complex_math! {
     /// Operations whose result is real (modulus, argument, polar form) or whose
     /// argument is (a real power, base, or logarithm base), which the `Self -> Self`
     /// core families cannot express.
@@ -89,21 +38,22 @@ decl_complex_math! {
     /// the core families and come from
     /// [`TranscendentalMath`](thermite::math::TranscendentalMath) as they do for
     /// any other vector.
-    trait Complex<FloatElement>: ComplexVector {
+    #[element(FloatElement)]
+    pub trait ComplexMath: ComplexVector {
         /// The modulus `$|z|$`, as a real value.
         ///
         /// Uses `hypot`, so it does not overflow for large components the way
         /// `sqrt(norm_sqr())` would.
-        fn norm[][](self: Self) -> Self::Real;
+        fn norm(self) -> Self::Real;
 
         /// The principal argument `arg(z)`, in `(-pi, pi]`, as a real value.
-        fn arg[][](self: Self) -> Self::Real;
+        fn arg(self) -> Self::Real;
 
         /// Converts to polar form `(r, theta)`, such that `self == r * exp(i*theta)`.
-        fn to_polar[][](self: Self) -> (Self::Real, Self::Real);
+        fn to_polar(self) -> (Self::Real, Self::Real);
 
         /// Builds a complex number from a polar representation `r * exp(i*theta)`.
-        fn from_polar[][](r: Self::Real, theta: Self::Real) -> Self;
+        fn from_polar(r: Self::Real, theta: Self::Real) -> Self;
 
         /// The unit complex number at angle `theta`, `$e^{i\theta} = \cos\theta + i\sin\theta$`.
         ///
@@ -111,32 +61,32 @@ decl_complex_math! {
         /// doing it that way, it's just one `sin_cos` and nothing else. This is the
         /// rotation/phasor constructor, for twiddle factors, unit-circle sampling, and the
         /// angle term of an [`expf`](ComplexMath::expf).
-        fn from_angle[][](theta: Self::Real) -> Self;
+        fn from_angle(theta: Self::Real) -> Self;
 
         /// Raises `self` to a real power.
         ///
         /// The complex-exponent form is [`powf`](thermite::math::TranscendentalMath::powf).
-        fn powfr[][](self: Self, e: Self::Real) -> Self;
+        fn powfr(self, e: Self::Real) -> Self;
 
         /// Raises a real base to the complex power `self`.
-        fn expf[][](self: Self, base: Self::Real) -> Self;
+        fn expf(self, base: Self::Real) -> Self;
 
         /// The logarithm of `self` in an arbitrary real base.
         ///
         /// The complex-base form is [`log`](thermite::math::TranscendentalMath::log).
-        fn logr[][](self: Self, base: Self::Real) -> Self;
+        fn logr(self, base: Self::Real) -> Self;
 
         /// `1/self`, scaling by the modulus and not its square.
         ///
         /// Survives the magnitudes where [`inv`](ComplexVector::inv) would have
         /// `norm_sqr()` overflow to infinity or underflow to zero.
-        fn finv[][](self: Self) -> Self;
+        fn finv(self) -> Self;
 
         /// `self/rhs`, scaling by the modulus and not its square.
         ///
         /// Survives the magnitudes where `/` would have `rhs.norm_sqr()` overflow
         /// to infinity or underflow to zero.
-        fn fdiv[][](self: Self, rhs: Self) -> Self;
+        fn fdiv(self, rhs: Self) -> Self;
     }
 }
 
@@ -788,12 +738,21 @@ impl<V: RealFloatVector> SpecializedTranscendentalMath<Complex<V::Element>> for 
     /// sign afterwards, which over C collapses `z` to its modulus and returns a real
     /// root.
     #[inline(always)]
-    fn nth_root<P: Policy, const N: usize>(self) -> Self {
+    fn nth_root_n<P: Policy, const N: usize>(self) -> Self {
         let (r, theta) = self.to_polar_p::<P>();
 
         // Not `const_splat!`: `N` is a generic parameter, which cannot appear in the
         // const operation that arm expands to.
         let n = V::splat(<V::Element as FloatElement>::from_int(N as thermite::LargeInt));
+
+        Self::from_polar_p::<P>(r.powf_p::<P>(n.approx_reciprocal_p::<P>()), theta / n)
+    }
+
+    /// [`nth_root_n`](Self::nth_root_n) for a degree known only at runtime.
+    #[inline(always)]
+    fn nth_root<P: Policy>(self, n: u32) -> Self {
+        let (r, theta) = self.to_polar_p::<P>();
+        let n = V::splat(<V::Element as FloatElement>::from_int(n as thermite::LargeInt));
 
         Self::from_polar_p::<P>(r.powf_p::<P>(n.approx_reciprocal_p::<P>()), theta / n)
     }
@@ -847,9 +806,17 @@ impl<V: RealFloatVector> SpecializedTranscendentalMath<Complex<V::Element>> for 
 
     /// `log_N(z) = ln(z) / ln(N)` for a compile-time integer base.
     #[inline(always)]
-    fn log_n<P: Policy, const N: usize>(self) -> Self {
+    fn log_n_n<P: Policy, const N: usize>(self) -> Self {
         // See `nth_root`: a generic `N` rules `const_splat!` out here.
         let ln_n = V::splat(<V::Element as FloatElement>::from_int(N as thermite::LargeInt)).ln_p::<P>();
+
+        self.ln_p::<P>() / ln_n
+    }
+
+    /// `log_n(z) = ln(z) / ln(n)` for a base known only at runtime.
+    #[inline(always)]
+    fn log_n<P: Policy>(self, n: u32) -> Self {
+        let ln_n = V::splat(<V::Element as FloatElement>::from_int(n as thermite::LargeInt)).ln_p::<P>();
 
         self.ln_p::<P>() / ln_n
     }

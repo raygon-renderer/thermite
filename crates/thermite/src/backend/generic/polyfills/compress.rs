@@ -26,7 +26,7 @@
 //! - [`compress_z_merge2`] / [`compress_z_merge4`] / [`compress_z_merge8`] are
 //!   the *zeroing* left-pack for an `ArrayRegister` of 2/4/8 native chunks:
 //!   compact each chunk with its own `compress_z`, then merge the results
-//!   pairwise up a binary tree. Each merge is [`merge_pair`]: one `swizzle` per
+//!   pairwise up a binary tree. Each merge is `merge_pair`: one `swizzle` per
 //!   output chunk plus one `bitor`, no control table and no cross-chunk
 //!   `array_swizzle`. This is the `ArrayRegister::compress_z` path at every
 //!   supported chunk shape.
@@ -469,9 +469,9 @@ pub fn compress_z_wide<R: Register>(value: Storage<R>, mask: Storage<R::Mask>) -
 /// an unsupported shape falls back to the scalar default instead.
 ///
 /// The `chunk_lanes` list is inherited from the retired count-indexed control
-/// tables. The pairwise merge ([`merge_pair`]) itself needs no table and only
+/// tables. The pairwise merge (`merge_pair`) itself needs no table and only
 /// wants `chunk_lanes * chunks <= 64` (the `native_bitmask` bound
-/// [`compress_chunk_z`] relies on). Widening it is a separate change, since
+/// `compress_chunk_z` relies on). Widening it is a separate change, since
 /// every shape it would add is currently unreachable.
 #[inline(always)]
 pub const fn merge_ctrl_supported(chunk_lanes: usize, chunks: usize) -> bool {
@@ -829,12 +829,12 @@ fn merge_indices<R: Register + ?Sized, const H: usize, const TWO_H: usize>(
 /// 1. **Level 0**: [`zz`](CoreRegister::zz) the input, then compact every 8-lane
 ///    group *in place* with one permute. Group `g`'s indices are its
 ///    [`COMPRESS8`] row (entries `<= 7`, widened straight out of the table) plus
-///    the block base `8g` supplied by [`block_base`]. Each group is now
+///    the block base `8g` supplied by `block_base`. Each group is now
 ///    `[selected..., 0...]`.
 /// 2. **Merge levels**: `log2(LANES / 8)` passes at half-sizes 8, 16, 32. Each
 ///    pass reads the pair-relative `MERGE_CTRL_U8_*` rows for *all* pairs at that
 ///    level, adds the pair base, and resolves them with a single permute. See
-///    [`build_merge_ctrl_u8`] for why a one-source control can sentinel overflow
+///    `build_merge_ctrl_u8` for why a one-source control can sentinel overflow
 ///    at the left block's last lane.
 ///
 /// Valid for `LANES % 8 == 0` and `16 <= LANES <= 64` (below 16 there is nothing
@@ -1032,10 +1032,10 @@ pub fn compress_z_grouped_n<R: Register, const N: usize>(
 ///
 /// # The shift, and why the OR is exact
 ///
-/// `shift_up(tail, t)` is [`merge_pair`]'s `M == 1` trick: one
+/// `shift_up(tail, t)` is `merge_pair`'s `M == 1` trick: one
 /// [`swizzle`](Register::swizzle) whose **first** source is
 /// [`EMPTY`](CoreRegister::EMPTY) and whose index register is the constant
-/// [`lane_iota`] plus the broadcast `LANES - t`. Output lane `i` then reads
+/// `lane_iota` plus the broadcast `LANES - t`. Output lane `i` then reads
 /// index `i + LANES - t`:
 ///
 /// - `i < t`: index `< LANES`, inside the EMPTY window, so the lane is zero.
@@ -1160,7 +1160,7 @@ fn compress_chunk_z<B: Register>(chunk: Storage<B>, mask: Storage<B::Mask>) -> (
 
 /// Two-level zeroing left-pack for a 2-chunk register: compact each chunk
 /// *natively* (its own `compress_z`, fully vectorized for table-path chunks)
-/// and merge the two with [`merge_pair`], with no scalar gather-index scatter
+/// and merge the two with `merge_pair`, with no scalar gather-index scatter
 /// and no cross-chunk `array_swizzle`.
 ///
 /// Much faster than [`compress_permute_wide`] at 16 lanes (8-lane chunks): the
@@ -1262,7 +1262,7 @@ fn chunk_column<B: Register, const C: usize, const N: usize>(
 
 /// Same-mask multi-vector [`compress_z_merge2`]: the chunk compactions become
 /// the chunk register's own `compress_z_n` (recursively sharing *its* plan),
-/// the counts and the [`merge_pair_plan`] are built once, and only the blends,
+/// the counts and the `merge_pair_plan` are built once, and only the blends,
 /// swizzles and OR are per value.
 #[inline(always)]
 pub fn compress_z_merge2_n<B: Register, const N: usize>(

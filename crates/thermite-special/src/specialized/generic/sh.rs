@@ -615,7 +615,7 @@ macro_rules! sh_grad_columns {
 /// All real spherical harmonics through degree `L` at the unit direction `(x, y, z)`.
 ///
 /// `out[l * (l + 1) + m]` receives `$Y_{\ell m}$` for `m` in `-l..=l`, and `N` must
-/// equal `(L + 1)^2` (compile-time checked). See the [module docs](self) for
+/// equal `(L + 1)^2` (compile-time checked). See the module docs for
 /// conventions, the algorithm, and the unit-vector requirement.
 ///
 /// The policy parameter is currently unused (the evaluation is pure polynomial
@@ -755,7 +755,7 @@ where
         assert!(N == (L + 1) * (L + 1));
     }
 
-    let two = V::ONE + V::ONE;
+    let two = V::TWO;
 
     // q_0^0 = sqrt(1/4pi) = (1/sqrt(pi)) / 2, exactly what the fast table seeds with.
     let mut mag = V::FRAC_1_SQRT_PI / two;

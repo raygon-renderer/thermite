@@ -1,4 +1,4 @@
-//! Generalized Laguerre polynomials: `laguerre::<N>` and its per-lane sibling `laguerrev`.
+//! Generalized Laguerre polynomials: `laguerre_n::<N>` and its per-lane sibling `laguerrev`.
 //!
 //! References are the same three-term recurrence run in exact rational arithmetic
 //! (Python `fractions`) and rounded to f64 exactly once, so the tolerances below
@@ -41,7 +41,7 @@ fn close(name: &str, got: f64, want: f64, tol: f64) {
 }
 
 fn lag<const N: usize>(x: f64, alpha: f64) -> f64 {
-    D::splat(x).laguerre::<N>(D::splat(alpha)).extract::<0>()
+    D::splat(x).laguerre_n::<N>(D::splat(alpha)).extract::<0>()
 }
 
 // --- Values against the exact rational recurrence ---
@@ -244,13 +244,13 @@ fn hermitev_matches_hermite_lane_by_lane() {
 
             for lane in 0..4 {
                 let want = match ns[lane] {
-                    0 => D::splat(x).hermite::<0>(),
-                    1 => D::splat(x).hermite::<1>(),
-                    2 => D::splat(x).hermite::<2>(),
-                    3 => D::splat(x).hermite::<3>(),
-                    5 => D::splat(x).hermite::<5>(),
-                    8 => D::splat(x).hermite::<8>(),
-                    10 => D::splat(x).hermite::<10>(),
+                    0 => D::splat(x).hermite_n::<0>(),
+                    1 => D::splat(x).hermite_n::<1>(),
+                    2 => D::splat(x).hermite_n::<2>(),
+                    3 => D::splat(x).hermite_n::<3>(),
+                    5 => D::splat(x).hermite_n::<5>(),
+                    8 => D::splat(x).hermite_n::<8>(),
+                    10 => D::splat(x).hermite_n::<10>(),
                     n => unreachable!("degree {n} has no const-generic counterpart here"),
                 }
                 .extract::<0>();
@@ -281,7 +281,7 @@ fn laguerre_f32_tracks_the_reference() {
     ];
 
     for (alpha, x, want) in probes {
-        let got = F::splat(x).laguerre::<5>(F::splat(alpha)).extract::<0>();
+        let got = F::splat(x).laguerre_n::<5>(F::splat(alpha)).extract::<0>();
         close(&format!("f32 L_5^({alpha})({x})"), got as f64, want as f64, 1e-6);
     }
 }
@@ -301,7 +301,7 @@ fn laguerre_differentiates_through_dual() {
         ($n:literal, $($alpha:expr),+ $(,)?) => {$(
             for &x in &[0.5, 2.5, 7.0] {
                 let d = DD::variable(D::splat(x), 0)
-                    .laguerre::<$n>(DD::constant(D::splat($alpha)));
+                    .laguerre_n::<$n>(DD::constant(D::splat($alpha)));
 
                 let value = d.value().extract::<0>();
                 let slope = d.gradient()[0].extract::<0>();

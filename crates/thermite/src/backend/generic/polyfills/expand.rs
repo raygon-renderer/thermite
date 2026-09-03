@@ -30,7 +30,7 @@
 //!   16/32/64-lane register: `log2(LANES / 8)` permutes *unmerge* the packed run
 //!   back into per-8-lane-group runs, then one permute scatters each group and a
 //!   `zz` zeroes the rest. Branchless, and the mirror of
-//!   [`compress_z_grouped`](super::compress::compress_z_grouped), run backwards.
+//!   [`compress_z_grouped`], run backwards.
 //!   This is the `expand_z` arm of `compress_via_wide!`.
 //! - [`expand_grouped`] is the *non-zeroing* form at the same shapes, and the
 //!   `expand` arm of `compress_via_wide!`. Two [`expand_z_grouped`] trees (one
@@ -169,7 +169,7 @@ pub unsafe fn expand_permute8_raw<R: Register>(value: Storage<R>, mask: Storage<
 
 /// Same-mask multi-vector form of [`expand_permute`]: one table row fetch
 /// shared by `N` [`permutev_row`](Register::permutev_row)s, the mirror of
-/// [`compress_permute_n`](super::compress::compress_permute_n).
+/// [`compress_permute_n`].
 #[inline(always)]
 pub fn expand_permute_n<R, const N: usize>(values: [Storage<R>; N], mask: Storage<R::Mask>) -> [Storage<R>; N]
 where
@@ -244,7 +244,7 @@ where
 }
 
 /// The assert-free body of [`expand_permute_wide`], the mirror of
-/// [`compress_permute_wide_raw`](super::compress::compress_permute_wide_raw).
+/// [`compress_permute_wide_raw`].
 /// Blanket impls like `ArrayRegister` route here from an `if const` guard: a
 /// `const` block inside an untaken `if const` arm still evaluates at
 /// monomorphization, so the safe wrapper's asserts would fire for exactly the
@@ -490,7 +490,7 @@ fn unmerge_indices<R: Register + ?Sized, const H: usize, const TWO_H: usize>(
 /// Zeroing inverse left-pack for a native wide register: **`log2` unmerge passes
 /// plus grouped rows**, entirely in one register and entirely branchless. It is
 /// the exact inverse of
-/// [`compress_z_grouped`](super::compress::compress_z_grouped) on the selected
+/// [`compress_z_grouped`] on the selected
 /// data, run backwards.
 ///
 /// `compress_z_grouped` goes *group compress -> merge 8 -> merge 16 -> merge
@@ -510,7 +510,7 @@ fn unmerge_indices<R: Register + ?Sized, const H: usize, const TWO_H: usize>(
 ///    `compress_z_grouped`, which zeroes *first*: that direction may assume its
 ///    pad lanes are zero, whereas here the caller's lanes past
 ///    `popcount(mask)` are unspecified and there is no free zero to sentinel
-///    at. See [`build_unmerge_ctrl_u8`] for the live-prefix invariant that
+///    at. See `build_unmerge_ctrl_u8` for the live-prefix invariant that
 ///    makes "dead lanes may hold anything" sound at every level.
 ///
 /// Valid for `LANES % 8 == 0` and `16 <= LANES <= 64`, the same shapes as
@@ -685,7 +685,7 @@ pub fn expand_z_grouped_n<R: Register, const N: usize>(
 ///
 /// `shift_down(v, t)` is one [`swizzle`](Register::swizzle) whose **second**
 /// source is [`EMPTY`](CoreRegister::EMPTY) and whose index register is the
-/// constant [`lane_iota`](super::compress::lane_iota) plus the broadcast `t`.
+/// constant `lane_iota` plus the broadcast `t`.
 /// Output lane `j` reads index `j + t`: inside `0..LANES` that is `v[t + j]`,
 /// and at `j + t >= LANES` it falls into the EMPTY window and reads zero. Only
 /// `j < LANES - t` is ever consumed (there are exactly `LANES - t` unselected

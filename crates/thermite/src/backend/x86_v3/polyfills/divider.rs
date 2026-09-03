@@ -1,10 +1,7 @@
 use super::*;
 
-// libdivide.h - Optimized integer division
-// https://libdivide.com
-//
-// Copyright (C) 2010 - 2019 ridiculous_fish, <libdivide@ridiculousfish.com>
-// Copyright (C) 2016 - 2019 Kim Walisch, <kim.walisch@gmail.com>
+// Ported from libdivide (https://libdivide.com), dual-licensed zlib / BSL-1.0.
+// Copyright (C) 2010-2019 ridiculous_fish, 2016-2019 Kim Walisch.
 
 #[inline(always)]
 pub unsafe fn _mm256_mullhi_epu64x_v3(x: __m256i, y: __m256i) -> __m256i {

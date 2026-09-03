@@ -29,9 +29,9 @@ fn main() {
 
     let e = 0.8717676911661476;
     println!("expint1({e})");
-    println!("  perf  {:.17e}", s(e).expint_p::<Performance, 1>().extract::<0>());
-    println!("  prec  {:.17e}", s(e).expint_p::<Precision, 1>().extract::<0>());
-    println!("  ref   {:.17e}", s(e).expint_p::<Reference, 1>().extract::<0>());
+    println!("  perf  {:.17e}", s(e).expint_n_p::<Performance, 1>().extract::<0>());
+    println!("  prec  {:.17e}", s(e).expint_n_p::<Precision, 1>().extract::<0>());
+    println!("  ref   {:.17e}", s(e).expint_n_p::<Reference, 1>().extract::<0>());
 
     let z = Complex::new(s(-8.4), s(0.0));
     println!("Re w(-8.4 + 0i)   [true = e^-70.56 = 2.2708e-31]");

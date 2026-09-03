@@ -682,10 +682,10 @@ impl<C, V: CompensatedFloatVector> NewConst<V::Element, V::Lanes> for Compensate
 where
     C: NewConst<Compensated<V::Element>, V::Lanes>,
 {
-    const VALUES: thermite::generic_array::GenericArray<V::Element, V::Lanes> = const {
+    const VALUES: GenericArray<V::Element, V::Lanes> = const {
         let c_vals = C::VALUES;
         let src = c_vals.as_slice();
-        let mut out: thermite::generic_array::GenericArray<V::Element, V::Lanes> = unsafe { core::mem::zeroed() };
+        let mut out: GenericArray<V::Element, V::Lanes> = unsafe { core::mem::zeroed() };
         let dst = out.as_mut_slice();
         let mut i = 0;
         while i < V::LANES {
@@ -701,10 +701,10 @@ impl<C, V: CompensatedFloatVector> NewConst<V::Element, V::Lanes> for Compensate
 where
     C: NewConst<Compensated<V::Element>, V::Lanes>,
 {
-    const VALUES: thermite::generic_array::GenericArray<V::Element, V::Lanes> = const {
+    const VALUES: GenericArray<V::Element, V::Lanes> = const {
         let c_vals = C::VALUES;
         let src = c_vals.as_slice();
-        let mut out: thermite::generic_array::GenericArray<V::Element, V::Lanes> = unsafe { core::mem::zeroed() };
+        let mut out: GenericArray<V::Element, V::Lanes> = unsafe { core::mem::zeroed() };
         let dst = out.as_mut_slice();
         let mut i = 0;
         while i < V::LANES {
@@ -1625,6 +1625,46 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
         V::_loop_hint()
     }
 
+    #[inline(always)]
+    #[track_caller]
+    fn _enter(name: &'static str) -> u32 {
+        V::_enter_tagged("Compensated", name)
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _enter_tagged(tag: &'static str, name: &'static str) -> u32 {
+        V::_enter_tagged(tag, name)
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _exit(token: u32) {
+        V::_exit(token)
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _region_arg(mut self, token: u32) -> Self {
+        self.value = self.value._region_arg(token);
+        self.error = self.error._region_arg(token);
+        self
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _region_result(mut self, token: u32) -> Self {
+        self.value = self.value._region_result(token);
+        self.error = self.error._region_result(token);
+        self
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _region_imm(token: u32, imm: core::fmt::Arguments) {
+        V::_region_imm(token, imm)
+    }
+
     type Element = Compensated<V::Element>;
 
     const EMPTY: Self = Self::new(V::ZERO);
@@ -1667,8 +1707,8 @@ impl<V: CompensatedFloatVector> GenericVector for Compensated<V> {
     }
 
     #[inline(always)]
-    fn into_array(self) -> thermite::generic_array::GenericArray<Self::Element, Self::Lanes> {
-        let mut arr = thermite::generic_array::GenericArray::default();
+    fn into_array(self) -> GenericArray<Self::Element, Self::Lanes> {
+        let mut arr = GenericArray::default();
 
         for i in 0..Self::LANES {
             arr[i] = Compensated {

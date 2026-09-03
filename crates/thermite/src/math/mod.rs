@@ -53,226 +53,6 @@ pub trait Coefficients<T, const N: usize> {
 // Helper macro to declare math traits and implementations
 // for both policy and default policy versions. This reduces
 // boilerplate and ensures consistency between the two traits,
-// though it is a bit annoying to read and write.
-macro_rules! decl_math {
-    ($(
-        $(#[$trait_meta:meta])*
-        // Each supertrait bound may carry associated-type bindings, parsed
-        // structurally (`Bound<Name = Ty, ...>`) because a tt-repetition cannot
-        // terminate at a closing angle bracket. This is how `PrimalMath` states
-        // `PrimalProjection<Primal = Self>` directly in supertrait position.
-        trait $trait:ident<$element:ident> $(: $( $bound:ident $(< $($bound_assoc:ident = $bound_ty:ty),+ >)? )&+ )? {
-            // Optional policy-driven methods that exist on vectors only. Same `_p` and
-            // default-policy treatment as the ordinary items below, but no `scalar_`
-            // form: their signatures mention associated types (`Self::Primal` from the
-            // `PrimalProjection` supertrait) that a bare `f32` does not have. (Nor
-            // would one be useful, since a scalar is its own primal, so the scalar
-            // form would duplicate the plain method exactly.)
-            $(vector_fns {
-                $(
-                    $(#[$vfn_meta:meta])*
-                    fn $vfn_name:ident [ $($vfn_generics:tt)* ][$($vfn_generic_names:ident),*]( $($vfn_arg:ident : $vfn_ty:ty),* $(,)?) -> $vfn_ret:ty;
-                )*
-            })?
-            $(
-                $(#[$meta:meta])*
-                fn $name:ident [ $($generics:tt)* ][$($generic_names:ident),*]( $($arg_name:ident :$arg_ty:ty),* $(,)?) -> $ret:ty
-                    $(where [ $($where_clause:tt)* ])?;
-            )*
-        }
-    )*) => {paste::paste! {$(
-        #[doc = "" $trait " Math functions for floating-point vectors with customizable policies."]
-        $(#[$trait_meta])*
-        #[doc = ""]
-        #[doc = "This trait provides a set of " [<$trait:lower>] " mathematical operations that can be performed"]
-        #[doc = "on floating-point vector types. Each function has a variant that accepts"]
-        #[doc = "a policy parameter, which controls precision and performance."]
-        #[doc = ""]
-        #[doc = "For convenience, a default implementation is also provided in the [`" $trait "Math`] trait,"]
-        #[doc = "which uses the [`DefaultPolicy`]. All floating-point vector types that implement"]
-        #[doc = "the necessary internal math operations will automatically implement this trait, and"]
-        #[doc = "the [`" $trait "Math`] trait as well for all types that implement this one."]
-        #[thermite_macros::dispatch(Self, thermite = "crate")]
-        pub trait [<$trait MathWithPolicy>] $(: $($bound $(< $($bound_assoc = $bound_ty),+ >)? +)+)? {
-            $($(
-                $(#[$vfn_meta])* fn [<$vfn_name _p>]<P: Policy, $($vfn_generics)*>($($vfn_arg: $vfn_ty),*) -> $vfn_ret;
-            )*)?
-            $(
-                $(#[$meta])* fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
-                    $(where $($where_clause)*)?;
-            )*
-        }
-
-        #[doc = "" $trait " Math functions for floating-point vectors using the default policy."]
-        $(#[$trait_meta])*
-        #[doc = ""]
-        #[doc = "This trait requires " $($("[`" $bound "`]") ", "+)? " via the bounds on [`" $trait "MathWithPolicy`]."]
-        #[doc = ""]
-        #[doc = "This trait provides the same set of mathematical operations as [`" $trait "MathWithPolicy`],"]
-        #[doc = "but uses the [`DefaultPolicy`] for all operations. This allows for easier usage"]
-        #[doc = "when specific policy customization is not required."]
-        #[doc = ""]
-        #[doc = "Implementors of [`" $trait "MathWithPolicy`] will automatically implement this trait as well."]
-        #[doc = ""]
-        #[doc = "All methods here have an associated method in [`" $trait "MathWithPolicy`] with a `_p` suffix"]
-        #[doc = "that accepts a policy parameter as the first generic argument."]
-        #[thermite_macros::dispatch(Self, thermite = "crate")]
-        pub trait [<$trait Math>]: [<$trait MathWithPolicy>] {
-            $($(
-                // `<Self as ...>` explicitly: an argument typed through an associated
-                // type cannot drive `Self` inference, since the projection is not
-                // injective.
-                $(#[$vfn_meta])* #[inline(always)] fn $vfn_name<$($vfn_generics)*>($($vfn_arg: $vfn_ty),*) -> $vfn_ret
-                { <Self as [<$trait MathWithPolicy>]>::[<$vfn_name _p>]::<DefaultPolicy, $($vfn_generic_names),*>($($vfn_arg),*) }
-            )*)?
-            $(
-                $(#[$meta])* #[inline(always)] fn $name<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
-                    $(where $($where_clause)*)?
-                { [<$trait MathWithPolicy>]::[<$name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*) }
-            )*
-        }
-
-        impl<M> [<$trait Math>] for M where M: [<$trait MathWithPolicy>] {}
-
-        // Note: The FloatVector<Element = E> bound is necessary to ensure E is bounded.
-        #[thermite_macros::dispatch(Self, thermite = "crate")]
-        impl<E: $element, V: FloatVector<Element = E> + $($($bound $(< $($bound_assoc = $bound_ty),+ >)? +)+)?> [<$trait MathWithPolicy>] for V
-            where V: specialized::[<Specialized $trait Math>]<E>
-        {
-            $($(
-                $(#[$vfn_meta])* #[skip_dispatch] #[inline(always)]
-                fn [<$vfn_name _p>]<P: Policy, $($vfn_generics)*>($($vfn_arg: $vfn_ty),*) -> $vfn_ret
-                { <V as specialized::[<Specialized $trait Math>]<E>>::$vfn_name::<P, $($vfn_generic_names),*>($($vfn_arg),*) }
-            )*)?
-            $(
-                #[cfg(not(feature = "disable_dispatch"))]
-                $(#[$meta])* #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
-                    $(where $($where_clause)*)?
-                { <V as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*) }
-
-                #[cfg(feature = "disable_dispatch")]
-                $(#[$meta])* #[skip_dispatch] #[inline(always)] fn [<$name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
-                    $(where $($where_clause)*)?
-                { <V as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($($arg_name),*) }
-            )*
-        })*
-
-        #[doc = "Aggregate of all scalar math traits with customizable policies."]
-        #[doc = ""]
-        #[doc = "This trait collects every method from the following trait families into a single"]
-        #[doc = "trait implemented directly on `f32` and `f64`:"]
-        #[doc = ""]
-        $(#[doc = "- [`" [<$trait MathWithPolicy>] "`]"])*
-        #[doc = ""]
-        #[doc = "All methods are prefixed with `scalar_` to avoid conflicts with the inherent methods"]
-        #[doc = "already defined on `f32`/`f64` (e.g., `f32::sin`, `f32::exp`). The policy-aware"]
-        #[doc = "versions additionally carry a `_p` suffix, following the same convention as the"]
-        #[doc = "vector math traits."]
-        #[doc = ""]
-        #[doc = "# Limitations"]
-        #[doc = ""]
-        #[doc = "This trait is **only** implemented for bare scalar types. Code that is generic over"]
-        #[doc = "a `FloatVector` bound will not accept a bare `f32` or `f64` - the scalar must be"]
-        #[doc = "wrapped in [`Vector`](crate::Vector) first (e.g., `Vector::<f32>(x)`) to satisfy"]
-        #[doc = "that bound. `ScalarMath` exists purely as a convenience for call-sites that already"]
-        #[doc = "hold a concrete scalar and do not need to be generic."]
-        #[doc = ""]
-        #[doc = "For convenience, a default-policy version is provided by [`ScalarMath`], which"]
-        #[doc = "drops the `_p` suffix and uses [`DefaultPolicy`] for all operations."]
-        #[thermite_macros::dispatch(Self, thermite = "crate")]
-        #[diagnostic::on_unimplemented(
-            message = "`{Self}` is not a bare floating-point scalar",
-            note = "`ScalarMathWithPolicy` is implemented only for the bare scalar types `f32` and `f64`. For SIMD vectors, bound on `FloatVector` plus the vector math traits (`CoreMath`, `TranscendentalMath`, ...) instead."
-        )]
-        pub trait ScalarMathWithPolicy: ElementExt<Element = Self> + FloatElementWithBits {$($(
-            $(#[$meta])* fn [<scalar_ $name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
-                $(where $($where_clause)*)?;
-        )*)*
-
-            /// Square root of `self`.
-            ///
-            /// Unlike the rest of this trait, `sqrt` is not a policy-driven approximation. It is
-            /// exact (correctly rounded) on all supported formats, so the policy is ignored. This
-            /// exists only so scalar code can spell it the same way as the other `scalar_` methods;
-            /// on vectors, `sqrt` is an inherent [`FloatVector`] method rather than a math trait one.
-            #[inline(always)]
-            fn scalar_sqrt_p<P: Policy>(self) -> Self {
-                FloatElement::sqrt(self)
-            }
-        }
-
-        #[doc = "Aggregate of all scalar math traits using the default policy."]
-        #[doc = ""]
-        #[doc = "This trait collects every method from the following trait families into a single"]
-        #[doc = "trait implemented directly on `f32` and `f64`, using [`DefaultPolicy`] for all operations:"]
-        #[doc = ""]
-        $(#[doc = "- [`" [<$trait Math>] "`]"])*
-        #[doc = ""]
-        #[doc = "All methods are prefixed with `scalar_` to avoid conflicts with the inherent methods"]
-        #[doc = "already defined on `f32`/`f64`. See [`ScalarMathWithPolicy`] for the policy-aware"]
-        #[doc = "variant, which additionally carries a `_p` suffix on each method."]
-        #[doc = ""]
-        #[doc = "# Limitations"]
-        #[doc = ""]
-        #[doc = "This trait is **only** implemented for bare scalar types. Code that is generic over"]
-        #[doc = "a `FloatVector` bound will not accept a bare `f32` or `f64` - the scalar must be"]
-        #[doc = "wrapped in [`Vector`](crate::Vector) first (e.g., `Vector::<f32>(x)`) to satisfy"]
-        #[doc = "that bound. `ScalarMath` exists purely as a convenience for call-sites that already"]
-        #[doc = "hold a concrete scalar and do not need to be generic."]
-        #[doc = ""]
-        #[doc = "All types that implement [`ScalarMathWithPolicy`] automatically implement this trait."]
-        #[thermite_macros::dispatch(Self, thermite = "crate")]
-        #[diagnostic::on_unimplemented(
-            message = "`{Self}` is not a bare floating-point scalar",
-            note = "`ScalarMath` is implemented only for the bare scalar types `f32` and `f64`. For SIMD vectors, bound on `FloatVector` plus the vector math traits (`CoreMath`, `TranscendentalMath`, ...) instead."
-        )]
-        pub trait ScalarMath: ScalarMathWithPolicy {$($(
-            $(#[$meta])* #[inline(always)] fn [<scalar_ $name>]<$($generics)*>($($arg_name: $arg_ty),*) -> $ret
-                $(where $($where_clause)*)?
-            { ScalarMathWithPolicy::[<scalar_ $name _p>]::<DefaultPolicy, $($generic_names),*>($($arg_name),*) }
-        )*)*
-
-            /// Square root of `self`.
-            ///
-            /// See [`ScalarMathWithPolicy::scalar_sqrt_p`]. `sqrt` is exact, so this is simply the
-            /// scalar spelling of the inherent [`FloatVector::sqrt`] vector method.
-            #[inline(always)]
-            fn scalar_sqrt(self) -> Self {
-                ScalarMathWithPolicy::scalar_sqrt_p::<DefaultPolicy>(self)
-            }
-        }
-
-        impl<M> ScalarMath for M where M: ScalarMathWithPolicy {}
-
-        #[thermite_macros::dispatch(Self, thermite = "crate")]
-        impl<E: ElementExt<Element = Self> + FloatElementWithBits> ScalarMathWithPolicy for E
-        where
-            $crate::Vector<E>: Unwrap<Unwrapped = E> +
-                FloatVectorWithBits<Element = E,
-                    Signed: Unwrap<Unwrapped = <E as Element>::Signed>,
-                    Unsigned: Unwrap<Unwrapped = <E as Element>::Unsigned>,
-                    SignedBits: Unwrap<Unwrapped = <E as FloatElementWithBits>::SignedBits>,
-                    Bits: Unwrap<Unwrapped = <E as FloatElementWithBits>::Bits>
-                >
-                $(+ specialized::[<Specialized $trait Math>]<E>)*,
-            E: $crate::register::FloatRegister<Storage = E>,
-        {$($(
-            $(#[$meta])* #[skip_dispatch] #[inline(always)] fn [<scalar_ $name _p>]<P: Policy, $($generics)*>($($arg_name: $arg_ty),*) -> $ret
-                $(where $($where_clause)*)?
-            {
-                let ($(decl_math!(@SELF $arg_name this),)*) = Unwrap::wrap(($($arg_name,)*));
-
-                let res = <$crate::Vector<E> as specialized::[<Specialized $trait Math>]<E>>::$name::<P, $($generic_names),*>($(decl_math!(@SELF $arg_name this)),*);
-
-                Unwrap::unwrap(res)
-            }
-        )*)*}
-    }};
-
-    // rename `self` to `this`. Requires an existing ident to bind to.
-    (@SELF self $rename:ident) => { $rename };
-    (@SELF $other:ident $rename:ident) => { $other };
-}
 
 #[cfg(test)]
 mod tests {
@@ -354,13 +134,18 @@ impl<E: FloatElement, V: FloatVector<Element = E> + specialized::SpecializedPrim
     }
 }
 
-decl_math! {
+thermite_macros::math_traits! {
+    #![thermite(crate)]
+    #![scalar(ScalarMath)]
+    #![surface]
+
     /// Float-specific mathematical functions like `ldexp` and `frexp`.
     #[diagnostic::on_unimplemented(
         message = "`{Self}` does not provide float bit-level math (`ldexp`, `frexp`, `flush_denormals`)",
         note = "This trait is auto-implemented for every `FloatVectorWithBits` (concrete float vectors such as `Vector<f32>` / `f32xN`). A bare `f32`/`f64` has to be wrapped in `Vector::<f32>::splat(x)`. For scalar math use `ScalarMath` instead."
     )]
-    trait Float<FloatElementWithBits>: FloatVectorWithBits {
+    #[element(FloatElementWithBits)]
+    pub trait FloatMath: FloatVectorWithBits {
         /// Computes `self * 2^exp` efficiently.
         ///
         /// The default policy handles the full domain: overflow gives a signed
@@ -373,7 +158,7 @@ decl_math! {
         /// `frexp`, for instance) can drop all of it with
         /// `ldexp_p::<CheckOverflow<P, false>>(exp)`, leaving an add, a shift
         /// and an or. Out-of-domain inputs are then garbage in, garbage out.
-        fn ldexp[][](self: Self, exp: Self::SignedBits) -> Self;
+        fn ldexp(self, exp: Self::SignedBits) -> Self;
 
         /// Decomposes `self` into its normalized fraction and an integral power of two.
         ///
@@ -384,7 +169,7 @@ decl_math! {
         /// denormal/subnormal values are properly handled regardless, not flushed. Mixed
         /// workloads of normal and denormal values will be slower than all-similar workloads
         /// due to branch prediction misprediction. This was the fastest approach overall.
-        fn frexp[][](self: Self) -> (Self, Self::SignedBits);
+        fn frexp(self) -> (Self, Self::SignedBits);
 
         /// Removes denormal/subnormal values, flushing them to zero.
         ///
@@ -398,7 +183,7 @@ decl_math! {
         ///
         /// See [`DenormalBehavior`](policy::DenormalBehavior) for more options for how to control
         /// this function, as it is used extensively internally.
-        fn flush_denormals[][](self: Self) -> Self;
+        fn flush_denormals(self) -> Self;
     }
 
     /// This is the core set of mathematical operations that form the basis for more advanced functions.
@@ -406,55 +191,55 @@ decl_math! {
         message = "`{Self}` does not provide core polynomial math (`poly`, `poly_rev`, ...)",
         note = "The math traits are auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types. A bare `f32`/`f64` does not qualify. Wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`'s `scalar_`-prefixed methods."
     )]
-    trait Core<FloatElement>: FloatVector & PrimalProjection {
-        vector_fns {
-            /// [`poly`](Self::poly) with the coefficients held in [`Primal`](Self::Primal) form.
-            ///
-            /// The augmented fields of a constant (a `Dual`'s derivatives, a `Complex`'s
-            /// imaginary part) are identically zero, so carrying coefficients in `Self`
-            /// stores those zeros and then adds them at every Horner step. Neither the
-            /// storage nor the addition can be optimized away: `x + 0.0` is not `x` when
-            /// `x` is `-0.0`, so the adds survive to run time.
-            ///
-            /// Taking them as `Self::Primal` removes both. The coefficient array shrinks by
-            /// the augmentation factor (4x for `Dual<V, 3>`, 2x for `Complex`), and each
-            /// Horner step adds to the primal component alone.
-            ///
-            /// For a type that is its own primal this is exactly [`poly`](Self::poly) with
-            /// pre-splatted coefficients, and the default impl reduces to it.
-            ///
-            /// Coefficients are _vectors_, not elements: a caller with a constant table has
-            /// usually splatted it once already, and the composites that benefit most are
-            /// the ones for which splatting per call would be the expensive part.
-            ///
-            /// The length is a [`typenum`](generic_array::typenum) length rather than a
-            /// `const N: usize` so that a coefficient table can be supplied by a type that
-            /// knows its own length only as an associated type. Literal call sites spell it
-            /// [`GenericArray::from_array`].
-            fn poly_n_primal[N: ArrayLength][N](self: Self, coeffs: &GenericArray<Self::Primal, N>) -> Self;
+    #[element(FloatElement)]
+    pub trait CoreMath: FloatVector + PrimalProjection {
+        /// [`poly`](CoreMath::poly) with the coefficients held in [`Primal`](PrimalProjection::Primal) form.
+        ///
+        /// The augmented fields of a constant (a `Dual`'s derivatives, a `Complex`'s
+        /// imaginary part) are identically zero, so carrying coefficients in `Self`
+        /// stores those zeros and then adds them at every Horner step. Neither the
+        /// storage nor the addition can be optimized away: `x + 0.0` is not `x` when
+        /// `x` is `-0.0`, so the adds survive to run time.
+        ///
+        /// Taking them as `Self::Primal` removes both. The coefficient array shrinks by
+        /// the augmentation factor (4x for `Dual<V, 3>`, 2x for `Complex`), and each
+        /// Horner step adds to the primal component alone.
+        ///
+        /// For a type that is its own primal this is exactly [`poly`](CoreMath::poly) with
+        /// pre-splatted coefficients, and the default impl reduces to it.
+        ///
+        /// Coefficients are _vectors_, not elements: a caller with a constant table has
+        /// usually splatted it once already, and the composites that benefit most are
+        /// the ones for which splatting per call would be the expensive part.
+        ///
+        /// The length is a [`typenum`](generic_array::typenum) length rather than a
+        /// `const N: usize` so that a coefficient table can be supplied by a type that
+        /// knows its own length only as an associated type. Literal call sites spell it
+        /// [`GenericArray::from_array`].
+        #[vector_only] #[skip_dispatch] fn poly_n_primal<N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self;
 
-            /// [`poly_rev`](Self::poly_rev) with the coefficients held in [`Primal`](Self::Primal) form.
-            ///
-            /// Same trade as [`poly_n_primal`](Self::poly_n_primal) (the constants carry no
-            /// augmented fields to store or add), with the coefficients in reverse order.
-            fn poly_rev_n_primal[N: ArrayLength][N](self: Self, coeffs: &GenericArray<Self::Primal, N>) -> Self;
+        /// [`poly_rev`](CoreMath::poly_rev) with the coefficients held in [`Primal`](PrimalProjection::Primal) form.
+        ///
+        /// Same trade as [`poly_n_primal`](CoreMath::poly_n_primal) (the constants carry no
+        /// augmented fields to store or add), with the coefficients in reverse order.
+        #[vector_only] #[skip_dispatch] fn poly_rev_n_primal<N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self;
 
-            /// [`poly_n_primal`](Self::poly_n_primal) over a runtime-length slice.
-            ///
-            /// A plain slice rather than a `GenericArray`, since the length is no longer
-            /// carried in the type, which is also why this one has no reason to reach for
-            /// `typenum`. Same primal-Horner step and the same saving on the addend. What
-            /// the runtime length costs is the unrolling and, for real vectors, the ILP
-            /// lowering, exactly as in [`poly`](Self::poly).
-            ///
-            /// The empty polynomial is `0`.
-            #[skip_dispatch] fn poly_primal[][](self: Self, coeffs: &[Self::Primal]) -> Self;
+        /// [`poly_n_primal`](CoreMath::poly_n_primal) over a runtime-length slice.
+        ///
+        /// A plain slice rather than a `GenericArray`, since the length is no longer
+        /// carried in the type, which is also why this one has no reason to reach for
+        /// `typenum`. Same primal-Horner step and the same saving on the addend. What
+        /// the runtime length costs is the unrolling and, for real vectors, the ILP
+        /// lowering, exactly as in [`poly`](CoreMath::poly).
+        ///
+        /// The empty polynomial is `0`.
+        #[vector_only] #[skip_dispatch] #[compose] fn poly_primal(self, coeffs: &[Self::Primal]) -> Self;
 
-            /// [`poly_rev_n_primal`](Self::poly_rev_n_primal) over a runtime-length slice.
-            ///
-            /// Same trade as [`poly_primal`](Self::poly_primal), coefficients descending.
-            #[skip_dispatch] fn poly_rev_primal[][](self: Self, coeffs: &[Self::Primal]) -> Self;
-        }
+        /// [`poly_rev_n_primal`](CoreMath::poly_rev_n_primal) over a runtime-length slice.
+        ///
+        /// Same trade as [`poly_primal`](CoreMath::poly_primal), coefficients descending.
+        #[vector_only] #[skip_dispatch] #[compose] fn poly_rev_primal(self, coeffs: &[Self::Primal]) -> Self;
+
 
         /// Computes the polynomial with the given coefficients at `self`.
         ///
@@ -462,9 +247,9 @@ decl_math! {
         /// falls back to standard operations if not.
         ///
         /// If you know the length of your coefficient array at compile time,
-        /// **strongly** consider using [`poly_n`](Self::poly_n) instead,
+        /// **strongly** consider using [`poly_n`](CoreMath::poly_n) instead,
         /// which can be optimized more aggressively.
-        #[skip_dispatch] fn poly[][](self: Self, coeffs: &[Self::Element]) -> Self;
+        #[skip_dispatch] #[compose] fn poly(self, coeffs: &[Self::Element]) -> Self;
 
         /// Computes the polynomial with the given coefficients at `self`, but with the coefficients in reverse order.
         ///
@@ -472,21 +257,21 @@ decl_math! {
         /// falls back to standard operations if not.
         ///
         /// If you know the length of your coefficient array at compile time,
-        /// **strongly** consider using [`poly_rev_n`](Self::poly_rev_n) instead,
+        /// **strongly** consider using [`poly_rev_n`](CoreMath::poly_rev_n) instead,
         /// which can be optimized more aggressively.
-        #[skip_dispatch] fn poly_rev[][](self: Self, coeffs: &[Self::Element]) -> Self;
+        #[skip_dispatch] #[compose] fn poly_rev(self, coeffs: &[Self::Element]) -> Self;
 
         /// Computes the polynomial with the given coefficients at `self`.
         ///
         /// This will use fused multiply-add instructions where available for improved performance and accuracy, but
         /// falls back to standard operations if not.
-        #[skip_dispatch] fn poly_n[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+        #[skip_dispatch] #[compose] fn poly_n<const N: usize>(self, coeffs: &[Self::Element; N]) -> Self;
 
         /// Computes the polynomial with the given coefficients at `self`, but with the coefficients in reverse order.
         ///
         /// This will use fused multiply-add instructions where available for improved performance and accuracy, but
         /// falls back to standard operations if not.
-        #[skip_dispatch] fn poly_rev_n[const N: usize][N](self: Self, coeffs: &[Self::Element; N]) -> Self;
+        #[skip_dispatch] #[compose] fn poly_rev_n<const N: usize>(self, coeffs: &[Self::Element; N]) -> Self;
 
         /// Computes the ratio of two polynomials at `self`, given the numerator and denominator coefficients.
         ///
@@ -494,11 +279,7 @@ decl_math! {
         ///
         /// This will use fused multiply-add instructions where available for improved performance and accuracy, but
         /// falls back to standard operations if not.
-        #[skip_dispatch] fn poly_rational_n[const N: usize, const D: usize][N, D](
-            self: Self,
-            numerator: &[Self::Element; N],
-            denominator: &[Self::Element; D],
-        ) -> Self;
+        #[skip_dispatch] #[compose] fn poly_rational_n<const N: usize, const D: usize>(self, numerator: &[Self::Element; N], denominator: &[Self::Element; D]) -> Self;
 
         /// Returns the multiplicative inverse of `self`, which is `1 / self`.
         ///
@@ -509,14 +290,14 @@ decl_math! {
         ///
         /// If using the policy version, you may select lower precision policies for extra performance,
         /// at the cost of accuracy.
-        fn approx_reciprocal[][](self: Self) -> Self;
+        fn approx_reciprocal(self) -> Self;
 
         /// Returns the result of dividing `self` by `divisor`, i.e., `self / divisor`.
         ///
         /// Depending on the precision policy and available features, this may be
         /// optimized to use approximate reciprocal and multiplication for better
         /// performance, at the cost of accuracy.
-        fn approx_div[][](self: Self, divisor: Self) -> Self;
+        fn approx_div(self, divisor: Self) -> Self;
 
         /// Returns `$a/\sqrt{b}$`, spelled `a.approx_div_sqrt(b)`, as one kernel rather
         /// than a divide bolted onto a square root.
@@ -534,7 +315,7 @@ decl_math! {
         /// correctly rounded and there is nothing left for the kernel to add.
         ///
         /// `$b = 0$` gives infinity and `$b < 0$` gives NaN, inherited from the root.
-        fn approx_div_sqrt[][](self: Self, denom: Self) -> Self;
+        fn approx_div_sqrt(self, denom: Self) -> Self;
 
         /// `$ab - cd$`, spelled `a.difference_of_products(b, c, d)`, evaluated so the
         /// two products cannot cancel catastrophically.
@@ -569,7 +350,7 @@ decl_math! {
         /// what an unsuffixed call gets. Without FMA the naive form is both the
         /// cheapest available _and_ the only one with the exactness property, so it
         /// runs at every precision rather than emulating a fused multiply.
-        fn difference_of_products[][](self: Self, b: Self, c: Self, d: Self) -> Self;
+        fn difference_of_products(self, b: Self, c: Self, d: Self) -> Self;
 
         /// `$ab + cd$`, spelled `a.sum_of_products(b, c, d)`.
         ///
@@ -578,7 +359,7 @@ decl_math! {
         /// cancels exactly as badly as a difference when the two terms have opposite
         /// signs, which is the ordinary case for the imaginary half of a complex
         /// multiply.
-        fn sum_of_products[][](self: Self, b: Self, c: Self, d: Self) -> Self;
+        fn sum_of_products(self, b: Self, c: Self, d: Self) -> Self;
 
         /// The harmonic mean of `N` values, `$N / \sum_i 1/x_i$`.
         ///
@@ -597,7 +378,7 @@ decl_math! {
         ///
         /// A zero anywhere in the input gives `0`, which is the limit rather than a special
         /// case. An infinite element simply contributes nothing.
-        fn harmonic_mean_n[const N: usize][N](values: [Self; N]) -> Self;
+        fn harmonic_mean_n<const N: usize>(values: [Self; N]) -> Self;
 
         /// [`harmonic_mean_n`](CoreMath::harmonic_mean_n) over a runtime-length slice.
         ///
@@ -608,7 +389,7 @@ decl_math! {
         ///
         /// The mean of no values is `NaN` (`0/0`), matching the empty-average convention
         /// rather than inventing a value.
-        #[skip_dispatch] fn harmonic_mean[][](values: &[Self]) -> Self;
+        #[skip_dispatch] #[compose] fn harmonic_mean(values: &[Self]) -> Self;
 
         /// `$1 / \sum_i 1/x_i$`, the reciprocal of the sum of reciprocals of `N` values.
         ///
@@ -625,7 +406,7 @@ decl_math! {
         ///
         /// Same scaled evaluation and same edge cases as
         /// [`harmonic_mean_n`](CoreMath::harmonic_mean_n).
-        fn inv_sum_inv_n[const N: usize][N](values: [Self; N]) -> Self;
+        fn inv_sum_inv_n<const N: usize>(values: [Self; N]) -> Self;
 
         /// [`inv_sum_inv_n`](CoreMath::inv_sum_inv_n) over a runtime-length slice.
         ///
@@ -633,19 +414,19 @@ decl_math! {
         /// [`harmonic_mean`](CoreMath::harmonic_mean), with the same loss of unrolling. The
         /// empty input gives `$1/0 =$` infinity, the identity of the parallel-combination
         /// law this implements.
-        #[skip_dispatch] fn inv_sum_inv[][](values: &[Self]) -> Self;
+        #[skip_dispatch] #[compose] fn inv_sum_inv(values: &[Self]) -> Self;
 
         /// Returns the inverse square root of `self`, which is `1 / sqrt(self)`.
         ///
         /// If using the policy version, you may select lower precision policies for extra performance,
         /// at the cost of accuracy.
-        fn inverse_sqrt[][](self: Self) -> Self;
+        fn inverse_sqrt(self) -> Self;
 
         /// Returns `self` raised to the signed integer power of `e`.
-        #[skip_dispatch] fn powi[][](self: Self, e: i32) -> Self;
+        #[skip_dispatch] #[compose] fn powi(self, e: i32) -> Self;
 
         /// Returns `self` raised to the signed integer power of each element in `e`.
-        fn powiv[][](self: Self, e: Self::Signed) -> Self;
+        fn powiv(self, e: Self::Signed) -> Self;
     }
 
     /// Transcendental mathematical functions like trigonometric, exponential, and logarithmic functions.
@@ -655,40 +436,41 @@ decl_math! {
         note = "This trait is auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types (`Dual`, `Complex`, `Compensated`). A bare `f32`/`f64` does not qualify. Wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`'s `scalar_`-prefixed methods (`x.scalar_exp()`, ...).",
         note = "If `{Self}` already is a `FloatVector` and only the method call fails to resolve, bring the trait into scope: `use thermite::math::TranscendentalMath;`."
     )]
-    trait Transcendental<FloatElement>: CoreMathWithPolicy {
+    #[element(FloatElement)]
+    pub trait TranscendentalMath: CoreMathWithPolicy {
         /// Trigonometric sine and cosine, together. This will be more efficient than calling `sin` and `cos` separately.
-        fn sin_cos[][](self: Self) -> (Self, Self);
+        fn sin_cos(self) -> (Self, Self);
         /// Trigonometric sine
-        fn sin[][](self: Self) -> Self;
+        fn sin(self) -> Self;
         /// Trigonometric cosine
-        fn cos[][](self: Self) -> Self;
+        fn cos(self) -> Self;
         /// Trigonometric tangent
-        fn tan[][](self: Self) -> Self;
+        fn tan(self) -> Self;
 
         /// Returns `cos(x) - 1` of `self`, which is more precise than `cos(x) - 1` directly near zero.
         ///
         /// Evaluated as `$-2\sin^2(x/2)$`, which has no cancellation near `x = 0`.
-        fn cos_m1[][](self: Self) -> Self;
+        fn cos_m1(self) -> Self;
         /// Returns the versine `$1 - \cos(x)$` of `self`, evaluated as `$2\sin^2(x/2)$` (accurate near zero).
-        fn versin[][](self: Self) -> Self;
+        fn versin(self) -> Self;
         /// Returns the haversine `$\tfrac{1 - \cos(x)}{2}$` of `self`, evaluated as `$\sin^2(x/2)$` (accurate near zero).
         ///
         /// This is the kernel of the haversine great-circle-distance formula.
-        fn haversin[][](self: Self) -> Self;
+        fn haversin(self) -> Self;
 
         /// Sine and cosine of `pi * x`, together. This will be more efficient than calling `sin_pi` and `cos_pi` separately,
         /// and more precise than computing them manually with `sin(pi * x)` and `cos(pi * x)`.
-        fn sincos_pi[][](self: Self) -> (Self, Self);
+        fn sincos_pi(self) -> (Self, Self);
 
         /// Trigonometric sine of `pi * x`, with improved precision when the policy allows.
-        fn sin_pi[][](self: Self) -> Self;
+        fn sin_pi(self) -> Self;
         /// Trigonometric cosine of `pi * x`, with improved precision when the policy allows.
-        fn cos_pi[][](self: Self) -> Self;
+        fn cos_pi(self) -> Self;
         /// Trigonometric tangent of `pi * x`, with improved precision when the policy allows.
-        fn tan_pi[][](self: Self) -> Self;
+        fn tan_pi(self) -> Self;
 
         /// Computes `sin(x) / x` with improved precision when the policy allows.
-        fn sinc[][](self: Self) -> Self;
+        fn sinc(self) -> Self;
 
         /// Returns `$\frac{1 - \cos(x)}{x^2}$`, finite at `x = 0` where it takes the value `1/2`.
         ///
@@ -704,50 +486,50 @@ decl_math! {
         /// [`sinc`](TranscendentalMath::sinc) as the first. Rigid-body and Lie-group integrators, IMU
         /// preintegration, and skinning all evaluate it once per timestep. The prevailing practice is a
         /// hand-rolled Taylor cutoff with an arbitrary epsilon.
-        fn versinc[][](self: Self) -> Self;
+        fn versinc(self) -> Self;
 
         /// Computes `$\frac{\sin(\pi x)}{\pi x}$` with improved precision when the policy allows.
-        fn sinc_pi[][](self: Self) -> Self;
+        fn sinc_pi(self) -> Self;
 
         /// Hyperbolic sine and cosine, together. This will be more efficient than calling `sinh` and `cosh` separately.
-        fn sinh_cosh[][](self: Self) -> (Self, Self);
+        fn sinh_cosh(self) -> (Self, Self);
         /// Hyperbolic sine
-        fn sinh[][](self: Self) -> Self;
+        fn sinh(self) -> Self;
         /// Hyperbolic cosine
-        fn cosh[][](self: Self) -> Self;
+        fn cosh(self) -> Self;
         /// Hyperbolic tangent
-        fn tanh[][](self: Self) -> Self;
+        fn tanh(self) -> Self;
         /// Returns the arcsine of `self`.
-        fn asin[][](self: Self) -> Self;
+        fn asin(self) -> Self;
         /// Returns the arccosine of `self`.
-        fn acos[][](self: Self) -> Self;
+        fn acos(self) -> Self;
         /// Returns the arctangent of `self`.
-        fn atan[][](self: Self) -> Self;
+        fn atan(self) -> Self;
 
         /// Inverse hyperbolic sine
-        fn asinh[][](self: Self) -> Self;
+        fn asinh(self) -> Self;
         /// Inverse hyperbolic cosine
-        fn acosh[][](self: Self) -> Self;
+        fn acosh(self) -> Self;
         /// Inverse hyperbolic tangent
-        fn atanh[][](self: Self) -> Self;
+        fn atanh(self) -> Self;
         /// The exponential function, returns `e^(self)`.
-        fn exp[][](self: Self) -> Self;
+        fn exp(self) -> Self;
         /// The Half exponential function, returns `0.5 * e^(self)`.
-        fn exph[][](self: Self) -> Self;
+        fn exph(self) -> Self;
         /// The base-2 exponential function, returns `2^(self)`.
-        fn exp2[][](self: Self) -> Self;
+        fn exp2(self) -> Self;
         /// The base-10 exponential function, returns `10^(self)`.
-        fn exp10[][](self: Self) -> Self;
+        fn exp10(self) -> Self;
         /// Returns `exp(self) - 1` of `self`, which is more precise than calculating `exp(self) - 1` directly.
-        fn exp_m1[][](self: Self) -> Self;
+        fn exp_m1(self) -> Self;
         /// Returns `2^(self) - 1`, which is more precise than calculating `exp2(self) - 1` directly.
-        fn exp2_m1[][](self: Self) -> Self;
+        fn exp2_m1(self) -> Self;
         /// Returns `10^(self) - 1`, which is more precise than calculating `exp10(self) - 1` directly.
-        fn exp10_m1[][](self: Self) -> Self;
+        fn exp10_m1(self) -> Self;
         /// Returns `$\sqrt{1 + x} - 1$` of `self`, which is more precise than `sqrt(1 + x) - 1` directly near zero.
         ///
         /// Evaluated as `$\frac{x}{\sqrt{1 + x} + 1}$`, which has no cancellation near `x = 0`.
-        fn sqrt1pm1[][](self: Self) -> Self;
+        fn sqrt1pm1(self) -> Self;
 
         /// Returns `$\sqrt{1 - e^{-x}}$` for `x >= 0`, without the cancellation of the direct form.
         ///
@@ -757,19 +539,19 @@ decl_math! {
         ///
         /// This is the noise scaling of an exactly-integrated Ornstein-Uhlenbeck step: Langevin and
         /// Bussi-Parrinello thermostats, and the variance-preserving schedules used by diffusion models.
-        fn sqrt1mexp[][](self: Self) -> Self;
+        fn sqrt1mexp(self) -> Self;
         /// Returns `self` raised to the power of `e`.
-        fn powf[][](self: Self, e: Self) -> Self;
+        fn powf(self, e: Self) -> Self;
         /// Returns `$x^e - 1$` where `x = self`, computed accurately as `$e^{e \ln(x)}$`-style `expm1`.
         ///
         /// More precise than `powf(x, e) - 1` when the result is near zero (i.e. `x` near 1 or `e` near 0),
         /// e.g. compound returns/growth rates.
-        fn powf_m1[][](self: Self, e: Self) -> Self;
+        fn powf_m1(self, e: Self) -> Self;
         /// Returns `$(1 + x)^n$` where `x = self`, computed accurately near `x = 0` as `$e^{n \ln(1 + x)}$`.
         ///
         /// This is the IEEE 754 `compound` operation, and is more precise than `powf(1 + x, n)` for small `x`
         /// (e.g. compound-growth/interest over `n` periods at rate `x`).
-        fn compound[][](self: Self, n: Self) -> Self;
+        fn compound(self, n: Self) -> Self;
         /// Returns `$(1 + x)^n - 1$` where `x = self`, the `$-1$` sibling of
         /// [`compound`](TranscendentalMath::compound).
         ///
@@ -782,14 +564,21 @@ decl_math! {
         /// This is the numerator of the shifted Box-Cox transform, and the kernel underneath
         /// `thermite-special`'s `boxcox_1p` and Yeo-Johnson transform, whose whole reason for
         /// existing is data that straddles zero.
-        fn compound_m1[][](self: Self, n: Self) -> Self;
+        fn compound_m1(self, n: Self) -> Self;
         /// Returns the cube root of `self`.
-        fn cbrt[][](self: Self) -> Self;
+        fn cbrt(self) -> Self;
         /// Returns the Nth root of `self`.
         ///
         /// This is often faster _and_ more accurate than using `powf(1.0 / N as float)`. Supports
         /// negative numbers for odd N.
-        fn nth_root[const N: usize][N](self: Self) -> Self;
+        fn nth_root_n<const N: usize>(self) -> Self;
+        /// Returns the `n`-th root of `self` for a degree known only at runtime.
+        ///
+        /// The same arithmetic as [`nth_root_n`](TranscendentalMath::nth_root_n), so the two agree
+        /// to the bit at every `n`. The difference is that the special cases (`n` of 1 to 4) are one
+        /// uniform branch on the value rather than a compile-time fold. Prefer the const form when
+        /// the degree is a literal.
+        fn nth_root(self, n: u32) -> Self;
         /// Returns the natural logarithm of `self`.
         ///
         /// # Examples
@@ -812,7 +601,7 @@ decl_math! {
         /// }
         /// assert!(max_err < 1e-14, "max relative error {max_err}");
         /// ```
-        fn ln[][](self: Self) -> Self;
+        fn ln(self) -> Self;
         /// Returns `$x \ln y$` with `x = self`, defined as `0` wherever `x` is zero.
         ///
         /// `$0 \cdot \ln 0$` is `$0 \cdot -\infty =$` NaN written directly, and one NaN poisons
@@ -828,14 +617,14 @@ decl_math! {
         /// This is the case where a vector implementation is strictly ahead of a scalar one:
         /// the guard is a masked select costing one instruction, where scalar code needs a
         /// branch per element.
-        fn xlogy[][](self: Self, y: Self) -> Self;
+        fn xlogy(self, y: Self) -> Self;
 
         /// Returns `$x \ln(1 + y)$` with `x = self`, defined as `0` wherever `x` is zero.
         ///
         /// [`xlogy`](TranscendentalMath::xlogy)'s companion for the case where `y` is a small
         /// perturbation, keeping [`ln_1p`](TranscendentalMath::ln_1p)'s accuracy near zero
         /// rather than losing it to `$1 + y$` first. Same zero and NaN conventions.
-        fn xlog1py[][](self: Self, y: Self) -> Self;
+        fn xlog1py(self, y: Self) -> Self;
 
         /// Returns `$\sinh(x)/x$` of `self`, the hyperbolic counterpart of [`sinc`](TranscendentalMath::sinc),
         /// with its removable singularity `$\mathrm{sinhc}(0) = 1$` filled in.
@@ -849,7 +638,7 @@ decl_math! {
         /// Turns up in the hyperbolic exponential map, catenary curves, beam and rod stiffness
         /// matrices in FEM, exact solutions of linear ODE blocks, and the Einstein heat-capacity
         /// function `$x^2 e^x/(e^x-1)^2$`, which is exactly `$1/\mathrm{sinhc}(x/2)^2$`.
-        fn sinhc[][](self: Self) -> Self;
+        fn sinhc(self) -> Self;
 
         /// Returns `$\operatorname{atanh}(x)/x$` of `self`, with its removable singularity
         /// `$\mathrm{atanhc}(0) = 1$` filled in.
@@ -873,7 +662,7 @@ decl_math! {
         /// codes write it as an `if` on `$f^2 < 10^{-4}$` that mispredicts across shocks. It also
         /// turns up in relativistic velocity addition, optical-depth ratios in radiative
         /// transfer, and the Legendre function of the second kind `$Q_0$`.
-        fn atanhc[][](self: Self) -> Self;
+        fn atanhc(self) -> Self;
 
         /// Returns `$\cosh(x) - 1$` of `self`, the hyperbolic counterpart of
         /// [`cos_m1`](TranscendentalMath::cos_m1).
@@ -883,18 +672,18 @@ decl_math! {
         /// `$1 - \cos x = 2\sin^2(x/2)$`. The direct spelling instead cancels: `$\cosh x - 1$` is
         /// `$O(x^2)$` against a `$\cosh$` of `$1$`, so it has lost half the mantissa by
         /// `$x \approx 10^{-8}$` and all of it by `$x \approx 10^{-16}$`.
-        fn cosh_m1[][](self: Self) -> Self;
+        fn cosh_m1(self) -> Self;
 
         /// Returns `$\ln(1 + x)$` of `self`.
-        fn ln_1p[][](self: Self) -> Self;
+        fn ln_1p(self) -> Self;
         /// Returns the base-2 logarithm of `self`.
-        fn log2[][](self: Self) -> Self;
+        fn log2(self) -> Self;
         /// Returns the base-10 logarithm of `self`.
-        fn log10[][](self: Self) -> Self;
+        fn log10(self) -> Self;
         /// Returns `$\log_2(1 + x)$` of `self`, which is more precise than `log2(1 + x)` directly near zero.
-        fn log2_p1[][](self: Self) -> Self;
+        fn log2_p1(self) -> Self;
         /// Returns `$\log_{10}(1 + x)$` of `self`, which is more precise than `log10(1 + x)` directly near zero.
-        fn log10_p1[][](self: Self) -> Self;
+        fn log10_p1(self) -> Self;
 
         /// Returns `$\ln(1 + x) - x$` of `self`, which is accurate near zero where the
         /// subtraction otherwise cancels away every significant digit.
@@ -922,12 +711,12 @@ decl_math! {
         /// The natural home of `$\ln(1+x)-x$` is a density or deviance: the Poisson/binomial
         /// deviance is `$-k \cdot \mathrm{log1pmx}((\lambda-k)/k)$`, and the same shape turns up
         /// in entropies, Kullback-Leibler divergences and saddle-point approximations.
-        fn log1pmx[][](self: Self) -> Self;
+        fn log1pmx(self) -> Self;
 
         /// Returns the logarithm of `self` with respect to the given `base`.
         ///
         /// This is simply a convenience method for `self.log2() / base.log2()`.
-        fn log[][](self: Self, base: Self) -> Self;
+        fn log(self, base: Self) -> Self;
 
         /// Returns the logarithm of `self` with respect to the given integer base `N`.
         ///
@@ -935,13 +724,20 @@ decl_math! {
         /// implementation for larger bases.
         ///
         /// For bases 0 and 1, the result is 0 and Infinity respectively.
-        fn log_n[const N: usize][N](self: Self) -> Self;
+        fn log_n_n<const N: usize>(self) -> Self;
+
+        /// Returns the logarithm of `self` with respect to an integer base known only at runtime.
+        ///
+        /// The runtime twin of [`log_n_n`](TranscendentalMath::log_n_n): the same table lookup for
+        /// bases up to 32 and the same fallback above, so the two agree to the bit. Bases 0 and 1
+        /// give 0 and infinity as there.
+        fn log_n(self, n: u32) -> Self;
 
         /// Returns `$\ln(1 - e^{-x})$`, which depending on the policy may be
         /// an approximation more performant than the exact calculation. If you're using a policy with below
         /// average precision, and happen to have `ln(x)` available, you can use [`ln1m_expnx_ext`](TranscendentalMath::ln1m_expnx_ext) instead
         /// to provide that.
-        fn ln1m_expnx[][](self: Self) -> Self;
+        fn ln1m_expnx(self) -> Self;
 
         /// Returns `ln(1 - exp(lnx))`, which depending on the policy may be
         /// an approximation more performant than the exact calculation. If you're using a policy with below
@@ -949,7 +745,7 @@ decl_math! {
         ///
         /// Although not obvious, `ln(x)` is used internally for the approximation, and if it's already available,
         /// you may as well use this function to avoid recomputing it.
-        fn ln1m_expnx_ext[][](self: Self, lnx: Self) -> Self;
+        fn ln1m_expnx_ext(self, lnx: Self) -> Self;
     }
 
     // TODO: Create an associated type `Scalar` to return for spatial functions,
@@ -962,7 +758,8 @@ decl_math! {
         message = "`{Self}` does not provide spatial math (`hypot`, `atan2`, ...)",
         note = "This trait is auto-implemented for every float vector (any `FloatVector` whose element is `f32`/`f64`) and for composite float types. A bare `f32`/`f64` does not qualify. Wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`'s `scalar_`-prefixed methods."
     )]
-    trait Spatial<FloatElement>: CoreMathWithPolicy {
+    #[element(FloatElement)]
+    pub trait SpatialMath: CoreMathWithPolicy {
         /// Computes the Euclidean norm (hypotenuse) of `self` and `other`, i.e., `sqrt(self^2 + other^2)`.
         ///
         /// This is not higher performance than the naive implementation, but is more resistant to overflow and underflow.
@@ -970,7 +767,7 @@ decl_math! {
         ///
         /// Check out [`hypot_n`](SpatialMath::hypot_n) for N values known at compile time,
         /// and [`hypot_s`](SpatialMath::hypot_s) for a runtime-length slice.
-        fn hypot[][](self: Self, other: Self) -> Self;
+        fn hypot(self, other: Self) -> Self;
 
         /// Computes the Euclidean norm (hypotenuse) of N values, i.e., `$\sqrt{x_1^2 + x_2^2 + \dots + x_N^2}$`.
         ///
@@ -980,7 +777,7 @@ decl_math! {
         /// `N = 2` is written out as its own arm in every lowering, so
         /// [`hypot`](SpatialMath::hypot) is this function at that length rather than a
         /// separate kernel.
-        fn hypot_n[const N: usize][N](values: [Self; N]) -> Self;
+        fn hypot_n<const N: usize>(values: [Self; N]) -> Self;
 
         /// Computes the inverse Euclidean norm (inverse hypotenuse) of N values, i.e., `$1/\sqrt{x_1^2 + x_2^2 + \dots + x_N^2}$`.
         ///
@@ -988,7 +785,7 @@ decl_math! {
         /// especially for larger N, and is more resistant to overflow and underflow when using average or higher precision policies.
         ///
         /// At lower precision policies, we can take advantage of fast approximate inverse square root implementations for better performance.
-        fn inv_hypot_n[const N: usize][N](values: [Self; N]) -> Self;
+        fn inv_hypot_n<const N: usize>(values: [Self; N]) -> Self;
 
         /// [`hypot_n`](SpatialMath::hypot_n) over a runtime-length slice.
         ///
@@ -998,28 +795,28 @@ decl_math! {
         /// [`hypot_n`](SpatialMath::hypot_n).
         ///
         /// The norm of no values is `0`.
-        #[skip_dispatch] fn hypot_s[][](values: &[Self]) -> Self;
+        #[skip_dispatch] #[compose] fn hypot_s(values: &[Self]) -> Self;
 
         /// [`inv_hypot_n`](SpatialMath::inv_hypot_n) over a runtime-length slice.
         ///
         /// Same trade as [`hypot_s`](SpatialMath::hypot_s). The inverse norm of no
         /// values is infinity, matching `1/0`.
-        #[skip_dispatch] fn inv_hypot[][](values: &[Self]) -> Self;
+        #[skip_dispatch] #[compose] fn inv_hypot(values: &[Self]) -> Self;
 
         /// L1 Norm, or the "Manhattan" distance from the origin.
         ///
         /// For 1D vectors, this is equivalent to the absolute value.
-        fn l1_norm[][](self: Self) -> Self;
+        fn l1_norm(self) -> Self;
 
         /// L2 Norm, or the "Euclidean" distance from the origin.
         ///
         /// For 1D vectors, this is equivalent to the absolute value.
-        fn l2_norm[][](self: Self) -> Self;
+        fn l2_norm(self) -> Self;
 
         /// Squared L2 Norm, or the squared "Euclidean" distance from the origin.
         ///
         /// For 1D vectors, this is equivalent to squaring the value.
-        fn l2_norm_squared[][](self: Self) -> Self;
+        fn l2_norm_squared(self) -> Self;
     }
 
     /// Real-value mathematical functions that cannot be applied to some number types. (e.g., complex numbers)
@@ -1027,42 +824,43 @@ decl_math! {
         message = "`{Self}` does not provide real-valued math (`to_degrees`, `to_radians`, `tolerance`, ...)",
         note = "`RealMath` builds on both `TranscendentalMath` and `SpatialMath`, and is only meaningful for real-valued float vectors. Number types like `Complex` deliberately do not implement it. A bare `f32`/`f64` does not qualify either. Wrap it in `Vector::<f32>::splat(x)`, or use `ScalarMath`."
     )]
-    trait Real<FloatElement>: TranscendentalMathWithPolicy & SpatialMathWithPolicy {
+    #[element(FloatElement)]
+    pub trait RealMath: TranscendentalMathWithPolicy + SpatialMathWithPolicy {
         /// Returns the precision tolerance based on the selected policy. This is a good
         /// default tolerance to use for numerical methods.
-        #[skip_dispatch] fn tolerance[][]() -> Self;
+        #[skip_dispatch] #[compose] fn tolerance() -> Self;
 
         /// Converts angles from radians to degrees.
-        fn to_degrees[][](self: Self) -> Self;
+        fn to_degrees(self) -> Self;
 
         /// Converts angles from degrees to radians.
-        fn to_radians[][](self: Self) -> Self;
+        fn to_radians(self) -> Self;
 
         /// Wraps the angle (radians) in `self` to the range `[-π, π)`.
         ///
         /// The formula for this is `self - floor((self + π) / 2π) * 2π`
-        fn wrap_angle[][](self: Self) -> Self;
+        fn wrap_angle(self) -> Self;
 
         /// Computes the smallest difference between two angles (in radians),
         /// taking into account angle wrapping.
         ///
         /// To get the "distance" between two angles, use the absolute value of the result.
-        fn angle_diff[][](self: Self, other: Self) -> Self;
+        fn angle_diff(self, other: Self) -> Self;
 
         /// Returns the four-quadrant arctangent of `self` and `x`.
         ///
         /// This method is only defined for real-valued types.
-        fn atan2[][](self: Self, x: Self) -> Self;
+        fn atan2(self, x: Self) -> Self;
 
         /// Linearly interpolates between `a` and `b` based on the value of `self`.
         ///
         /// This operation is not clamped.
-        fn lerp[][](self: Self, a: Self, b: Self) -> Self;
+        fn lerp(self, a: Self, b: Self) -> Self;
 
         /// Scales `self` from the input range `[in_min, in_max]` to the output range `[out_min, out_max]`.
         ///
         /// This operation is not clamped.
-        fn rescale[][](self: Self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self;
+        fn rescale(self, in_min: Self, in_max: Self, out_min: Self, out_max: Self) -> Self;
 
         /// Returns `$\ln(e^{a} + e^{b})$` computed in a numerically stable way that avoids overflow,
         /// where `a = self` and `b = other`.
@@ -1070,7 +868,7 @@ decl_math! {
         /// Evaluated as `$\max(a, b) + \ln(1 + e^{-|a - b|})$`, so the result is accurate even when `a`
         /// and `b` are large. This is the workhorse of stable log-domain probability arithmetic
         /// (e.g. the two-argument log-sum-exp).
-        fn logaddexp[][](self: Self, other: Self) -> Self;
+        fn logaddexp(self, other: Self) -> Self;
 
         /// The logarithmic mean `$L(x, y) = \frac{x - y}{\ln x - \ln y}$`, for positive `x` and `y`.
         ///
@@ -1083,7 +881,7 @@ decl_math! {
         /// `$\frac{x - y}{2\,\mathrm{atanh}\!\left(\frac{x-y}{x+y}\right)}$`, which is stable
         /// throughout. For nearby arguments the subtraction is exact by Sterbenz's lemma and `atanh`
         /// is accurate near zero. Equal arguments return `x`, the limiting value.
-        fn logmean[][](self: Self, other: Self) -> Self;
+        fn logmean(self, other: Self) -> Self;
 
         /// Returns `$\ln\left(\sum_{i} e^{x_i}\right)$` over `N` values, computed in a
         /// numerically stable way that avoids overflow.
@@ -1109,7 +907,7 @@ decl_math! {
         /// let y = V::logsumexp_n([V::splat(1000.0), V::splat(1001.0), V::splat(999.0)]);
         /// assert!((y.extract::<0>() - 1001.4076059644443).abs() < 1e-12);
         /// ```
-        fn logsumexp_n[const N: usize][N](values: [Self; N]) -> Self;
+        fn logsumexp_n<const N: usize>(values: [Self; N]) -> Self;
 
         /// [`logsumexp_n`](RealMath::logsumexp_n) over a runtime-length slice.
         ///
@@ -1120,7 +918,7 @@ decl_math! {
         ///
         /// The empty input gives `-inf`, the identity of `logaddexp`, so folding this over
         /// any partition of the inputs agrees.
-        #[skip_dispatch] fn logsumexp[][](values: &[Self]) -> Self;
+        #[skip_dispatch] #[compose] fn logsumexp(values: &[Self]) -> Self;
 
         /// Returns `$\ln(e^{a} - e^{b})$` where `a = self` and `b = other`, computed in a
         /// numerically stable way that avoids overflow.
@@ -1141,7 +939,7 @@ decl_math! {
         ///
         /// The result exists only for `a >= b`, and is `-inf` at `a == b`. An `a < b` input
         /// is out of domain and gives NaN at `Average` precision and above.
-        fn logsubexp[][](self: Self, other: Self) -> Self;
+        fn logsubexp(self, other: Self) -> Self;
 
         /// The entropy term `$-x \ln x$` of `self`, extended to the closed half-line.
         ///
@@ -1153,7 +951,7 @@ decl_math! {
         /// convention, the extended-value form that keeps `entr` concave over all of `$\mathbb{R}$`
         /// so a convex solver can use it as a barrier. SciPy, CVXPY and Convex.jl all define it
         /// this way. Summing `entr` over a distribution gives its Shannon entropy in nats.
-        fn entr[][](self: Self) -> Self;
+        fn entr(self) -> Self;
 
         /// The relative-entropy term `$x \ln(x/y)$`, with `x = self`.
         ///
@@ -1169,7 +967,7 @@ decl_math! {
         /// The `$+\infty$` covers `$y = 0$` at positive `x` (an event the model assigns zero
         /// probability but the data observed, which is genuinely infinite surprise) as well as
         /// negative inputs, which are out of domain.
-        fn rel_entr[][](self: Self, y: Self) -> Self;
+        fn rel_entr(self, y: Self) -> Self;
 
         /// The convex-programming Kullback-Leibler divergence term, with `x = self`.
         ///
@@ -1191,7 +989,7 @@ decl_math! {
         /// identity `$-x \cdot \mathrm{log1pmx}((y-x)/x)$`, which moves the cancellation inside
         /// [`log1pmx`](TranscendentalMath::log1pmx), where it belongs. Same identity as the
         /// Poisson deviance; `bd0` in `thermite-special` is this function under another name.
-        fn kl_div[][](self: Self, y: Self) -> Self;
+        fn kl_div(self, y: Self) -> Self;
 
         /// Generalized smoothstep function of Order `2N-1`. Note: The "smoothness"
         /// for higher order is in terms of the number of continuous derivatives,
@@ -1216,10 +1014,18 @@ decl_math! {
         ///
         /// // Standard 3rd-order smoothstep (N = 2) over the default [0, 1] edges:
         /// // 3t^2 - 2t^3
-        /// let y = V::splat(0.25).smoothstep::<2>(None);
+        /// let y = V::splat(0.25).smoothstep_n::<2>(None);
         /// assert!((y.extract::<0>() - 0.15625).abs() < 1e-15);
         /// ```
-        fn smoothstep[const N: usize][N](self: Self, edges: Option<(Self, Self)>) -> Self;
+        fn smoothstep_n<const N: usize>(self, edges: Option<(Self, Self)>) -> Self;
+
+        /// The order-`2n-1` smoothstep for a degree known only at runtime.
+        ///
+        /// The runtime twin of [`smoothstep_n`](RealMath::smoothstep_n): a branch over the const
+        /// forms for `n` in `0..=4`, which is the const form's own code with its folded coefficients.
+        /// The polynomial is too small for a table-driven loop to compete with that. `n` above 4
+        /// returns NaN.
+        fn smoothstep(self, edges: Option<(Self, Self)>, n: u32) -> Self;
 
         /// Returns the inverse smoothstep of `self`, which is the value that would produce `self` when passed to `smoothstep`.
         ///
@@ -1237,14 +1043,22 @@ decl_math! {
         /// type V = Vector<f64>;
         ///
         /// let x = V::splat(1.0 / 16.0);
-        /// let y = x.smoothstep::<12>(None);
-        /// let x_back = y.inverse_smoothstep::<12>(None);
+        /// let y = x.smoothstep_n::<12>(None);
+        /// let x_back = y.inverse_smoothstep_n::<12>(None);
         /// assert!((x_back.extract::<0>() - x.extract::<0>()).abs() < 1e-9);
         /// ```
-        fn inverse_smoothstep[const N: usize][N](self: Self, edges: Option<(Self, Self)>) -> Self;
+        fn inverse_smoothstep_n<const N: usize>(self, edges: Option<(Self, Self)>) -> Self;
+
+        /// The inverse of [`smoothstep`](RealMath::smoothstep) for a degree known only at runtime.
+        /// See [`inverse_smoothstep_n`](RealMath::inverse_smoothstep_n), whose runtime twin this is.
+        fn inverse_smoothstep(self, edges: Option<(Self, Self)>, n: u32) -> Self;
 
         /// Derivative of the `smoothstep` function of order `2N-1`, at the given point.
-        fn smoothstep_derivative[const N: usize][N](self: Self, edges: Option<(Self, Self)>) -> Self;
+        fn smoothstep_derivative_n<const N: usize>(self, edges: Option<(Self, Self)>) -> Self;
+
+        /// Derivative of [`smoothstep`](RealMath::smoothstep) for a degree known only at runtime.
+        /// See [`smoothstep_derivative_n`](RealMath::smoothstep_derivative_n), whose runtime twin this is.
+        fn smoothstep_derivative(self, edges: Option<(Self, Self)>, n: u32) -> Self;
 
         /// C∞-smooth interpolation factor between the given edges (defaulting to 0 and 1).
         ///
@@ -1264,16 +1078,16 @@ decl_math! {
         /// - `k = 1`: the standard balanced sigmoid-like transition.
         /// - `k > 1`: stretches the transition region, so the curve is more gradual.
         /// - `$k \approx 2/\sqrt{3}$` (~1.1547): the function becomes bimodal. Use with caution above this value.
-        fn smooth_interpolator[][](self: Self, edges: Option<(Self, Self)>, k: Self) -> Self;
+        fn smooth_interpolator(self, edges: Option<(Self, Self)>, k: Self) -> Self;
 
         /// Inverse of [`smooth_interpolator`](crate::math::RealMath::smooth_interpolator).
         ///
         /// Given an output value `y` in `[0, 1]`, recovers the input `x` such that
         /// `smooth_interpolator(x, edges, k) ≈ y`.
-        fn smooth_interpolator_inverse[][](self: Self, edges: Option<(Self, Self)>, k: Self) -> Self;
+        fn smooth_interpolator_inverse(self, edges: Option<(Self, Self)>, k: Self) -> Self;
 
         /// Returns 1 if `self` is greater than or equal to `edge`, otherwise returns 0.
-        fn step[][](self: Self, edge: Self) -> Self;
+        fn step(self, edge: Self) -> Self;
     }
 
     /// "Primal" math for _single-value_ real numbers: plain float vectors and
@@ -1288,6 +1102,29 @@ decl_math! {
         note = "`PrimalMath` is implemented for plain real float vectors and `Compensated`, never for derivative- or component-carrying composites such as `Dual` or `Complex`.",
         note = "For a composite type, use its associated `Primal` type (`Self::Primal` via `PrimalProjection`) instead of the composite itself."
     )]
-    trait Primal<FloatElement>: RealMathWithPolicy & PrimalProjection<Primal = Self> {
+    #[element(FloatElement)]
+    pub trait PrimalMath: RealMathWithPolicy + PrimalProjection<Primal = Self> {
+    }
+
+    scalar_extras {
+        /// Square root of `self`.
+        ///
+        /// Unlike the rest of this trait, `sqrt` is exact (correctly rounded) on all supported
+        /// formats rather than a policy-driven approximation, so the policy is ignored. This
+        /// exists only so scalar code can spell it the same way as the other `scalar_` methods.
+        /// On vectors, `sqrt` is an inherent [`FloatVector`] method rather than a math trait one.
+        #[inline(always)]
+        fn scalar_sqrt_p<P: Policy>(self) -> Self {
+            FloatElement::sqrt(self)
+        }
+
+        /// Square root of `self`.
+        ///
+        /// See [`ScalarMathWithPolicy::scalar_sqrt_p`]. `sqrt` is exact, so this is the scalar
+        /// spelling of the inherent [`FloatVector::sqrt`] vector method.
+        #[inline(always)]
+        fn scalar_sqrt(self) -> Self {
+            ScalarMathWithPolicy::scalar_sqrt_p::<DefaultPolicy>(self)
+        }
     }
 }

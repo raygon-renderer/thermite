@@ -94,7 +94,7 @@ macro_rules! check_order {
         fn $name() {
             for &y in PROBES {
                 let x = D::splat(y)
-                    .inverse_smoothstep_p::<TightBudget, $n>(None)
+                    .inverse_smoothstep_n_p::<TightBudget, $n>(None)
                     .extract::<0>();
 
                 assert!(
@@ -132,9 +132,11 @@ check_order!(inverse_smoothstep_n8_converges_in_12_iterations, 8);
 #[test]
 fn inverse_smoothstep_is_antisymmetric() {
     for &y in PROBES {
-        let a = D::splat(y).inverse_smoothstep_p::<TightBudget, 3>(None).extract::<0>();
+        let a = D::splat(y)
+            .inverse_smoothstep_n_p::<TightBudget, 3>(None)
+            .extract::<0>();
         let b = D::splat(1.0 - y)
-            .inverse_smoothstep_p::<TightBudget, 3>(None)
+            .inverse_smoothstep_n_p::<TightBudget, 3>(None)
             .extract::<0>();
 
         assert!(

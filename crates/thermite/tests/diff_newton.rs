@@ -59,7 +59,7 @@ macro_rules! newton_scenarios {
 
         // --- 1. Unbounded Newton, per-lane different roots -------------------
         {
-            let (root, conv) = newtons_method::<V, Precision, _>(a, sp($utol), None, sq);
+            let (root, conv) = newtons_method::<V, Precision, _>(a, sp($utol), GenericMask::TRUTHY, None, sq);
             assert!(conv.all(), "{} unbounded_sqrt did not converge", $L);
             chk("unbounded_sqrt", root, sqrt_a, $urel);
         }
@@ -67,7 +67,7 @@ macro_rules! newton_scenarios {
         // --- 2. Bounded (increasing); bracket collapses to ~tolerance --------
         {
             let bounds = Some((V::ZERO, a + V::ONE));
-            let (root, conv) = newtons_method::<V, Precision, _>(sp(0.1), sp($btol), bounds, sq);
+            let (root, conv) = newtons_method::<V, Precision, _>(sp(0.1), sp($btol), GenericMask::TRUTHY, bounds, sq);
             assert!(conv.all(), "{} bounded_increasing did not converge", $L);
             chk("bounded_increasing", root, sqrt_a, $brel);
         }
@@ -75,7 +75,7 @@ macro_rules! newton_scenarios {
         // --- 3. Initial guess outside the bracket must be clamped in ---------
         {
             let bounds = Some((V::ZERO, a + V::ONE));
-            let (root, conv) = newtons_method::<V, Precision, _>(sp(-1.0e3), sp($btol), bounds, sq);
+            let (root, conv) = newtons_method::<V, Precision, _>(sp(-1.0e3), sp($btol), GenericMask::TRUTHY, bounds, sq);
             assert!(conv.all(), "{} clamp_outside did not converge", $L);
             chk("clamp_outside", root, sqrt_a, $brel);
         }
@@ -83,7 +83,7 @@ macro_rules! newton_scenarios {
         // --- 4. Bounded *decreasing* function (min_is_negative = false) ------
         {
             let bounds = Some((V::ZERO, a + V::ONE));
-            let (root, conv) = newtons_method::<V, Precision, _>(sp(0.1), sp($btol), bounds, dsq);
+            let (root, conv) = newtons_method::<V, Precision, _>(sp(0.1), sp($btol), GenericMask::TRUTHY, bounds, dsq);
             assert!(conv.all(), "{} bounded_decreasing did not converge", $L);
             chk("bounded_decreasing", root, sqrt_a, $brel);
         }
@@ -93,7 +93,7 @@ macro_rules! newton_scenarios {
         {
             let cube = |x: V| (x * x * x, three * x * x);
             let bounds = Some((sp(-1.0), two));
-            let (root, conv) = newtons_method::<V, Precision, _>(sp(0.5), sp($btol), bounds, cube);
+            let (root, conv) = newtons_method::<V, Precision, _>(sp(0.5), sp($btol), GenericMask::TRUTHY, bounds, cube);
             assert!(conv.all(), "{} zero_deriv_at_root did not converge", $L);
             // f(x)=x^3 so the function-space tolerance only pins |x| <= tol^(1/3)
             // (e.g. ~0.009 for the f32 tol of 1e-6). What matters is that the
@@ -112,7 +112,7 @@ macro_rules! newton_scenarios {
                 (x2 * x - two * x2 + x - two, three * x2 - four * x + V::ONE)
             };
             let bounds = Some((V::ZERO, three));
-            let (root, conv) = newtons_method::<V, Precision, _>(sp(0.5), sp($btol), bounds, cubic);
+            let (root, conv) = newtons_method::<V, Precision, _>(sp(0.5), sp($btol), GenericMask::TRUTHY, bounds, cubic);
             assert!(conv.all(), "{} interior_zero_deriv did not converge", $L);
             chk("interior_zero_deriv", root, [2.0, 2.0, 2.0, 2.0], ($brel as f64).max(1e-3));
         }
@@ -123,7 +123,7 @@ macro_rules! newton_scenarios {
         {
             let f = |x: V| (x * x - two, x + x);
             let bounds = Some((V::ONE, two));
-            let (root, conv) = newtons_method::<V, Precision, _>(sp(1.5), V::ZERO, bounds, f);
+            let (root, conv) = newtons_method::<V, Precision, _>(sp(1.5), V::ZERO, GenericMask::TRUTHY, bounds, f);
             assert!(conv.all(), "{} bracket_collapse did not terminate-as-converged", $L);
             chk("bracket_collapse", root, [2f64.sqrt(); 4], ($brel as f64).max(1e-3));
         }
@@ -131,7 +131,7 @@ macro_rules! newton_scenarios {
         // --- 8. Large tolerance => converged immediately at the start --------
         {
             let f = |x: V| (x * x - two, x + x);
-            let (root, conv) = newtons_method::<V, Precision, _>(sp(3.0), sp(1.0e9), None, f);
+            let (root, conv) = newtons_method::<V, Precision, _>(sp(3.0), sp(1.0e9), GenericMask::TRUTHY, None, f);
             assert!(conv.all(), "{} large_tol not all-converged", $L);
             chk("large_tol_immediate", root, [3.0, 3.0, 3.0, 3.0], 0.0); // unchanged start
         }
@@ -142,7 +142,7 @@ macro_rules! newton_scenarios {
         {
             let f = |x: V| (x * x - two, x + x);
             let tol = V::new([1.0e9 as $e, 1.0e-12 as $e, 1.0e-12 as $e, 1.0e-12 as $e]);
-            let (_root, conv) = newtons_method::<V, MaxIterations<Performance, 1>, _>(sp(3.0), tol, None, f);
+            let (_root, conv) = newtons_method::<V, MaxIterations<Performance, 1>, _>(sp(3.0), tol, GenericMask::TRUTHY, None, f);
             let bits = rd(conv.select(V::ONE, V::ZERO));
             assert_eq!(bits, [1.0, 0.0, 0.0, 0.0], "{} per_lane_partial mask wrong", $L);
         }
@@ -151,7 +151,7 @@ macro_rules! newton_scenarios {
         {
             let f = |x: V| (x * x - two, x + x);
             let (_root, conv) =
-                newtons_method::<V, MaxIterations<Performance, 1>, _>(sp(10.0), sp(1.0e-9), None, f);
+                newtons_method::<V, MaxIterations<Performance, 1>, _>(sp(10.0), sp(1.0e-9), GenericMask::TRUTHY, None, f);
             assert!(!conv.all(), "{} should NOT fully converge in 1 iteration", $L);
         }
 
@@ -159,9 +159,9 @@ macro_rules! newton_scenarios {
         {
             let bounds = Some((V::ZERO, a + V::ONE));
             let (r_on, c_on) =
-                newtons_method::<V, CheckOverflow<Precision, true>, _>(sp(0.1), sp($btol), bounds, sq);
+                newtons_method::<V, CheckOverflow<Precision, true>, _>(sp(0.1), sp($btol), GenericMask::TRUTHY, bounds, sq);
             let (r_off, c_off) =
-                newtons_method::<V, CheckOverflow<Precision, false>, _>(sp(0.1), sp($btol), bounds, sq);
+                newtons_method::<V, CheckOverflow<Precision, false>, _>(sp(0.1), sp($btol), GenericMask::TRUTHY, bounds, sq);
             assert!(c_on.all() && c_off.all(), "{} check_overflow arms did not converge", $L);
             chk("overflow_on", r_on, sqrt_a, $brel);
             chk("overflow_off", r_off, sqrt_a, $brel);
@@ -245,25 +245,26 @@ fn series_sum_and_prod() {
 
     // geometric series sum_{n>=0} 0.5^n = 2, converged (terms fall below tol).
     let geom = |n: i64| V::splat(0.5f64.powi(n as i32));
-    let plain = sum_f::<V, Performance, _>(tol, 0, 200, geom);
-    let kahan = sum_f::<V, UseCompensation<Performance, true>, _>(tol, 0, 200, geom); // drives swap
+    let plain = sum_f::<V, Performance, _>(tol, GenericMask::TRUTHY, 0, 200, geom);
+    let kahan = sum_f::<V, UseCompensation<Performance, true>, _>(tol, GenericMask::TRUTHY, 0, 200, geom); // drives swap
     for r in [plain, kahan] {
         let v = r.expect("geometric sum should converge").into_array()[0];
         assert!((v - 2.0).abs() < 1e-9, "sum_f geometric = {v}");
     }
 
     // non-convergence -> Err(partial). f(n)=1 never falls below tol, so it sums 10 terms.
-    let err = sum_f::<V, Performance, _>(V::splat(1e-12), 0, 10, |_| V::ONE);
+    let err = sum_f::<V, Performance, _>(V::splat(1e-12), GenericMask::TRUTHY, 0, 10, |_| V::ONE);
     let p = err.expect_err("constant series must not converge").into_array()[0];
     assert!((p - 10.0).abs() < 1e-9, "partial sum = {p}");
 
     // prod_f: product of (1 + 0.5^(n+1)) converges (delta shrinks below tol).
-    let pr =
-        prod_f::<V, UseCompensation<Performance, true>, _>(tol, 0, 80, |n| V::splat(1.0 + 0.5f64.powi(n as i32 + 1)));
+    let pr = prod_f::<V, UseCompensation<Performance, true>, _>(tol, GenericMask::TRUTHY, 0, 80, |n| {
+        V::splat(1.0 + 0.5f64.powi(n as i32 + 1))
+    });
     let pv = pr.expect("converging product").into_array()[0];
     assert!(pv > 2.0 && pv < 3.0, "prod_f = {pv}");
 
     // prod_f non-convergence: f(n)=2 keeps doubling -> delta never small -> Err.
-    let perr = prod_f::<V, Performance, _>(tol, 0, 8, |_| V::TWO);
+    let perr = prod_f::<V, Performance, _>(tol, GenericMask::TRUTHY, 0, 8, |_| V::TWO);
     assert!(perr.is_err(), "doubling product must not converge");
 }

@@ -100,9 +100,9 @@ fn main() {
 
     // --- exponential integrals -------------------------------------------------------
     for x in decades(1e-3, 60.0, 40) {
-        row1("expint1", x, s(x).expint::<1>());
-        row1("expint2", x, s(x).expint::<2>());
-        row1("expint3", x, s(x).expint::<3>());
+        row1("expint1", x, s(x).expint_n::<1>());
+        row1("expint2", x, s(x).expint_n::<2>());
+        row1("expint3", x, s(x).expint_n::<3>());
     }
 
     // --- logistic / information theory ------------------------------------------------
@@ -143,14 +143,14 @@ fn main() {
 
     // --- orthogonal polynomials --------------------------------------------------------
     for x in (-40..=40).map(|i| i as f64 * 0.1) {
-        row1("hermite3", x, s(x).hermite::<3>());
-        row1("hermite8", x, s(x).hermite::<8>());
+        row1("hermite3", x, s(x).hermite_n::<3>());
+        row1("hermite8", x, s(x).hermite_n::<8>());
         row1("legendre5", x, s(x).legendre(5, 0));
         row1("legendre7_2", x, s(x).legendre(7, 2));
     }
     for x in (0..=60).map(|i| i as f64 * 0.2) {
-        row2("laguerre4", x, 0.0, s(x).laguerre::<4>(s(0.0)));
-        row2("laguerre6a", x, 1.5, s(x).laguerre::<6>(s(1.5)));
+        row2("laguerre4", x, 0.0, s(x).laguerre_n::<4>(s(0.0)));
+        row2("laguerre6a", x, 1.5, s(x).laguerre_n::<6>(s(1.5)));
     }
     for x in (-20..=20).map(|i| i as f64 * 0.05) {
         row2("jacobi4", x, 0.0, s(x).jacobi(s(0.5), s(1.5), 4, 0));

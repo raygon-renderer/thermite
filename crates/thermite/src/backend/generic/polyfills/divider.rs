@@ -1,3 +1,6 @@
+// Ported from libdivide (https://libdivide.com), dual-licensed zlib / BSL-1.0.
+// Copyright (C) 2010-2019 ridiculous_fish, 2016-2019 Kim Walisch.
+
 use num_traits::{WrappingSub as _, Zero as _};
 
 use crate::divider::Denominator;

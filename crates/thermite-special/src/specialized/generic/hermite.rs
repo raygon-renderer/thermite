@@ -65,7 +65,7 @@ where
 /// the critical path plus one multiply beside it. See [`seed`] for the range and the
 /// precision of the Gaussian factor.
 #[inline(always)]
-pub fn hermite_function<P, E, V, const N: usize>(x: V) -> V
+pub fn hermite_function_n<P, E, V, const N: usize>(x: V) -> V
 where
     P: Policy,
     E: FloatElement,
@@ -85,6 +85,40 @@ where
     while k < N {
         // psi_{k+1} = sqrt(2/(k+1)) x psi_k - sqrt(k/(k+1)) psi_{k-1}, the subtraction
         // carried in the constant. p0 is two steps back, so its multiply is off the chain.
+        let ax = x * V::splat(a::<E>(k));
+        let next = ax.mul_adde(p1, p0 * V::splat(b::<E>(k)));
+        p0 = p1;
+        p1 = next;
+        k += 1;
+    }
+
+    p1 * f
+}
+
+/// The runtime-degree twin of [`hermite_function_n`].
+///
+/// The same seed, recurrence and final factor, with the degree as a value.
+/// `a_k` and `b_k` are computed per step rather than folded. Both are a correctly rounded
+/// division and square root either way, so the result agrees with the const form to the bit.
+#[inline(always)]
+pub fn hermite_function<P, E, V>(x: V, n: u32) -> V
+where
+    P: Policy,
+    E: FloatElement,
+    V: FloatVector<Element = E> + SpecializedTranscendentalMath<E>,
+{
+    let (f, g0) = seed::<P, E, V>(x);
+
+    if n == 0 {
+        return g0 * f;
+    }
+
+    let mut p0 = g0;
+    let mut p1 = (V::SQRT_2 * x) * g0;
+
+    let n = n as usize;
+    let mut k = 1;
+    while k < n {
         let ax = x * V::splat(a::<E>(k));
         let next = ax.mul_adde(p1, p0 * V::splat(b::<E>(k)));
         p0 = p1;

@@ -136,6 +136,11 @@ pub extern crate tribool;
 
 pub use thermite_macros::{HasIsa, dispatch, dispatch_dyn};
 
+// Re-exported for the sibling crates that declare math-trait families of
+// their own (thermite-special).
+#[doc(hidden)]
+pub use thermite_macros::math_traits;
+
 /// Creates a shuffle mask for various instructions. Note
 /// that the order of the arguments is reversed from the
 /// normal order of the lanes, so `MM_SHUFFLE!(3, 2, 1, 0)`

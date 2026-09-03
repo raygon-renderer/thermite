@@ -9,6 +9,28 @@ use thermite_special::{RealSpecialMathWithPolicy, SpecialMathWithPolicy};
 
 use crate::specialized::special::SpecializedCompensatedSpecialMath;
 
+// The elliptic kernels (`carlson`, `ellint`) are generic over any float vector whose element
+// carries the Carlson convergence threshold `(3 eps)^(1/8)`: the deviation at which the
+// 7th-order Taylor tail (`~ deviation^8`) drops below rounding. A double-double has its own
+// `eps` (`2^-104` / `2^-46`), so the threshold is recomputed for it rather than lifted from
+// the inner element: with the f64 value the tail would stop at 6.8e-16 and the whole
+// second word would be noise. About three more duplication steps per call buys the rest.
+impl thermite_special::elliptic::EllipticConsts for Compensated<f64> {
+    /// `(3 * 2^-104)^(1/8)`
+    const CARLSON_THRESH: Self = Compensated { value: 0.00014003939092283656, error: 0.0 };
+    /// `2^-14`: the `R_C` series tail `t^8/17` is then `1e-34`. Below this the `ln` arm of
+    /// the closed form loses about `eps/s` with `s ~ sqrt(t) = 0.008`, a few units of 1e-30,
+    /// which is the accuracy floor of `R_J` on this type.
+    const RC_SERIES_THRESH: Self = Compensated { value: 6.103515625e-5, error: 0.0 };
+}
+
+impl thermite_special::elliptic::EllipticConsts for Compensated<f32> {
+    /// `(3 * 2^-46)^(1/8)`
+    const CARLSON_THRESH: Self = Compensated { value: 0.021316588, error: 0.0 };
+    /// `1/128` still: the tail `1.5e-17` is below this type's `2^-46`.
+    const RC_SERIES_THRESH: Self = Compensated { value: 0.0078125, error: 0.0 };
+}
+
 // Compensated is a single-value real, so it belongs in the "primal" tier and gains the
 // value-and-derivative (`_d`) activation forms (via the trait defaults).
 impl<V: CompensatedFloatVector> SpecializedRealPrimalMath<Compensated<V::Element>> for Compensated<V>
@@ -584,6 +606,24 @@ where
     #[inline(always)]
     fn trigamma<P: Policy>(self) -> Self {
         <V as SpecializedCompensatedSpecialMath<V::Element>>::compensated_trigamma::<P>(self)
+    }
+
+    /// `n = 0` and `n = 1` reach the tuned double-double digamma/trigamma. **`n >= 2`
+    /// returns NaN**: no double-double algorithm exists for the higher orders yet, and
+    /// silently routing through an f64-precision path would put 53 good bits in a
+    /// 106-bit container, the same reason `Compensated` refuses the shared Lanczos
+    /// tables. NaN over quiet precision loss, like the real kernel's unimplemented
+    /// regions.
+    #[inline(always)]
+    fn polygamma<P: Policy>(self, n: u32) -> Self {
+        match n {
+            0 => SpecializedSpecialMath::digamma::<P>(self),
+            1 => SpecializedSpecialMath::trigamma::<P>(self),
+            // Unimplemented, not undefined: there is no double-double algorithm for the
+            // higher orders here yet. `n` is a scalar, so this is a whole-call decision and
+            // says so rather than returning a NaN that would propagate silently.
+            _ => todo!("Compensated polygamma(n >= 2) has no double-double algorithm yet"),
+        }
     }
 
     // TEMP(bessel_j): disabled until orders beyond J_0 exist - see thermite-special/src/lib.rs.

@@ -189,7 +189,7 @@ fn odd_round_add_full<R: FloatRegister, const SORTED: bool>(
 /// overflows), a split carry into the exponent top, or an inf/NaN input,
 /// because the algorithm cannot create an inexact finite result (BM 2008
 /// Sec. VI). Both that post-check and the pre-gate route the whole packet
-/// through [`fmadd_ro_rescue`], a fully vectorized (no scalar loop, no libm)
+/// through `fmadd_ro_rescue`, a fully vectorized (no scalar loop, no libm)
 /// all-range path, so the emulation is total and every lane of every input
 /// is correctly rounded.
 #[inline(always)]

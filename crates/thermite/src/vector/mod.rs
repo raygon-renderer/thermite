@@ -567,6 +567,98 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     #[track_caller]
     fn _loop_hint() {}
 
+    /// Marks entry into a named math function, for symbolic vector types.
+    ///
+    /// The `decl_math!` forwarders call this with the public function's name
+    /// before delegating to the specialized implementation, and pass the
+    /// returned token to [`_exit`](Self::_exit) afterwards. Compiles to
+    /// nothing here (empty body, constant return, inlined away). A symbolic
+    /// vector overrides it to bracket the call as a region: everything
+    /// recorded between the pair is _inside_ that function, which is what
+    /// lets a trace through a composite type report `Dual::trigamma` rather
+    /// than the interior computation. Regions nest. The token pairs each exit
+    /// with its enter.
+    ///
+    /// **Composite vector types must forward this to the value they wrap**,
+    /// tagging it with their own name so the region reports the composite the
+    /// call was made on:
+    ///
+    /// ```ignore
+    /// fn _enter(name: &'static str) -> u32 { V::_enter_tagged("Dual", name) }
+    /// fn _enter_tagged(tag: &'static str, name: &'static str) -> u32 { V::_enter_tagged(tag, name) }
+    /// fn _exit(token: u32) { V::_exit(token) }
+    /// ```
+    #[doc(hidden)]
+    #[inline(always)]
+    #[track_caller]
+    fn _enter(_name: &'static str) -> u32 {
+        0
+    }
+
+    /// [`_enter`](Self::_enter) carrying a composite type's tag. The default
+    /// drops the tag. Composites forward it unchanged so the _outermost_
+    /// composite in a nesting is the one a region reports.
+    #[doc(hidden)]
+    #[inline(always)]
+    #[track_caller]
+    fn _enter_tagged(_tag: &'static str, name: &'static str) -> u32 {
+        Self::_enter(name)
+    }
+
+    /// Marks exit from the region opened by the [`_enter`](Self::_enter) that
+    /// returned `token`. Compiles to nothing here.
+    #[doc(hidden)]
+    #[inline(always)]
+    #[track_caller]
+    fn _exit(_token: u32) {}
+
+    /// Declares `self` an operand of the open region `token`, in signature
+    /// order. The `decl_math!` forwarders thread every vector-shaped argument
+    /// through this between [`_enter`](Self::_enter) and the call, so a
+    /// symbolic trace records the call's operands canonically instead of
+    /// inferring them from the interior's read order (which is arbitrary,
+    /// incomplete, and silently changes when an implementation is edited).
+    ///
+    /// Identity here. **Composite vector types must forward each component in
+    /// struct declaration order** (`re` before `dual`, `re` before `im`), so
+    /// the recorded operand list is arg-major, component-minor:
+    ///
+    /// ```ignore
+    /// fn _region_arg(self, token: u32) -> Self {
+    ///     Dual { re: self.re._region_arg(token), dual: self.dual.map(|d| d._region_arg(token)) }
+    /// }
+    /// ```
+    #[doc(hidden)]
+    #[inline(always)]
+    #[track_caller]
+    fn _region_arg(self, _token: u32) -> Self {
+        self
+    }
+
+    /// Declares `self` a result of the open region `token`. Threaded over the
+    /// return value (tuple members and out-parameter slots included) before
+    /// [`_exit`](Self::_exit), for the same reason as
+    /// [`_region_arg`](Self::_region_arg): escaping-value inference gives a
+    /// call node whose arity depends on the _call site_. Identity here, and
+    /// composites forward componentwise, exactly as for `_region_arg`.
+    #[doc(hidden)]
+    #[inline(always)]
+    #[track_caller]
+    fn _region_result(self, _token: u32) -> Self {
+        self
+    }
+
+    /// Attaches non-vector call data (const generics, host scalars,
+    /// coefficient slices) to the open region `token`, pre-rendered. This is
+    /// the region marker's immediate, playing the same role as the immediate
+    /// on a recorded operation (`shl<23>`): without it a symbolic trace
+    /// collapses `nth_root_n::<3>` to a node that has lost the 3. No-op here;
+    /// composites forward it unchanged.
+    #[doc(hidden)]
+    #[inline(always)]
+    #[track_caller]
+    fn _region_imm(_token: u32, _imm: core::fmt::Arguments) {}
+
     /// Number of lanes in the vector, as a runtime value.
     ///
     /// Today this is always [`LANES`](Self::LANES), but prefer it over the constant in
@@ -1390,7 +1482,7 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
     /// pairs must stay on separate calls.
     ///
     /// The default is a per-value loop, so every composite inherits it.
-    /// [`Vector`](crate::Vector) overrides it with the register's shared-plan
+    /// [`Vector`] overrides it with the register's shared-plan
     /// form.
     #[inline(always)]
     fn compress_n<const N: usize>(values: [Self; N], mask: Self::Mask) -> [Self; N] {
@@ -2569,7 +2661,7 @@ pub trait SignedIntegerVector: SignedVector + IntegerVector<Element: crate::elem
     ///
     /// The count must be less than the element bit width. Out of range, the lane
     /// takes an unspecified value, as for
-    /// [`BitshiftVector::shrv`](crate::vector::BitshiftVector::shrv).
+    /// [`BitshiftVector::shrv`].
     #[conditional] fn srav(self, counts: Self::Unsigned) -> Self;
 
     /// Floor average: `(a + b) >> 1` rounded toward -∞, computed without overflow.
@@ -3608,7 +3700,7 @@ pub trait LinAlg4Vector: LinAlg3Vector {
     /// several shuffles/permutations to compute efficiently with SIMD.
     ///
     /// In lieu of a full policy system, `FAST` is used to pick the internal behavior.
-    /// See [`cross`](LinAlg3Vector::cross) for why, since this method internally uses cross
+    /// See [`cross3`](LinAlg3Vector::cross3) for why, since this method internally uses cross
     /// products.
     fn quat4_vec3_product<const FAST: bool>(self, vec: Self) -> Self;
 

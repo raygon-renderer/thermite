@@ -53,22 +53,22 @@ macro_rules! kernel {
 
 const N: usize = 4;
 
-kernel!(k_float_a0, |x: V| x.laguerre_function::<N>(V::ZERO));
+kernel!(k_float_a0, |x: V| x.laguerre_function_n::<N>(V::ZERO));
 kernel!(k_float_a3, |x: V| x
-    .laguerre_function::<N>(V::splat(V::Element::from_int(3))));
-kernel!(k_int_a0, |x: V| x.laguerre_function_i::<N>(0));
-kernel!(k_int_a3, |x: V| x.laguerre_function_i::<N>(3));
-kernel!(k_int_a20, |x: V| x.laguerre_function_i::<N>(20));
-kernel!(k_int_a200, |x: V| x.laguerre_function_i::<N>(200));
+    .laguerre_function_n::<N>(V::splat(V::Element::from_int(3))));
+kernel!(k_int_a0, |x: V| x.laguerre_function_i_n::<N>(0));
+kernel!(k_int_a3, |x: V| x.laguerre_function_i_n::<N>(3));
+kernel!(k_int_a20, |x: V| x.laguerre_function_i_n::<N>(20));
+kernel!(k_int_a200, |x: V| x.laguerre_function_i_n::<N>(200));
 // Runtime weight the compiler cannot see through.
-kernel!(k_int_rt, |x: V| x.laguerre_function_i::<N>(black_box(3)));
-kernel!(k_int_rt0, |x: V| x.laguerre_function_i::<N>(black_box(0)));
-kernel!(k_int_rt2, |x: V| x.laguerre_function_i::<N>(black_box(2)));
-kernel!(k_int_rt200, |x: V| x.laguerre_function_i::<N>(black_box(200)));
+kernel!(k_int_rt, |x: V| x.laguerre_function_i_n::<N>(black_box(3)));
+kernel!(k_int_rt0, |x: V| x.laguerre_function_i_n::<N>(black_box(0)));
+kernel!(k_int_rt2, |x: V| x.laguerre_function_i_n::<N>(black_box(2)));
+kernel!(k_int_rt200, |x: V| x.laguerre_function_i_n::<N>(black_box(200)));
 kernel!(k_float_a200, |x: V| x
-    .laguerre_function::<N>(V::splat(V::Element::from_int(200))));
+    .laguerre_function_n::<N>(V::splat(V::Element::from_int(200))));
 kernel!(k_float_rt, |x: V| x
-    .laguerre_function::<N>(V::splat(V::Element::from_int(black_box(3)))));
+    .laguerre_function_n::<N>(V::splat(V::Element::from_int(black_box(3)))));
 // The Poisson mass itself, against the form everyone writes by hand.
 kernel!(k_pois, |x: V| V::splat(V::Element::from_int(20)).poisson_pmf(x));
 kernel!(k_pois_naive, |x: V| {

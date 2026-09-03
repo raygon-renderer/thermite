@@ -223,7 +223,7 @@ impl Policy for MyPolicy {
         precision: PrecisionPolicy::Average,
         avoid_branching: true,
         max_iterations: 10000,
-        use_compensation: true,
+        use_compensation: false,
         denormal_behavior: DenormalBehavior::FlushToZero,
     };
 }
@@ -362,7 +362,7 @@ pub mod policies {
             precision: extra_precision(P::POLICY.precision),
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
-            use_compensation: P::POLICY.precision.ge(PrecisionPolicy::Average),
+            use_compensation: P::POLICY.use_compensation,
             denormal_behavior: P::POLICY.denormal_behavior,
         };
     }
@@ -374,7 +374,7 @@ pub mod policies {
             precision: less_precision(P::POLICY.precision),
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
-            use_compensation: P::POLICY.precision.gt(PrecisionPolicy::Average),
+            use_compensation: P::POLICY.use_compensation,
             denormal_behavior: P::POLICY.denormal_behavior,
         };
     }
@@ -494,7 +494,7 @@ pub mod policies {
             precision: PrecisionPolicy::Best,
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
-            use_compensation: true,
+            use_compensation: false,
             denormal_behavior: P::POLICY.denormal_behavior,
         };
     }
@@ -506,7 +506,7 @@ pub mod policies {
             precision: PrecisionPolicy::Reference,
             avoid_branching: P::POLICY.avoid_branching,
             max_iterations: P::POLICY.max_iterations,
-            use_compensation: true,
+            use_compensation: false,
             denormal_behavior: P::POLICY.denormal_behavior,
         };
     }
@@ -570,7 +570,7 @@ pub mod policies {
             precision: PrecisionPolicy::Best,
             avoid_branching: false,
             max_iterations: 50000,
-            use_compensation: true,
+            use_compensation: false,
             denormal_behavior: DenormalBehavior::select_default(false),
         };
     }
@@ -597,7 +597,7 @@ pub mod policies {
             precision: PrecisionPolicy::Reference,
             avoid_branching: false,
             max_iterations: 100000,
-            use_compensation: true,
+            use_compensation: false,
             denormal_behavior: DenormalBehavior::select_default(false),
         };
     }

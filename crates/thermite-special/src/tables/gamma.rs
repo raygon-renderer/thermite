@@ -30,7 +30,7 @@
 ///   order, which is what `poly_rational_n_p` expects, for `lgamma_r` and `beta`.
 ///
 /// The `q`/`q_rev` pair is the same polynomial `z(z+1)...(z+N-2)` written both ways.
-/// Coefficients from Boost.Math `lanczos.hpp` (BSL-1.0); Boost lists both `num` and
+/// Coefficients from Boost.Math's Lanczos approximations (BSL-1.0). Boost lists both `num` and
 /// `denom` constant-term-first, so `p_rev`/`q_rev` are its arrays reversed.
 pub struct Lanczos<E, const N: usize> {
     pub g: E,

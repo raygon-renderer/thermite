@@ -305,12 +305,20 @@ mod composed_f32 {
             -ln2,
         );
 
-        // log_n::<N>(x) = log base N
-        spot("log_3(9)", V::splat(9.0).log_n_p::<Reference, 3>().extract::<0>(), 2.0);
-        spot("log_2(8)", V::splat(8.0).log_n_p::<Reference, 2>().extract::<0>(), 3.0);
+        // log_n_n::<N>(x) = log base N
+        spot(
+            "log_3(9)",
+            V::splat(9.0).log_n_n_p::<Reference, 3>().extract::<0>(),
+            2.0,
+        );
+        spot(
+            "log_2(8)",
+            V::splat(8.0).log_n_n_p::<Reference, 2>().extract::<0>(),
+            3.0,
+        );
         spot(
             "log_10(1000)",
-            V::splat(1000.0).log_n_p::<Reference, 10>().extract::<0>(),
+            V::splat(1000.0).log_n_n_p::<Reference, 10>().extract::<0>(),
             3.0,
         );
     }
@@ -349,9 +357,9 @@ mod composed_f32 {
 
             // log_n needs x > 0.
             agrees(
-                "log_n::<7>",
-                p.log_n_p::<Reference, 7>().extract::<0>(),
-                p.log_n_p::<Best, 7>().extract::<0>(),
+                "log_n_n::<7>",
+                p.log_n_n_p::<Reference, 7>().extract::<0>(),
+                p.log_n_n_p::<Best, 7>().extract::<0>(),
             );
         }
     }

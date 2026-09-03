@@ -24,6 +24,7 @@ workspace = true
 std = ["thermite/std"]
 wasm = ["thermite/wasm"]                         # wasm32/wasm64 SIMD128 backend (needed to name it in tests)
 disable_dispatch = ["thermite/disable_dispatch"] # Disable dispatch in thermite for maximum performance, but massive code bloat
+trace = ["thermite/trace"]                       # Emit trace region markers in the math forwarders (for thermite-trace)
 
 [dependencies]
 cfg-if = "1"
@@ -62,4 +63,8 @@ harness = false
 
 [[bench]]
 name = "expint"
+harness = false
+
+[[bench]]
+name = "bessel"
 harness = false

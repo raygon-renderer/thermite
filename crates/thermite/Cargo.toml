@@ -28,6 +28,12 @@ bitvec = ["dep:bitvec", "generic-array/bitvec"]
 
 document_registers = [] # Whether to document individual register abstractions
 
+# Emit the trace region markers in the public math forwarders (`_enter`/`_exit`
+# plus operand/result/immediate threading), for thermite-trace. The marker
+# methods on GenericVector exist unconditionally. This only controls whether
+# the `math_traits!` forwarder bodies call them.
+trace = ["thermite-macros/trace"]
+
 # NOTE: the historical `disable_fast_fma` feature was REMOVED once the emulated FMA
 # became correctly rounded. On backends without hardware FMA, `mul_add` and family
 # now lower to a round-to-odd emulation (Boldo-Melquiond 2008; `fmadd_ro` /

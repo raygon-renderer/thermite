@@ -269,14 +269,14 @@ fn inverse_smoothstep_implicit_derivative() {
     // derivative d/dy inverse(y) = 1 / smoothstep'(x), NOT a value from differentiating
     // through Newton.
     let x0 = 0.3_f64;
-    let y0 = V::splat(x0).smoothstep::<3>(None).extract::<0>();
+    let y0 = V::splat(x0).smoothstep_n::<3>(None).extract::<0>();
 
     let y = D::variable(V::splat(y0), 0);
-    let t = y.inverse_smoothstep::<3>(None);
+    let t = y.inverse_smoothstep_n::<3>(None);
 
     assert!(close(t.re.extract::<0>(), x0, 1e-6)); // round-trip
 
-    let sd = V::splat(x0).smoothstep_derivative::<3>(None).extract::<0>();
+    let sd = V::splat(x0).smoothstep_derivative_n::<3>(None).extract::<0>();
     assert!(close(t.dual[0].extract::<0>(), 1.0 / sd, 1e-6));
 }
 
@@ -284,7 +284,7 @@ fn inverse_smoothstep_implicit_derivative() {
 fn nth_root_override() {
     // d/dx x^(1/3) = 1/(3 x^(2/3)), at x = 8: value 2, deriv 1/(3*4) = 1/12.
     let x = D::variable(V::splat(8.0), 0);
-    let r = x.nth_root::<3>();
+    let r = x.nth_root_n::<3>();
 
     assert!(close(r.re.extract::<0>(), 2.0, 1e-9));
     assert!(close(r.dual[0].extract::<0>(), 1.0 / 12.0, 1e-9));

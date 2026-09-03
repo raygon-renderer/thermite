@@ -4,8 +4,7 @@
 //! (the AGM behind the complete first/second kinds, the five Carlson duplications, the
 //! phi-range reduction) are reached the way a caller reaches them.
 //!
-//! Reference values come from A&S / Mathematica (the same tables as
-//! `reference/elliptic.c`). Where no table exists (phi outside `[0, pi/2]`, the `D`
+//! Reference values come from A&S / Mathematica. Where no table exists (phi outside `[0, pi/2]`, the `D`
 //! kind, and `R_J` with a negative parameter) the test builds its own oracle from an
 //! identity or a numerical Cauchy principal value, so nothing here depends on the
 //! implementation being right in two places at once.
@@ -28,6 +27,41 @@ fn close(got: f64, want: f64, tol: f64) -> bool {
     (got - want).abs() <= tol * want.abs().max(1.0)
 }
 
+// Jacobi zeta from mpmath at 30 digits, via the defining difference
+// Z = E(phi,k) - E(k) F(phi,k)/K(k), which is a different computation from the Carlson
+// form under test, so this is a real cross-check rather than a restatement.
+// (phi, k, Z(phi, k))
+const JACOBI_ZETA: &[(f64, f64, f64)] = &[
+    (0.0, 0.5, 0.0),
+    (0.3, 0.5, 0.036766998867488845911),
+    (0.7, 0.5, 0.065615536956845927299),
+    (1.0, 0.9, 0.2804533264624154805),
+    (-0.7, 0.8, -0.1932025746760059664),
+    (2.0, 0.6, -0.078633525006053302798),
+    (3.0, 0.99, -0.097602115566158220906),
+    (4.5, 0.3, 0.0095954090261178052864),
+    (0.7, 0.0, 0.0),
+    (1.2, 0.999, 0.55959701221741850373),
+];
+
+// Heuman's lambda from mpmath at 30 digits, via the defining three-term combination.
+// Covers both arms: entries at |phi| <= pi/2 take the Carlson form, the rest the Legendre
+// identity, and 1.5707963 sits just short of the endpoint where the R_J parameter is most
+// delicate.
+// (phi, k, Lambda_0(phi, k))
+const HEUMAN_LAMBDA: &[(f64, f64, f64)] = &[
+    (0.3, 0.5, 0.27619645372589324643),
+    (0.7, 0.5, 0.6035962502087692917),
+    (1.0, 0.9, 0.68787980092097212311),
+    (1.5, 0.1, 0.9956640865531333951),
+    (1.5707963, 0.7, 0.99999998990261178138),
+    (1.8, 0.5, 1.0639612315238180472),
+    (2.5, 0.3, 1.4150608561304022021),
+    (3.0, 0.9, 1.8945758000922666049),
+    (-1.0, 0.6, -0.77268315426127576343),
+    (0.9, 0.99, 0.58180966333069250961),
+];
+
 // (k, K(k), E(k))
 const KE: &[(f64, f64, f64)] = &[
     (0.0, 1.570796326794897, 1.570796326794897),
@@ -35,6 +69,106 @@ const KE: &[(f64, f64, f64)] = &[
     (0.7071067811865476, 1.854074677301372, 1.350643881047676),
     (0.8660254037844386, 2.156515647499643, 1.211056027568459),
     (0.9486832980505138, 2.578092113348173, 1.104774732704073),
+];
+
+// AGM spot values from mpmath at 30 digits. The last two straddle the range where the
+// starting ratio, not the quadratic tail, sets the iteration count.
+// (a, b, AGM(a, b))
+const AGM: &[(f64, f64, f64)] = &[
+    (1.0, 2.0, 1.4567910310469068692),
+    (1.0, 1.4142135623730950488, 1.1981402347355922074),
+    (24.0, 6.0, 13.458171481725615421),
+    (3.0, 3.0, 3.0),
+    (1.0, 1.0e-8, 0.079305210334345310798),
+    (1.0e-30, 1.0, 0.022292230559453832048),
+    (0.5, 1.0e12, 52870140222.89687512),
+];
+
+// Jacobi elliptic functions from mpmath at 30 digits. Covers k = 0 (the trigonometric
+// degeneracy), k approaching 1, both signs of u, and the two points where a member of the
+// triple is exactly zero: u = K (cn = 0) and u = 2K (sn = 0).
+// (u, k, sn, cn, dn)
+const JACOBI: &[(f64, f64, f64, f64, f64)] = &[
+    (0.0, 0.5, 0.0, 1.0, 1.0),
+    (0.7, 0.0, 0.64421768723769101971, 0.76484218728448845486, 1.0),
+    (
+        0.7,
+        0.5,
+        0.63429327633511237202,
+        0.77309251684133431103,
+        0.94837651273058064585,
+    ),
+    (
+        -0.7,
+        0.5,
+        -0.63429327633511237202,
+        0.77309251684133431103,
+        0.94837651273058064585,
+    ),
+    (
+        1.9,
+        0.9,
+        0.98573306130364143008,
+        0.16831616634462503784,
+        0.46146242404001938958,
+    ),
+    (
+        3.366,
+        0.5,
+        0.0055006749505070420888,
+        -0.99998487117310373055,
+        0.99999621781473364535,
+    ),
+    (
+        -5.1,
+        0.75,
+        0.90729112913363234275,
+        -0.42050304041162232807,
+        0.73277747572842527664,
+    ),
+    (
+        0.3,
+        0.1,
+        0.29547798521037720328,
+        0.95534954872864000884,
+        0.99956336847773696364,
+    ),
+    (
+        6.0,
+        0.99,
+        0.61351195068720361726,
+        -0.78968543507144807728,
+        0.79441386250828918745,
+    ),
+    (
+        -8.0,
+        0.8,
+        -0.018787076551251492614,
+        0.99982350730249257144,
+        0.99988704826244286462,
+    ),
+    (
+        2.0,
+        0.999,
+        0.96443754803169331087,
+        0.26431083206447528786,
+        0.26780508840374556204,
+    ),
+    (
+        1.0,
+        0.9999999,
+        0.76159417303675454936,
+        0.64805425359028542507,
+        0.64805434309291762445,
+    ),
+    (
+        1.685750354812596,
+        0.5,
+        1.0,
+        -8.2623790858790638229e-18,
+        0.86602540378443864676,
+    ),
+    (3.501507605831505, 0.6, -8.6427771956862322199e-17, -1.0, 1.0),
 ];
 
 // Incomplete F and E from the reference value tables.
@@ -208,11 +342,12 @@ macro_rules! elliptic_tests {
             use thermite::Vector;
             use thermite::math::policy::policies::{CheckOverflow, Precision};
             use thermite::prelude::*;
-            use thermite_special::SpecialMathWithPolicy;
             use thermite_special::elliptic::{
                 CarlsonKind, CarlsonRc, CarlsonRd, CarlsonRf, CarlsonRg, CarlsonRj, EllintD, EllintDInc, EllintE,
-                EllintEInc, EllintF, EllintK, EllintPi, EllintPiInc, EllipticConsts, EllipticKind,
+                EllintEInc, EllintF, EllintK, EllintPi, EllintPiInc, EllipticConsts, EllipticKind, HeumanLambda,
+                JacobiZeta,
             };
+            use thermite_special::{RealSpecialMathWithPolicy, SpecialMathWithPolicy};
 
             type F32 = Vector<<$backend as Simd>::$f32reg>;
             type F64 = Vector<<$backend as Simd>::$f64reg>;
@@ -233,7 +368,7 @@ macro_rules! elliptic_tests {
                 F64::carlson_p::<Precision, K>(kind).extract::<0>()
             }
 
-            // K and E complete, which is the AGM path (the only caller of it).
+            // K and E complete, which is the AGM path.
             #[test]
             fn ellint_complete_ke_matches_reference() {
                 for &(k, want_k, want_e) in KE {
@@ -242,6 +377,250 @@ macro_rules! elliptic_tests {
                     assert!(close(gk, want_k, 1.0e-13), "K({k}): got {gk}, want {want_k}");
                     assert!(close(ge, want_e, 1.0e-13), "E({k}): got {ge}, want {want_e}");
                 }
+            }
+
+            #[test]
+            fn jacobi_zeta_matches_the_defining_difference() {
+                for &(phi, k, want) in JACOBI_ZETA {
+                    let got = ell(JacobiZeta { phi: v(phi), k: v(k) });
+                    assert!(close(got, want, 1.0e-13), "Z({phi}, {k}): got {got}, want {want}");
+                }
+            }
+
+            // Structural properties, independent of the table: odd in phi, pi-periodic, and
+            // exactly zero at every multiple of pi/2: the last is where the defining
+            // difference cancels worst and the Carlson form should not care.
+            #[test]
+            fn jacobi_zeta_symmetries() {
+                for &(phi, k) in &[(0.7f64, 0.5f64), (1.3, 0.9), (2.2, 0.3)] {
+                    let z = ell(JacobiZeta { phi: v(phi), k: v(k) });
+                    let neg = ell(JacobiZeta {
+                        phi: v(-phi),
+                        k: v(k),
+                    });
+                    assert_eq!(neg, -z, "Z odd in phi at ({phi}, {k})");
+
+                    let shifted = ell(JacobiZeta {
+                        phi: v(phi + core::f64::consts::PI),
+                        k: v(k),
+                    });
+                    assert!(close(shifted, z, 1.0e-12), "Z pi-periodic at ({phi}, {k})");
+                }
+                for &k in &[0.3f64, 0.7, 0.95] {
+                    for n in 0..4 {
+                        let phi = core::f64::consts::FRAC_PI_2 * n as f64;
+                        let z = ell(JacobiZeta { phi: v(phi), k: v(k) });
+                        assert!(z.abs() < 1.0e-15, "Z({phi}, {k}) should vanish, got {z}");
+                    }
+                }
+                // k = 0 makes Z identically zero. k = 1 is the pinned hyperbolic-free limit
+                // sin(phi) * sign(cos phi), neither of which the Carlson form can reach.
+                assert_eq!(
+                    ell(JacobiZeta {
+                        phi: v(1.1),
+                        k: v(0.0)
+                    }),
+                    0.0,
+                    "Z(phi, 0)"
+                );
+                let one = F64::ellint_p::<CheckOverflow<Precision, true>, _>(JacobiZeta {
+                    phi: v(1.1),
+                    k: v(1.0),
+                })
+                .extract::<0>();
+                assert!(
+                    close(one, 1.1f64.sin(), 1.0e-15),
+                    "Z(1.1, 1) = sin(1.1), got {one}"
+                );
+            }
+
+            #[test]
+            fn heuman_lambda_matches_the_defining_combination() {
+                for &(phi, k, want) in HEUMAN_LAMBDA {
+                    let got = ell(HeumanLambda { phi: v(phi), k: v(k) });
+                    assert!(
+                        close(got, want, 1.0e-13),
+                        "Lambda({phi}, {k}): got {got}, want {want}"
+                    );
+                }
+            }
+
+            // The endpoints that define it, and the seam between its two arms. The R_J
+            // parameter `1 - k^2/delta^2` is exactly zero at phi = pi/2, so the naive
+            // spelling rounds negative just short of it and silently switches R_J to its
+            // principal-value branch. These pin that it does not.
+            #[test]
+            fn heuman_lambda_endpoints_and_arm_seam() {
+                for &k in &[0.1f64, 0.5, 0.9] {
+                    let zero = ell(HeumanLambda { phi: v(0.0), k: v(k) });
+                    assert_eq!(zero, 0.0, "Lambda(0, {k}) should be 0");
+
+                    let half = ell(HeumanLambda {
+                        phi: v(core::f64::consts::FRAC_PI_2),
+                        k: v(k),
+                    });
+                    assert!(
+                        close(half, 1.0, 1.0e-14),
+                        "Lambda(pi/2, {k}) should be 1, got {half}"
+                    );
+
+                    // Straddle the pi/2 seam: the two arms must agree across it.
+                    let eps = 1.0e-9;
+                    let lo = ell(HeumanLambda {
+                        phi: v(core::f64::consts::FRAC_PI_2 - eps),
+                        k: v(k),
+                    });
+                    let hi = ell(HeumanLambda {
+                        phi: v(core::f64::consts::FRAC_PI_2 + eps),
+                        k: v(k),
+                    });
+                    assert!(
+                        close(lo, hi, 1.0e-8),
+                        "arms disagree at pi/2 for k={k}: {lo} vs {hi}"
+                    );
+                }
+            }
+
+            /// The Jacobi triple through its public entry, at lane 0.
+            fn jac(u: f64, k: f64) -> (f64, f64, f64) {
+                let (sn, cn, dn) = F64::jacobi_elliptic_p::<Precision>(v(u), v(k));
+                (sn.extract::<0>(), cn.extract::<0>(), dn.extract::<0>())
+            }
+
+            #[test]
+            fn jacobi_elliptic_matches_reference() {
+                for &(u, k, wsn, wcn, wdn) in JACOBI {
+                    let (sn, cn, dn) = jac(u, k);
+                    // Absolute tolerance on purpose: all three are bounded by 1 and all three
+                    // have zeros, so a relative gate at a zero would be testing how well the
+                    // zero's location is known rather than the function.
+                    assert!(close(sn, wsn, 1.0e-14), "sn({u}, {k}): got {sn}, want {wsn}");
+                    assert!(close(cn, wcn, 1.0e-14), "cn({u}, {k}): got {cn}, want {wcn}");
+                    assert!(close(dn, wdn, 1.0e-14), "dn({u}, {k}): got {dn}, want {wdn}");
+                }
+            }
+
+            // sn^2 + cn^2 = 1 and k^2 sn^2 + dn^2 = 1 hold identically. They are independent
+            // of the reference table and catch a triple that is self-consistently wrong.
+            #[test]
+            fn jacobi_elliptic_identities() {
+                for ki in 0..20 {
+                    let k = ki as f64 / 20.0;
+                    for ui in 0..20 {
+                        let u = -6.0 + 12.0 * ui as f64 / 19.0;
+                        let (sn, cn, dn) = jac(u, k);
+                        let pyth = sn * sn + cn * cn - 1.0;
+                        let delta = k * k * sn * sn + dn * dn - 1.0;
+                        assert!(pyth.abs() < 1.0e-14, "sn^2+cn^2-1 = {pyth} at u={u}, k={k}");
+                        assert!(delta.abs() < 1.0e-14, "k^2 sn^2+dn^2-1 = {delta} at u={u}, k={k}");
+                    }
+                }
+            }
+
+            // sn is odd in u, cn and dn are even. The kernel gets this from the sign of the
+            // single sine at the bottom of the ladder, so it is worth pinning.
+            #[test]
+            fn jacobi_elliptic_parity() {
+                for &(u, k) in &[(0.7, 0.5), (2.3, 0.9), (5.0, 0.25)] {
+                    let (sp, cp, dp) = jac(u, k);
+                    let (sm, cm, dm) = jac(-u, k);
+                    assert_eq!(sm, -sp, "sn parity at u={u}, k={k}");
+                    assert_eq!(cm, cp, "cn parity at u={u}, k={k}");
+                    assert_eq!(dm, dp, "dn parity at u={u}, k={k}");
+                }
+            }
+
+            // The two moduli where the ladder degenerates: k = 0 is pure trigonometry, and
+            // k = 1 is the hyperbolic limit the ladder cannot walk to and so substitutes.
+            #[test]
+            fn jacobi_elliptic_degenerate_moduli() {
+                for &u in &[0.0f64, 0.4, 1.7, -3.2] {
+                    let (sn, cn, dn) = jac(u, 0.0);
+                    assert!(close(sn, u.sin(), 1.0e-15), "sn(u,0) != sin u at u={u}");
+                    assert!(close(cn, u.cos(), 1.0e-15), "cn(u,0) != cos u at u={u}");
+                    assert_eq!(dn, 1.0, "dn(u,0) != 1 at u={u}");
+
+                    let f = |u: f64, k: f64| {
+                        let (sn, cn, dn) = F64::jacobi_elliptic_p::<CheckOverflow<Precision, true>>(v(u), v(k));
+                        (sn.extract::<0>(), cn.extract::<0>(), dn.extract::<0>())
+                    };
+                    let (sn, cn, dn) = f(u, 1.0);
+                    let sech = 1.0 / u.cosh();
+                    assert!(close(sn, u.tanh(), 1.0e-15), "sn(u,1) != tanh u at u={u}");
+                    assert!(close(cn, sech, 1.0e-15), "cn(u,1) != sech u at u={u}");
+                    assert!(close(dn, sech, 1.0e-15), "dn(u,1) != sech u at u={u}");
+
+                    // Only k^2 enters, so the sign of the modulus is irrelevant, and |k| > 1
+                    // leaves the domain through a negative square root rather than a guard.
+                    let (sp, cp, dp) = f(u, 0.6);
+                    let (sm, cm, dm) = f(u, -0.6);
+                    assert_eq!((sp, cp, dp), (sm, cm, dm), "modulus sign at u={u}");
+                    assert!(f(u, 1.5).0.is_nan(), "|k| > 1 should be NaN at u={u}");
+                }
+            }
+
+            /// The general AGM through its own public entry, at lane 0.
+            fn agm(a: f64, b: f64) -> f64 {
+                F64::agm_p::<Precision>(v(a), v(b)).extract::<0>()
+            }
+
+            #[test]
+            fn agm_matches_reference() {
+                for &(a, b, want) in AGM {
+                    let got = agm(a, b);
+                    assert!(close(got, want, 1.0e-14), "AGM({a}, {b}): got {got}, want {want}");
+                    // Symmetric in its arguments, and to the last bit: the recurrence's first
+                    // pass is symmetric, so the whole thing is.
+                    assert_eq!(agm(b, a), got, "AGM({b}, {a}) != AGM({a}, {b})");
+                }
+            }
+
+            // K(k) = pi / (2 AGM(1, k')). The complete integral runs its own copy of the
+            // recurrence with the `E` accumulator attached, so agreement here is the check
+            // that the two did not drift apart.
+            #[test]
+            fn agm_matches_complete_k() {
+                for &(k, want_k, _) in KE {
+                    let kp = (1.0 - k * k).sqrt();
+                    let got = core::f64::consts::FRAC_PI_2 / agm(1.0, kp);
+                    assert!(
+                        close(got, want_k, 1.0e-14),
+                        "K({k}) via AGM: got {got}, want {want_k}"
+                    );
+                }
+            }
+
+            // Homogeneous: AGM(ca, cb) = c AGM(a, b). Scaling by a power of two is exact on
+            // both sides, so this holds bit for bit and is what a caller working near the
+            // overflow threshold is told to rely on.
+            #[test]
+            fn agm_is_homogeneous_in_powers_of_two() {
+                for &(a, b, _) in AGM {
+                    for c in [0.25f64, 4.0, 2f64.powi(-100), 2f64.powi(100)] {
+                        let scaled = agm(a * c, b * c);
+                        let want = agm(a, b) * c;
+                        assert_eq!(scaled, want, "AGM({a}*{c}, {b}*{c}) != {c} * AGM({a}, {b})");
+                    }
+                }
+            }
+
+            #[test]
+            fn agm_edge_cases() {
+                let f = |a: f64, b: f64| F64::agm_p::<CheckOverflow<Precision, true>>(v(a), v(b)).extract::<0>();
+
+                // AGM(a, 0) = 0: the iteration only walks toward it, so this is the pin.
+                assert_eq!(f(3.0, 0.0), 0.0, "AGM(3, 0)");
+                assert_eq!(f(0.0, 3.0), 0.0, "AGM(0, 3)");
+                assert_eq!(f(0.0, 0.0), 0.0, "AGM(0, 0)");
+
+                assert_eq!(f(f64::INFINITY, 2.0), f64::INFINITY, "AGM(inf, 2)");
+                assert_eq!(f(2.0, f64::INFINITY), f64::INFINITY, "AGM(2, inf)");
+
+                // No limit: zero against infinity, and anything negative.
+                assert!(f(0.0, f64::INFINITY).is_nan(), "AGM(0, inf)");
+                assert!(f(-1.0, 2.0).is_nan(), "AGM(-1, 2)");
+                assert!(f(1.0, -2.0).is_nan(), "AGM(1, -2)");
+                assert!(f(f64::NAN, 1.0).is_nan(), "AGM(NaN, 1)");
             }
 
             // The hardcoded EllipticConsts::CARLSON_THRESH literals must equal sqrt(sqrt(sqrt(3*eps))).

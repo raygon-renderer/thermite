@@ -3303,7 +3303,7 @@ pub trait FloatRegister:
     /// instruction the spec allows to resolve independently.
     ///
     /// The vector layer forwards this verbatim as
-    /// [`MulAddExt::HAS_NATIVE_FMA`](crate::vector::ops::MulAddExt::HAS_NATIVE_FMA).
+    /// [`MulAddExt::HAS_NATIVE_FMA`].
     const HAS_NATIVE_FMA: tribool::Tribool;
 
     const HALF: Storage<Self>;

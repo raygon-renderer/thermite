@@ -177,7 +177,7 @@ fn composites_inherit_the_new_forms() {
     );
 }
 
-/// `phi::<N>` on a composite takes the element-agnostic default, whose series arm
+/// `phi_n::<N>` on a composite takes the element-agnostic default, whose series arm
 /// iterates until it converges to the element's own epsilon, so double-double gets a
 /// double-double answer, not an f64 one.
 #[test]
@@ -187,7 +187,7 @@ fn compensated_phi_converges_past_f64() {
 
     // phi_3(0.75) from mpmath, split into the nearest f64 and its remainder.
     let (want_hi, want_lo) = (0.20325929863745107_f64, -2.887853226508e-18_f64);
-    let c = C::new(D::splat(0.75)).phi::<3>();
+    let c = C::new(D::splat(0.75)).phi_n::<3>();
     let (hi, lo) = (c.value().extract::<0>(), c.error().extract::<0>());
     close("compensated phi hi", hi, want_hi, 2e-16);
     // The pair need not be normalized to the nearest hi, so compare the residual of the
@@ -196,6 +196,6 @@ fn compensated_phi_converges_past_f64() {
     close("compensated phi lo", (hi - want_hi) + lo, want_lo, 1e-9);
 
     // And the recurrence arm, above the split.
-    let far = C::new(D::splat(3.0)).phi::<3>().value().extract::<0>();
+    let far = C::new(D::splat(3.0)).phi_n::<3>().value().extract::<0>();
     close("compensated phi far", far, 0.4290939601180617681825, 2e-15);
 }

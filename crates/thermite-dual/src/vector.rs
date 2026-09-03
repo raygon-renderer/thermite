@@ -408,6 +408,50 @@ impl<V: DualFloatVector, const N: usize> GenericVector for Dual<V, N> {
         V::_loop_hint()
     }
 
+    #[inline(always)]
+    #[track_caller]
+    fn _enter(name: &'static str) -> u32 {
+        V::_enter_tagged("Dual", name)
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _enter_tagged(tag: &'static str, name: &'static str) -> u32 {
+        V::_enter_tagged(tag, name)
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _exit(token: u32) {
+        V::_exit(token)
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _region_arg(mut self, token: u32) -> Self {
+        self.re = self.re._region_arg(token);
+        for i in 0..N {
+            self.dual[i] = self.dual[i]._region_arg(token);
+        }
+        self
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _region_result(mut self, token: u32) -> Self {
+        self.re = self.re._region_result(token);
+        for i in 0..N {
+            self.dual[i] = self.dual[i]._region_result(token);
+        }
+        self
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _region_imm(token: u32, imm: core::fmt::Arguments) {
+        V::_region_imm(token, imm)
+    }
+
     type Element = Dual<V::Element, N>;
 
     const EMPTY: Self = Self::ZERO;
@@ -1474,11 +1518,11 @@ impl<V: DualFloatVector, const N: usize> NegMasked<V::Mask> for Dual<V, N> {
     // first builds the whole negated `Dual` (one loop) and then blends it (another loop).
     #[inline(always)]
     fn neg_c(self, mask: V::Mask) -> Self {
-        let re = mask.select(-self.re, self.re);
+        let re = self.re.neg_c(mask);
         let mut dual = self.dual;
         let mut i = 0;
         while i < N {
-            dual[i] = mask.select(-dual[i], dual[i]);
+            dual[i] = dual[i].neg_c(mask);
             i += 1;
         }
         Self { re, dual }
@@ -1564,8 +1608,20 @@ impl<V: DualFloatVector, const N: usize> FloatVector for Dual<V, N> {
     #[inline(always)]
     fn sqrt(self) -> Self {
         let s = self.re.sqrt();
-        // d/dx sqrt(x) = 1 / (2 sqrt(x))
-        self.chain(s, V::HALF / s)
+        // d/dx sqrt(x) = 1 / (2 sqrt(x)), infinite at the origin, which is right along a
+        // nonzero tangent and wrong along a zero one, where `inf * 0` would poison a
+        // derivative that is exactly zero. A constant zero under a square root is ordinary
+        // (Carlson's `R_J(0, ..)` inside every third-kind elliptic integral), so the zero
+        // tangent is kept as it is rather than multiplied.
+        let factor = V::HALF / s;
+        let mut dual = self.dual;
+        let mut i = 0;
+        while i < N {
+            let d = dual[i];
+            dual[i] = d.is_zero().select(d, factor * d);
+            i += 1;
+        }
+        Self { re: s, dual }
     }
 
     #[inline(always)]

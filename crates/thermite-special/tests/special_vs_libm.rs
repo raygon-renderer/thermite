@@ -529,12 +529,11 @@ fn digamma_f64_reflection() {
     }
 }
 
-// `trigamma` is deliberately absent from the public `SpecialMath` trait, so its
-// tests live in their own module: importing `SpecializedSpecialMath` at file scope
-// would make every method the two traits share (`logistic_sigmoid`, ...) ambiguous.
+// `trigamma` is public on `SpecialMath` as of the polygamma arc. These tests use the
+// public `_p` spelling (importing `SpecializedSpecialMath` at file scope would make
+// every method the two traits share ambiguous).
 mod trigamma {
     use super::*;
-    use thermite_special::specialized::SpecializedSpecialMath as _;
 
     // psi_1 reference: recurrence psi_1(x) = 1/x^2 + psi_1(x+1) walks any x (including
     // negative non-integers) up past the poles, then the Bernoulli asymptotic series
@@ -569,7 +568,7 @@ mod trigamma {
         let pi2 = core::f64::consts::PI * core::f64::consts::PI;
         let buf = [1.0, 2.0, 0.5, 3.0];
         let want = [pi2 / 6.0, pi2 / 6.0 - 1.0, pi2 / 2.0, pi2 / 6.0 - 1.25];
-        let got = f64x4::new(buf).trigamma::<Precision>().into_array();
+        let got = f64x4::new(buf).trigamma_p::<Precision>().into_array();
         for k in 0..4 {
             assert!(
                 close(got[k], want[k], 1.0e-14),
@@ -591,7 +590,7 @@ mod trigamma {
                 let t = ((i + k) as f64) / (n as f64);
                 buf[k] = 0.05 + t * (20.0 - 0.05); // positive domain (pole only at 0)
             }
-            let got = f64x4::new(buf).trigamma::<DefaultPolicy>().into_array();
+            let got = f64x4::new(buf).trigamma_p::<DefaultPolicy>().into_array();
             for k in 0..4 {
                 let want = trigamma_ref(buf[k]);
                 assert!(
@@ -618,7 +617,7 @@ mod trigamma {
                 let t = ((i + k) as f64) / (n as f64);
                 buf[k] = -8.0 + t * 8.0; // [-8, 0]
             }
-            let got = f64x4::new(buf).trigamma::<Precision>().into_array();
+            let got = f64x4::new(buf).trigamma_p::<Precision>().into_array();
             for k in 0..4 {
                 if (buf[k] - buf[k].round()).abs() < 0.02 {
                     continue;
@@ -641,7 +640,7 @@ mod trigamma {
     #[test]
     fn trigamma_f64_poles() {
         let buf = [0.0, -1.0, -2.0, -7.0];
-        let got = f64x4::new(buf).trigamma::<Precision>().into_array();
+        let got = f64x4::new(buf).trigamma_p::<Precision>().into_array();
         for k in 0..4 {
             assert!(
                 got[k] == f64::INFINITY,
@@ -662,7 +661,7 @@ mod trigamma {
                 let t = ((i + k) as f32) / (n as f32);
                 buf[k] = 0.05 + t * (20.0 - 0.05);
             }
-            let got = f32x8::new(buf).trigamma::<DefaultPolicy>().into_array();
+            let got = f32x8::new(buf).trigamma_p::<DefaultPolicy>().into_array();
             for k in 0..8 {
                 let want = trigamma_ref(buf[k] as f64);
                 assert!(

@@ -26,7 +26,7 @@ const AMP_CAP: f64 = 64.0;
 //   x_cf = (AMP_CAP * (N-1)!)^(1/(N-1))
 //
 // which is 64 at N = 2, 11.3 at N = 3, and settles into the 6-to-17 range for everything
-// above that (it grows like (N-1)/e). Past it, `expint_fraction` runs instead.
+// above that (it grows like (N-1)/e). Past it, `expint_fraction_n` runs instead.
 //
 // The cap has to be a fixed number of ulp, not the whole mantissa. Solving
 // x^(N-1)/(N-1)! = 2^mantissa_bits instead runs the recurrence until the amplification has
@@ -92,7 +92,7 @@ const fn recurrence_threshold(n: usize) -> f64 {
     (lo + hi) * 0.5
 }
 
-/// Iteration cap for [`expint_fraction`].
+/// Iteration cap for [`expint_fraction_n`].
 ///
 /// The fraction is only entered above [`recurrence_threshold`], and the slowest case at any
 /// threshold needs 26 iterations (N = 5..10, where the threshold bottoms out near x = 6);
@@ -113,7 +113,22 @@ pub trait ExpIntConsts<const N: usize>: FloatConsts + Sized {
     const ONE_OVER_N_MINUS_1: Self;
     const FACTORS: [Self; N]; // n+2
     const RECIPROCALS: [Self; N]; // reciprocal of factors
+
+    /// [`RECURRENCE_THRESHOLD`](Self::RECURRENCE_THRESHOLD) for every order below
+    /// [`EXPINT_TABLE_ORDERS`], precomputed: the threshold is a bisection, which the
+    /// runtime-order form must not pay per call.
+    const RECURRENCE_THRESHOLDS: [Self; EXPINT_TABLE_ORDERS];
+    /// `1/(2+k)` for `k` below [`EXPINT_TABLE_ORDERS`], the recurrence's per-step scale.
+    const RECIPROCAL_TABLE: [Self; EXPINT_TABLE_ORDERS];
+
+    /// [`RECURRENCE_THRESHOLD`](Self::RECURRENCE_THRESHOLD) for an order known only at runtime:
+    /// a table lookup, falling back to the bisection only past the table.
+    fn recurrence_threshold_dyn(n: u32) -> Self;
 }
+
+/// How many orders the runtime-order `expint` has precomputed constants for. Past this the
+/// per-step scale is a division and the threshold a bisection, per call.
+pub const EXPINT_TABLE_ORDERS: usize = 33;
 
 macro_rules! impl_expint_consts {
     (
@@ -129,6 +144,25 @@ macro_rules! impl_expint_consts {
             const LARGE_D: [Self; 12] = [$($ld_value),*];
             const ASYMPTOTIC_CONST: Self = 0.66373538970947265625;
             const RECURRENCE_THRESHOLD: Self = const { recurrence_threshold(N) as f32 };
+
+            const RECURRENCE_THRESHOLDS: [Self; EXPINT_TABLE_ORDERS] = {
+                let mut t = [0.0; EXPINT_TABLE_ORDERS]; let mut i = 0;
+                while i < EXPINT_TABLE_ORDERS { t[i] = recurrence_threshold(i) as f32; i += 1; }
+                t
+            };
+            const RECIPROCAL_TABLE: [Self; EXPINT_TABLE_ORDERS] = {
+                let mut r = [0.0; EXPINT_TABLE_ORDERS]; let mut i = 0;
+                while i < EXPINT_TABLE_ORDERS { r[i] = 1.0 / (2 + i) as Self; i += 1; }
+                r
+            };
+
+            #[inline(always)]
+            fn recurrence_threshold_dyn(n: u32) -> Self {
+                match <Self as ExpIntConsts<N>>::RECURRENCE_THRESHOLDS.get(n as usize) {
+                    Some(&t) => t,
+                    None => recurrence_threshold(n as usize) as f32,
+                }
+            }
             const ONE_OVER_N_MINUS_1: Self = if N > 1 { 1.0 / (N as Self - 1.0) } else { Self::INFINITY };
             const FACTORS: [Self; N] = {
                 let mut facts = [0.0; N]; let mut i = 0;
@@ -149,6 +183,25 @@ macro_rules! impl_expint_consts {
             const LARGE_D: [Self; 12] = [$($ld_value),*];
             const ASYMPTOTIC_CONST: Self = 0.66373538970947265625;
             const RECURRENCE_THRESHOLD: Self = const { recurrence_threshold(N) };
+
+            const RECURRENCE_THRESHOLDS: [Self; EXPINT_TABLE_ORDERS] = {
+                let mut t = [0.0; EXPINT_TABLE_ORDERS]; let mut i = 0;
+                while i < EXPINT_TABLE_ORDERS { t[i] = recurrence_threshold(i); i += 1; }
+                t
+            };
+            const RECIPROCAL_TABLE: [Self; EXPINT_TABLE_ORDERS] = {
+                let mut r = [0.0; EXPINT_TABLE_ORDERS]; let mut i = 0;
+                while i < EXPINT_TABLE_ORDERS { r[i] = 1.0 / (2 + i) as Self; i += 1; }
+                r
+            };
+
+            #[inline(always)]
+            fn recurrence_threshold_dyn(n: u32) -> Self {
+                match <Self as ExpIntConsts<N>>::RECURRENCE_THRESHOLDS.get(n as usize) {
+                    Some(&t) => t,
+                    None => recurrence_threshold(n as usize),
+                }
+            }
             const ONE_OVER_N_MINUS_1: Self = if N > 1 { 1.0 / (N as Self - 1.0) } else { Self::INFINITY };
             const FACTORS: [Self; N] = {
                 let mut facts = [0.0; N]; let mut i = 0;
@@ -259,7 +312,7 @@ impl_expint_consts! {
 /// time it is accurate (`$x \approx 90$`) the fraction already converges in 7 iterations. It
 /// can only help where help is least needed.
 #[inline(always)]
-fn expint_fraction<P, E, V, const N: usize>(x: V, exp_neg_x: V) -> V
+fn expint_fraction_n<P, E, V, const N: usize>(x: V, exp_neg_x: V) -> V
 where
     P: Policy,
     E: FloatElementWithBits + ExpIntConsts<N>,
@@ -283,7 +336,7 @@ where
     };
 
     let tiny = V::MIN_POSITIVE;
-    let two = V::ONE + V::ONE;
+    let two = V::TWO;
     let n_large = const { N as thermite::LargeInt };
 
     // b_0 = x + n, and the first convergent is 1/b_0. Both are positive for x > 0, so the
@@ -332,13 +385,189 @@ where
 }
 
 #[inline(always)]
-/// `$E_N(x)$` only. See [`expint_double_primal`] for the shape of the computation.
-pub fn expint_double<P: Policy, E, V, const N: usize>(x: V) -> V
+/// `$E_N(x)$` only. See [`expint_double_primal_n`] for the shape of the computation.
+pub fn expint_double_n<P: Policy, E, V, const N: usize>(x: V) -> V
 where
     E: FloatElementWithBits + ExpIntConsts<N>,
     V: FloatVectorWithBits<Element = E> + crate::specialized::SpecializedSpecialMath<E>,
 {
-    expint_double_primal::<P, E, V, N>(x).0
+    expint_double_primal_n::<P, E, V, N>(x).0
+}
+
+// ---- runtime-order twins ------------------------------------------------------------------
+//
+// The order-independent constants come from `ExpIntConsts<1>`. The per-order ones
+// (`FACTORS`, `RECIPROCALS`, `ONE_OVER_N_MINUS_1`, `RECURRENCE_THRESHOLD`) are the same
+// correctly rounded divisions the const impl folds, formed here per call. So the two forms
+// agree to the bit, which `tests/expint.rs` checks.
+
+/// The runtime-order twin of [`expint_fraction_n`].
+#[inline(always)]
+fn expint_fraction<P, E, V>(x: V, exp_neg_x: V, n: u32) -> V
+where
+    P: Policy,
+    E: FloatElementWithBits,
+    V: FloatVectorWithBits<Element = E> + crate::specialized::SpecializedSpecialMath<E>,
+{
+    let tol = if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
+        <V as FloatConsts>::SQRT_EPSILON
+    } else if const { P::POLICY.precision.le(PrecisionPolicy::Medium) } {
+        <V as FloatConsts>::SQRT_EPSILON * <V as FloatConsts>::FOURTH_ROOT_EPSILON
+    } else {
+        <V as FloatConsts>::EPSILON
+    };
+
+    let tiny = V::MIN_POSITIVE;
+    let two = V::TWO;
+    let n_large = n as thermite::LargeInt;
+
+    let mut b = x + V::splat(E::from_int(n_large));
+    let mut c = V::MAX;
+    let mut d = V::ONE / b;
+    let mut h = d;
+
+    let mut active = <V::Mask as GenericMask>::TRUTHY;
+    let mut i = 1u32;
+
+    while i <= CF_MAX_ITER {
+        V::_loop_hint();
+
+        let a = V::splat(E::from_int(
+            -(i as thermite::LargeInt) * (n_large - 1 + i as thermite::LargeInt),
+        ));
+        b += two;
+
+        let den = a.mul_adde(d, b);
+        d = V::ONE / den.is_zero().select(tiny, den);
+
+        let num = b + a / c;
+        c = num.is_zero().select(tiny, num);
+
+        let delta = c * d;
+
+        h = active.select(h * delta, h);
+
+        active &= (delta - V::ONE).abs().cmp_gt(tol);
+
+        if i.is_multiple_of(4) && active.none() {
+            break;
+        }
+
+        i += 1;
+    }
+
+    h * exp_neg_x
+}
+
+/// The runtime-order twin of [`expint_double_primal_n`].
+#[inline(always)]
+pub fn expint_double_primal<P: Policy, E, V>(x: V, n: u32) -> (V, V)
+where
+    E: FloatElementWithBits + ExpIntConsts<1>,
+    V: FloatVectorWithBits<Element = E> + crate::specialized::SpecializedSpecialMath<E>,
+{
+    let exp_neg_x = (-x).exp_p::<P>();
+    let x_ex = exp_neg_x / x;
+
+    if n == 0 {
+        let mut result = x_ex;
+        let mut prev = x_ex * (V::ONE + x.approx_reciprocal_p::<P>());
+
+        if const { P::POLICY.check_overflow } {
+            let x_is_zero = x.is_zero();
+            result = x_is_zero.select(V::INFINITY, result);
+            prev = x_is_zero.select(V::INFINITY, prev);
+
+            let bad = x.cmp_lt(V::ZERO) | x.is_nan();
+            result = bad.select(V::NAN, result);
+            prev = bad.select(V::NAN, prev);
+        }
+
+        return (result, prev);
+    }
+
+    let is_large = x.cmp_gt(V::ONE);
+
+    let inv_x = x.approx_reciprocal_p::<P>();
+
+    let mut e_n = x
+        .poly_rev_n_p::<P, _>(&<E as ExpIntConsts<1>>::SMALL_N)
+        .approx_div_p::<P>(x.poly_rev_n_p::<P, _>(&<E as ExpIntConsts<1>>::SMALL_D));
+
+    let large_e1 = inv_x
+        .poly_rev_n_p::<P, _>(&<E as ExpIntConsts<1>>::LARGE_N)
+        .approx_div_p::<P>(inv_x.poly_rev_n_p::<P, _>(&<E as ExpIntConsts<1>>::LARGE_D));
+
+    e_n += x - x.ln_p::<P>() - V::splat(<E as ExpIntConsts<1>>::ASYMPTOTIC_CONST);
+
+    e_n = is_large.select((V::ONE + large_e1) * x_ex, e_n);
+
+    // Recurrence `E_1 -> E_n`, the `n = 1` step peeled as in the const form.
+    let mut e_prev = x_ex;
+
+    if n > 1 {
+        e_prev = e_n;
+        e_n = x.nmul_adde(e_n, exp_neg_x);
+
+        let mut k = 0usize;
+        while k < n as usize - 2 {
+            e_prev = e_n;
+            let f = E::from_int((2 + k) as thermite::LargeInt);
+            e_n = if const { P::POLICY.precision.ge(PrecisionPolicy::Best) } {
+                x.nmul_adde(e_n, exp_neg_x) / V::splat(f)
+            } else {
+                // The precomputed reciprocal where there is one, and the same division
+                // past the table.
+                let r = match <E as ExpIntConsts<1>>::RECIPROCAL_TABLE.get(k) {
+                    Some(&r) => r,
+                    None => E::ONE / f,
+                };
+                x.nmul_adde(e_n, exp_neg_x).scale(r)
+            };
+            k += 1;
+        }
+    }
+
+    let is_very_large = x.cmp_ge(V::splat(<E as ExpIntConsts<1>>::recurrence_threshold_dyn(n)));
+
+    if n > 1 && thermite::unlikely(is_very_large.any()) {
+        e_n = is_very_large.select(expint_fraction::<P, E, V>(x, exp_neg_x, n), e_n);
+
+        let back = (exp_neg_x - e_n.scale(E::from_int(n as thermite::LargeInt - 1))) / x;
+        e_prev = is_very_large.select(back, e_prev);
+    }
+
+    if const { P::POLICY.check_overflow } {
+        let x_is_zero = x.is_zero();
+
+        if n == 1 {
+            e_n = x_is_zero.select(V::INFINITY, e_n);
+        } else {
+            e_n = x_is_zero.select(V::splat(E::ONE / E::from_int(n as thermite::LargeInt - 1)), e_n);
+        }
+
+        if n <= 2 {
+            e_prev = x_is_zero.select(V::INFINITY, e_prev);
+        } else {
+            e_prev = x_is_zero.select(V::splat(E::ONE / E::from_int(n as thermite::LargeInt - 2)), e_prev);
+        }
+
+        let bad = x.cmp_lt(V::ZERO) | x.is_nan();
+        e_n = bad.select(V::NAN, e_n);
+        e_prev = bad.select(V::NAN, e_prev);
+    }
+
+    (e_n, e_prev)
+}
+
+/// `$E_n(x)$` only, for a runtime order. See [`expint_double_primal`].
+#[inline(always)]
+pub fn expint_double<P: Policy, E, V>(x: V, n: u32) -> V
+where
+    E: FloatElementWithBits + ExpIntConsts<1>,
+    V: FloatVectorWithBits<Element = E> + crate::specialized::SpecializedSpecialMath<E>,
+{
+    expint_double_primal::<P, E, V>(x, n).0
 }
 
 /// `$E_N(x)$` together with the adjacent lower order `$E_{N-1}(x)$`, which is
@@ -352,7 +581,7 @@ where
 /// (it damps by `1/x` where the forward one amplifies by `x`) and its only weakness,
 /// the cancellation as `x -> 0`, is unreachable here because that branch only runs for
 /// very large `x`.
-pub fn expint_double_primal<P: Policy, E, V, const N: usize>(x: V) -> (V, V)
+pub fn expint_double_primal_n<P: Policy, E, V, const N: usize>(x: V) -> (V, V)
 where
     E: FloatElementWithBits + ExpIntConsts<N>,
     V: FloatVectorWithBits<Element = E> + crate::specialized::SpecializedSpecialMath<E>,
@@ -448,10 +677,10 @@ where
     let is_very_large = x.cmp_ge(V::splat(E::RECURRENCE_THRESHOLD));
 
     // Past the point where the forward recurrence still holds its digits, take the
-    // continued fraction instead. See [`expint_fraction`] and [`recurrence_threshold`];
-    // this replaced an asymptotic series that left an unreachable band for every N >= 4.
+    // continued fraction instead. See [`expint_fraction_n`] and [`recurrence_threshold`].
+    // This replaced an asymptotic series that left an unreachable band for every N >= 4.
     if const { N > 1 } && thermite::unlikely(is_very_large.any()) {
-        e_n = is_very_large.select(expint_fraction::<P, E, V, N>(x, exp_neg_x), e_n);
+        e_n = is_very_large.select(expint_fraction_n::<P, E, V, N>(x, exp_neg_x), e_n);
 
         // The forward-carried `e_prev` came from a recurrence this branch just rejected
         // as unreliable, so re-derive it by inverting that recurrence instead:

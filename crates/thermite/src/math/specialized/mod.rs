@@ -415,8 +415,106 @@ impl<P: Policy, const N: usize, V: FloatVector> AsFloatVectorWithBitsKernel<V, N
     }
 }
 
+/// Compensated Horner evaluation, Graillat-Langlois-Louvet 2005.
+///
+/// Runs an ordinary Horner recurrence and, alongside it, an exact accumulation of every
+/// rounding error the recurrence commits. The result is about what a doubled-precision
+/// Horner would give, which makes it **insensitive to the conditioning of the polynomial**,
+/// the reason it is here.
+///
+/// `REV` picks the coefficient order: `false` is constant-term-first (`poly_n`), `true` is
+/// leading-term-first (`poly_rev_n`). It is a const parameter so the index arithmetic folds.
+///
+/// # Why this is opt-in and not a precision tier
+///
+/// About **10 operations per term against 1 FMA**: `two_product` is 2, `two_sum` is 6, and
+/// the error accumulator 2. No standard policy enables it. A call site that wants it asks
+/// with `UseCompensation<P, true>`, which is how the Bessel rationals reach it.
+///
+/// # Two arms, chosen by `HAS_NATIVE_FMA`
+///
+/// The product half of the compensation needs a **correctly rounded** FMA for `pi` to be the
+/// exact product error. Where the hardware fuses, that is one instruction and this is the full
+/// Graillat-Langlois-Louvet scheme: both error sources captured, the condition number entering
+/// **squared**, behavior equivalent to doubled precision.
+///
+/// Where it does not fuse (and on `Indeterminate`, i.e. wasm, which cannot promise it) the
+/// product half is **dropped** and only the sums are compensated. Thermite's `mul_add` is
+/// correctly rounded on every backend, so the full scheme would still be _exact_ there. It is
+/// simply not worth it. The emulated correctly rounded FMA is a stronger guarantee than the
+/// product error this needs, and measured **27x on the 1-lane f64 seed** and about **4x on
+/// f64x4** for roughly 2x of accuracy.
+///
+/// The downgrade is real and is not hidden: with the product errors uncompensated they are
+/// still amplified by the full condition number, so the bound improves only from
+/// `gamma_{2n}` to `gamma_n` (about a factor of two, not an order of magnitude). The
+/// compensation stops being conditioning-proof and becomes a constant-factor improvement. It
+/// is kept because the same ~9 operations deliver that factor with no FMA anywhere, which is
+/// strictly better than the alternative of not compensating at all.
+#[inline(always)]
+fn compensated_horner<V, E, const N: usize, const REV: bool>(x: V, coeffs: &[E; N]) -> V
+where
+    E: Copy,
+    V: FloatVector<Element = E>,
+{
+    // Leading coefficient: last slot when constant-first, first slot when leading-first.
+    let mut s = V::splat(coeffs[if REV { 0 } else { N - 1 }]);
+    let mut e = V::ZERO;
+
+    let mut i = 1usize;
+    while i < N {
+        let c = V::splat(coeffs[if REV { i } else { N - 1 - i }]);
+
+        let p = s * x;
+
+        // two_sum(p, c): t is the rounded sum, sigma the exact error (Knuth, 6 ops: the
+        // operands are not ordered by magnitude, so the cheap fast_two_sum is not valid).
+        // This half needs no FMA at all, only adds and subtracts.
+        let t = p + c;
+        let b = t - p;
+        let sigma = (p - (t - b)) + (c - b);
+
+        // two_product(s, x): `pi` is the EXACT error of the rounded product `p`, and is
+        // available in one instruction only where the hardware fuses.
+        //
+        // Where it does not, `mul_add` lowers to the emulated correctly rounded FMA, which is
+        // strictly more work than this needs: correct rounding of a SUM is a stronger
+        // guarantee than the product error we are extracting, and we throw the rest away.
+        // Measured, that path cost 27x on the 1-lane f64 seed and about 4x on f64x4, against
+        // roughly 2x of accuracy. So off-FMA this degrades to compensating the SUMS only.
+        //
+        // That is a real downgrade, and an honest one: capturing both errors makes the
+        // condition number enter SQUARED, which is what makes full compensation behave like
+        // doubled precision. Sums alone leaves the surviving product errors amplified by the
+        // full condition number, so the bound only improves from `gamma_{2n}` to `gamma_n`.
+        // That is a factor of about two, not an order of magnitude. It is still worth
+        // having: the same ~9 operations buy that factor without an FMA anywhere.
+        //
+        // `Indeterminate` (wasm, where the engine may or may not fuse a relaxed madd) takes the
+        // cheap arm as well. It cannot PROMISE fusion, and `pi` is only the exact product error
+        // under a genuine FMA. A `mul_add` that silently lowers to multiply-then-add makes the
+        // compensation compensate for the wrong thing.
+        let inc = if const { matches!(V::HAS_NATIVE_FMA, tribool::True) } {
+            s.mul_add(x, -p) + sigma
+        } else {
+            sigma
+        };
+
+        // The error terms ride the same recurrence as the value. `mul_adde` and not `mul_add`:
+        // `e` is already a correction of relative size ~eps, so its own rounding is second
+        // order, and insisting on a correctly rounded FMA here would drag the emulated path
+        // back in on exactly the backends the branch above just rescued.
+        e = e.mul_adde(x, inc);
+        s = t;
+
+        i += 1;
+    }
+
+    s + e
+}
+
 pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
-    /// Backing definition of [`CoreMathWithPolicy::poly_n_primal`].
+    /// Backing definition of [`CoreMath::poly_n_primal`](crate::math::CoreMath::poly_n_primal).
     ///
     /// Horner over primal coefficients. The multiply stays in `Self` (both operands
     /// genuinely vary), but the addend is a constant with no augmentation, so the
@@ -439,7 +537,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
         res
     }
 
-    /// Backing definition of [`CoreMathWithPolicy::poly_rev_n_primal`].
+    /// Backing definition of [`CoreMath::poly_rev_n_primal`](crate::math::CoreMath::poly_rev_n_primal).
     ///
     /// [`poly_n_primal`](Self::poly_n_primal) with the coefficients in descending order.
     /// The same primal-Horner step, walked forwards.
@@ -459,7 +557,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
         res
     }
 
-    /// Backing definition of [`CoreMathWithPolicy::poly_primal`].
+    /// Backing definition of [`CoreMath::poly_primal`](crate::math::CoreMath::poly_primal).
     ///
     /// The same primal-Horner walk as [`poly_n_primal`](Self::poly_n_primal) over a
     /// runtime length. Unlike the slice reductions, a polynomial is not folded over
@@ -480,7 +578,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
         res
     }
 
-    /// Backing definition of [`CoreMathWithPolicy::poly_rev_primal`].
+    /// Backing definition of [`CoreMath::poly_rev_primal`](crate::math::CoreMath::poly_rev_primal).
     ///
     /// [`poly_primal`](Self::poly_primal) with the coefficients descending.
     #[inline(always)]
@@ -608,6 +706,12 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
     fn poly_n<P: Policy, const N: usize>(self, coeffs: &[E; N]) -> Self {
         let x = self;
 
+        // Opt-in only: no standard policy sets `use_compensation`, so this arm exists for
+        // call sites that ask with `UseCompensation<P, true>`.
+        if const { P::POLICY.use_compensation } {
+            return compensated_horner::<Self, E, N, false>(x, coeffs);
+        }
+
         if const {
             !P::POLICY.unroll_loops
                 || P::POLICY.precision.ge(PrecisionPolicy::Best)
@@ -666,6 +770,12 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
     #[inline(always)]
     fn poly_rev_n<P: Policy, const N: usize>(self, coeffs: &[E; N]) -> Self {
         let x = self;
+
+        // See `poly_n`. `poly_rational_n`'s reciprocal branch evaluates through here, so
+        // leaving it out would silently keep the old accuracy for every `x > 1`.
+        if const { P::POLICY.use_compensation } {
+            return compensated_horner::<Self, E, N, true>(x, coeffs);
+        }
 
         if const {
             !P::POLICY.unroll_loops
@@ -1410,7 +1520,7 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
     }
 
     #[inline(always)]
-    fn nth_root<P: Policy, const N: usize>(self) -> Self {
+    fn nth_root_n<P: Policy, const N: usize>(self) -> Self {
         let mut x = self;
 
         match N {
@@ -1470,6 +1580,54 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
         }
     }
 
+    /// The runtime twin of [`nth_root_n`](Self::nth_root_n): the same arithmetic with the degree
+    /// as a value, so the two agree to the bit at every `n`. The special cases are one uniform
+    /// branch on `n` rather than a compile-time fold.
+    #[inline(always)]
+    fn nth_root<P: Policy>(self, n: u32) -> Self {
+        let mut x = self;
+
+        match n {
+            0 => Self::NAN, // undefined
+            1 => x,
+            2 => x.sqrt(),
+            3 => x.cbrt_p::<P>(),
+            4 if const { P::POLICY.precision.le(PrecisionPolicy::Average) } => x.sqrt().sqrt(),
+
+            _ => {
+                let odd = n & 1 == 1;
+                let mut is_neg = GenericMask::FALSY;
+
+                // for odd powers, work with absolute value and restore sign later
+                if odd {
+                    is_neg = x.is_negative();
+                    x = x.abs();
+                }
+
+                let y = x.powf_p::<LessPrecision<P>>(Self::splat(E::from_ratio(1, n as crate::LargeInt)));
+                let y_n = y.powi_p::<P>(n as i32);
+
+                let np1 = Self::splat(E::from_int((n + 1) as crate::LargeInt));
+                let nm1 = Self::splat(E::from_int((n - 1) as crate::LargeInt));
+
+                // The dimensionless Halley step. See the const form for why.
+                let q = y_n / x;
+                let t = (Self::ONE - q) / q.mul_adde(np1, nm1);
+                let mut y2 = t.mul_adde(y + y, y);
+
+                if const { P::POLICY.check_overflow } {
+                    y2 = (x.cmp_eq(Self::ZERO) | x.is_infinite()).select(y, y2);
+                }
+
+                if odd {
+                    y2 = y2.neg_c(is_neg);
+                }
+
+                y2
+            }
+        }
+    }
+
     fn ln<P: Policy>(self) -> Self;
     fn ln_1p<P: Policy>(self) -> Self;
     fn log2<P: Policy>(self) -> Self;
@@ -1497,7 +1655,19 @@ pub trait SpecializedTranscendentalMath<E>: SpecializedCoreMath<E> {
         Self::ln_1p::<P>(self) - self
     }
 
-    fn log_n<P: Policy, const N: usize>(self) -> Self;
+    fn log_n_n<P: Policy, const N: usize>(self) -> Self;
+
+    /// The runtime twin of [`log_n_n`](Self::log_n_n). This default goes through
+    /// [`log`](Self::log). The real f32/f64 vectors override it with the same table lookup the
+    /// const form uses, so the two agree to the bit there.
+    #[inline(always)]
+    fn log_n<P: Policy>(self, n: u32) -> Self {
+        match n {
+            0 => Self::ZERO,
+            1 => <Self as FloatVector>::INFINITY,
+            _ => Self::log::<P>(self, Self::splat(E::from_int(n as crate::LargeInt))),
+        }
+    }
 
     #[inline(always)]
     fn log<P: Policy>(self, base: Self) -> Self {
@@ -1945,7 +2115,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     }
 
     #[inline(always)]
-    fn smoothstep<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
+    fn smoothstep_n<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
         let mut t = self;
 
         #[cfg(not(target_arch = "spirv"))]
@@ -1991,8 +2161,24 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         }
     }
 
+    /// The runtime twin of [`smoothstep_n`](Self::smoothstep_n): a ladder over the degrees
+    /// worth having, `0..=4`, each arm the const form with its folded coefficients. The
+    /// polynomial is a handful of FMAs, so a coefficient table walked by a loop would cost more
+    /// than the branch that picks an instantiation. Degrees past 4 return NaN.
     #[inline(always)]
-    fn smoothstep_derivative<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
+    fn smoothstep<P: Policy>(self, edges: Option<(Self, Self)>, n: u32) -> Self {
+        match n {
+            0 => Self::smoothstep_n::<P, 0>(self, edges),
+            1 => Self::smoothstep_n::<P, 1>(self, edges),
+            2 => Self::smoothstep_n::<P, 2>(self, edges),
+            3 => Self::smoothstep_n::<P, 3>(self, edges),
+            4 => Self::smoothstep_n::<P, 4>(self, edges),
+            _ => Self::NAN,
+        }
+    }
+
+    #[inline(always)]
+    fn smoothstep_derivative_n<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
         let mut t = self;
         let mut dt_dx = Self::ONE;
 
@@ -2042,8 +2228,22 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         }
     }
 
+    /// The runtime twin of [`smoothstep_derivative_n`](Self::smoothstep_derivative_n), the same
+    /// `0..=4` ladder as [`smoothstep`](Self::smoothstep).
     #[inline(always)]
-    fn inverse_smoothstep<P: Policy, const N: usize>(mut y: Self, edges: Option<(Self, Self)>) -> Self {
+    fn smoothstep_derivative<P: Policy>(self, edges: Option<(Self, Self)>, n: u32) -> Self {
+        match n {
+            0 => Self::smoothstep_derivative_n::<P, 0>(self, edges),
+            1 => Self::smoothstep_derivative_n::<P, 1>(self, edges),
+            2 => Self::smoothstep_derivative_n::<P, 2>(self, edges),
+            3 => Self::smoothstep_derivative_n::<P, 3>(self, edges),
+            4 => Self::smoothstep_derivative_n::<P, 4>(self, edges),
+            _ => Self::NAN,
+        }
+    }
+
+    #[inline(always)]
+    fn inverse_smoothstep_n<P: Policy, const N: usize>(mut y: Self, edges: Option<(Self, Self)>) -> Self {
         let mut ba = Self::ONE;
         let mut bar = Self::ONE;
         let mut bar_a = Self::ONE; // (b - a) * a
@@ -2108,7 +2308,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         let bounds = edges.or(Some((Self::ZERO, Self::ONE)));
 
         #[rustfmt::skip]
-        let (v, _converged) = algorithms::newtons_method::<Self, P, _>(x0, Self::tolerance::<P>(), bounds, #[inline(always)] move |x: Self| {
+        let (v, _converged) = algorithms::newtons_method::<Self, P, _>(x0, Self::tolerance::<P>(), GenericMask::TRUTHY, bounds, #[inline(always)] move |x: Self| {
             let mut t = x;
             let dt_dx = bar;
 
@@ -2146,6 +2346,20 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         });
 
         v
+    }
+
+    /// The runtime twin of [`inverse_smoothstep_n`](Self::inverse_smoothstep_n), the same
+    /// `0..=4` ladder as [`smoothstep`](Self::smoothstep).
+    #[inline(always)]
+    fn inverse_smoothstep<P: Policy>(y: Self, edges: Option<(Self, Self)>, n: u32) -> Self {
+        match n {
+            0 => Self::inverse_smoothstep_n::<P, 0>(y, edges),
+            1 => Self::inverse_smoothstep_n::<P, 1>(y, edges),
+            2 => Self::inverse_smoothstep_n::<P, 2>(y, edges),
+            3 => Self::inverse_smoothstep_n::<P, 3>(y, edges),
+            4 => Self::inverse_smoothstep_n::<P, 4>(y, edges),
+            _ => Self::NAN,
+        }
     }
 
     #[inline(always)]
@@ -2314,7 +2528,7 @@ impl<const N: usize> Smoothstep<N> {
         let mut coeffs = [0; N];
         // `N as i32 - 1` (not `(N - 1) as i32`) so the N=0 case, an empty coeff
         // array whose loop never runs and leaves `n` unused, doesn't underflow `usize`
-        // at compile time. This lets `smoothstep`/`inverse_smoothstep::<0>` compile.
+        // at compile time. This lets `smoothstep`/`inverse_smoothstep_n::<0>` compile.
         let n = N as i32 - 1;
 
         let mut k = 0;

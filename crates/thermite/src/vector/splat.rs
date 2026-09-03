@@ -65,6 +65,12 @@ macro_rules! const_splat {
         const { $crate::vector::const_splat::<_, <$E as $crate::register::FloatElement>::ConstInt<{$n}>>() }
     };
 
+    // The same ratio spelled as a fraction of two literals, `const_splat!(ratio <E>: -1 / 10)`,
+    // which reads as the number it is. Must precede the `expr, expr` arm.
+    (ratio <$E:ty>: $n:literal / $d:literal) => {
+        $crate::const_splat!(ratio <$E>: $n, $d)
+    };
+
     // Compile-time rational constant N/D cast to a generic float element E.
     // N and D must be const expressions of type i64.
     // Requires E: FloatElement (provides E::ConstRatio<N, D> implementing SplatConst<E>).
@@ -89,6 +95,29 @@ macro_rules! const_splat {
         }
         const { $crate::vector::const_splat::<_, __ConstSplatValue>() }
     }};
+}
+
+/// A compile-time float _element_ constant from an integer or a ratio: the scalar twin of
+/// [`const_splat!`]'s `int` / `ratio` arms, for the places that take an element rather than
+/// a vector (`v.scale(..)`, a scalar helper's return, a threshold compared against an
+/// element).
+///
+/// ```ignore
+/// let eighth: E = thermite::const_element!(ratio <E>: 1 / 8);
+/// let n: E = thermite::const_element!(int <E>: 8);
+/// v.scale(thermite::const_element!(ratio <E>: 1 / 3))
+/// ```
+#[macro_export]
+macro_rules! const_element {
+    (int <$E:ty>: $n:expr) => {
+        <<$E as $crate::register::FloatElement>::ConstInt<{ $n }> as $crate::vector::SplatConst<$E>>::VALUE
+    };
+    (ratio <$E:ty>: $n:literal / $d:literal) => {
+        $crate::const_element!(ratio <$E>: $n, $d)
+    };
+    (ratio <$E:ty>: $n:expr, $d:expr) => {
+        <<$E as $crate::register::FloatElement>::ConstRatio<{ $n }, { $d }> as $crate::vector::SplatConst<$E>>::VALUE
+    };
 }
 
 /// Type-level addition of two [`ArrayLength`] typenums.

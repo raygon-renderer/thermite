@@ -443,7 +443,7 @@ macro_rules! zernike_grad_columns {
 /// Every Zernike mode through degree `L` at the Cartesian point `(x, y)`.
 ///
 /// `out[(n(n+2) + m)/2]` receives `$Z_n^m$` in the normalization named by `NORM`, and `N`
-/// must equal `(L+1)(L+2)/2` (compile-time checked). See the [module docs](self) for the
+/// must equal `(L+1)(L+2)/2` (compile-time checked). See the module docs for the
 /// algorithm and the domain note.
 ///
 /// The policy parameter is unused: evaluation is pure polynomial arithmetic with one

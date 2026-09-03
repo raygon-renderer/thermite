@@ -24,7 +24,386 @@ where
     // `Primal = V`) resolve. A type parameter's `Primal` will not normalize
     // through the blanket impl on its own.
     V: thermite::math::PrimalProjection<Primal = V>,
+    V: thermite::math::RealMathWithPolicy<Element = f32>,
 {
+    #[inline(always)]
+    fn zetac<P: Policy>(self) -> Self {
+        generic::zeta::zeta_impl::<P, _, _, true>(self)
+    }
+
+    #[inline(always)]
+    fn polylog<P: Policy>(self, order: crate::PolylogOrder<f32, i32>) -> Self {
+        generic::polylog::polylog_impl::<P, f32, Self>(self, order)
+    }
+
+    #[inline(always)]
+    fn zeta<P: Policy>(self) -> Self {
+        generic::zeta::zeta_impl::<P, _, _, false>(self)
+    }
+
+    #[inline(always)]
+    fn zeta_with_deriv<P: Policy, const ZETAC: bool>(self) -> (Self, Self) {
+        generic::zeta::zeta_core::<P, _, _, ZETAC, true>(self)
+    }
+
+    #[inline(always)]
+    fn bessel_i<P: Policy, const N: i32>(self) -> Self {
+        bessel_i_dispatch::<P, Self, N, false>(self)
+    }
+
+    #[inline(always)]
+    fn bessel_i_scaled<P: Policy, const N: i32>(self) -> Self {
+        bessel_i_dispatch::<P, Self, N, true>(self)
+    }
+
+    #[inline(always)]
+    fn bessel_k<P: Policy, const N: i32>(self) -> Self {
+        bessel_k_dispatch::<P, Self, N, false>(self)
+    }
+
+    #[inline(always)]
+    fn bessel_k_scaled<P: Policy, const N: i32>(self) -> Self {
+        bessel_k_dispatch::<P, Self, N, true>(self)
+    }
+
+    #[inline(always)]
+    fn bessel_j<P: Policy, const N: i32>(self) -> Self {
+        use crate::tables::bessel::jy::{BESSEL_J0_F32, BESSEL_J1_F32};
+        // `Reference` is contractually bit-identical to libm, lane by lane. Unlike most of
+        // this crate, libm actually has these (the C/POSIX XSI set) at every order, so the
+        // arm exists. `I`/`K` have no libm counterpart and therefore no reference arm.
+        if const { is_reference::<P>() } {
+            let v = if const { N == 0 } {
+                map1(self, libm::j0f)
+            } else if const { N.unsigned_abs() == 1 } {
+                map1(self, libm::j1f)
+            } else {
+                map1(self, |v| libm::jnf(N.abs(), v))
+            };
+            // A sign flip is exact, so reflecting libm's own value keeps the tier's
+            // bit-identity promise rather than trading it for a second algorithm.
+            return if const { bessel_reflect_negates(N) } { -v } else { v };
+        }
+        let v = if const { N == 0 } {
+            generic::bessel::jy::bessel_j0_impl::<P, f32, _, _, _, _>(self, &BESSEL_J0_F32)
+        } else if const { N.unsigned_abs() == 1 } {
+            generic::bessel::jy::bessel_j1_impl::<P, f32, _, _, _, _>(self, &BESSEL_J1_F32)
+        } else {
+            generic::bessel::jy::bessel_jn_pair_impl::<P, f32, _, _, _, _, _, _, _, N>(
+                self,
+                &BESSEL_J0_F32,
+                &BESSEL_J1_F32,
+            )
+            .1
+        };
+        // `J_{-n} = (-1)^n J_n`. Every arm above evaluated at `|N|`.
+        if const { bessel_reflect_negates(N) } { -v } else { v }
+    }
+
+    #[inline(always)]
+    fn bessel_y<P: Policy, const N: i32>(self) -> Self {
+        use crate::tables::bessel::jy::{BESSEL_J0_F32, BESSEL_J1_F32, BESSEL_Y0_F32, BESSEL_Y1_F32};
+        if const { is_reference::<P>() } {
+            let v = if const { N == 0 } {
+                map1(self, libm::y0f)
+            } else if const { N.unsigned_abs() == 1 } {
+                map1(self, libm::y1f)
+            } else {
+                map1(self, |v| libm::ynf(N.abs(), v))
+            };
+            return if const { bessel_reflect_negates(N) } { -v } else { v };
+        }
+        let v = if const { N.unsigned_abs() >= 2 } {
+            // Y is the dominant solution, so upward recurrence is stable and costs exactly
+            // |N|-1 steps (no trip count question at all, unlike J).
+            let y0 = generic::bessel::jy::bessel_y_impl::<P, f32, _, _, _, _, _, _, _, _, false>(
+                self,
+                &BESSEL_Y0_F32,
+                &BESSEL_J0_F32,
+            );
+            let y1 = generic::bessel::jy::bessel_y_impl::<P, f32, _, _, _, _, _, _, _, _, true>(
+                self,
+                &BESSEL_Y1_F32,
+                &BESSEL_J1_F32,
+            );
+            generic::bessel::jy::bessel_yn_recur::<f32, _, N>(self, y0, y1).1
+        } else if const { N == 0 } {
+            generic::bessel::jy::bessel_y_impl::<P, f32, _, _, _, _, _, _, _, _, false>(
+                self,
+                &BESSEL_Y0_F32,
+                &BESSEL_J0_F32,
+            )
+        } else {
+            generic::bessel::jy::bessel_y_impl::<P, f32, _, _, _, _, _, _, _, _, true>(
+                self,
+                &BESSEL_Y1_F32,
+                &BESSEL_J1_F32,
+            )
+        };
+        // `Y_{-n} = (-1)^n Y_n`, the same reflection `J` gets.
+        if const { bessel_reflect_negates(N) } { -v } else { v }
+    }
+
+    #[inline(always)]
+    fn bessel_i_with_deriv<P: Policy, const N: i32, const SCALED: bool>(self) -> (Self, Self) {
+        bessel_i_deriv_dispatch::<P, Self, N, SCALED>(self)
+    }
+
+    #[inline(always)]
+    fn bessel_k_with_deriv<P: Policy, const N: i32, const SCALED: bool>(self) -> (Self, Self) {
+        bessel_k_deriv_dispatch::<P, Self, N, SCALED>(self)
+    }
+
+    #[inline(always)]
+    fn bessel_iv<P: Policy, const SCALED: bool>(self, order: crate::BesselOrder<Self, Self::Signed>) -> Self {
+        // Half-integer order is elementary: hyperbolic seeds and the same two recurrence
+        // directions the integer kernel uses. See `generic::bessel_half`.
+        let order = order.simplify();
+        if let crate::BesselOrder::HalfInteger(k) = order {
+            return generic::bessel::half::bessel_ik_half::<P, f32, _, SCALED>(
+                Self::from_signed_integer(k) * Self::HALF,
+                self,
+                crate::tables::bessel::BESSEL_I0_F32.far_threshold,
+            )
+            .0;
+        }
+        // `Thirds` and `Real` take the table-free arms in `generic::bessel_ik_nu`.
+        let Some(n) = order.as_integer() else {
+            return generic::bessel::ik_real::bessel_ik_real::<P, f32, _, _, 11, 11, SCALED, true>(
+                order.to_real(),
+                self,
+                &crate::tables::lgamma1p::LGAMMA1P_F32,
+                crate::tables::bessel::BESSEL_I0_F32.far_threshold,
+            )
+            .0;
+        };
+        // `I_{-n} = I_n` for integer `n`, so magnitude is the whole story and no sign is owed
+        // afterwards. `J`/`Y` below are the ones that reflect.
+        let nf = Self::from_signed_integer(n).abs();
+        let v = generic::bessel::ik::bessel_iv_impl::<P, f32, _, _, _, _, SCALED>(
+            self,
+            nf,
+            &crate::tables::bessel::BESSEL_I0_F32,
+        );
+        // Orders 0 and 1 have closed forms, and the ratio ladder is measurably worse at them:
+        // it reaches order 1 as `I_0 * r_1`, paying the continued fraction for a value the
+        // table gives directly. Measured 5.49 ULP against 3.04 before this select was added.
+        let i1 =
+            generic::bessel::ik::bessel_i1_impl::<P, _, _, _, _, SCALED>(self, &crate::tables::bessel::BESSEL_I1_F32);
+        nf.cmp_le(Self::ONE).select(
+            nf.cmp_le(Self::ZERO).select(
+                generic::bessel::ik::bessel_i0_impl::<P, _, _, _, _, SCALED>(
+                    self,
+                    &crate::tables::bessel::BESSEL_I0_F32,
+                ),
+                i1,
+            ),
+            v,
+        )
+    }
+
+    #[inline(always)]
+    fn bessel_kv<P: Policy, const SCALED: bool>(self, order: crate::BesselOrder<Self, Self::Signed>) -> Self {
+        // Half-integer order is elementary. See `generic::bessel_half`.
+        let order = order.simplify();
+        if let crate::BesselOrder::HalfInteger(k) = order {
+            return generic::bessel::half::bessel_ik_half::<P, f32, _, SCALED>(
+                Self::from_signed_integer(k) * Self::HALF,
+                self,
+                crate::tables::bessel::BESSEL_I0_F32.far_threshold,
+            )
+            .1;
+        }
+        // `Thirds` and `Real` take the table-free arms in `generic::bessel_ik_nu`.
+        let Some(n) = order.as_integer() else {
+            // `NEED_I = false`: this entry wants only `K`, which is the cheap half. Skipping
+            // `I` skips the continued fraction and the asymptotic series both.
+            return generic::bessel::ik_real::bessel_ik_real::<P, f32, _, _, 11, 11, SCALED, false>(
+                order.to_real(),
+                self,
+                &crate::tables::lgamma1p::LGAMMA1P_F32,
+                crate::tables::bessel::BESSEL_I0_F32.far_threshold,
+            )
+            .1;
+        };
+        // `K_{-n} = K_n`, as with `I`.
+        let nf = Self::from_signed_integer(n).abs();
+        generic::bessel::ik::bessel_kv_impl::<P, f32, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, SCALED>(
+            self,
+            nf,
+            &crate::tables::bessel::BESSEL_K0_F32,
+            &crate::tables::bessel::BESSEL_K1_F32,
+            &crate::tables::bessel::BESSEL_I0_F32,
+            &crate::tables::bessel::BESSEL_I1_F32,
+        )
+    }
+
+    #[inline(always)]
+    fn bessel_jv<P: Policy>(self, order: crate::BesselOrder<Self, Self::Signed>) -> Self {
+        // Half-integer order is elementary. See `generic::bessel_half`. `simplify` has
+        // already turned an even numerator into `Integer`, so anything still tagged
+        // `HalfInteger` here is a genuine half-odd order.
+        let order = order.simplify();
+        if let crate::BesselOrder::HalfInteger(k) = order {
+            return generic::bessel::half::bessel_jy_half::<P, f32, _>(Self::from_signed_integer(k) * Self::HALF, self)
+                .0;
+        }
+        // `Thirds` and `Real` take the table-free arms in `generic::bessel_nu`, which cover
+        // the whole axis at any real order. Thirds are not specialised beyond that, and
+        // deliberately: see the module docs there.
+        let Some(n) = order.as_integer() else {
+            let nu = order.to_real();
+            return generic::bessel::jy_real::bessel_jy_real::<P, f32, _, 5, 11, 11, 13, 2>(
+                nu,
+                self,
+                Self::ZERO,
+                &crate::tables::lgamma1p::LGAMMA1P_F32,
+            )
+            .0;
+        };
+        // The const form routes `Reference` to libm, and so must this one, or the tier silently
+        // stops meaning "bit-identical to libm" as soon as the order moves into a register.
+        if const { is_reference::<P>() } {
+            let mut out = self;
+            let mut i = 0;
+            while i < Self::LANES {
+                // Reflected here rather than handed to libm signed, so the tier means the
+                // same thing at negative order as the const form does.
+                let k = n.extractv(i);
+                let r = libm::jnf(k.unsigned_abs() as i32, self.extractv(i));
+                out = out.insertv(i, if k < 0 && k % 2 != 0 { -r } else { r });
+                i += 1;
+            }
+            return out;
+        }
+        let (nf, flip) = bessel_reflect_v(Self::from_signed_integer(n));
+        generic::bessel::jy::bessel_jv_impl::<P, f32, _, _, _, _, _, _, _>(
+            self,
+            nf,
+            &crate::tables::bessel::jy::BESSEL_J0_F32,
+            &crate::tables::bessel::jy::BESSEL_J1_F32,
+        )
+        .neg_c(flip)
+    }
+
+    #[inline(always)]
+    fn bessel_yv<P: Policy>(self, order: crate::BesselOrder<Self, Self::Signed>) -> Self {
+        // Half-integer order is elementary. See `generic::bessel_half`.
+        let order = order.simplify();
+        if let crate::BesselOrder::HalfInteger(k) = order {
+            return generic::bessel::half::bessel_jy_half::<P, f32, _>(Self::from_signed_integer(k) * Self::HALF, self)
+                .1;
+        }
+        let Some(n) = order.as_integer() else {
+            let nu = order.to_real();
+            return generic::bessel::jy_real::bessel_jy_real::<P, f32, _, 5, 11, 11, 13, 2>(
+                nu,
+                self,
+                Self::ZERO,
+                &crate::tables::lgamma1p::LGAMMA1P_F32,
+            )
+            .1;
+        };
+        if const { is_reference::<P>() } {
+            let mut out = self;
+            let mut i = 0;
+            while i < Self::LANES {
+                let k = n.extractv(i);
+                let r = libm::ynf(k.unsigned_abs() as i32, self.extractv(i));
+                out = out.insertv(i, if k < 0 && k % 2 != 0 { -r } else { r });
+                i += 1;
+            }
+            return out;
+        }
+        let (nf, flip) = bessel_reflect_v(Self::from_signed_integer(n));
+        generic::bessel::jy::bessel_yv_impl::<P, f32, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _>(
+            self,
+            nf,
+            &crate::tables::bessel::jy::BESSEL_Y0_F32,
+            &crate::tables::bessel::jy::BESSEL_Y1_F32,
+            &crate::tables::bessel::jy::BESSEL_J0_F32,
+            &crate::tables::bessel::jy::BESSEL_J1_F32,
+        )
+        .neg_c(flip)
+    }
+
+    impl_sph_bessel_entries!(f32, crate::tables::bessel::BESSEL_I0_F32);
+
+    impl_airy_entries!(
+        f32,
+        5,
+        11,
+        11,
+        13,
+        2,
+        &crate::tables::lgamma1p::LGAMMA1P_F32,
+        &crate::tables::bessel::airy::AIRY_ZERO_F32,
+        crate::tables::bessel::BESSEL_I0_F32
+    );
+
+    #[inline(always)]
+    fn bessel_j_with_deriv<P: Policy, const N: i32>(self) -> (Self, Self) {
+        // Order N-1 comes from the recurrence, which walks through it either way: forward
+        // passes it on the last step, downward keeps the shorter product.
+        let (prev, v) = if const { N == 0 } {
+            // J_{-1} = -J_1, so the identity still holds and the N/x term vanishes.
+            (-Self::bessel_j::<P, 1>(self), Self::bessel_j::<P, 0>(self))
+        } else if const { N.unsigned_abs() == 1 } {
+            (Self::bessel_j::<P, 0>(self), Self::bessel_j::<P, 1>(self))
+        } else {
+            generic::bessel::jy::bessel_jn_pair_impl::<P, f32, _, _, _, _, _, _, _, N>(
+                self,
+                &crate::tables::bessel::jy::BESSEL_J0_F32,
+                &crate::tables::bessel::jy::BESSEL_J1_F32,
+            )
+        };
+        let d = if const { N == 0 } {
+            prev
+        } else {
+            prev - v * (Self::splat(N.unsigned_abs() as f32) / self)
+        };
+        // The pair above is at `|N|`. Reflecting a negative order scales the function by a
+        // constant `(-1)^n`, so differentiating both sides carries the identical sign.
+        if const { bessel_reflect_negates(N) } {
+            (-v, -d)
+        } else {
+            (v, d)
+        }
+    }
+
+    #[inline(always)]
+    fn bessel_y_with_deriv<P: Policy, const N: i32>(self) -> (Self, Self) {
+        let (prev, v) = if const { N == 0 } {
+            (-Self::bessel_y::<P, 1>(self), Self::bessel_y::<P, 0>(self))
+        } else if const { N.unsigned_abs() == 1 } {
+            (Self::bessel_y::<P, 0>(self), Self::bessel_y::<P, 1>(self))
+        } else {
+            let y0 = generic::bessel::jy::bessel_y_impl::<P, f32, _, _, _, _, _, _, _, _, false>(
+                self,
+                &crate::tables::bessel::jy::BESSEL_Y0_F32,
+                &crate::tables::bessel::jy::BESSEL_J0_F32,
+            );
+            let y1 = generic::bessel::jy::bessel_y_impl::<P, f32, _, _, _, _, _, _, _, _, true>(
+                self,
+                &crate::tables::bessel::jy::BESSEL_Y1_F32,
+                &crate::tables::bessel::jy::BESSEL_J1_F32,
+            );
+            generic::bessel::jy::bessel_yn_recur::<f32, _, N>(self, y0, y1)
+        };
+        let d = if const { N == 0 } {
+            prev
+        } else {
+            prev - v * (Self::splat(N.unsigned_abs() as f32) / self)
+        };
+        // The pair above is at `|N|`. Reflecting a negative order scales the function by a
+        // constant `(-1)^n`, so differentiating both sides carries the identical sign.
+        if const { bessel_reflect_negates(N) } {
+            (-v, -d)
+        } else {
+            (v, d)
+        }
+    }
+
     type ExpIntDetails = Self;
     const LAGUERRE_PRODUCT_SEED_CAP: i32 = 29;
 
@@ -51,7 +430,7 @@ where
     // The `bessel_j0`/`bessel_j0_pqzero` machinery this called is kept below under the
     // same marker.
     //#[inline(always)]
-    //fn bessel_j<P: Policy, const N: usize>(self) -> Self {
+    //fn bessel_j<P: Policy, const N: i32>(self) -> Self {
     //    match N {
     //        0 => bessel_j0::<Self, P>(self),
     //        _ => todo!(),
@@ -338,6 +717,11 @@ where
     }
 
     #[inline(always)]
+    fn polygamma<P: Policy>(self, n: u32) -> Self {
+        generic::polygamma::polygamma_impl::<P, _, _>(self, n)
+    }
+
+    #[inline(always)]
     fn digamma<P: Policy>(self) -> Self {
         generic::digamma::digamma_impl::<P, _, _, _, _, _, _>(self, &crate::tables::gamma::DIGAMMA_F32)
     }
@@ -358,17 +742,17 @@ where
     }
 
     #[inline(always)]
-    fn expint<P: Policy, const N: usize>(self) -> Self {
-        generic::expint::expint_double::<P, f32, Self, N>(self)
+    fn expint_n<P: Policy, const N: usize>(self) -> Self {
+        generic::expint::expint_double_n::<P, f32, Self, N>(self)
     }
 
     #[inline(always)]
-    fn expint_primal<P: Policy, const N: usize>(self) -> (Self, Self) {
-        generic::expint::expint_double_primal::<P, f32, Self, N>(self)
+    fn expint_primal_n<P: Policy, const N: usize>(self) -> (Self, Self) {
+        generic::expint::expint_double_primal_n::<P, f32, Self, N>(self)
     }
 
     #[inline(always)]
-    fn phi<P: Policy, const N: usize>(self) -> Self {
+    fn phi_n<P: Policy, const N: usize>(self) -> Self {
         // Fixed series length for f32: truncation gets at most 1/32 of the tier's ulp
         // budget, which at `Best` and above is under one ulp.
         let terms = const {
@@ -382,7 +766,44 @@ where
                 P::POLICY.max_iterations
             }
         };
-        super::generic::phi::phi_internal::<Self, f32, P, N, false>(self, terms)
+        super::generic::phi::phi_internal_n::<Self, f32, P, N, false>(self, terms)
+    }
+
+    #[inline(always)]
+    fn expint<P: Policy>(self, n: u32) -> Self {
+        generic::expint::expint_double::<P, f32, Self>(self, n)
+    }
+
+    #[inline(always)]
+    fn expint_primal<P: Policy>(self, n: u32) -> (Self, Self) {
+        generic::expint::expint_double_primal::<P, f32, Self>(self, n)
+    }
+
+    #[inline(always)]
+    fn phi<P: Policy>(self, n: u32) -> Self {
+        // Precomputed per policy, as for f64.
+        const EPS_SCALE: f64 = 1.0 / 32.0;
+        let table = const {
+            super::generic::phi::phi_terms_table(
+                f32::EPSILON as f64 * P::POLICY.precision.tolerance() as f64 * EPS_SCALE,
+                P::POLICY.max_iterations,
+            )
+        };
+        let terms = match table.get(n as usize) {
+            Some(&t) => t,
+            None => {
+                let needed = super::generic::phi::phi_series_terms(
+                    n as usize,
+                    f32::EPSILON as f64 * P::POLICY.precision.tolerance() as f64 * EPS_SCALE,
+                );
+                if needed < P::POLICY.max_iterations {
+                    needed
+                } else {
+                    P::POLICY.max_iterations
+                }
+            }
+        };
+        super::generic::phi::phi_internal::<Self, f32, P, false>(self, n, terms)
     }
 }
 
@@ -702,6 +1123,36 @@ where
     // the blanket impl on its own, and the table signatures need `Primal = Self`.
     V: thermite::math::PrimalProjection<Primal = V>,
 {
+    #[inline(always)]
+    fn fresnel<P: Policy>(self) -> (Self, Self) {
+        use crate::tables::fresnel as t;
+        generic::fresnel::fresnel_with::<P, _, _, _, _, _, _>(
+            self,
+            t::X0_F32,
+            t::MAP_F32,
+            t::CUTOFF_F32,
+            &t::CHEB_C_F32,
+            &t::CHEB_S_F32,
+            &t::AUX_P_F32,
+            &t::AUX_Q_F32,
+        )
+    }
+
+    #[inline(always)]
+    fn sici<P: Policy>(self) -> (Self, Self) {
+        use crate::tables::sici as t;
+        generic::sici::sici_with::<P, _, _, _, _, _, _>(
+            self,
+            t::X0_F32,
+            t::MAP_F32,
+            t::CUTOFF_F32,
+            &t::CHEB_SI_F32,
+            &t::CHEB_CIN_F32,
+            &t::AUX_P_F32,
+            &t::AUX_Q_F32,
+        )
+    }
+
     // --- Spherical harmonics: the compile-time-table fast paths ---
     //
     // A concrete `f32`/`f64` element has a `ShConsts` table, which the generic
@@ -746,6 +1197,26 @@ where
         } else {
             sh_table_impl::<Self, L, N, CS>(table);
         }
+    }
+
+    #[inline(always)]
+    fn bessel_i_ratio<P: Policy>(self, nu: Self) -> Self {
+        generic::bessel::ratio::bessel_i_ratio_impl::<P, f32, Self>(self, nu)
+    }
+
+    #[inline(always)]
+    fn inv_bessel_i_ratio<P: Policy>(self, nu: Self) -> Self {
+        generic::bessel::ratio::inv_bessel_i_ratio_impl::<P, f32, Self>(self, nu)
+    }
+
+    #[inline(always)]
+    fn bessel_i_ratio_1m<P: Policy>(self, nu: Self) -> Self {
+        generic::bessel::ratio::bessel_i_ratio_1m_impl::<P, f32, Self>(self, nu)
+    }
+
+    #[inline(always)]
+    fn inv_bessel_i_ratio_1m<P: Policy>(self, nu: Self) -> Self {
+        generic::bessel::ratio::inv_bessel_i_ratio_1m_impl::<P, f32, Self>(self, nu)
     }
 
     #[inline(always)]
@@ -1149,11 +1620,21 @@ fn erf_f_internal<V: FloatVectorWithBits<Element = f32>, P: Policy, const C: boo
     }
     // higher precision policies or GPU with native exp support.
     else {
-        // NOTE: x does not need to be clamped here, everything behaves well even for large inputs.
+        // Past |x| = 1.8e19 (and at infinity) x^2 overflows and `exp_neg_x2 * t` is `0 * 0`
+        // at best and NaN through the reciprocal at worst. erfc has underflowed by 10.1
+        // and erf(4) is exactly 1, so clamping at 16 changes no finite result.
+        // Compare-and-select rather than `min` so a NaN input stays NaN on every backend.
+        let x = if const { P::POLICY.check_overflow } {
+            let cap: V = thermite::const_splat!(f32: 16.0);
+            x.cmp_gt(cap).select(cap, x)
+        } else {
+            x
+        };
 
-        // if ignoring denormals, just multiple x0 by itself to save like one cycle,
-        // instead of waiting on abs(), otherwise use the denormal-flushed x value
-        let x2 = if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Ignore) } {
+        // if ignoring denormals (and not clamping), just multiply x0 by itself to save like
+        // one cycle, instead of waiting on abs(), otherwise use the denormal-flushed x value
+        let x2 = if const { matches!(P::POLICY.denormal_behavior, DenormalBehavior::Ignore) && !P::POLICY.check_overflow }
+        {
             x0 * x0
         } else {
             x * x
@@ -1343,3 +1824,143 @@ const LANGEVIN_SMALL_F32_LO: [f32; 5] = [
     -0.00017605189350433648,
     8.862235517881345e-06,
 ];
+
+/// Order dispatch for the modified Bessel entry points. `N` is a const parameter, so the
+/// `if const` collapses to one arm and the unused table is never built.
+///
+/// Orders 0 and 1 are closed forms. Everything above seeds from the order-0 form and walks
+/// the ratio recurrence down. All three arms are selected at compile time, so a call site
+/// pays for exactly one.
+#[inline(always)]
+fn bessel_i_dispatch<P: Policy, V, const N: i32, const SCALED: bool>(x: V) -> V
+where
+    V: thermite::vector::FloatVector<Element = f32> + thermite::math::TranscendentalMathWithPolicy,
+{
+    if const { N == 0 } {
+        generic::bessel::ik::bessel_i0_impl::<P, _, _, _, _, SCALED>(x, &crate::tables::bessel::BESSEL_I0_F32)
+    } else if const { N.unsigned_abs() == 1 } {
+        generic::bessel::ik::bessel_i1_impl::<P, _, _, _, _, SCALED>(x, &crate::tables::bessel::BESSEL_I1_F32)
+    } else {
+        // Orders past 1 seed from the order-0 closed form and walk the ratio recurrence down.
+        generic::bessel::ik::bessel_in_impl::<P, f32, _, _, _, _, N, SCALED>(x, &crate::tables::bessel::BESSEL_I0_F32)
+    }
+}
+
+/// Order dispatch for the modified Bessel functions of the second kind.
+///
+/// Orders 0 and 1 are closed forms. Above that the recurrence runs **upward**, the opposite
+/// of the `I` family and stable for exactly that reason: `K` is the dominant solution.
+/// Both `K` kernels also need the `I` tables, because their small arms are
+/// `P(x^2) - ln(x) I_0(x)` and `R(x^2) x + 1/x + ln(x) I_1(x)`.
+#[inline(always)]
+fn bessel_k_dispatch<P: Policy, V, const N: i32, const SCALED: bool>(x: V) -> V
+where
+    V: thermite::vector::FloatVector<Element = f32> + thermite::math::TranscendentalMathWithPolicy,
+{
+    use crate::tables::bessel::{BESSEL_I0_F32, BESSEL_I1_F32, BESSEL_K0_F32, BESSEL_K1_F32};
+    if const { N == 0 } {
+        generic::bessel::ik::bessel_k0_impl::<P, f32, _, _, _, _, _, _, _, _, SCALED>(x, &BESSEL_K0_F32, &BESSEL_I0_F32)
+    } else if const { N.unsigned_abs() == 1 } {
+        generic::bessel::ik::bessel_k1_impl::<P, f32, _, _, _, _, _, _, _, _, SCALED>(x, &BESSEL_K1_F32, &BESSEL_I1_F32)
+    } else {
+        // The recurrence takes the two seeds, not the tables. Each closed form infers its
+        // own array lengths here, at the one place that already names them concretely.
+        let k0 = generic::bessel::ik::bessel_k0_impl::<P, f32, _, _, _, _, _, _, _, _, SCALED>(
+            x,
+            &BESSEL_K0_F32,
+            &BESSEL_I0_F32,
+        );
+        let k1 = generic::bessel::ik::bessel_k1_impl::<P, f32, _, _, _, _, _, _, _, _, SCALED>(
+            x,
+            &BESSEL_K1_F32,
+            &BESSEL_I1_F32,
+        );
+        generic::bessel::ik::bessel_kn_recur::<f32, _, N>(x, k0, k1).1
+    }
+}
+
+/// `(I_N, I_N prime)`, sharing the order-`N-1` value the recurrence already produces.
+///
+/// `I_N' = I_{N-1} - (N/x) I_N`, and at `N = 0` the second term vanishes because
+/// `I_{-1} = I_1`. One formula covers every order, with the `N = 0` case written out to
+/// keep `0/x` from becoming `0/0` at the origin.
+///
+/// Scaled adds one term: `d/dx e^{-|x|}f = e^{-|x|}(f' - sgn(x) f)`.
+#[inline(always)]
+fn bessel_i_deriv_dispatch<P: Policy, V, const N: i32, const SCALED: bool>(x: V) -> (V, V)
+where
+    V: thermite::vector::FloatVector<Element = f32> + thermite::math::TranscendentalMathWithPolicy,
+{
+    let (prev, v) = if const { N == 0 } {
+        (
+            bessel_i_dispatch::<P, V, 1, SCALED>(x),
+            bessel_i_dispatch::<P, V, 0, SCALED>(x),
+        )
+    } else if const { N.unsigned_abs() == 1 } {
+        (
+            bessel_i_dispatch::<P, V, 0, SCALED>(x),
+            bessel_i_dispatch::<P, V, 1, SCALED>(x),
+        )
+    } else {
+        generic::bessel::ik::bessel_in_pair_impl::<P, f32, _, _, _, _, N, SCALED>(
+            x,
+            &crate::tables::bessel::BESSEL_I0_F32,
+        )
+    };
+
+    let mut d = if const { N == 0 } {
+        prev
+    } else {
+        prev - v * (V::splat(N.unsigned_abs() as f32) / x)
+    };
+    if const { SCALED } {
+        d -= v.copysign(x);
+    }
+    (v, d)
+}
+
+/// `(K_N, K_N prime)`. `K_N' = -K_{N-1} - (N/x) K_N`, and `K_{-1} = K_1`.
+///
+/// Scaled subtracts rather than adds, since the scaling runs the other way:
+/// `d/dx e^{x}f = e^{x}(f' + f)`.
+#[inline(always)]
+fn bessel_k_deriv_dispatch<P: Policy, V, const N: i32, const SCALED: bool>(x: V) -> (V, V)
+where
+    V: thermite::vector::FloatVector<Element = f32> + thermite::math::TranscendentalMathWithPolicy,
+{
+    let (prev, v) = if const { N == 0 } {
+        (
+            bessel_k_dispatch::<P, V, 1, SCALED>(x),
+            bessel_k_dispatch::<P, V, 0, SCALED>(x),
+        )
+    } else if const { N.unsigned_abs() == 1 } {
+        (
+            bessel_k_dispatch::<P, V, 0, SCALED>(x),
+            bessel_k_dispatch::<P, V, 1, SCALED>(x),
+        )
+    } else {
+        // The upward recurrence walks THROUGH order N-1 on its way to N, so the pair costs
+        // nothing beyond returning it.
+        let k0 = generic::bessel::ik::bessel_k0_impl::<P, f32, _, _, _, _, _, _, _, _, SCALED>(
+            x,
+            &crate::tables::bessel::BESSEL_K0_F32,
+            &crate::tables::bessel::BESSEL_I0_F32,
+        );
+        let k1 = generic::bessel::ik::bessel_k1_impl::<P, f32, _, _, _, _, _, _, _, _, SCALED>(
+            x,
+            &crate::tables::bessel::BESSEL_K1_F32,
+            &crate::tables::bessel::BESSEL_I1_F32,
+        );
+        generic::bessel::ik::bessel_kn_recur::<f32, _, N>(x, k0, k1)
+    };
+
+    let mut d = if const { N == 0 } {
+        -prev
+    } else {
+        -prev - v * (V::splat(N.unsigned_abs() as f32) / x)
+    };
+    if const { SCALED } {
+        d += v;
+    }
+    (v, d)
+}

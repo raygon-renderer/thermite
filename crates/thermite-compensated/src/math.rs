@@ -655,7 +655,7 @@ where
     }
 
     #[inline(always)]
-    fn log_n<P: Policy, const N: usize>(self) -> Self {
+    fn log_n_n<P: Policy, const N: usize>(self) -> Self {
         match N {
             0 => Self::ZERO,     // log(x)/log(0) = log(x)/-infinity = 0
             1 => Self::INFINITY, // log(x)/log(1) = log(x)/0 = complex infinity, only return real part
@@ -666,6 +666,18 @@ where
                 self.ln_p::<P>() * <V as crate::consts::CompensatedLogTable<V>>::LOG_TABLE[n - 3]
             }
             _ => self.ln_p::<P>() / V::splat(FloatElement::from_int(N as i64)).ln_p::<P>(),
+        }
+    }
+
+    #[inline(always)]
+    fn log_n<P: Policy>(self, n: u32) -> Self {
+        match n {
+            0 => Self::ZERO,
+            1 => Self::INFINITY,
+            2 => self.log2_p::<P>(),
+            10 => self.log10_p::<P>(),
+            n if n <= 32 => self.ln_p::<P>() * <V as crate::consts::CompensatedLogTable<V>>::LOG_TABLE[n as usize - 3],
+            _ => self.ln_p::<P>() / V::splat(FloatElement::from_int(n as i64)).ln_p::<P>(),
         }
     }
 
@@ -706,7 +718,7 @@ where
 
         let pi_2 = Self::FRAC_PI_2;
         let y_is_neg = y.value().cmp_lt(V::ZERO);
-        let on_axis_res = y_is_neg.select(-pi_2, pi_2);
+        let on_axis_res = pi_2.neg_c(y_is_neg);
 
         // Standard case
         let z = y / x;

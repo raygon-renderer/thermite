@@ -235,7 +235,7 @@ where
     let (rest, large, prod, n) = poisson::pmf_parts::<P, E, V, ALL_LARGE>(a, x);
 
     let x4 = x * quarter;
-    let g = poisson::exp_two_sum::<P, E, V>(large.select(x4, -x4), rest * V::HALF);
+    let g = poisson::exp_two_sum::<P, E, V>(x4.neg_c(!large), rest * V::HALF);
     let g = g * (n * V::splat(E::TAU)).sqrt().inverse_sqrt_p::<P>();
     // sqrt(prod) is 1 wherever no lane was shifted, and a sqrt is not free.
     let g = if const { ALL_LARGE } || (const { !P::POLICY.avoid_branching } && large.all()) {
@@ -266,7 +266,7 @@ where
 /// path. Under `INT_ALPHA` they are scalars and fold to literals at a compile-time weight;
 /// otherwise each step carries a vector `sqrt` and reciprocal. See [`seed`] for the range.
 #[inline(always)]
-pub fn laguerre_function<P, E, V, const N: usize, const INT_ALPHA: bool>(x: V, alpha: V, alpha_int: i32) -> V
+pub fn laguerre_function_n<P, E, V, const N: usize, const INT_ALPHA: bool>(x: V, alpha: V, alpha_int: i32) -> V
 where
     P: Policy,
     E: FloatElement,
@@ -291,6 +291,49 @@ where
         let (s_k, d_k) = step_scale::<P, E, V, INT_ALPHA>(k, alpha, alpha_int);
 
         // ((2k + alpha + 1 - x) l_k - s_{k-1} l_{k-1}) / s_k
+        let b = two_k_a1::<E, V, INT_ALPHA>(k, a1, alpha_int) - x;
+        let next = b.mul_sube(p1, s_prev * p0) * d_k;
+
+        s_prev = s_k;
+        p0 = p1;
+        p1 = next;
+
+        k += 1;
+    }
+
+    p1 * f
+}
+
+/// The runtime-degree twin of [`laguerre_function_n`].
+///
+/// The same seed, the same recurrence and the same backward `s_k` order, with the degree as a
+/// value. Under `INT_ALPHA` the per-step scales are computed rather than folded, which is the
+/// only cost.
+#[inline(always)]
+pub fn laguerre_function<P, E, V, const INT_ALPHA: bool>(x: V, alpha: V, alpha_int: i32, n: u32) -> V
+where
+    P: Policy,
+    E: FloatElement,
+    V: FloatVector<Element = E> + SpecializedSpecialMath<E>,
+{
+    let (f, g0) = seed::<P, E, V, INT_ALPHA>(x, alpha, alpha_int);
+
+    if n == 0 {
+        return g0 * f;
+    }
+
+    let a = weight::<E, V, INT_ALPHA>(alpha, alpha_int);
+    let a1 = a + V::ONE;
+
+    let (mut s_prev, d0) = step_scale::<P, E, V, INT_ALPHA>(0, alpha, alpha_int);
+    let mut p0 = g0;
+    let mut p1 = ((a1 - x) * g0) * d0;
+
+    let n = n as usize;
+    let mut k = 1;
+    while k < n {
+        let (s_k, d_k) = step_scale::<P, E, V, INT_ALPHA>(k, alpha, alpha_int);
+
         let b = two_k_a1::<E, V, INT_ALPHA>(k, a1, alpha_int) - x;
         let next = b.mul_sube(p1, s_prev * p0) * d_k;
 

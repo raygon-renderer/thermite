@@ -15,15 +15,15 @@ fn main() {
             ] {
                 for x in xs {
                     let v = match n {
-                        3 => D::splat(x).expint_p::<$p, 3>(),
-                        8 => D::splat(x).expint_p::<$p, 8>(),
-                        _ => D::splat(x).expint_p::<$p, 20>(),
+                        3 => D::splat(x).expint_n_p::<$p, 3>(),
+                        8 => D::splat(x).expint_n_p::<$p, 8>(),
+                        _ => D::splat(x).expint_n_p::<$p, 20>(),
                     };
                     println!("f64,{},{n},{x:.17e},{:.17e}", $name, v.extract::<0>());
                     let w = match n {
-                        3 => F::splat(x as f32).expint_p::<$p, 3>(),
-                        8 => F::splat(x as f32).expint_p::<$p, 8>(),
-                        _ => F::splat(x as f32).expint_p::<$p, 20>(),
+                        3 => F::splat(x as f32).expint_n_p::<$p, 3>(),
+                        8 => F::splat(x as f32).expint_n_p::<$p, 8>(),
+                        _ => F::splat(x as f32).expint_n_p::<$p, 20>(),
                     };
                     println!("f32,{},{n},{x:.17e},{:.17e}", $name, w.extract::<0>());
                 }

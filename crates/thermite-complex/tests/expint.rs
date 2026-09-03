@@ -118,21 +118,21 @@ fn check(n: usize, got: C, a: f64, b: f64, wr: f64, wi: f64, tol: f64) {
 #[test]
 fn expint_e1_matches_mpmath() {
     for &(a, b, wr, wi) in EXPINT_E1 {
-        check(1, c(a, b).expint::<1>(), a, b, wr, wi, 1e-14);
+        check(1, c(a, b).expint_n::<1>(), a, b, wr, wi, 1e-14);
     }
 }
 
 #[test]
 fn expint_e2_matches_mpmath() {
     for &(a, b, wr, wi) in EXPINT_E2 {
-        check(2, c(a, b).expint::<2>(), a, b, wr, wi, 1e-12);
+        check(2, c(a, b).expint_n::<2>(), a, b, wr, wi, 1e-12);
     }
 }
 
 #[test]
 fn expint_e3_matches_mpmath() {
     for &(a, b, wr, wi) in EXPINT_E3 {
-        check(3, c(a, b).expint::<3>(), a, b, wr, wi, 1e-10);
+        check(3, c(a, b).expint_n::<3>(), a, b, wr, wi, 1e-10);
     }
 }
 
@@ -143,8 +143,8 @@ fn conjugate_symmetry_across_the_cut() {
     // sharpest form of that: the two sides must be exact mirror images, not merely
     // close, since the only asymmetric ingredient is arg(z) inside the principal ln.
     for &(a, b) in &[(-2.0, 0.1), (-5.0, 0.01), (-20.0, 5.0), (-0.5, 0.25)] {
-        let (up_re, up_im) = parts(c(a, b).expint::<1>());
-        let (dn_re, dn_im) = parts(c(a, -b).expint::<1>());
+        let (up_re, up_im) = parts(c(a, b).expint_n::<1>());
+        let (dn_re, dn_im) = parts(c(a, -b).expint_n::<1>());
 
         assert_eq!(up_re, dn_re, "Re E_1 differs across the cut at {a} +/- {b}i");
         assert_eq!(up_im, -dn_im, "Im E_1 is not mirrored at {a} +/- {b}i");
@@ -156,7 +156,7 @@ fn on_the_cut_takes_arg_pi() {
     // On (-inf, 0] the value is fixed by which side `ln` is continuous from. This crate
     // documents Arg = +pi there, and -ln z puts that straight into Im E_1 as -pi.
     for &x in &[-0.5, -0.999, -2.5] {
-        let (_, im) = parts(c(x, 0.0).expint::<1>());
+        let (_, im) = parts(c(x, 0.0).expint_n::<1>());
 
         assert!(
             (im + std::f64::consts::PI).abs() < 1e-15,
@@ -170,7 +170,7 @@ fn negative_reals_are_in_domain() {
     // Real `expint` NaNs out x < 0; the complex principal branch must not. Regression
     // for the `expint_invalid` hook.
     for &(a, b) in &[(-2.0, 0.1), (-0.5, 0.0), (-40.0, 0.0)] {
-        let (re, im) = parts(c(a, b).expint::<1>());
+        let (re, im) = parts(c(a, b).expint_n::<1>());
 
         assert!(re.is_finite() && im.is_finite(), "E_1({a} + {b}i) came back non-finite");
     }
@@ -181,7 +181,7 @@ fn far_off_axis_small_real_part_uses_the_right_regime() {
     // 0.5 + 100i has re < 1 but |z| >> 1. A lexicographic `cmp_lt` reads that as "in the
     // unit disc" and sends it to the power series, which diverges there. Regression for
     // the `expint_use_series` hook.
-    let (re, im) = parts(c(0.5, 100.0).expint::<1>());
+    let (re, im) = parts(c(0.5, 100.0).expint_n::<1>());
 
     assert!((re - 3.14866779430731346e-03).abs() < 1e-15, "got re {re}");
     assert!((im + 5.18249190899322792e-03).abs() < 1e-15, "got im {im}");

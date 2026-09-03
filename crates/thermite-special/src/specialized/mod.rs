@@ -1,6 +1,7 @@
 #![allow(clippy::excessive_precision)]
 
 use thermite::{
+    const_splat,
     mask::GenericMask,
     math::{
         CoreMathWithPolicy as _, FloatConsts, PrimalProjection, TranscendentalMathWithPolicy as _,
@@ -16,9 +17,17 @@ use thermite::{
 
 use super::SpecialMathWithPolicy as _;
 
+#[macro_use]
+mod bessel;
+pub use bessel::{BesselDetails, kernels};
+pub(crate) use bessel::{bessel_reflect_negates, bessel_reflect_v};
+
 pub(crate) mod generic;
 mod pd;
 mod ps;
+
+pub use generic::bessel::ratio::{bessel_i_ratio_deriv, bessel_i_ratio_deriv_1m};
+pub use generic::ndtr::LogTailPolicy;
 
 /// The decisions the [`expint`](SpecializedSpecialMath::expint) kernel has to make
 /// differently depending on the arithmetic it is running in.
@@ -120,8 +129,8 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
     /// Computes the exponential integral `E_N(x)` for integer order `N`.
     #[inline(always)]
-    fn expint<P: Policy, const N: usize>(self) -> Self {
-        self.expint_primal::<P, N>().0
+    fn expint_n<P: Policy, const N: usize>(self) -> Self {
+        self.expint_primal_n::<P, N>().0
     }
 
     /// Computes `$E_N(x)$` together with the adjacent lower order `$E_{N-1}(x)$`.
@@ -137,7 +146,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     /// computed in parallel across SIMD lanes and blended at the end.
     /// For N > 1, applies the recurrence `$E_{n+1}(x) = (e^{-x} - x \cdot E_n(x)) / n$`.
     #[inline(always)]
-    fn expint_primal<P: Policy, const N: usize>(self) -> (Self, Self) {
+    fn expint_primal_n<P: Policy, const N: usize>(self) -> (Self, Self) {
         let x = self;
 
         // The series/continued-fraction path below produces E_1, so the two orders
@@ -166,6 +175,121 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
             return (value, prev);
         }
 
+        let mut e_n = Self::expint_e1_generic::<P>(x, exp_neg_x);
+
+        // Order beneath the current one. Before the recurrence runs, E_N is E_1, so the
+        // order below it is E_0.
+        let mut e_prev = e0;
+
+        // --- Apply recurrence for N > 1 ---
+        // E_{n+1}(x) = (e^{-x} - x * E_n(x)) / n
+        if const { N > 1 } {
+            let mut n = 1u32;
+            while n < N as u32 {
+                let nf = Self::splat(E::from_int(n as thermite::LargeInt));
+                e_prev = e_n;
+                e_n = x.nmul_adde(e_n, exp_neg_x) / nf;
+                n += 1;
+            }
+        }
+
+        // --- Edge cases ---
+        if const { P::POLICY.check_overflow } {
+            // E_1(0) = +inf, E_n(0) = 1/(n-1) for n > 1
+            let x_is_zero = x.is_zero();
+            if const { N == 1 } {
+                e_n = x_is_zero.select(Self::INFINITY, e_n);
+            } else if const { N > 1 } {
+                e_n = x_is_zero.select(Self::splat(E::ONE / E::from_int(N as thermite::LargeInt - 1)), e_n);
+            }
+
+            // Same rule one order down: E_0 and E_1 both diverge at zero, E_n does not.
+            if const { N <= 2 } {
+                e_prev = x_is_zero.select(Self::INFINITY, e_prev);
+            } else {
+                e_prev = x_is_zero.select(Self::splat(E::ONE / E::from_int(N as thermite::LargeInt - 2)), e_prev);
+            }
+
+            let bad = <Self::ExpIntDetails as ExpIntDetails<E, Self>>::invalid(x);
+            e_n = bad.select(Self::NAN, e_n);
+            e_prev = bad.select(Self::NAN, e_prev);
+        }
+
+        (e_n, e_prev)
+    }
+
+    /// The runtime-order twin of [`expint_n`](Self::expint_n).
+    #[inline(always)]
+    fn expint<P: Policy>(self, n: u32) -> Self {
+        self.expint_primal::<P>(n).0
+    }
+
+    /// The runtime-order twin of [`expint_primal_n`](Self::expint_primal_n): the same `E_1`
+    /// core, the same recurrence with the order as a value.
+    #[inline(always)]
+    fn expint_primal<P: Policy>(self, n: u32) -> (Self, Self) {
+        let x = self;
+
+        let exp_neg_x = (-x).exp_p::<P>();
+        let inv_x = x.approx_reciprocal_p::<P>();
+        let e0 = exp_neg_x * inv_x;
+
+        if n == 0 {
+            let mut value = e0;
+            let mut prev = e0 * (Self::ONE + inv_x);
+
+            if const { P::POLICY.check_overflow } {
+                let x_is_zero = x.is_zero();
+                value = x_is_zero.select(Self::INFINITY, value);
+                prev = x_is_zero.select(Self::INFINITY, prev);
+
+                let bad = <Self::ExpIntDetails as ExpIntDetails<E, Self>>::invalid(x);
+                value = bad.select(Self::NAN, value);
+                prev = bad.select(Self::NAN, prev);
+            }
+
+            return (value, prev);
+        }
+
+        let mut e_n = Self::expint_e1_generic::<P>(x, exp_neg_x);
+        let mut e_prev = e0;
+
+        let mut k = 1u32;
+        while k < n {
+            let kf = Self::splat(E::from_int(k as thermite::LargeInt));
+            e_prev = e_n;
+            e_n = x.nmul_adde(e_n, exp_neg_x) / kf;
+            k += 1;
+        }
+
+        if const { P::POLICY.check_overflow } {
+            let x_is_zero = x.is_zero();
+            if n == 1 {
+                e_n = x_is_zero.select(Self::INFINITY, e_n);
+            } else {
+                e_n = x_is_zero.select(Self::splat(E::ONE / E::from_int(n as thermite::LargeInt - 1)), e_n);
+            }
+
+            if n <= 2 {
+                e_prev = x_is_zero.select(Self::INFINITY, e_prev);
+            } else {
+                e_prev = x_is_zero.select(Self::splat(E::ONE / E::from_int(n as thermite::LargeInt - 2)), e_prev);
+            }
+
+            let bad = <Self::ExpIntDetails as ExpIntDetails<E, Self>>::invalid(x);
+            e_n = bad.select(Self::NAN, e_n);
+            e_prev = bad.select(Self::NAN, e_prev);
+        }
+
+        (e_n, e_prev)
+    }
+
+    /// `E_1(x)` by the interleaved series and continued fraction, the core both `expint`
+    /// forms share. Not an entry point: no edge handling, and the caller supplies
+    /// `e^{-x}` because it already has it.
+    #[doc(hidden)]
+    #[inline(always)]
+    fn expint_e1_generic<P: Policy>(x: Self, exp_neg_x: Self) -> Self {
         // E_n(x) is only defined for x > 0 (and x >= 0 for n > 1).
         // Compute E_1(x) first, then apply recurrence for higher orders.
 
@@ -294,48 +418,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
             cf_result = cf_f * exp_neg_x;
         }
 
-        let mut e_n = use_series.select(series_result, cf_result);
-
-        // Order beneath the current one. Before the recurrence runs, E_N is E_1, so the
-        // order below it is E_0.
-        let mut e_prev = e0;
-
-        // --- Apply recurrence for N > 1 ---
-        // E_{n+1}(x) = (e^{-x} - x * E_n(x)) / n
-        if const { N > 1 } {
-            let mut n = 1u32;
-            while n < N as u32 {
-                let nf = Self::splat(E::from_int(n as thermite::LargeInt));
-                e_prev = e_n;
-                e_n = x.nmul_adde(e_n, exp_neg_x) / nf;
-                n += 1;
-            }
-        }
-
-        // --- Edge cases ---
-        if const { P::POLICY.check_overflow } {
-            // E_1(0) = +inf, E_n(0) = 1/(n-1) for n > 1
-            let x_is_zero = x.is_zero();
-            if const { N == 1 } {
-                e_n = x_is_zero.select(Self::INFINITY, e_n);
-            } else if const { N > 1 } {
-                e_n = x_is_zero.select(Self::splat(E::ONE / E::from_int(N as thermite::LargeInt - 1)), e_n);
-            }
-
-            // Same rule one order down: E_0 and E_1 both diverge at zero, E_n does not.
-            if const { N <= 2 } {
-                e_prev = x_is_zero.select(Self::INFINITY, e_prev);
-            } else {
-                e_prev = x_is_zero.select(Self::splat(E::ONE / E::from_int(N as thermite::LargeInt - 2)), e_prev);
-            }
-
-            // Negative x: NaN, and NaN in, NaN out.
-            let bad = <Self::ExpIntDetails as ExpIntDetails<E, Self>>::invalid(x);
-            e_n = bad.select(Self::NAN, e_n);
-            e_prev = bad.select(Self::NAN, e_prev);
-        }
-
-        (e_n, e_prev)
+        use_series.select(series_result, cf_result)
     }
 
     #[inline(always)]
@@ -384,20 +467,458 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 
     /// The trigamma function `psi_1(x) = d/dx psi(x)`, the second derivative of `ln Gamma`.
     ///
-    /// Deliberately absent from the public `SpecialMath` trait, unlike every sibling
-    /// here. It exists only so that `digamma` is differentiable (forward-mode AD over
-    /// the Gamma family needs `psi_1` the way `ln Gamma` needs `psi`), and keeping it
-    /// off the public trait is what stops that need from cascading: a public
-    /// `trigamma` would oblige `Dual` to implement it, which requires `psi_2`, which
-    /// requires `psi_3`, and so on, because the Gamma-derivative family is not closed
-    /// under differentiation. Closing it for real means a general `polygamma(n)`,
-    /// whose derivative is simply `polygamma(n + 1)`.
+    /// Public on `SpecialMath` since 2026-08-29. It was deliberately absent while the
+    /// Gamma-derivative family was open-ended (a public `trigamma` obliged `Dual` to
+    /// produce `psi_2`, which needed `psi_3`, and so on). `polygamma`'s runtime order
+    /// closed that ladder, and every implementor of this trait already carried a
+    /// working `trigamma`, so publishing became a pure decl move.
     ///
     /// Not defined at zero or the negative integers.
     fn trigamma<P: Policy>(self) -> Self;
 
+    /// The polygamma function `$\psi_n(x)$`, the n-th derivative of
+    /// [`digamma`](SpecializedSpecialMath::digamma).
+    ///
+    /// The order is a **runtime** scalar, uniform across lanes, deliberately: runtime
+    /// `n` is what closes the family under differentiation (`$\psi_n' = \psi_{n+1}$`
+    /// is just `n + 1`), where a const-generic order would recurse without bound in
+    /// `Dual`'s chain rule. It costs SIMD nothing, since every order-dependent
+    /// coefficient is scalar math splatted once.
+    ///
+    /// On this trait (rather than the real-only one) since 2026-08-29 so that complex
+    /// vectors carry it too. The complex implementation reflects at `Re z < 1/2` and
+    /// shares the real kernel's series structure in complex arithmetic.
+    fn polygamma<P: Policy>(self, n: u32) -> Self;
+
+    /// `Compensated` keeps the default: the Euler-Maclaurin coefficients are tabulated to
+    /// `f64`, so a double-double built from them would carry 53 real bits and noise, the same
+    /// reason it has no `GammaPrimalTables` impl. `Dual` overrides it through
+    /// [`zeta_with_deriv`](Self::zeta_with_deriv).
     #[inline(always)]
-    fn hermite<P: Policy, const N: usize>(mut x: Self) -> Self {
+    fn zetac<P: Policy>(self) -> Self {
+        todo!("zetac is not implemented for this composite type; see the trait method's docs")
+    }
+
+    /// `zeta(s)`, as `1 + zetac(s)`. Defaulted for the same reason as
+    /// [`zetac`](Self::zetac).
+    #[inline(always)]
+    fn zeta<P: Policy>(self) -> Self {
+        todo!("zeta is not implemented for this composite type; see `zetac`'s docs")
+    }
+
+    /// `Li_s(z)` at a scalar order. Defaulted for the same reason as [`zetac`](Self::zetac):
+    /// the coefficient precompute is `f64`, so a double-double has nothing to reach for.
+    /// `Dual` overrides it through the order-lowering identity `Li_s' = Li_{s-1}/z`.
+    #[inline(always)]
+    fn polylog<P: Policy>(
+        self,
+        order: crate::PolylogOrder<
+            E,
+            <<Self as thermite::vector::GenericVector>::Signed as thermite::vector::GenericVector>::Element,
+        >,
+    ) -> Self {
+        let _ = order;
+        todo!("polylog is not implemented for this composite type; see the trait method's docs")
+    }
+
+    /// `(zeta(s), zeta'(s))`, or `(zeta(s) - 1, zeta'(s))` when `ZETAC` is set: the two
+    /// functions differ by a constant, so one derivative serves both.
+    ///
+    /// This exists because `zeta'` is a _second kernel_ rather than a chain rule over `zeta`:
+    /// `zeta'(s) = -sum ln(n) n^-s`, which has no expression in terms of `zeta` itself. It
+    /// shares every transcendental with the value, so computing both together is far cheaper
+    /// than computing them apart, which is what lets `Dual` differentiate without running the
+    /// correction ladder in dual arithmetic.
+    #[inline(always)]
+    fn zeta_with_deriv<P: Policy, const ZETAC: bool>(self) -> (Self, Self) {
+        todo!("zeta_with_deriv is not implemented for this composite type; see `zetac`'s docs")
+    }
+
+    /// `I_N(x)`, or `e^{-|x|} I_N(x)` when `SCALED`: the modified Bessel function of the
+    /// first kind at compile-time integer order.
+    ///
+    /// One method serves both the scaled and unscaled public entry points because they are
+    /// not built from each other: each table region is natively one or the other, so the
+    /// `SCALED` flag moves _which_ arm pays for an exponential rather than adding one.
+    ///
+    /// Defaulted rather than required: the coefficient tables are element-specific, so a
+    /// generic composite has nothing to reach for.
+    #[inline(always)]
+    fn bessel_i<P: Policy, const N: i32>(self) -> Self {
+        todo!("bessel_i is not implemented for this composite type")
+    }
+
+    /// `e^{-|x|} I_N(x)`. Not a wrapper over [`bessel_i`](Self::bessel_i): above the series
+    /// threshold the coefficient tables _are_ the scaled value, so this form skips the
+    /// exponential the unscaled one pays for, and stays finite where `I_N` overflows.
+    #[inline(always)]
+    fn bessel_i_scaled<P: Policy, const N: i32>(self) -> Self {
+        todo!("bessel_i_scaled is not implemented for this composite type")
+    }
+
+    /// `K_N(x)`, the modified Bessel function of the second kind at compile-time integer
+    /// order. Defaulted for the same reason as [`bessel_i`](Self::bessel_i).
+    #[inline(always)]
+    fn bessel_k<P: Policy, const N: i32>(self) -> Self {
+        todo!("bessel_k is not implemented for this composite type")
+    }
+
+    /// `e^{x} K_N(x)`. Not a wrapper: above the series threshold the tables are natively the
+    /// scaled quantity, so this form skips the exponential the unscaled one pays for, and
+    /// stays in range where `K_N` has decayed to zero.
+    #[inline(always)]
+    fn bessel_k_scaled<P: Policy, const N: i32>(self) -> Self {
+        todo!("bessel_k_scaled is not implemented for this composite type")
+    }
+
+    /// `J_N(x)`, the oscillatory Bessel function of the first kind. Orders 0 and 1 only for
+    /// now. Higher orders want a recurrence that is not written yet.
+    #[inline(always)]
+    fn bessel_j<P: Policy, const N: i32>(self) -> Self {
+        todo!("bessel_j is not implemented for this composite type")
+    }
+
+    /// `Y_N(x)`, the oscillatory Bessel function of the second kind.
+    #[inline(always)]
+    fn bessel_y<P: Policy, const N: i32>(self) -> Self {
+        todo!("bessel_y is not implemented for this composite type")
+    }
+
+    /// `(I_N(x), d/dx I_N(x))`, or the scaled pair when `SCALED`.
+    ///
+    /// A second kernel rather than a chain rule, for the same reason `zeta_with_deriv` is:
+    /// every derivative identity in this family reaches DOWN one order,
+    /// `I_N' = I_{N-1} - (N/x) I_N`, so the value and the derivative share almost all of their
+    /// work: the ratio recurrence produces `I_{N-1}` alongside `I_N` for free. It is also what
+    /// lets `Dual` differentiate without running the recurrence in dual arithmetic.
+    ///
+    /// That the identity reaches down and not up is the fact that unblocks this whole family:
+    /// the textbook form `J_N' = (J_{N-1} - J_{N+1})/2` needs an order ABOVE `N`, which is why
+    /// `bessel_j` sat disabled for so long.
+    #[inline(always)]
+    fn bessel_i_with_deriv<P: Policy, const N: i32, const SCALED: bool>(self) -> (Self, Self) {
+        todo!("bessel_i_with_deriv is not implemented for this composite type")
+    }
+
+    /// `(K_N(x), d/dx K_N(x))`. See [`bessel_i_with_deriv`](Self::bessel_i_with_deriv).
+    #[inline(always)]
+    fn bessel_k_with_deriv<P: Policy, const N: i32, const SCALED: bool>(self) -> (Self, Self) {
+        todo!("bessel_k_with_deriv is not implemented for this composite type")
+    }
+
+    /// `(J_N(x), d/dx J_N(x))`. See [`bessel_i_with_deriv`](Self::bessel_i_with_deriv).
+    #[inline(always)]
+    fn bessel_j_with_deriv<P: Policy, const N: i32>(self) -> (Self, Self) {
+        todo!("bessel_j_with_deriv is not implemented for this composite type")
+    }
+
+    /// `(Y_N(x), d/dx Y_N(x))`. See [`bessel_i_with_deriv`](Self::bessel_i_with_deriv).
+    #[inline(always)]
+    fn bessel_y_with_deriv<P: Policy, const N: i32>(self) -> (Self, Self) {
+        todo!("bessel_y_with_deriv is not implemented for this composite type")
+    }
+
+    /// `I_n(x)` with a per-lane order. See [`bessel_i`](Self::bessel_i).
+    #[inline(always)]
+    fn bessel_iv<P: Policy, const SCALED: bool>(self, _order: crate::BesselOrder<Self, Self::Signed>) -> Self {
+        todo!("bessel_iv is not implemented for this composite type")
+    }
+
+    /// `K_n(x)` with a per-lane order. See [`bessel_k`](Self::bessel_k).
+    #[inline(always)]
+    fn bessel_kv<P: Policy, const SCALED: bool>(self, _order: crate::BesselOrder<Self, Self::Signed>) -> Self {
+        todo!("bessel_kv is not implemented for this composite type")
+    }
+
+    /// `J_n(x)` with a per-lane order. See [`bessel_j`](Self::bessel_j).
+    #[inline(always)]
+    fn bessel_jv<P: Policy>(self, _order: crate::BesselOrder<Self, Self::Signed>) -> Self {
+        todo!("bessel_jv is not implemented for this composite type")
+    }
+
+    /// `Y_n(x)` with a per-lane order. See [`bessel_y`](Self::bessel_y).
+    #[inline(always)]
+    fn bessel_yv<P: Policy>(self, _order: crate::BesselOrder<Self, Self::Signed>) -> Self {
+        todo!("bessel_yv is not implemented for this composite type")
+    }
+
+    /// `j_n(x)`, the spherical Bessel function of the first kind. See
+    /// [`sph_bessel_j`](Self::sph_bessel_j).
+    #[inline(always)]
+    fn sph_bessel_j_n<P: Policy, const N: usize>(self) -> Self {
+        todo!("sph_bessel_j is not implemented for this composite type")
+    }
+
+    /// `y_n(x)`. See [`sph_bessel_y`](Self::sph_bessel_y).
+    #[inline(always)]
+    fn sph_bessel_y_n<P: Policy, const N: usize>(self) -> Self {
+        todo!("sph_bessel_y is not implemented for this composite type")
+    }
+
+    /// `i_n(x)`. See [`sph_bessel_i`](Self::sph_bessel_i).
+    #[inline(always)]
+    fn sph_bessel_i_n<P: Policy, const N: usize>(self) -> Self {
+        todo!("sph_bessel_i is not implemented for this composite type")
+    }
+
+    /// `e^{-x} i_n(x)`. See [`sph_bessel_i_scaled`](Self::sph_bessel_i_scaled).
+    #[inline(always)]
+    fn sph_bessel_i_scaled_n<P: Policy, const N: usize>(self) -> Self {
+        todo!("sph_bessel_i_scaled is not implemented for this composite type")
+    }
+
+    /// `k_n(x)`. See [`sph_bessel_k`](Self::sph_bessel_k).
+    #[inline(always)]
+    fn sph_bessel_k_n<P: Policy, const N: usize>(self) -> Self {
+        todo!("sph_bessel_k is not implemented for this composite type")
+    }
+
+    /// `e^{x} k_n(x)`. See [`sph_bessel_k_scaled`](Self::sph_bessel_k_scaled).
+    #[inline(always)]
+    fn sph_bessel_k_scaled_n<P: Policy, const N: usize>(self) -> Self {
+        todo!("sph_bessel_k_scaled is not implemented for this composite type")
+    }
+
+    /// `(j_n(x), j_n'(x))`, both from one walk.
+    ///
+    /// The derivative identity reaches **down** one order,
+    /// `f_n' = f_{n-1} - ((n+1)/x) f_n`, and the recurrence passes through `n-1` regardless,
+    /// so the pair costs no more than the value. Exists for `Dual`, on the same footing as
+    /// `bessel_j_with_deriv`.
+    #[inline(always)]
+    fn sph_bessel_j_with_deriv_n<P: Policy, const N: usize>(self) -> (Self, Self) {
+        todo!("sph_bessel_j_with_deriv is not implemented for this composite type")
+    }
+
+    /// `(y_n(x), y_n'(x))`. See [`sph_bessel_j_with_deriv`](Self::sph_bessel_j_with_deriv).
+    #[inline(always)]
+    fn sph_bessel_y_with_deriv_n<P: Policy, const N: usize>(self) -> (Self, Self) {
+        todo!("sph_bessel_y_with_deriv is not implemented for this composite type")
+    }
+
+    /// `(i_n(x), i_n'(x))`, scaled by `e^{-x}` when `SCALED`, in which case the derivative is
+    /// the scaled function's own, `d/dx(e^{-x} i_n) = e^{-x}(i_n' - i_n)`.
+    #[inline(always)]
+    fn sph_bessel_i_with_deriv_n<P: Policy, const N: usize, const SCALED: bool>(self) -> (Self, Self) {
+        todo!("sph_bessel_i_with_deriv is not implemented for this composite type")
+    }
+
+    /// `(k_n(x), k_n'(x))`, scaled by `e^{x}` when `SCALED`.
+    #[inline(always)]
+    fn sph_bessel_k_with_deriv_n<P: Policy, const N: usize, const SCALED: bool>(self) -> (Self, Self) {
+        todo!("sph_bessel_k_with_deriv is not implemented for this composite type")
+    }
+
+    // ---- runtime-order twins of the ten above, same composite caveat -------------------------
+
+    /// `j_n(x)` for a runtime order. See [`sph_bessel_j`](Self::sph_bessel_j).
+    #[inline(always)]
+    fn sph_bessel_j<P: Policy>(self, n: u32) -> Self {
+        let _ = n;
+        todo!("sph_bessel_j is not implemented for this composite type")
+    }
+
+    /// `y_n(x)` for a runtime order.
+    #[inline(always)]
+    fn sph_bessel_y<P: Policy>(self, n: u32) -> Self {
+        let _ = n;
+        todo!("sph_bessel_y is not implemented for this composite type")
+    }
+
+    /// `i_n(x)` for a runtime order.
+    #[inline(always)]
+    fn sph_bessel_i<P: Policy>(self, n: u32) -> Self {
+        let _ = n;
+        todo!("sph_bessel_i is not implemented for this composite type")
+    }
+
+    /// `e^{-x} i_n(x)` for a runtime order.
+    #[inline(always)]
+    fn sph_bessel_i_scaled<P: Policy>(self, n: u32) -> Self {
+        let _ = n;
+        todo!("sph_bessel_i_scaled is not implemented for this composite type")
+    }
+
+    /// `k_n(x)` for a runtime order.
+    #[inline(always)]
+    fn sph_bessel_k<P: Policy>(self, n: u32) -> Self {
+        let _ = n;
+        todo!("sph_bessel_k is not implemented for this composite type")
+    }
+
+    /// `e^{x} k_n(x)` for a runtime order.
+    #[inline(always)]
+    fn sph_bessel_k_scaled<P: Policy>(self, n: u32) -> Self {
+        let _ = n;
+        todo!("sph_bessel_k_scaled is not implemented for this composite type")
+    }
+
+    /// `(j_n(x), j_n'(x))` for a runtime order. See
+    /// [`sph_bessel_j_with_deriv_n`](Self::sph_bessel_j_with_deriv_n).
+    #[inline(always)]
+    fn sph_bessel_j_with_deriv<P: Policy>(self, n: u32) -> (Self, Self) {
+        let _ = n;
+        todo!("sph_bessel_j_with_deriv is not implemented for this composite type")
+    }
+
+    /// `(y_n(x), y_n'(x))` for a runtime order.
+    #[inline(always)]
+    fn sph_bessel_y_with_deriv<P: Policy>(self, n: u32) -> (Self, Self) {
+        let _ = n;
+        todo!("sph_bessel_y_with_deriv is not implemented for this composite type")
+    }
+
+    /// `(i_n(x), i_n'(x))` for a runtime order, scaled by `e^{-x}` when `SCALED`.
+    #[inline(always)]
+    fn sph_bessel_i_with_deriv<P: Policy, const SCALED: bool>(self, n: u32) -> (Self, Self) {
+        let _ = n;
+        todo!("sph_bessel_i_with_deriv is not implemented for this composite type")
+    }
+
+    /// `(k_n(x), k_n'(x))` for a runtime order, scaled by `e^{x}` when `SCALED`.
+    #[inline(always)]
+    fn sph_bessel_k_with_deriv<P: Policy, const SCALED: bool>(self, n: u32) -> (Self, Self) {
+        let _ = n;
+        todo!("sph_bessel_k_with_deriv is not implemented for this composite type")
+    }
+
+    // ---- marker-selected entries ---------------------------------------------------------
+    //
+    // The public `bessel_n` / `bessel` / `sph_bessel_n` / `sph_bessel` / `airy` /
+    // `airy_all` are thin: the family marker picks which of the per-family hooks above it
+    // reaches. Nothing here needs overriding (a composite that overrides the per-family
+    // hooks is reached through them), but they are trait methods because the math-traits
+    // forwarder calls every public entry through this trait.
+
+    /// `bessel_n::<F, N>()`: see [`BesselFamily`](crate::bessel::BesselFamily).
+    #[inline(always)]
+    fn bessel_n<P: Policy, F: crate::bessel::BesselFamily, const N: i32>(self) -> Self {
+        F::cyl_n::<P, E, Self, N>(self)
+    }
+
+    /// `bessel::<F>(order)`: see [`BesselFamily`](crate::bessel::BesselFamily).
+    #[inline(always)]
+    fn bessel<P: Policy, F: crate::bessel::BesselFamily>(self, order: crate::BesselOrder<Self, Self::Signed>) -> Self {
+        F::cyl_v::<P, E, Self>(self, order)
+    }
+
+    /// `sph_bessel_n::<F, N>()`.
+    #[inline(always)]
+    fn sph_bessel_n<P: Policy, F: crate::bessel::BesselFamily, const N: usize>(self) -> Self {
+        F::sph_n::<P, E, Self, N>(self)
+    }
+
+    /// `sph_bessel::<F>(n)`.
+    #[inline(always)]
+    fn sph_bessel<P: Policy, F: crate::bessel::BesselFamily>(self, n: u32) -> Self {
+        F::sph_v::<P, E, Self>(self, n)
+    }
+
+    /// `airy::<W>()`: see [`AiryFn`](crate::bessel::AiryFn).
+    #[inline(always)]
+    fn airy<P: Policy, W: crate::bessel::AiryFn>(self) -> Self {
+        W::eval::<P, E, Self, false>(self)
+    }
+
+    /// The four Airy values, scaled on the positive axis when `SCALED`.
+    #[inline(always)]
+    fn airy_all<P: Policy, const SCALED: bool>(self) -> (Self, Self, Self, Self) {
+        if const { SCALED } {
+            self.airy_tuple_scaled::<P>()
+        } else {
+            self.airy_tuple::<P>()
+        }
+    }
+
+    /// `Scaled(J)` at runtime order: `e^{-|Im z|} J_nu(z)`, SciPy's `jve`. The scale factor
+    /// is 1 on the real axis, so the default is the unscaled value. `Complex` overrides.
+    #[inline(always)]
+    fn bessel_jv_scaled<P: Policy>(self, order: crate::BesselOrder<Self, Self::Signed>) -> Self {
+        self.bessel_jv::<P>(order)
+    }
+
+    /// `Scaled(Y)` at runtime order, the `Y` twin of [`bessel_jv_scaled`](Self::bessel_jv_scaled).
+    #[inline(always)]
+    fn bessel_yv_scaled<P: Policy>(self, order: crate::BesselOrder<Self, Self::Signed>) -> Self {
+        self.bessel_yv::<P>(order)
+    }
+
+    /// `(Ai, Ai', Bi, Bi')`. See [`airy`](Self::airy).
+    ///
+    /// The kernel needs the `LogGamma1p` and `AiryZero` tables keyed to a concrete element,
+    /// which a generic `E` on this trait does not carry, the same bind the Bessel family is
+    /// in. The `ps`/`pd` impls override this. A composite gets this until it supplies its own.
+    ///
+    /// **Worth overriding for a derivative-carrying composite**, and unusually easy to: Airy
+    /// satisfies `$w'' = xw$`, so every derivative past the first is a combination of the
+    /// value and the first derivative, both of which this returns. Nothing needs to
+    /// differentiate the Bessel machinery underneath.
+    #[inline(always)]
+    fn airy_tuple<P: Policy>(self) -> (Self, Self, Self, Self) {
+        todo!("airy is not implemented for this composite type")
+    }
+
+    /// `(Ai, Ai', Bi, Bi')` with the exponential factored out on the positive axis. Not a
+    /// wrapper over [`airy`](Self::airy): it is the form the kernel produces natively, and
+    /// the unscaled one is the wrapper. See [`airy`](Self::airy) with a `Scaled` marker.
+    #[inline(always)]
+    fn airy_tuple_scaled<P: Policy>(self) -> (Self, Self, Self, Self) {
+        todo!("airy_scaled is not implemented for this composite type")
+    }
+
+    /// `Ai(x)` alone: a cheaper evaluation than [`airy`](Self::airy), not a projection of
+    /// it. See [`airy_ai`](Self::airy_ai).
+    #[inline(always)]
+    fn airy_ai<P: Policy>(self) -> Self {
+        todo!("airy_ai is not implemented for this composite type")
+    }
+
+    /// `e^zeta Ai(x)` on the positive axis. See [`airy_ai_scaled`](Self::airy_ai_scaled).
+    #[inline(always)]
+    fn airy_ai_scaled<P: Policy>(self) -> Self {
+        todo!("airy_ai_scaled is not implemented for this composite type")
+    }
+
+    /// `Bi(x)` alone. See [`airy_bi`](Self::airy_bi).
+    #[inline(always)]
+    fn airy_bi<P: Policy>(self) -> Self {
+        todo!("airy_bi is not implemented for this composite type")
+    }
+
+    /// `e^-zeta Bi(x)` on the positive axis. See [`airy_bi_scaled`](Self::airy_bi_scaled).
+    #[inline(always)]
+    fn airy_bi_scaled<P: Policy>(self) -> Self {
+        todo!("airy_bi_scaled is not implemented for this composite type")
+    }
+
+    /// `Ai'(x)` alone. See [`airy_ai_prime`](Self::airy_ai_prime).
+    #[inline(always)]
+    fn airy_ai_prime<P: Policy>(self) -> Self {
+        todo!("airy_ai_prime is not implemented for this composite type")
+    }
+
+    /// `e^zeta Ai'(x)` on the positive axis. See
+    /// [`airy_ai_prime_scaled`](Self::airy_ai_prime_scaled).
+    #[inline(always)]
+    fn airy_ai_prime_scaled<P: Policy>(self) -> Self {
+        todo!("airy_ai_prime_scaled is not implemented for this composite type")
+    }
+
+    /// `Bi'(x)` alone. See [`airy_bi_prime`](Self::airy_bi_prime).
+    #[inline(always)]
+    fn airy_bi_prime<P: Policy>(self) -> Self {
+        todo!("airy_bi_prime is not implemented for this composite type")
+    }
+
+    /// `e^-zeta Bi'(x)` on the positive axis. See
+    /// [`airy_bi_prime_scaled`](Self::airy_bi_prime_scaled).
+    #[inline(always)]
+    fn airy_bi_prime_scaled<P: Policy>(self) -> Self {
+        todo!("airy_bi_prime_scaled is not implemented for this composite type")
+    }
+
+    #[inline(always)]
+    fn hermite_n<P: Policy, const N: usize>(mut x: Self) -> Self {
         #[cfg(not(target_arch = "spirv"))]
         if let Some(new_x) = FlushDenormals::<P>::flush_denormals([x]) {
             x = new_x[0];
@@ -505,14 +1026,34 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         n_is_zero.select(Self::ONE, p1)
     }
 
+    /// A uniform runtime degree is [`hermitev`](Self::hermitev) with the degree splatted.
+    /// Nothing cheaper is correct.
     #[inline(always)]
-    fn hermite_function<P: Policy, const N: usize>(mut x: Self) -> Self {
+    fn hermite<P: Policy>(self, n: u32) -> Self {
+        Self::hermitev::<P>(
+            self,
+            Self::splat(E::from_int(n as thermite::LargeInt)).to_unsigned_integer(),
+        )
+    }
+
+    #[inline(always)]
+    fn hermite_function_n<P: Policy, const N: usize>(mut x: Self) -> Self {
         #[cfg(not(target_arch = "spirv"))]
         if let Some(new_x) = FlushDenormals::<P>::flush_denormals([x]) {
             x = new_x[0];
         }
 
-        generic::hermite::hermite_function::<P, _, _, N>(x)
+        generic::hermite::hermite_function_n::<P, _, _, N>(x)
+    }
+
+    #[inline(always)]
+    fn hermite_function<P: Policy>(mut x: Self, n: u32) -> Self {
+        #[cfg(not(target_arch = "spirv"))]
+        if let Some(new_x) = FlushDenormals::<P>::flush_denormals([x]) {
+            x = new_x[0];
+        }
+
+        generic::hermite::hermite_function::<P, _, _>(x, n)
     }
 
     #[inline(always)]
@@ -526,7 +1067,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     }
 
     #[inline(always)]
-    fn laguerre<P: Policy, const N: usize>(mut x: Self, mut alpha: Self) -> Self {
+    fn laguerre_n<P: Policy, const N: usize>(mut x: Self, mut alpha: Self) -> Self {
         #[cfg(not(target_arch = "spirv"))]
         if let Some(new) = FlushDenormals::<P>::flush_denormals([x, alpha]) {
             x = new[0];
@@ -605,25 +1146,56 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         n_is_zero.select(Self::ONE, p1)
     }
 
+    /// A uniform runtime degree is [`laguerrev`](Self::laguerrev) with the degree splatted.
     #[inline(always)]
-    fn laguerre_function<P: Policy, const N: usize>(mut x: Self, mut alpha: Self) -> Self {
+    fn laguerre<P: Policy>(self, alpha: Self, n: u32) -> Self {
+        Self::laguerrev::<P>(
+            self,
+            alpha,
+            Self::splat(E::from_int(n as thermite::LargeInt)).to_unsigned_integer(),
+        )
+    }
+
+    #[inline(always)]
+    fn laguerre_function_n<P: Policy, const N: usize>(mut x: Self, mut alpha: Self) -> Self {
         #[cfg(not(target_arch = "spirv"))]
         if let Some(new) = FlushDenormals::<P>::flush_denormals([x, alpha]) {
             x = new[0];
             alpha = new[1];
         }
 
-        generic::laguerre::laguerre_function::<P, _, _, N, false>(x, alpha, 0)
+        generic::laguerre::laguerre_function_n::<P, _, _, N, false>(x, alpha, 0)
     }
 
     #[inline(always)]
-    fn laguerre_function_i<P: Policy, const N: usize>(mut x: Self, alpha: i32) -> Self {
+    fn laguerre_function<P: Policy>(mut x: Self, mut alpha: Self, n: u32) -> Self {
+        #[cfg(not(target_arch = "spirv"))]
+        if let Some(new) = FlushDenormals::<P>::flush_denormals([x, alpha]) {
+            x = new[0];
+            alpha = new[1];
+        }
+
+        generic::laguerre::laguerre_function::<P, _, _, false>(x, alpha, 0, n)
+    }
+
+    #[inline(always)]
+    fn laguerre_function_i_n<P: Policy, const N: usize>(mut x: Self, alpha: i32) -> Self {
         #[cfg(not(target_arch = "spirv"))]
         if let Some(new) = FlushDenormals::<P>::flush_denormals([x]) {
             x = new[0];
         }
 
-        generic::laguerre::laguerre_function::<P, _, _, N, true>(x, Self::ZERO, alpha)
+        generic::laguerre::laguerre_function_n::<P, _, _, N, true>(x, Self::ZERO, alpha)
+    }
+
+    #[inline(always)]
+    fn laguerre_function_i<P: Policy>(mut x: Self, alpha: i32, n: u32) -> Self {
+        #[cfg(not(target_arch = "spirv"))]
+        if let Some(new) = FlushDenormals::<P>::flush_denormals([x]) {
+            x = new[0];
+        }
+
+        generic::laguerre::laguerre_function::<P, _, _, true>(x, Self::ZERO, alpha, n)
     }
 
     #[inline(always)]
@@ -805,14 +1377,12 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     fn planck<P: Policy>(self) -> Self {
         // x^3/(e^x - 1) = x^2 / phi_1(x). phi_1 is 1 at the origin, so the 0/0 of the direct
         // quotient never forms and the x^2 limit falls out on its own.
-        (self * self).approx_div_p::<P>(Self::phi_p::<P, 1>(self))
+        (self * self).approx_div_p::<P>(Self::phi_n_p::<P, 1>(self))
     }
 
     #[rustfmt::skip]
     #[inline(always)]
     fn legendre0<P: Policy, const N: u32>(x: Self, n: u32) -> Self {
-        macro_rules! c { ($n:literal / $d:literal) => { Self::splat(<E as FloatElement>::ConstRatio::<{ $n }, { $d }>::VALUE) }; }
-
         let x2 = x.square();
         let x4 = x2.square();
         let x8 = x4.square();
@@ -824,52 +1394,52 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
         // hand-tuned Estrin's scheme polynomials
         match n {
             1 => x,
-            2 => x2.mul_adde(c!(3 / 2), c!(-1 / 2)),
-            3 => x * x2.mul_adde(c!(5 / 2), c!(-3 / 2)),
-            4 => x4.mul_adde(c!(35 / 8), x2.mul_adde(c!(-15 / 4), c!(3 / 8))),
-            5 => x * x4.mul_adde(c!(63 / 8), x2.mul_adde(c!(-35 / 4), c!(15 / 8))),
+            2 => x2.mul_adde(const_splat!(ratio <E>: 3 / 2), const_splat!(ratio <E>: -1 / 2)),
+            3 => x * x2.mul_adde(const_splat!(ratio <E>: 5 / 2), const_splat!(ratio <E>: -3 / 2)),
+            4 => x4.mul_adde(const_splat!(ratio <E>: 35 / 8), x2.mul_adde(const_splat!(ratio <E>: -15 / 4), const_splat!(ratio <E>: 3 / 8))),
+            5 => x * x4.mul_adde(const_splat!(ratio <E>: 63 / 8), x2.mul_adde(const_splat!(ratio <E>: -35 / 4), const_splat!(ratio <E>: 15 / 8))),
             6 => x4.mul_adde(
-                x2.mul_adde(c!(231 / 16), c!(-315 / 16)),
-                x2.mul_adde(c!(105 / 16), c!(-5 / 16)),
+                x2.mul_adde(const_splat!(ratio <E>: 231 / 16), const_splat!(ratio <E>: -315 / 16)),
+                x2.mul_adde(const_splat!(ratio <E>: 105 / 16), const_splat!(ratio <E>: -5 / 16)),
             ),
             7 => x * x4.mul_adde(
-                x2.mul_adde(c!(429 / 16), c!(-693 / 16)),
-                x2.mul_adde(c!(315 / 16), c!(-35 / 16)),
+                x2.mul_adde(const_splat!(ratio <E>: 429 / 16), const_splat!(ratio <E>: -693 / 16)),
+                x2.mul_adde(const_splat!(ratio <E>: 315 / 16), const_splat!(ratio <E>: -35 / 16)),
             ),
-            8 => x8.mul_adde(c!(6435 / 128), x4.mul_adde(
-                x2.mul_adde(c!(-3003 / 32), c!(3465 / 64)),
-                x2.mul_adde(c!(-315 / 32), c!(35 / 128)),
+            8 => x8.mul_adde(const_splat!(ratio <E>: 6435 / 128), x4.mul_adde(
+                x2.mul_adde(const_splat!(ratio <E>: -3003 / 32), const_splat!(ratio <E>: 3465 / 64)),
+                x2.mul_adde(const_splat!(ratio <E>: -315 / 32), const_splat!(ratio <E>: 35 / 128)),
             )),
-            9 => x * x8.mul_adde(c!(12155 / 128), x4.mul_adde(
-                x2.mul_adde(c!(-6435 / 32), c!(9009 / 64)),
-                x2.mul_adde(c!(-1155 / 32), c!(315 / 128)),
+            9 => x * x8.mul_adde(const_splat!(ratio <E>: 12155 / 128), x4.mul_adde(
+                x2.mul_adde(const_splat!(ratio <E>: -6435 / 32), const_splat!(ratio <E>: 9009 / 64)),
+                x2.mul_adde(const_splat!(ratio <E>: -1155 / 32), const_splat!(ratio <E>: 315 / 128)),
             )),
             10 => x8.mul_adde(
-                x2.mul_adde(c!(46189 / 256), c!(-109395 / 256)),
+                x2.mul_adde(const_splat!(ratio <E>: 46189 / 256), const_splat!(ratio <E>: -109395 / 256)),
                 x4.mul_adde(
-                    x2.mul_adde(c!(45045 / 128), c!(-15015 / 128)),
-                    x2.mul_adde(c!(3465 / 256), c!(-63 / 256)),
+                    x2.mul_adde(const_splat!(ratio <E>: 45045 / 128), const_splat!(ratio <E>: -15015 / 128)),
+                    x2.mul_adde(const_splat!(ratio <E>: 3465 / 256), const_splat!(ratio <E>: -63 / 256)),
                 ),
             ),
             11 => x * x8.mul_adde(
-                x2.mul_adde(c!(88179 / 256), c!(-230945 / 256)),
+                x2.mul_adde(const_splat!(ratio <E>: 88179 / 256), const_splat!(ratio <E>: -230945 / 256)),
                 x4.mul_adde(
-                    x2.mul_adde(c!(109395 / 128), c!(-45045 / 128)),
-                    x2.mul_adde(c!(15015 / 256), c!(-693 / 256)),
+                    x2.mul_adde(const_splat!(ratio <E>: 109395 / 128), const_splat!(ratio <E>: -45045 / 128)),
+                    x2.mul_adde(const_splat!(ratio <E>: 15015 / 256), const_splat!(ratio <E>: -693 / 256)),
                 ),
             ),
             12 => x8.mul_adde(
-                x4.mul_adde(c!(676039 / 1024), x2.mul_adde(c!(-969969 / 512), c!(2078505 / 1024))),
+                x4.mul_adde(const_splat!(ratio <E>: 676039 / 1024), x2.mul_adde(const_splat!(ratio <E>: -969969 / 512), const_splat!(ratio <E>: 2078505 / 1024))),
                 x4.mul_adde(
-                    x2.mul_adde(c!(-255255 / 256), c!(225225 / 1024)),
-                    x2.mul_adde(c!(-9009 / 512), c!(231 / 1024)),
+                    x2.mul_adde(const_splat!(ratio <E>: -255255 / 256), const_splat!(ratio <E>: 225225 / 1024)),
+                    x2.mul_adde(const_splat!(ratio <E>: -9009 / 512), const_splat!(ratio <E>: 231 / 1024)),
                 ),
             ),
             13 => x * x8.mul_adde(
-                x4.mul_adde(c!(1300075 / 1024), x2.mul_adde(c!(-2028117 / 512), c!(4849845 / 1024))),
+                x4.mul_adde(const_splat!(ratio <E>: 1300075 / 1024), x2.mul_adde(const_splat!(ratio <E>: -2028117 / 512), const_splat!(ratio <E>: 4849845 / 1024))),
                 x4.mul_adde(
-                    x2.mul_adde(c!(-692835 / 256), c!(765765 / 1024)),
-                    x2.mul_adde(c!(-45045 / 512), c!(3003 / 1024)),
+                    x2.mul_adde(const_splat!(ratio <E>: -692835 / 256), const_splat!(ratio <E>: 765765 / 1024)),
+                    x2.mul_adde(const_splat!(ratio <E>: -45045 / 512), const_splat!(ratio <E>: 3003 / 1024)),
                 ),
             ),
             _ => unsafe { core::hint::unreachable_unchecked() },
@@ -998,14 +1568,21 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     fn lambert_w<P: Policy>(self) -> (Self, Self);
 
     // TEMP(bessel_j): disabled until orders beyond J_0 exist. See the note in lib.rs.
-    //fn bessel_j<P: Policy, const N: usize>(self) -> Self;
+    //fn bessel_j<P: Policy, const N: i32>(self) -> Self;
 
     #[inline(always)]
-    fn phi<P: Policy, const N: usize>(self) -> Self {
+    fn phi_n<P: Policy, const N: usize>(self) -> Self {
         // Element-agnostic form: the series arm runs until it converges to
         // `Self::EPSILON`, capped by the policy's iteration budget. The f32/f64
         // backends override this with a compile-time term count.
-        generic::phi::phi_internal::<Self, E, P, N, true>(self, P::POLICY.max_iterations)
+        generic::phi::phi_internal_n::<Self, E, P, N, true>(self, P::POLICY.max_iterations)
+    }
+
+    /// The runtime-order twin of [`phi_n`](Self::phi_n). The f32/f64 backends override it with
+    /// a term count worked out from `n` per call.
+    #[inline(always)]
+    fn phi<P: Policy>(self, n: u32) -> Self {
+        generic::phi::phi_internal::<Self, E, P, true>(self, n, P::POLICY.max_iterations)
     }
 }
 
@@ -1017,7 +1594,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
 // leaving it unreachable made those two functions uncallable from generic code.
 pub use generic::elliptic::{
     CarlsonKind, CarlsonRc, CarlsonRd, CarlsonRf, CarlsonRg, CarlsonRj, EllintD, EllintDInc, EllintE, EllintEInc,
-    EllintF, EllintK, EllintPi, EllintPiInc, EllipticConsts, EllipticKind, WrapTo,
+    EllintF, EllintK, EllintPi, EllintPiInc, EllipticConsts, EllipticKind, HeumanLambda, JacobiZeta, WrapTo,
 };
 
 // The spherical-harmonic kernels, ahead of their `RealSpecialMath` wiring. Re-exported
@@ -1032,6 +1609,31 @@ pub use generic::sh::{
 // point past which it stops being straight-line code.
 pub use generic::zernike::{MAX_DEGREE as MAX_ZERNIKE_DEGREE, zernike_basis_d_impl, zernike_basis_impl};
 
+// The zeta kernel's per-element constants and its tier table. `thermite-complex` runs the
+// same Euler-Maclaurin expansion in complex arithmetic and needs both: the constants are the
+// base-2 logarithms of the primes under N, which are properties of the _real_ element even
+// when the argument is complex.
+pub use generic::zeta::{ZetaConsts, bernoulli_terms as zeta_bernoulli_terms};
+
+/// The polylogarithm's per-call order plan and region constants, for thermite-complex's
+/// kernel. Not a stable surface.
+#[doc(hidden)]
+pub use generic::polylog::{
+    KMAX as POLYLOG_KMAX, PolylogElement, PolylogPlan, root_count as polylog_root_count, t1 as polylog_t1,
+};
+
+// The Landen ladder itself. Composite types override `jacobi_elliptic` to avoid
+// differentiating it (see the trait method's docs) but still need to reach it for the case
+// their shortcut does not cover: a dual-valued _modulus_, whose derivative is not a
+// product of the triple.
+pub use generic::jacobi_elliptic::{NMAX as JACOBI_NMAX, jacobi_elliptic as jacobi_elliptic_impl};
+
+// `C' = cos(pi x^2/2)` and `S' = sin(pi x^2/2)` are the definition of the pair, so the
+// autodiff rule needs the same exactly-reduced phase the kernel uses, and needs it for
+// the same reason, the derivative being a full-amplitude oscillation where the values
+// have settled to 1/2.
+pub use generic::fresnel::phase_half_x2 as fresnel_phase;
+
 /// Specialized implementation trait for real-only special math functions.
 ///
 /// Extends [`SpecializedSpecialMath`] with functions that have no meaningful
@@ -1040,6 +1642,211 @@ pub use generic::zernike::{MAX_DEGREE as MAX_ZERNIKE_DEGREE, zernike_basis_d_imp
 pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
     fn erfinv<P: Policy>(self) -> Self;
     fn probit<P: Policy>(self) -> Self;
+
+    /// `erfc(-x/sqrt 2)/2`, the standard normal CDF.
+    #[inline(always)]
+    fn ndtr<P: Policy>(self) -> Self {
+        generic::ndtr::ndtr_impl::<P, _, _>(self)
+    }
+
+    /// `ln(ndtr(x))`, finite wherever `x` is: `ln(erfc)` in the moderate region, `erfcx`
+    /// with `-x^2/2` kept in the log domain in the tail, `ln_1p` of the complement on the
+    /// right. See `generic::ndtr`. Element types without a Weideman table
+    /// (`Compensated`) inherit their direct `erfcx`'s range, about `|x| < 37`.
+    #[inline(always)]
+    fn log_ndtr<P: Policy>(self) -> Self {
+        generic::ndtr::log_ndtr_impl::<P, _, _>(self)
+    }
+
+    /// `ln(erfc(x))` on the same construction as [`log_ndtr`](Self::log_ndtr), with the
+    /// tail on the right and `ln_1p(+-erf(|x|))` on the bounded side.
+    #[inline(always)]
+    fn logerfc<P: Policy>(self) -> Self {
+        generic::ndtr::logerfc_impl::<P, _, _>(self)
+    }
+
+    /// `(ln ndtr(x), phi(x)/ndtr(x))`, the value with the inverse Mills ratio, which is its
+    /// derivative. What [`inv_log_ndtr`](Self::inv_log_ndtr)'s Newton and `Dual` both need.
+    #[inline(always)]
+    fn log_ndtr_with_deriv<P: Policy>(self) -> (Self, Self) {
+        generic::ndtr::log_ndtr_with_deriv_impl::<P, _, _, true>(self)
+    }
+
+    /// The `x` with `ln ndtr(x) = y`. Newton on [`log_ndtr`](Self::log_ndtr).
+    #[inline(always)]
+    fn inv_log_ndtr<P: Policy>(self) -> Self {
+        generic::ndtr::inv_log_ndtr_impl::<P, _, _>(self)
+    }
+
+    /// The `x > 0` with `digamma(x) = y`. Newton on `digamma` with `trigamma`, and the
+    /// Stirling fixed point above `y = 6`.
+    #[inline(always)]
+    fn inv_digamma<P: Policy>(self) -> Self {
+        generic::inverses::inv_digamma_impl::<P, _, _>(self)
+    }
+
+    /// The `w > 0` with `w + ln w = x`. Newton, and the Lagrange series below `x = -7`.
+    #[inline(always)]
+    fn wright_omega<P: Policy>(self) -> Self {
+        generic::inverses::wright_omega_impl::<P, _, _>(self)
+    }
+
+    /// `(C(x), S(x))`, the Fresnel integrals. See `generic::fresnel`.
+    ///
+    /// The coefficient tables are per-element, so the `ps`/`pd` impls supply them and
+    /// every other type gets this default. `Dual` overrides it with the closed-form
+    /// derivatives `C' = cos(pi x^2/2)`, `S' = sin(pi x^2/2)`.
+    #[inline(always)]
+    fn fresnel<P: Policy>(self) -> (Self, Self) {
+        todo!("fresnel is not implemented for this composite type")
+    }
+
+    /// `(Si(x), Ci(x))`, the trigonometric integrals. See `generic::sici`.
+    ///
+    /// Same shape as [`fresnel`](Self::fresnel): per-element tables in `ps`/`pd`, and
+    /// `Dual` differentiates by `Si' = sin(x)/x`, `Ci' = cos(x)/x`.
+    #[inline(always)]
+    fn sici<P: Policy>(self) -> (Self, Self) {
+        todo!("sici is not implemented for this composite type")
+    }
+
+    /// `C(x)` alone. Unlike the Airy singles this is genuinely the pair with one half
+    /// dead: the two share the argument reduction, the phase and both auxiliaries, so
+    /// only one Chebyshev series and one reconstruction fall out. They are pure, so
+    /// they do fall out.
+    #[inline(always)]
+    fn fresnel_c<P: Policy>(self) -> Self {
+        Self::fresnel::<P>(self).0
+    }
+
+    /// `S(x)` alone. See [`fresnel_c`](Self::fresnel_c).
+    #[inline(always)]
+    fn fresnel_s<P: Policy>(self) -> Self {
+        Self::fresnel::<P>(self).1
+    }
+
+    /// `Si(x)` alone. See [`fresnel_c`](Self::fresnel_c) for what is and is not saved.
+    #[inline(always)]
+    fn sinint<P: Policy>(self) -> Self {
+        Self::sici::<P>(self).0
+    }
+
+    /// `Ci(x)` alone. See [`fresnel_c`](Self::fresnel_c).
+    #[inline(always)]
+    fn cosint<P: Policy>(self) -> Self {
+        Self::sici::<P>(self).1
+    }
+
+    /// `I_nu(x) / I_{nu-1}(x)`, the vMF mean resultant length. See `generic::bessel_ratio`.
+    ///
+    /// The kernel reaches the Bessel continued fraction, which pins `Primal = Self`, so the
+    /// `ps`/`pd` impls supply it at the concrete element the way `bessel_iv` is. `Dual`
+    /// overrides through its inner vector, and any other composite is a `todo!()`.
+    #[inline(always)]
+    fn bessel_i_ratio<P: Policy>(self, _nu: Self) -> Self {
+        todo!("bessel_i_ratio is not implemented for this composite type")
+    }
+
+    /// The `kappa` with `I_nu(kappa) / I_{nu-1}(kappa) = r`. Newton on the ratio. Same
+    /// arrangement as [`bessel_i_ratio`](Self::bessel_i_ratio).
+    #[inline(always)]
+    fn inv_bessel_i_ratio<P: Policy>(self, _nu: Self) -> Self {
+        todo!("inv_bessel_i_ratio is not implemented for this composite type")
+    }
+
+    /// `1 - I_nu(x) / I_{nu-1}(x)`, accurate where the ratio is within an ulp of 1.
+    #[inline(always)]
+    fn bessel_i_ratio_1m<P: Policy>(self, _nu: Self) -> Self {
+        todo!("bessel_i_ratio_1m is not implemented for this composite type")
+    }
+
+    /// The `kappa` with `1 - I_nu(kappa) / I_{nu-1}(kappa) = t`, the complement form.
+    #[inline(always)]
+    fn inv_bessel_i_ratio_1m<P: Policy>(self, _nu: Self) -> Self {
+        todo!("inv_bessel_i_ratio_1m is not implemented for this composite type")
+    }
+
+    // ---- marker-selected ratio entries ---------------------------------------------------
+    //
+    // `bessel::ratio::<F>(nu)` and its three companions route through the family marker to
+    // the per-family hooks above (`I` today). Trait methods only because the forwarder calls
+    // every public entry through this trait. Nothing overrides them.
+
+    /// `bessel::ratio::<F>(nu)`: see [`BesselRatioFamily`](crate::bessel::BesselRatioFamily).
+    #[inline(always)]
+    fn bessel_ratio<P: Policy, F: crate::bessel::BesselRatioFamily>(self, nu: Self) -> Self {
+        F::ratio::<P, E, Self>(self, nu)
+    }
+
+    /// `inv_bessel::ratio::<F>(r)`.
+    #[inline(always)]
+    fn inv_bessel_ratio<P: Policy, F: crate::bessel::BesselRatioFamily>(self, nu: Self) -> Self {
+        F::inv_ratio::<P, E, Self>(self, nu)
+    }
+
+    /// `bessel_ratio_1m::<F>(nu)`.
+    #[inline(always)]
+    fn bessel_ratio_1m<P: Policy, F: crate::bessel::BesselRatioFamily>(self, nu: Self) -> Self {
+        F::ratio_1m::<P, E, Self>(self, nu)
+    }
+
+    /// `inv_bessel_ratio_1m::<F>(t)`.
+    #[inline(always)]
+    fn inv_bessel_ratio_1m<P: Policy, F: crate::bessel::BesselRatioFamily>(self, nu: Self) -> Self {
+        F::inv_ratio_1m::<P, E, Self>(self, nu)
+    }
+
+    /// `(x_k, w_k)` of the `n`-point Gauss-Legendre rule, the index `k` per lane. See
+    /// `generic::quadrature`.
+    #[inline(always)]
+    fn gauss_legendre<P: Policy>(self, n: u32) -> (Self, Self) {
+        generic::quadrature::gauss_legendre_impl::<P, _, _>(self, n)
+    }
+
+    /// `(x_k, w_k)` of the `n`-point Gauss-Hermite rule, the index `k` per lane.
+    #[inline(always)]
+    fn gauss_hermite<P: Policy>(self, n: u32) -> (Self, Self) {
+        generic::quadrature::gauss_hermite_impl::<P, _, _>(self, n)
+    }
+
+    /// `(x_k, w_k)` of the `n`-point Gauss-Laguerre rule with weight `x^alpha e^{-x}`, the
+    /// index `k` and `alpha` per lane.
+    #[inline(always)]
+    fn gauss_laguerre<P: Policy>(self, alpha: Self, n: u32) -> (Self, Self) {
+        generic::quadrature::gauss_laguerre_impl::<P, _, _>(self, alpha, n)
+    }
+
+    /// `AGM(a, b)`, sharing its recurrence with the complete elliptic integrals.
+    #[inline(always)]
+    fn agm<P: Policy>(a: Self, b: Self) -> Self {
+        generic::elliptic::agm::<P, _, _>(a, b)
+    }
+
+    /// `zeta(s) - 1`, the primitive of the pair: the Euler-Maclaurin sum's leading term _is_
+    /// the 1, so omitting it is exact where subtracting it afterwards is not.
+    ///
+    /// The kernel needs `E: BernoulliNumbers` and its own `ZetaConsts`, which a generic `E` on
+    /// this trait does not carry, the same bind [`polygamma`](SpecializedSpecialMath::polygamma) is in. The
+    /// `ps`/`pd` impls override this at the concrete element. The default here is what a
+    /// composite gets until it supplies its own.
+    ///
+    /// `(z)_m = Gamma(z+m)/Gamma(z)`, by exact product where `m` is a small integer and by
+    /// the Stirling difference otherwise. Never forms `lgamma(z+m) - lgamma(z)` except in
+    /// the residual region where nothing else applies.
+    #[inline(always)]
+    fn pochhammer<P: Policy>(z: Self, m: Self) -> Self {
+        generic::pochhammer::pochhammer::<P, _, Self>(z, m)
+    }
+
+    /// `(sn, cn, dn)` by the arithmetic-only descending Landen transformation.
+    ///
+    /// Composite types that carry derivatives override this: the triple is closed under
+    /// `d/du`, so the derivative components are products of the values and there is no
+    /// reason to differentiate the ladder itself.
+    #[inline(always)]
+    fn jacobi_elliptic<P: Policy>(u: Self, k: Self) -> (Self, Self, Self) {
+        generic::jacobi_elliptic::jacobi_elliptic::<P, _, _>(u, k)
+    }
 
     /// `(x^lambda - 1)/lambda`, `ln x` at `lambda = 0`.
     ///
@@ -1144,7 +1951,7 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
         let reflected = neg.select(Self::TWO - lambda, lambda);
         let r = Self::boxcox_1p::<P>(self.abs(), reflected);
 
-        neg.select(-r, r)
+        r.neg_c(neg)
     }
 
     /// The inverse Yeo-Johnson transform. The same sign fold as
@@ -1158,7 +1965,7 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
         let reflected = neg.select(Self::TWO - lambda, lambda);
         let r = Self::inv_boxcox_1p::<P>(self.abs(), reflected);
 
-        neg.select(-r, r)
+        r.neg_c(neg)
     }
 
     fn langevin<P: Policy>(self) -> Self;
@@ -1200,7 +2007,7 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
     fn lgamma_r<P: Policy>(self) -> (Self, Self);
 
     #[inline(always)]
-    fn algebraic_sigmoid<P: Policy, const N: usize>(self) -> Self {
+    fn algebraic_sigmoid_n<P: Policy, const N: usize>(self) -> Self {
         if const { N == 0 } {
             return self; // identity function
         }
@@ -1241,6 +2048,54 @@ pub trait SpecializedRealSpecialMath<E>: SpecializedSpecialMath<E> {
         let mut y = if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
             // this is the same number of operations as the more precise version, but
             // with better accuracy on large pre_root when using approximate rpc.
+            self * denom.approx_reciprocal_p::<P>()
+        } else {
+            self / denom
+        };
+
+        if const { P::POLICY.check_overflow } {
+            y = pre_root.is_infinite().select(self.signum(), y);
+        }
+
+        y
+    }
+
+    /// The runtime twin of [`algebraic_sigmoid_n`](Self::algebraic_sigmoid_n), same arithmetic.
+    #[inline(always)]
+    fn algebraic_sigmoid<P: Policy>(self, n: u32) -> Self {
+        if n == 0 {
+            return self;
+        }
+
+        let pre_root = Self::ONE + self.abs().powi_p::<P>(n as i32);
+
+        let denom = match n {
+            1 => pre_root,
+            2 => pre_root.sqrt(),
+            3 => pre_root.cbrt_p::<P>(),
+            4 if const { P::POLICY.precision.le(PrecisionPolicy::Average) } => pre_root.sqrt().sqrt(),
+            _ => {
+                let x = pre_root;
+
+                let mut y = x.powf_p::<CheckOverflow<LessPrecision<P>, false>>(Self::splat(
+                    E::ONE / E::from_int(n as thermite::LargeInt),
+                ));
+
+                let y_n = y.powi_p::<P>(n as i32);
+
+                let np1 = Self::splat(E::from_int((n + 1) as thermite::LargeInt));
+                let nm1 = Self::splat(E::from_int((n - 1) as thermite::LargeInt));
+
+                let num = y * (x - y_n);
+                let d = y_n.mul_adde(np1, x * nm1);
+
+                y += (num + num) / d;
+
+                y
+            }
+        };
+
+        let mut y = if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
             self * denom.approx_reciprocal_p::<P>()
         } else {
             self / denom
@@ -1405,7 +2260,7 @@ pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> + PrimalPr
         generic::sh::sh_eval_d_impl::<Self, L, N>(table, x, y, z, out, ddx, ddy, ddz);
     }
 
-    /// [`spherical_harmonics`](Self::spherical_harmonics) plus the ambient Cartesian
+    /// [`spherical_harmonics`](SpecializedRealSpecialMath::spherical_harmonics) plus the ambient Cartesian
     /// gradient of every harmonic. See [`sh_d_impl`] for the gradient semantics.
     #[inline(always)]
     #[allow(clippy::too_many_arguments)]
@@ -1500,7 +2355,7 @@ pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> + PrimalPr
     }
 
     #[inline(always)]
-    fn algebraic_sigmoid_d<P: Policy, const N: usize>(self) -> (Self, Self) {
+    fn algebraic_sigmoid_d_n<P: Policy, const N: usize>(self) -> (Self, Self) {
         if const { N == 0 } {
             return (self, Self::ONE); // identity function
         }
@@ -1551,6 +2406,63 @@ pub trait SpecializedRealPrimalMath<E>: SpecializedRealSpecialMath<E> + PrimalPr
 
             y = is_infinite.select(self.signum(), y);
             dy = dy.nz(is_infinite); // zero if is_infinite
+        }
+
+        (y, dy)
+    }
+
+    /// The runtime twin of [`algebraic_sigmoid_d_n`](Self::algebraic_sigmoid_d_n).
+    #[inline(always)]
+    fn algebraic_sigmoid_d<P: Policy>(self, n: u32) -> (Self, Self) {
+        if n == 0 {
+            return (self, Self::ONE);
+        }
+
+        let pre_root = Self::ONE + self.abs().powi_p::<P>(n as i32);
+
+        let denom = match n {
+            1 => pre_root,
+            2 => pre_root.sqrt(),
+            3 => pre_root.cbrt_p::<P>(),
+            4 if const { P::POLICY.precision.le(PrecisionPolicy::Average) } => pre_root.sqrt().sqrt(),
+            _ => {
+                let x = pre_root;
+
+                let mut y = x.powf_p::<CheckOverflow<LessPrecision<P>, false>>(Self::splat(
+                    E::ONE / E::from_int(n as thermite::LargeInt),
+                ));
+
+                let y_n = y.powi_p::<P>(n as i32);
+
+                let np1 = Self::splat(E::from_int((n + 1) as thermite::LargeInt));
+                let nm1 = Self::splat(E::from_int((n - 1) as thermite::LargeInt));
+
+                let num = y * (x - y_n);
+                let d = y_n.mul_adde(np1, x * nm1);
+
+                y += (num + num) / d;
+
+                y
+            }
+        };
+
+        let mut y;
+        let mut dy;
+
+        if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
+            let inv_denom = denom.approx_reciprocal_p::<P>();
+            y = self * inv_denom;
+            dy = inv_denom / pre_root;
+        } else {
+            y = self / denom;
+            dy = (pre_root * denom).approx_reciprocal_p::<P>();
+        }
+
+        if const { P::POLICY.check_overflow } {
+            let is_infinite = pre_root.is_infinite();
+
+            y = is_infinite.select(self.signum(), y);
+            dy = dy.nz(is_infinite);
         }
 
         (y, dy)

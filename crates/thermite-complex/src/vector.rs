@@ -406,6 +406,46 @@ impl<V: RealFloatVector> GenericVector for Complex<V> {
         V::_loop_hint()
     }
 
+    #[inline(always)]
+    #[track_caller]
+    fn _enter(name: &'static str) -> u32 {
+        V::_enter_tagged("Complex", name)
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _enter_tagged(tag: &'static str, name: &'static str) -> u32 {
+        V::_enter_tagged(tag, name)
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _exit(token: u32) {
+        V::_exit(token)
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _region_arg(mut self, token: u32) -> Self {
+        self.re = self.re._region_arg(token);
+        self.im = self.im._region_arg(token);
+        self
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _region_result(mut self, token: u32) -> Self {
+        self.re = self.re._region_result(token);
+        self.im = self.im._region_result(token);
+        self
+    }
+
+    #[inline(always)]
+    #[track_caller]
+    fn _region_imm(token: u32, imm: core::fmt::Arguments) {
+        V::_region_imm(token, imm)
+    }
+
     type Element = Complex<V::Element>;
 
     const EMPTY: Self = Self::ZERO;

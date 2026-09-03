@@ -1,4 +1,4 @@
-//! `phi::<N>`, the exponential-integrator phi-functions.
+//! `phi_n::<N>`, the exponential-integrator phi-functions.
 //!
 //! References are mpmath at 40 digits. The kernel is a two-arm split at `|z| = N` (series
 //! below, recurrence from `expm1` above), so the probes straddle that line, and the test
@@ -35,7 +35,7 @@ fn close(name: &str, got: f64, want: f64, tol: f64) {
 }
 
 fn phi1(x: f64) -> f64 {
-    D::splat(x).phi::<1>().extract::<0>()
+    D::splat(x).phi_n::<1>().extract::<0>()
 }
 
 // --- phi_1(x) = (e^x - 1)/x, the removable singularity ---
@@ -226,20 +226,20 @@ const REFS: &[(f64, [f64; 4])] = &[
 fn all_orders_f64<P: thermite::math::policy::Policy>(z: f64) -> [f64; 4] {
     let v = D::splat(z);
     [
-        v.phi_p::<P, 2>().extract::<0>(),
-        v.phi_p::<P, 3>().extract::<0>(),
-        v.phi_p::<P, 4>().extract::<0>(),
-        v.phi_p::<P, 6>().extract::<0>(),
+        v.phi_n_p::<P, 2>().extract::<0>(),
+        v.phi_n_p::<P, 3>().extract::<0>(),
+        v.phi_n_p::<P, 4>().extract::<0>(),
+        v.phi_n_p::<P, 6>().extract::<0>(),
     ]
 }
 
 fn all_orders_f32<P: thermite::math::policy::Policy>(z: f32) -> [f32; 4] {
     let v = F::splat(z);
     [
-        v.phi_p::<P, 2>().extract::<0>(),
-        v.phi_p::<P, 3>().extract::<0>(),
-        v.phi_p::<P, 4>().extract::<0>(),
-        v.phi_p::<P, 6>().extract::<0>(),
+        v.phi_n_p::<P, 2>().extract::<0>(),
+        v.phi_n_p::<P, 3>().extract::<0>(),
+        v.phi_n_p::<P, 4>().extract::<0>(),
+        v.phi_n_p::<P, 6>().extract::<0>(),
     ]
 }
 
@@ -291,11 +291,15 @@ fn f32_matches_mpmath() {
 fn low_orders_are_exp_and_expm1_over_x() {
     for &z in &[-3.0_f64, -0.25, 0.7, 4.0] {
         let v = D::splat(z);
-        assert_eq!(v.phi::<0>().extract::<0>(), v.exp().extract::<0>(), "phi_0({z}) is exp");
+        assert_eq!(
+            v.phi_n::<0>().extract::<0>(),
+            v.exp().extract::<0>(),
+            "phi_0({z}) is exp"
+        );
         // Not bit-equal: the kernel's divide is the policy's `approx_div`.
         close(
             "phi_1 is expm1/x",
-            v.phi::<1>().extract::<0>(),
+            v.phi_n::<1>().extract::<0>(),
             (v.exp_m1() / v).extract::<0>(),
             1e-15,
         );
@@ -307,27 +311,27 @@ fn low_orders_are_exp_and_expm1_over_x() {
 #[test]
 fn origin_and_infinities() {
     // phi_k(0) = 1/k!, exactly: the series arm's Horner collapses to its constant term.
-    assert_eq!(D::splat(0.0).phi::<2>().extract::<0>(), 0.5);
-    assert_eq!(D::splat(0.0).phi::<3>().extract::<0>(), 1.0 / 6.0);
-    assert_eq!(D::splat(0.0).phi::<5>().extract::<0>(), 1.0 / 120.0);
-    assert_eq!(F::splat(0.0).phi::<4>().extract::<0>(), 1.0 / 24.0);
+    assert_eq!(D::splat(0.0).phi_n::<2>().extract::<0>(), 0.5);
+    assert_eq!(D::splat(0.0).phi_n::<3>().extract::<0>(), 1.0 / 6.0);
+    assert_eq!(D::splat(0.0).phi_n::<5>().extract::<0>(), 1.0 / 120.0);
+    assert_eq!(F::splat(0.0).phi_n::<4>().extract::<0>(), 1.0 / 24.0);
 
-    assert_eq!(D::splat(f64::INFINITY).phi::<2>().extract::<0>(), f64::INFINITY);
-    assert_eq!(D::splat(f64::INFINITY).phi::<5>().extract::<0>(), f64::INFINITY);
-    assert_eq!(D::splat(f64::NEG_INFINITY).phi::<2>().extract::<0>(), 0.0);
-    assert_eq!(D::splat(f64::NEG_INFINITY).phi::<5>().extract::<0>(), 0.0);
-    assert!(D::splat(f64::NAN).phi::<3>().extract::<0>().is_nan());
+    assert_eq!(D::splat(f64::INFINITY).phi_n::<2>().extract::<0>(), f64::INFINITY);
+    assert_eq!(D::splat(f64::INFINITY).phi_n::<5>().extract::<0>(), f64::INFINITY);
+    assert_eq!(D::splat(f64::NEG_INFINITY).phi_n::<2>().extract::<0>(), 0.0);
+    assert_eq!(D::splat(f64::NEG_INFINITY).phi_n::<5>().extract::<0>(), 0.0);
+    assert!(D::splat(f64::NAN).phi_n::<3>().extract::<0>().is_nan());
 
     // Large finite arguments: expm1 overflows and the recurrence keeps the inf.
-    assert_eq!(D::splat(800.0).phi::<3>().extract::<0>(), f64::INFINITY);
-    assert_eq!(F::splat(100.0).phi::<3>().extract::<0>(), f32::INFINITY);
+    assert_eq!(D::splat(800.0).phi_n::<3>().extract::<0>(), f64::INFINITY);
+    assert_eq!(F::splat(100.0).phi_n::<3>().extract::<0>(), f32::INFINITY);
 }
 
 /// The reason the series arm exists: run the recurrence where the kernel refuses to.
 #[test]
 fn recurrence_alone_loses_the_answer_below_the_split() {
     fn recurrence(n: usize, z: f64) -> f64 {
-        let mut p = D::splat(z).phi::<1>().extract::<0>();
+        let mut p = D::splat(z).phi_n::<1>().extract::<0>();
         let mut fact = 1.0;
         for k in 1..n {
             p = (p - 1.0 / fact) / z;
@@ -341,7 +345,7 @@ fn recurrence_alone_loses_the_answer_below_the_split() {
     let z = 1e-3;
     let want = 0.1667083416680557539930583; // mpmath
     let naive = ((recurrence(3, z) - want) / want).abs();
-    let ours = ((D::splat(z).phi::<3>().extract::<0>() - want) / want).abs();
+    let ours = ((D::splat(z).phi_n::<3>().extract::<0>() - want) / want).abs();
     assert!(
         naive > 1e-10,
         "precondition: recurrence expected to be visibly wrong, rel {naive:e}"
@@ -351,7 +355,7 @@ fn recurrence_alone_loses_the_answer_below_the_split() {
     // Even at z = 1, still inside the split for N = 4, the recurrence has lost ~5 bits.
     let want4 = 0.05161516179237856869362;
     let naive4 = ((recurrence(4, 1.0) - want4) / want4).abs();
-    let ours4 = ((D::splat(1.0).phi::<4>().extract::<0>() - want4) / want4).abs();
+    let ours4 = ((D::splat(1.0).phi_n::<4>().extract::<0>() - want4) / want4).abs();
     assert!(naive4 > 4.0 * f64::EPSILON, "precondition: recurrence rel {naive4:e}");
     assert!(ours4 <= 2e-15, "kernel rel {ours4:e}");
 }
@@ -362,9 +366,9 @@ fn recurrence_alone_loses_the_answer_below_the_split() {
 fn recurrence_identity_holds_across_the_split() {
     for &z in &[-4.5_f64, -2.5, -1.5, -0.3, 0.3, 1.5, 2.5, 4.5, 12.0] {
         let v = D::splat(z);
-        let p2 = v.phi::<2>().extract::<0>();
-        let p3 = v.phi::<3>().extract::<0>();
-        let p4 = v.phi::<4>().extract::<0>();
+        let p2 = v.phi_n::<2>().extract::<0>();
+        let p3 = v.phi_n::<3>().extract::<0>();
+        let p4 = v.phi_n::<4>().extract::<0>();
         // Only checked where the subtraction is well conditioned.
         if z.abs() >= 1.5 {
             close("phi_3 from phi_2", (p2 - 0.5) / z, p3, 1e-13);
@@ -391,10 +395,10 @@ fn wide_backend_agrees_with_scalar() {
     // Mixed lanes on both sides of the split, so both arms run in one call.
     let zs = [-7.5, -0.5, 1.9, 30.0];
     let w = W::from_slice(&zs);
-    let (p2, p4) = (w.phi::<2>().into_array(), w.phi::<4>().into_array());
+    let (p2, p4) = (w.phi_n::<2>().into_array(), w.phi_n::<4>().into_array());
     for (i, &z) in zs.iter().enumerate() {
         let d = D::splat(z);
-        close("wide phi_2", p2.as_slice()[i], d.phi::<2>().extract::<0>(), 1e-15);
-        close("wide phi_4", p4.as_slice()[i], d.phi::<4>().extract::<0>(), 1e-15);
+        close("wide phi_2", p2.as_slice()[i], d.phi_n::<2>().extract::<0>(), 1e-15);
+        close("wide phi_4", p4.as_slice()[i], d.phi_n::<4>().extract::<0>(), 1e-15);
     }
 }

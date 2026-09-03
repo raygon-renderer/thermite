@@ -26,6 +26,104 @@ pub const fn phi_series_terms(n: usize, eps: f64) -> usize {
     k
 }
 
+/// How many orders the runtime-order `phi` has its series length precomputed for. See
+/// [`phi_terms_table`].
+pub const PHI_TABLE_ORDERS: usize = 33;
+
+/// [`phi_series_terms`] for every order below [`PHI_TABLE_ORDERS`], capped at
+/// `max_iterations`: the table the f32/f64 runtime-order entries build in a `const` block
+/// per policy, so the term count is an index per call rather than a search.
+pub const fn phi_terms_table(eps: f64, max_iterations: usize) -> [usize; PHI_TABLE_ORDERS] {
+    let mut t = [0; PHI_TABLE_ORDERS];
+    let mut n = 0;
+    while n < PHI_TABLE_ORDERS {
+        let needed = phi_series_terms(n, eps);
+        t[n] = if needed < max_iterations {
+            needed
+        } else {
+            max_iterations
+        };
+        n += 1;
+    }
+    t
+}
+
+/// The runtime-order twin of [`phi_internal_n`]: the same two arms with `N` as a value. The
+/// `1/N!` prefactor and the per-term ratios are the same running products, so the two forms
+/// agree to the bit for the same `terms`.
+#[inline(always)]
+pub fn phi_internal<V, E, P, const ADAPTIVE: bool>(z: V, n: u32, terms: usize) -> V
+where
+    E: FloatElement,
+    V: FloatVector<Element = E> + SpecializedTranscendentalMath<E>,
+    P: Policy,
+{
+    if n == 0 {
+        return V::exp::<P>(z);
+    }
+
+    if n == 1 {
+        let mut r = V::approx_div::<P>(V::exp_m1::<P>(z), z);
+
+        if const { P::POLICY.check_overflow } {
+            r = z.is_zero().select(V::ONE, r);
+            r = z.cmp_eq(V::INFINITY).select(V::INFINITY, r);
+        }
+
+        return r;
+    }
+
+    let n = n as usize;
+
+    let mut inv_fact = E::ONE;
+    let mut k = 2;
+    while k <= n {
+        inv_fact = inv_fact * E::from_ratio(1, k as LargeInt);
+        k += 1;
+    }
+
+    let near = z.abs().cmp_lt(V::splat(E::from_int(n as LargeInt)));
+
+    // Series arm.
+    let mut s = V::ZERO;
+    if const { P::POLICY.avoid_branching } || thermite::unlikely(near.any()) {
+        let tol = <V as FloatConsts>::EPSILON * V::HALF;
+        let mut term = V::splat(inv_fact);
+        s = term;
+        let mut k = 1;
+        while k <= terms {
+            term *= z * V::splat(E::from_ratio(1, (n + k) as LargeInt));
+            s += term;
+            if const { ADAPTIVE } && term.abs().cmp_le(tol * s.abs()).all() {
+                break;
+            }
+            k += 1;
+        }
+    }
+
+    // Recurrence arm.
+    let mut p = V::ZERO;
+    if const { P::POLICY.avoid_branching } || thermite::unlikely(!near.all()) {
+        let inv = V::ONE / z;
+        p = V::exp_m1::<P>(z) * inv;
+        let mut inv_kfact = E::ONE;
+        let mut k = 1;
+        while k < n {
+            p = (p - V::splat(inv_kfact)) * inv;
+            k += 1;
+            inv_kfact = inv_kfact * E::from_ratio(1, k as LargeInt);
+        }
+    }
+
+    let mut r = near.select(s, p);
+
+    if const { P::POLICY.check_overflow } {
+        r = z.cmp_eq(V::INFINITY).select(V::INFINITY, r);
+    }
+
+    r
+}
+
 /// `phi_N(z) = sum_{n>=0} z^n/(n+N)!`, the exponential-integrator functions.
 ///
 /// `N = 0` is `exp` and `N = 1` is `expm1(z)/z`. Beyond that, two arms split at `|z| = N`:
@@ -48,7 +146,7 @@ pub const fn phi_series_terms(n: usize, eps: f64) -> usize {
 /// leaves it there, and `-inf` gives `-1 * -0` and then a run of `+0`s, the limit. Only
 /// `+inf` itself, `inf * (1/inf)`, and the `0/0` of `N = 1` at the origin need patching.
 #[inline(always)]
-pub fn phi_internal<V, E, P, const N: usize, const ADAPTIVE: bool>(z: V, terms: usize) -> V
+pub fn phi_internal_n<V, E, P, const N: usize, const ADAPTIVE: bool>(z: V, terms: usize) -> V
 where
     E: FloatElement,
     V: FloatVector<Element = E> + SpecializedTranscendentalMath<E>,

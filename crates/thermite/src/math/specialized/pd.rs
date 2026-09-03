@@ -205,8 +205,13 @@ impl<V: FloatVectorWithBits<Element = f64>> SpecializedTranscendentalMath<f64> f
     }
 
     #[inline(always)]
-    fn log_n<P: Policy, const N: usize>(self) -> Self {
-        super::generic::log_n_internal::<V, f64, P, N>(self)
+    fn log_n_n<P: Policy, const N: usize>(self) -> Self {
+        super::generic::log_n_internal_n::<V, f64, P, N>(self)
+    }
+
+    #[inline(always)]
+    fn log_n<P: Policy>(self, n: u32) -> Self {
+        super::generic::log_n_internal::<V, f64, P>(self, n)
     }
 
     #[inline(always)]

@@ -95,12 +95,11 @@ use thermite::{
 };
 use thermite_special::{
     RealPrimalMathWithPolicy, RealSpecialMathWithPolicy, SpecialMathWithPolicy,
-    specialized::SpecializedSpecialMath,
     elliptic::{
-        EllipticConsts,
         CarlsonRc, CarlsonRd, CarlsonRf, CarlsonRg, CarlsonRj, EllintD, EllintDInc, EllintE, EllintEInc, EllintF,
-        EllintK, EllintPi, EllintPiInc,
+        EllintK, EllintPi, EllintPiInc, EllipticConsts,
     },
+    specialized::SpecializedSpecialMath,
 };
 
 // The method deliberately isn't named `into_array`: on a generic `V` receiver,
@@ -148,23 +147,23 @@ pub trait RealMathWithPolicyFfi: RealMathWithPolicy + RealPrimalMathWithPolicy {
     /// 3rd-order smoothstep
     #[inline(always)]
     fn smoothstep_p<P: Policy>(self) -> Self {
-        RealMathWithPolicy::smoothstep_p::<P, 2>(self, None)
+        RealMathWithPolicy::smoothstep_n_p::<P, 2>(self, None)
     }
 
     #[inline(always)]
     fn inverse_smoothstep_p<P: Policy>(self) -> Self {
-        RealMathWithPolicy::inverse_smoothstep_p::<P, 2>(self, None)
+        RealMathWithPolicy::inverse_smoothstep_n_p::<P, 2>(self, None)
     }
 
     /// 5th-order smoothstep
     #[inline(always)]
     fn smootherstep_p<P: Policy>(self) -> Self {
-        RealMathWithPolicy::smoothstep_p::<P, 3>(self, None)
+        RealMathWithPolicy::smoothstep_n_p::<P, 3>(self, None)
     }
 
     #[inline(always)]
     fn inverse_smootherstep_p<P: Policy>(self) -> Self {
-        RealMathWithPolicy::inverse_smoothstep_p::<P, 3>(self, None)
+        RealMathWithPolicy::inverse_smoothstep_n_p::<P, 3>(self, None)
     }
 
     #[inline(always)]
@@ -225,13 +224,13 @@ pub trait RealMathWithPolicyFfi: RealMathWithPolicy + RealPrimalMathWithPolicy {
     /// `x / (1 + |x|)`, the softsign function.
     #[inline(always)]
     fn algebraic_sigmoid_1_p<P: Policy>(self) -> Self {
-        RealSpecialMathWithPolicy::algebraic_sigmoid_p::<P, 1>(self)
+        RealSpecialMathWithPolicy::algebraic_sigmoid_n_p::<P, 1>(self)
     }
 
     /// `x / sqrt(1 + x^2)`.
     #[inline(always)]
     fn algebraic_sigmoid_2_p<P: Policy>(self) -> Self {
-        RealSpecialMathWithPolicy::algebraic_sigmoid_p::<P, 2>(self)
+        RealSpecialMathWithPolicy::algebraic_sigmoid_n_p::<P, 2>(self)
     }
 
     // --- Activations, value and derivative together ------------------------
@@ -256,12 +255,12 @@ pub trait RealMathWithPolicyFfi: RealMathWithPolicy + RealPrimalMathWithPolicy {
 
     #[inline(always)]
     fn algebraic_sigmoid_d_1_p<P: Policy>(self) -> (Self, Self) {
-        RealPrimalMathWithPolicy::algebraic_sigmoid_d_p::<P, 1>(self)
+        RealPrimalMathWithPolicy::algebraic_sigmoid_d_n_p::<P, 1>(self)
     }
 
     #[inline(always)]
     fn algebraic_sigmoid_d_2_p<P: Policy>(self) -> (Self, Self) {
-        RealPrimalMathWithPolicy::algebraic_sigmoid_d_p::<P, 2>(self)
+        RealPrimalMathWithPolicy::algebraic_sigmoid_d_n_p::<P, 2>(self)
     }
 
     // --- Fixed instantiations of const-generic orders ----------------------
@@ -269,7 +268,7 @@ pub trait RealMathWithPolicyFfi: RealMathWithPolicy + RealPrimalMathWithPolicy {
     /// The exponential integral `E_1(x)`, the order that actually gets called.
     #[inline(always)]
     fn expint_1_p<P: Policy>(self) -> Self {
-        SpecialMathWithPolicy::expint_p::<P, 1>(self)
+        SpecialMathWithPolicy::expint_n_p::<P, 1>(self)
     }
 
     /// Euclidean length of a 3-vector, without intermediate overflow.

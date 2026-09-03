@@ -1,4 +1,4 @@
-//! Orthonormal Hermite functions: `hermite_function::<N>` and `hermite_function_series_n::<N>`.
+//! Orthonormal Hermite functions: `hermite_function_n::<N>` and `hermite_function_series_n::<N>`.
 //!
 //! References come from `scripts/orthonormal_ref.py` (mpmath, 50 digits) and include
 //! degrees 50 to 1000 - far past where the raw polynomial is finite in either format,
@@ -60,11 +60,11 @@ macro_rules! for_each_degree {
 fn psi_at(n: usize, x: f64) -> f64 {
     let v = D::splat(x);
     match n {
-        50 => v.hermite_function::<50>(),
-        100 => v.hermite_function::<100>(),
-        150 => v.hermite_function::<150>(),
-        300 => v.hermite_function::<300>(),
-        1000 => v.hermite_function::<1000>(),
+        50 => v.hermite_function_n::<50>(),
+        100 => v.hermite_function_n::<100>(),
+        150 => v.hermite_function_n::<150>(),
+        300 => v.hermite_function_n::<300>(),
+        1000 => v.hermite_function_n::<1000>(),
         _ => unreachable!("no const instantiation for degree {n}"),
     }
     .extract::<0>()
@@ -73,11 +73,11 @@ fn psi_at(n: usize, x: f64) -> f64 {
 fn psi_at_f32(n: usize, x: f32) -> f32 {
     let v = F::splat(x);
     match n {
-        50 => v.hermite_function::<50>(),
-        100 => v.hermite_function::<100>(),
-        150 => v.hermite_function::<150>(),
-        300 => v.hermite_function::<300>(),
-        1000 => v.hermite_function::<1000>(),
+        50 => v.hermite_function_n::<50>(),
+        100 => v.hermite_function_n::<100>(),
+        150 => v.hermite_function_n::<150>(),
+        300 => v.hermite_function_n::<300>(),
+        1000 => v.hermite_function_n::<1000>(),
         _ => unreachable!("no const instantiation for degree {n}"),
     }
     .extract::<0>()
@@ -88,7 +88,7 @@ fn matches_mpmath_at_low_degree() {
     macro_rules! check {
         ($n:literal) => {
             for (j, &x) in HF_XS.iter().enumerate() {
-                let got = D::splat(x).hermite_function::<$n>().extract::<0>();
+                let got = D::splat(x).hermite_function_n::<$n>().extract::<0>();
                 close_abs(&format!("psi_{}({x})", $n), got, HF[$n][j], 4e-16);
             }
         };
@@ -134,9 +134,9 @@ fn precision_policy_recovers_the_gaussian_residual_on_fma_hardware() {
     macro_rules! at {
         ($p:ty, $n:expr, $x:expr) => {
             match $n {
-                150 => W::splat($x).hermite_function_p::<$p, 150>(),
-                300 => W::splat($x).hermite_function_p::<$p, 300>(),
-                1000 => W::splat($x).hermite_function_p::<$p, 1000>(),
+                150 => W::splat($x).hermite_function_n_p::<$p, 150>(),
+                300 => W::splat($x).hermite_function_n_p::<$p, 300>(),
+                1000 => W::splat($x).hermite_function_n_p::<$p, 1000>(),
                 _ => unreachable!(),
             }
             .extract::<0>()
@@ -178,9 +178,9 @@ fn agrees_with_the_raw_polynomial_where_both_are_finite() {
             }
             let norm = norm.sqrt() * pi_qtr;
             for &x in &HF_XS {
-                let raw = D::splat(x).hermite::<$n>().extract::<0>();
+                let raw = D::splat(x).hermite_n::<$n>().extract::<0>();
                 let want = raw * (-0.5 * x * x).exp() / norm;
-                let got = D::splat(x).hermite_function::<$n>().extract::<0>();
+                let got = D::splat(x).hermite_function_n::<$n>().extract::<0>();
                 // The raw route cancels through the polynomial and its own exp, so the bound
                 // is set by its conditioning, not by the function kernel's.
                 close_abs(&format!("psi_{} vs raw at {x}", $n), got, want, 1e-12);
@@ -197,14 +197,14 @@ fn parity_and_the_origin() {
     macro_rules! check {
         ($n:literal) => {
             for &x in &HF_XS {
-                let pos = D::splat(x).hermite_function::<$n>().extract::<0>();
-                let neg = D::splat(-x).hermite_function::<$n>().extract::<0>();
+                let pos = D::splat(x).hermite_function_n::<$n>().extract::<0>();
+                let neg = D::splat(-x).hermite_function_n::<$n>().extract::<0>();
                 let want = if $n % 2 == 0 { pos } else { -pos };
                 assert_eq!(neg, want, "parity psi_{}({x})", $n);
             }
             if $n % 2 == 1 {
                 assert_eq!(
-                    D::ZERO.hermite_function::<$n>().extract::<0>(),
+                    D::ZERO.hermite_function_n::<$n>().extract::<0>(),
                     0.0,
                     "psi_{}(0)",
                     $n
@@ -292,11 +292,11 @@ fn lanes_stay_independent() {
     use thermite::backend::scalar::Scalar;
     type D4 = thermite::simd::f64x4<Scalar>;
     let xs = [HF_XS[0], HF_XS[3], HF_XS[6], HF_XS[9]];
-    let got = D4::new(xs).hermite_function::<7>();
+    let got = D4::new(xs).hermite_function_n::<7>();
     for (lane, &x) in xs.iter().enumerate() {
         assert_eq!(
             got.as_slice()[lane],
-            D::splat(x).hermite_function::<7>().extract::<0>(),
+            D::splat(x).hermite_function_n::<7>().extract::<0>(),
             "lane {lane}"
         );
     }
@@ -307,7 +307,7 @@ fn f32_tracks_the_reference_including_high_degree() {
     macro_rules! check {
         ($n:literal) => {
             for (j, &x) in HF_XS.iter().enumerate() {
-                let got = F::splat(x as f32).hermite_function::<$n>().extract::<0>() as f64;
+                let got = F::splat(x as f32).hermite_function_n::<$n>().extract::<0>() as f64;
                 close_abs(&format!("f32 psi_{}({x})", $n), got, HF[$n][j], 3e-7);
             }
         };

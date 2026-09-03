@@ -29,14 +29,14 @@ const E1: &[(f64, f64, f64)] = &[
 fn expint_e1_spans_both_regimes() {
     // 0.5 takes the power series, the rest take the continued fraction.
     for &(x, hi, lo) in E1 {
-        let got = c(x).expint::<1>();
-        assert!(got.value.extract::<0>().is_finite(), "expint::<1>({x}) is not finite");
+        let got = c(x).expint_n::<1>();
+        assert!(got.value.extract::<0>().is_finite(), "expint_n::<1>({x}) is not finite");
 
         let value = got.value.extract::<0>();
         let error = got.error.extract::<0>();
         let err = (((value - hi) + (error - lo)) / hi.abs()).abs();
 
-        assert!(err <= 1e-29, "expint::<1>({x}): rel err {err:e}");
+        assert!(err <= 1e-29, "expint_n::<1>({x}): rel err {err:e}");
     }
 }
 
@@ -46,8 +46,8 @@ fn expint_order_recurrence() {
     use thermite::math::TranscendentalMath;
 
     for x in [0.5f64, 2.0, 10.0] {
-        let e1 = c(x).expint::<1>();
-        let e2 = c(x).expint::<2>();
+        let e1 = c(x).expint_n::<1>();
+        let e2 = c(x).expint_n::<2>();
         let want = ((-c(x)).exp() - c(x) * e1) / C::new(V::ONE);
         let err = ((e2.value.extract::<0>() - want.value.extract::<0>()) / want.value.extract::<0>()).abs();
 

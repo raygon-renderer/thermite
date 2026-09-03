@@ -143,7 +143,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
     }
 
     #[inline(always)]
-    fn log_n<P: Policy, const N: usize>(self) -> Self {
+    fn log_n_n<P: Policy, const N: usize>(self) -> Self {
         if const { is_reference::<P>() } {
             return match N {
                 2 => map1(self, |x| libm::log2(x as f64) as f32),
@@ -152,7 +152,20 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             };
         }
 
-        super::generic::log_n_internal::<V, f32, P, N>(self)
+        super::generic::log_n_internal_n::<V, f32, P, N>(self)
+    }
+
+    #[inline(always)]
+    fn log_n<P: Policy>(self, n: u32) -> Self {
+        if const { is_reference::<P>() } {
+            return match n {
+                2 => map1(self, |x| libm::log2(x as f64) as f32),
+                10 => map1(self, |x| libm::log10(x as f64) as f32),
+                _ => map1(self, |x| (libm::log(x as f64) / libm::log(n as f64)) as f32),
+            };
+        }
+
+        super::generic::log_n_internal::<V, f32, P>(self, n)
     }
 
     #[inline(always)]
@@ -1110,7 +1123,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             let mut u1 = u1.min(V::ONE).max(V::ZERO);
 
             if const { P::POLICY.precision.eq(PrecisionPolicy::Medium) } {
-                u1 = u1.smoothstep_p::<P, 2>(None);
+                u1 = u1.smoothstep_n_p::<P, 2>(None);
             }
 
             // ResourceFunction["MiniMaxApproximation"][Log[x] - Log[1 - Exp[-x]], {x, {0.01, 20.0}, 3, 5}]

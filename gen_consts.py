@@ -803,11 +803,11 @@ _BERNOULLI = None
 
 
 def bernoulli_table(fmt):
-    """`B_2, B_4, ...` - every `B_2n` with `n >= 1` that is finite in `fmt`, as exact
+    """`B_2, B_4, ...`, every `B_2n` with `n >= 1` that is finite in `fmt`, as exact
     Fractions. `|B_2n|` grows factorially, so this terminates: the last finite one is
     B_64 for f32 and B_258 for f64.
 
-    B_0 = 1 is skipped along with B_1. B_0 and B_1 co-occur in practice - a formula that
+    B_0 = 1 is skipped along with B_1. B_0 and B_1 co-occur in practice. Any formula that
     indexes the sequence from 0 (Faulhaber, the binomial recurrence, the Bernoulli
     polynomials) reaches B_1 at k = 1, and a formula that skips B_1 (Euler-Maclaurin, the
     asymptotic series, the zeta identity) starts at B_2 and never wanted B_0 either. So
@@ -919,7 +919,7 @@ def gen_special_bernoulli():
     p("/// Implemented for `f32` and `f64` here, and for `Compensated<f32>` /")
     p("/// `Compensated<f64>` by `thermite-compensated` under its `special` feature.")
     p("pub trait BernoulliNumbers: FloatElement {")
-    p(r"    /// `$B_2, B_4, B_6, \ldots$` - every even-index Bernoulli number finite in `Self`,")
+    p(r"    /// `$B_2, B_4, B_6, \ldots$`, every even-index Bernoulli number finite in `Self`,")
     p(r"    /// starting at `$B_2$`, so that entry `i` is `$B_{2i+2}$`.")
     p("    ///")
     p(r"    /// See the [module docs](self) for why the table ends where it does, and why")
@@ -931,7 +931,7 @@ def gen_special_bernoulli():
     p("/// overflows `E`.")
     p("///")
     p(r"/// The argument is `n` as in `$B_{2n}$`, following the mathematics rather than the")
-    p(r"/// slice index, so `bernoulli_b2n::<f64>(1)` is `$B_2$` - the first entry. Reach for")
+    p(r"/// slice index, so `bernoulli_b2n::<f64>(1)` is `$B_2$`, the first entry. Reach for")
     p(r"/// [`BernoulliNumbers::B2N`] directly when iterating, where entry `i` is `$B_{2i+2}$`.")
     p("#[inline]")
     p("#[must_use]")
@@ -948,6 +948,78 @@ def gen_special_bernoulli():
         for k, fr in enumerate(table):
             lit = rust_float_literal(nearest(fr), fmt)
             p(f"        {lit},  // B_{2 * (k + 1)}")
+        p("    ];")
+        p("}")
+    p("")
+    return "\n".join(w)
+
+
+def factorial_table(fmt):
+    """`0!, 1!, 2!, ...`, every factorial finite in `fmt`, as exact Fractions. `n!`
+    grows factorially by definition, so this terminates: the last finite one is 34!
+    for f32 and 170! for f64."""
+    out = []
+    f = Fraction(1)
+    n = 0
+    while finite_in(fmt, f) is not None:
+        out.append(f)
+        n += 1
+        f *= n
+    return out
+
+
+FACTORIAL_MODULE_DOC = r"""//! Factorials `$n!$`, as one static table per float format.
+//!
+//! Entry `i` is `$i!$` (so the table starts `1, 1, 2, 6, ...`), correctly rounded once
+//! from the exact integer. Tabulating rather than accumulating is an accuracy decision
+//! as much as a speed one: a running product rounds at every step, while the table entry
+//! is the nearest float to the true value.
+//!
+//! # The table ends where the format does
+//!
+//! Each format has a last representable factorial and nothing beyond it to return, so
+//! **`FACTORIALS.len()` is the overflow boundary**: `FACTORIALS.get(n)` is `None`
+//! precisely where `$n!$` would be infinite. There is no overflow policy, no error type
+//! and no limit constant, because the slice length already carries that information.
+//!
+//! | format | entries | last finite | first to overflow |
+//! |---|---|---|---|
+//! | `f32` | 35 | `$34!$` | `$35!$` |
+//! | `f64` | 171 | `$170!$` | `$171!$` |"""
+
+
+def gen_special_factorial():
+    w = []
+    p = w.append
+    p(GENERATED)
+    p(FACTORIAL_MODULE_DOC)
+    p("")
+    p("use thermite::element::FloatElement;")
+    p("")
+    p("/// Static factorial tables for a float format.")
+    p("pub trait Factorials: FloatElement {")
+    p(r"    /// `$0!, 1!, 2!, \ldots$`, every factorial finite in `Self`, so entry `i` is `$i!$`.")
+    p("    ///")
+    p(r"    /// See the [module docs](self) for why the table ends where it does.")
+    p("    const FACTORIALS: &'static [Self];")
+    p("}")
+    p("")
+    p(r"/// `$n!$`, or `None` when it overflows `E`.")
+    p("#[inline]")
+    p("#[must_use]")
+    p("pub fn factorial<E: Factorials>(n: usize) -> Option<E> {")
+    p("    E::FACTORIALS.get(n).copied()")
+    p("}")
+    for fmt in ("f32", "f64"):
+        table = factorial_table(fmt)
+        nearest = FMT[fmt][1]
+        p("")
+        p(f"impl Factorials for {fmt} {{")
+        p("    #[rustfmt::skip]")
+        p(f"    const FACTORIALS: &'static [{fmt}] = &[")
+        for k, fr in enumerate(table):
+            lit = rust_float_literal(nearest(fr), fmt)
+            p(f"        {lit},  // {k}!")
         p("    ];")
         p("}")
     p("")
@@ -989,12 +1061,85 @@ def gen_compensated_bernoulli():
     return "\n".join(w)
 
 
+POLYLOG_MODULE_DOC = r"""//! Constants behind the polylogarithm kernel: `$\zeta$` at the positive integers and the
+//! Stieltjes constants, one table per float format.
+//!
+//! # `ZETA_INT` ends where the format does
+//!
+//! Entry `i` is `$\zeta(i + 2)$`. The table stops at the last `$n$` for which
+//! `$\zeta(n)$` is distinguishable from 1 in the format: `$\zeta(n) - 1 \approx 2^{-n}$`, so
+//! past the table the nearest float is exactly `1.0`, and a kernel reads that value for
+//! every order beyond it without a branch worth having. `ZETA_INT.len() + 1` is the last
+//! tabulated `$n$`.
+//!
+//! | format | entries | last tabulated |
+//! |---|---|---|
+//! | `f32` | 23 | `$\zeta(24)$` |
+//! | `f64` | 52 | `$\zeta(53)$` |
+//!
+//! # `STIELTJES`
+//!
+//! `$\gamma_0, \gamma_1, \ldots$` in the Laurent expansion about the pole,
+//!
+//! ```math
+//! \zeta(1 + \varepsilon) - \frac{1}{\varepsilon} = \sum_{k \ge 0} \frac{(-1)^k}{k!}\gamma_k\,\varepsilon^k ,
+//! ```
+//!
+//! which is entire, so the sum converges for every `$\varepsilon$`. The kernel uses it for
+//! `$|\varepsilon| \le 1/10$`, where 24 terms hold binary64 accuracy."""
+
+
+def gen_special_polylog():
+    w = []
+    p = w.append
+    p(GENERATED)
+    p(POLYLOG_MODULE_DOC)
+    p("")
+    p("use thermite::element::FloatElement;")
+    p("")
+    p("/// Static polylogarithm constant tables for a float format.")
+    p("pub trait PolylogConsts: FloatElement {")
+    p(r"    /// `$\zeta(n)$` for `$n = 2, 3, \ldots$`. Entry `i` is `$\zeta(i + 2)$`. See the [module docs](self).")
+    p("    const ZETA_INT: &'static [Self];")
+    p(r"    /// The Stieltjes constants `$\gamma_0, \gamma_1, \ldots$`. Entry `i` is `$\gamma_i$`.")
+    p("    const STIELTJES: &'static [Self];")
+    p("}")
+    for fmt in ("f32", "f64"):
+        nearest = FMT[fmt][1]
+        p("")
+        p(f"impl PolylogConsts for {fmt} {{")
+        p("    #[rustfmt::skip]")
+        p(f"    const ZETA_INT: &'static [{fmt}] = &[")
+        with mp.workdps(60):
+            n = 2
+            while True:
+                v = nearest(exact(mp.zeta(n)))
+                if v == 1.0:
+                    break
+                p(f"        {rust_float_literal(v, fmt)},  // zeta({n})")
+                n += 1
+        p("    ];")
+        p("")
+        p("    #[rustfmt::skip]")
+        p(f"    const STIELTJES: &'static [{fmt}] = &[")
+        with mp.workdps(60):
+            for k in range(24):
+                v = nearest(exact(mp.stieltjes(k)))
+                p(f"        {rust_float_literal(v, fmt)},  // gamma_{k}")
+        p("    ];")
+        p("}")
+    p("")
+    return "\n".join(w)
+
+
 OUTPUTS = [
     ("crates/thermite/src/math/consts/mod.rs", gen_thermite),
     ("crates/thermite-compensated/src/consts/mod.rs", gen_compensated),
     ("crates/thermite-interval/src/consts/mod.rs", gen_interval_consts),
     ("crates/thermite-interval/src/consts_table.rs", gen_interval_table),
     ("crates/thermite-special/src/tables/bernoulli.rs", gen_special_bernoulli),
+    ("crates/thermite-special/src/tables/factorial.rs", gen_special_factorial),
+    ("crates/thermite-special/src/tables/polylog.rs", gen_special_polylog),
     ("crates/thermite-compensated/src/consts/bernoulli.rs", gen_compensated_bernoulli),
 ]
 

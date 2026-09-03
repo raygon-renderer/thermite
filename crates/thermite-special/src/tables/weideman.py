@@ -3,7 +3,7 @@
 
     pip install mpmath && python weideman.py > weideman.rs
 
-A direct transcription of `reference/cef.m` (J. A. C. Weideman, 1995), the reference
+A direct transcription of Weideman's `cef` MATLAB routine (1995), the reference
 implementation accompanying "Computation of the complex error function", SIAM J. Numer.
 Anal. 31(5), 1497-1518, 1994:
 

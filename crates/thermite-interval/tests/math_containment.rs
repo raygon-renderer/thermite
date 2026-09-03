@@ -368,18 +368,18 @@ fn step_encloses_uncertain_lanes() {
 #[test]
 fn nth_root_odd_keeps_negative_branch() {
     let x: I<Balanced> = iv(-32.0, 1.0);
-    let (lo, hi) = bounds(x.nth_root::<5>());
+    let (lo, hi) = bounds(x.nth_root_n::<5>());
     assert!(lo <= -2.0, "5th root of -32 is -2; got lo = {lo}");
     assert!(hi >= 1.0, "5th root of 1 is 1; got hi = {hi}");
 
     // Even roots of a negative-touching interval clamp at the domain.
     let y: I<Balanced> = iv(-4.0, 16.0);
-    let (lo, hi) = bounds(y.nth_root::<4>());
+    let (lo, hi) = bounds(y.nth_root_n::<4>());
     assert!(lo <= 0.0 && lo >= -1e-300, "4th root domain clamps at zero: lo = {lo}");
     assert!(hi >= 2.0);
 
     let all_neg: I<Balanced> = iv(-16.0, -4.0);
-    assert!(all_neg.nth_root::<4>().is_empty().all());
+    assert!(all_neg.nth_root_n::<4>().is_empty().all());
 }
 
 // ---------------------------------------------------------------------------
@@ -400,15 +400,15 @@ point_containment!(
     nth_root5_contains,
     -1e5,
     1e5,
-    |i: I<Tightest>| i.nth_root::<5>(),
-    |c: C| c.nth_root::<5>()
+    |i: I<Tightest>| i.nth_root_n::<5>(),
+    |c: C| c.nth_root_n::<5>()
 );
 point_containment!(
     nth_root6_contains,
     0.0,
     1e5,
-    |i: I<Tightest>| i.nth_root::<6>(),
-    |c: C| c.nth_root::<6>()
+    |i: I<Tightest>| i.nth_root_n::<6>(),
+    |c: C| c.nth_root_n::<6>()
 );
 point_containment!(
     ln1m_expnx_contains,
@@ -531,25 +531,25 @@ fn smoothstep_interval() {
     let mut state = 12;
     for _ in 0..5_000 {
         let x = uniform(&mut state, -0.5, 1.5);
-        let i = pt::<Tightest>(x).smoothstep::<2>(None);
+        let i = pt::<Tightest>(x).smoothstep_n::<2>(None);
         let xc = x.clamp(0.0, 1.0);
-        let r = C::new(V1::splat(xc)).smoothstep::<2>(None);
+        let r = C::new(V1::splat(xc)).smoothstep_n::<2>(None);
         assert!(contains_dd(i, r), "smoothstep({x}): {:?} misses {:?}", bounds(i), dd(r));
     }
 
     let mid: I<Balanced> = iv(0.25, 0.75);
-    let (lo, hi) = bounds(mid.smoothstep::<2>(None));
+    let (lo, hi) = bounds(mid.smoothstep_n::<2>(None));
     // 3t^2 - 2t^3 at 0.25 = 0.15625, at 0.75 = 0.84375
     assert!(lo <= 0.15625 && lo > 0.15, "[{lo}, {hi}]");
     assert!(hi >= 0.84375 && hi < 0.85, "[{lo}, {hi}]");
 
     let below: I<Balanced> = iv(-3.0, -1.0);
-    assert_eq!(bounds(below.smoothstep::<2>(None)), (0.0, 0.0));
+    assert_eq!(bounds(below.smoothstep_n::<2>(None)), (0.0, 0.0));
 
     let zero_span_edges: I<Balanced> = iv(0.5, 0.5);
     let e0: I<Balanced> = iv(0.0, 1.0);
     let e1: I<Balanced> = iv(0.5, 2.0); // e1 - e0 contains 0
-    assert_eq!(bounds(zero_span_edges.smoothstep::<2>(Some((e0, e1)))), (0.0, 1.0));
+    assert_eq!(bounds(zero_span_edges.smoothstep_n::<2>(Some((e0, e1)))), (0.0, 1.0));
 }
 
 /// compound / powf_m1 four-corner containment.
