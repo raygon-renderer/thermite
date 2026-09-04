@@ -14,7 +14,7 @@
 //!   trigger widens, it never lies. The possibly-forms are inherent methods
 //!   on `Interval`.
 //! - _Memory_ (`load`/`store` family, `lookup`): `todo!()` until the
-//!   interleaved layout is settled. The slice-iteration story depends on it.
+//!   interleaved layout is settled. Slice iteration depends on it.
 
 use core::marker::PhantomData;
 
@@ -847,11 +847,11 @@ impl<V: IntervalFloatVector, W: WideningPolicy> NumericVector for Interval<V, W>
     };
 
     fn sort_by<O: thermite::sort::SortOrder>(self) -> Self {
-        todo!("lane sort keyed on interval order is deferred with the SortKey story")
+        todo!("lane sort keyed on interval order is deferred with the SortKey work")
     }
 
     fn bitonic_clean_by<O: thermite::sort::SortOrder>(self) -> Self {
-        todo!("lane sort keyed on interval order is deferred with the SortKey story")
+        todo!("lane sort keyed on interval order is deferred with the SortKey work")
     }
 
     /// Certainly zero: the degenerate interval `[0, 0]`.

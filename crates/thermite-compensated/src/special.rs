@@ -620,8 +620,8 @@ where
             0 => SpecializedSpecialMath::digamma::<P>(self),
             1 => SpecializedSpecialMath::trigamma::<P>(self),
             // Unimplemented, not undefined: there is no double-double algorithm for the
-            // higher orders here yet. `n` is a scalar, so this is a whole-call decision and
-            // says so rather than returning a NaN that would propagate silently.
+            // higher orders here yet. `n` is a scalar, so this is a whole-call `todo!`
+            // rather than a NaN that would propagate silently.
             _ => todo!("Compensated polygamma(n >= 2) has no double-double algorithm yet"),
         }
     }

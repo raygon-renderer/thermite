@@ -16,7 +16,7 @@
 //! ```
 //!
 //! since `$\sqrt{2/\pi x}$` is the amplitude the oscillation rides on. Equivalently: absolute
-//! error scaled by `$\sqrt{x}$` is bounded. Tests here compare on that basis and say so.
+//! error scaled by `$\sqrt{x}$` is bounded. Tests here compare on that basis.
 //!
 //! Below `x = 8` there is a stronger guarantee. It is why the fits are shaped the way they
 //! are. Each sub-8 region carries one zero of the function, factored out as

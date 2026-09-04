@@ -394,7 +394,9 @@ impl_assign! {
 //
 // i.e. two nested FMAs of the inner type per component. Composing the complex Mul
 // and Add instead would round the product first. Each component still rounds more
-// than once, so HAS_NATIVE_FMA is False.
+// than once, but HAS_NATIVE_FMA asks whether the FMA is FAST, not whether it is a
+// single rounding: four inner FMAs are cheap exactly when one is, so the flag
+// forwards the inner type's answer (see the `MulAddExt<V, Self>` impl above).
 
 // The eight methods are the (product sign, addend sign) pairs over the exact or
 // the estimating inner FMA. Both negations fold into the inner FMA's sign bits.
@@ -420,9 +422,7 @@ macro_rules! complex_mul_add {
 impl<V: RealValue> MulAddExt<Self, Self> for Complex<V> {
     type Output = Self;
 
-    // A complex "FMA" rounds each component several times whatever the inner FMA
-    // does. It is never a single-rounding operation.
-    const HAS_NATIVE_FMA: Tribool = tribool::False;
+    const HAS_NATIVE_FMA: Tribool = <V as MulAddExt<V, V>>::HAS_NATIVE_FMA;
 
     complex_mul_add! {
         mul_add   => false, false, mul_add,  nmul_add;

@@ -569,8 +569,8 @@ fn logmean_is_the_reciprocal_of_atanhc() {
             continue;
         }
         // atanhc steepens as |x| -> 1 (its derivative carries a 1/(1-x^2)), so the identity
-        // is correspondingly ill-conditioned there and the tolerance has to say so rather
-        // than be a flat number that only passes for the easy rows.
+        // is correspondingly ill-conditioned there, so the tolerance scales with `1/(1-x^2)`
+        // instead of being a flat number that only passes for the easy rows.
         let tol = 8.0 * f64::EPSILON / (1.0 - x * x);
         close(
             &format!("logmean(1+{x}, 1-{x})"),

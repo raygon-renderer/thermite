@@ -560,9 +560,9 @@ fn nearest_hit<V: FloatVector<Element = f32>>(o: &[V; 3], d: &[V; 3], tris: &[Tr
 /// for free. Everything downstream is bit-identical to the SoA kernel.
 ///
 /// The load is `load_deinterleaved_grouped::<2, 2>`, not a flat 6-stream
-/// `load_deinterleaved::<6>`, and the distinction is worth real time. A `Ray` is
-/// not six independent streams; it is TWO streams (origin, direction) of THREE
-/// components each, and the grouped call says so. Backends with structural loads
+/// `load_deinterleaved::<6>`, and the distinction is worth real time. The grouped
+/// call encodes that a `Ray` is TWO streams (origin, direction) of THREE components
+/// each, not six independent streams. Backends with structural loads
 /// then split it per chunk into `LD3`s - the transpose happens in the load unit -
 /// while the flat view, whose stream count of 6 no `LDn` covers, falls back to a
 /// register shuffle network. NEON `f32x4`: **12 instructions (two `LD3`) grouped,

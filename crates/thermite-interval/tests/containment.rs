@@ -8,6 +8,7 @@
 //! on accumulated width), never as absolute numbers.
 
 use thermite::prelude::*;
+use thermite::vector::ops::MulAddExt;
 use thermite_compensated::ScalarValue;
 use thermite_interval::{Balanced, Fastest, Interval, Tightest, WideningPolicy};
 
@@ -138,6 +139,31 @@ fn containment_sweep<W: WideningPolicy>() {
             );
         }
 
+        // fma: one interval operation, referenced against the exact `xs*ys + zs`.
+        // `fl(fl(xs*ys) + zs)` is DOUBLE rounded, and under cancellation it lands
+        // several ulps from the exact value, which is not a normalized double-double,
+        // and `le_exact`/`ge_exact` need one. So renormalize the head against the two
+        // residuals before comparing, or a sound bound reads as out of range.
+        let (z, zs) = rand_interval::<W>(&mut state);
+        let (p, r1) = s_two_prod(xs, ys);
+        let (s, r2) = s_two_sum(p, zs);
+        let (v, e) = s_two_sum(s, r2 + r1);
+        if v.is_finite() {
+            let got = MulAddExt::mul_add(x, y, z);
+            assert!(
+                contains_exact(got, v, e),
+                "fma: {xs:e} * {ys:e} + {zs:e} not in {:?}",
+                bounds(got)
+            );
+            // The whole point of fusing: never wider than multiplying and adding.
+            let (flo, fhi) = bounds(got);
+            let (clo, chi) = bounds(x * y + z);
+            assert!(
+                flo >= clo && fhi <= chi,
+                "fma wider than mul-then-add: [{flo:e}, {fhi:e}] vs [{clo:e}, {chi:e}]"
+            );
+        }
+
         // abs, min, max are exact set maps: plain point containment.
         assert!(x.abs_interval().contains(V1::splat(xs.abs())).all());
         assert!(x.min_interval(y).contains(V1::splat(xs.min(ys))).all());
@@ -182,6 +208,53 @@ fn tightest_preserves_exactness() {
     assert!(lo <= 3.0 && hi >= 3.0);
 }
 
+/// Cancellation is the case the fused FMA exists for. This triple (from the sweep)
+/// forms a product near `-4.5e21` that cancels down to `-2.3e20`. Multiplying first
+/// commits the product's rounding at the LARGER scale (about 7 ulps of the result),
+/// and no later step wins that back. One fused rounding never pays it.
+#[test]
+fn the_fused_fma_survives_cancellation() {
+    let x: I<Balanced> = iv(-5.558651027089484e-10, -5.558651027089484e-10);
+    let y: I<Balanced> = iv(8.216029136540841e30, 8.216029136540841e30);
+    let z: I<Balanced> = iv(4.3318161865435654e21, 4.3318161865435654e21);
+
+    let (flo, fhi) = bounds(MulAddExt::mul_add(x, y, z));
+    let (clo, chi) = bounds(x * y + z);
+
+    // The exact value, as a renormalized double-double.
+    let (p, r1) = s_two_prod(-5.558651027089484e-10, 8.216029136540841e30);
+    let (s, r2) = s_two_sum(p, 4.3318161865435654e21);
+    let (v, e) = s_two_sum(s, r2 + r1);
+
+    assert!(le_exact(flo, v, e) && ge_exact(fhi, v, e), "fma must enclose");
+    assert!(fhi - flo <= chi - clo, "fma must not be wider than mul-then-add");
+
+    // Where the inner vector actually fuses, the product's rounding never enters.
+    if matches!(<I<Balanced> as MulAddExt>::HAS_NATIVE_FMA, thermite::tribool::True) {
+        assert!(
+            (fhi - flo) * 4.0 < chi - clo,
+            "fused [{flo:e}, {fhi:e}] against composed [{clo:e}, {chi:e}]"
+        );
+    }
+}
+
+/// `0 * inf` is the set limit 0 in the fused FMA exactly as in the multiply, so that
+/// corner contributes the addend rather than a NaN that eats the min.
+#[test]
+fn the_fma_reads_zero_times_infinity_as_the_set_limit() {
+    let inf = f64::INFINITY;
+
+    // Every product is exactly zero, so the result is exactly the addend.
+    let r: I<Balanced> = MulAddExt::mul_add(iv(0.0, 0.0), iv(1.0, inf), iv(2.0, 3.0));
+    assert_eq!(bounds(r), (2.0, 3.0), "a zero factor gives back the addend");
+
+    // [0, 2] * [1, inf] spans [0, inf], so the sum spans [5, inf]: the NaN corner
+    // has to read as 5, one ulp of widening aside.
+    let r: I<Balanced> = MulAddExt::mul_add(iv(0.0, 2.0), iv(1.0, inf), iv(5.0, 5.0));
+    let (lo, hi) = bounds(r);
+    assert!(lo <= 5.0 && lo > 4.99 && hi == inf, "got [{lo:e}, {hi:e}]");
+}
+
 /// Accumulated widths order by tier: Tightest <= Balanced <= Fastest.
 #[test]
 fn width_orders_by_tier() {
@@ -222,9 +295,29 @@ fn empty_propagates() {
         x / e,
         e.sqrt_interval(),
         e.square_interval(),
+        MulAddExt::mul_add(e, x, x),
+        MulAddExt::mul_add(x, e, x),
+        MulAddExt::mul_add(x, x, e),
     ] {
         assert!(r.is_empty().all(), "empty must stay empty: {:?}", bounds(r));
     }
+}
+
+/// Regression: `[+inf, -inf] + [-inf, hi]` hit `inf + -inf = NaN`, and a NaN
+/// bound is not `lo > hi`, so the empty lane silently un-emptied.
+#[test]
+fn empty_plus_infinite_endpoint_stays_empty() {
+    fn check<W: WideningPolicy>() {
+        let e: I<W> = Interval::empty();
+        for x in [Interval::entire(), iv(f64::NEG_INFINITY, 1.0), iv(1.0, f64::INFINITY)] {
+            for r in [e + x, x + e, e - x, x - e] {
+                assert!(r.is_empty().all(), "empty must stay empty: {:?}", bounds(r));
+            }
+        }
+    }
+    check::<Fastest>();
+    check::<Balanced>();
+    check::<Tightest>();
 }
 
 /// Division by a zero-containing interval is the entire line.

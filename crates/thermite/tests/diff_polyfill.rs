@@ -233,7 +233,7 @@ const LIMITED_UNSIGNED: &[u64] = &[
 /// read a bogus exponent and overflow) **and** the positive endpoint `+2^51`,
 /// which is in the documented domain. Everything strictly between `0` and `2^51`
 /// was correct, which is exactly why a corpus of small naturals never noticed.
-/// Nothing on x86 could see any of it, and the x86 suite is what runs.
+/// The x86 suite is the one that runs, on hardware that could not see any of it.
 ///
 /// Instantiating the polyfills here on x86 registers puts them in the default
 /// suite regardless of which backend calls them. That is the general rule for

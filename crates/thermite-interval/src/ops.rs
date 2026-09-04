@@ -29,7 +29,7 @@ const fn is_fastest<W: WideningPolicy>() -> bool {
 }
 
 /// Residual adds only at `Tightest`. The two_sum chain costs 2x serial
-/// latency (measured), which `Balanced` declines.
+/// latency (measured), so `Balanced` skips it.
 #[inline(always)]
 const fn residual_add<W: WideningPolicy>() -> bool {
     matches!(W::TIER, WideningTier::Tightest)
@@ -37,8 +37,8 @@ const fn residual_add<W: WideningPolicy>() -> bool {
 
 /// Residual multiplies at `Balanced` when hardware FMA makes the residual a
 /// single instruction (+11% serial for 2x tightness, measured), and at
-/// `Tightest` unconditionally, where the Veltkamp-split product covers non-FMA
-/// hardware because tightness is that tier's contract.
+/// `Tightest` unconditionally, with the Veltkamp-split product standing in on
+/// non-FMA hardware (slower, but that tier promised tightness).
 #[inline(always)]
 const fn residual_mul<W: WideningPolicy>(has_fma: bool) -> bool {
     match W::TIER {
@@ -46,6 +46,41 @@ const fn residual_mul<W: WideningPolicy>(has_fma: bool) -> bool {
         WideningTier::Balanced => has_fma,
         WideningTier::Tightest => true,
     }
+}
+
+/// Whether `mul_add` builds each endpoint from one fused rounding instead of a full
+/// interval multiply followed by a full interval add. Needs two things:
+///
+/// - An inner `mul_add` that is an instruction rather than the software emulation.
+///   Only `False` is known at compile time to emulate. Wasm's `Indeterminate` is
+///   one relaxed op on a fusing engine and the correctly rounded emulation on the
+///   rest (thermite's canary decides once at runtime). Either way it is a single
+///   correct rounding, but the eight emulated corners on a non-fusing engine cost
+///   more than the composed multiply-then-add. That is accepted, since the
+///   tightness is the same and the engines that matter fuse.
+/// - A tier that widens by an unconditional ulp step, since one rounding needs
+///   exactly one step. `Tightest` widens by an exact residual instead, and promises
+///   that an exact operation does not widen at all. Keeping that promise for a
+///   fused form takes the fma's exact residual (Boldo-Muller's ErrFma, three
+///   error-free transforms), where multiply-then-add already has it from the
+///   `two_prod` and `two_sum` it runs anyway. A later refinement.
+#[inline(always)]
+const fn fuses_fma<V: IntervalFloatVector, W: WideningPolicy>() -> bool {
+    !matches!(V::HAS_NATIVE_FMA, tribool::False) && !matches!(W::TIER, WideningTier::Tightest)
+}
+
+/// One corner `(x, m)` of the fused FMA against both endpoints of `a`, each a single
+/// rounding of the exact `x*m + a`.
+///
+/// A NaN candidate is the `0 * inf` corner. Its product is the set limit 0 rather
+/// than NaN, so the candidate is exactly `a`, which is also what `mul_interval`
+/// makes of it through `unpoison`. The same patch covers `inf + -inf`, where the
+/// infinite endpoint of `a` is the true bound.
+#[inline(always)]
+fn fma_corner<V: IntervalFloatVector>(x: V, m: V, alo: V, ahi: V) -> (V, V) {
+    let (l, h) = (x.mul_add(m, alo), x.mul_add(m, ahi));
+
+    (l.is_nan().select(alo, l), h.is_nan().select(ahi, h))
 }
 
 // --- the widening-policy-driven core ops --------------------------------------
@@ -60,17 +95,23 @@ impl<V: IntervalFloatVector, W: WideningPolicy> Interval<V, W> {
     /// Interval addition.
     #[inline(always)]
     pub fn add_interval(self, rhs: Self) -> Self {
-        // Empty lanes survive for free: [+inf, -inf] + anything keeps
-        // lo = +inf and hi = -inf through every strategy.
-        if const { is_fastest::<W>() } {
-            Self::from_bounds_unchecked(scale_down(self.lo + rhs.lo), scale_up(self.hi + rhs.hi))
+        // Empty lanes survive the sum only against finite endpoints: [+inf, -inf]
+        // plus a half-line or `entire` hits `inf + -inf = NaN`, and a NaN bound is
+        // not empty (`lo > hi` is false), so the poison is applied explicitly. It
+        // is computed off the critical path and costs the two final blends.
+        let poison = self.is_empty() | rhs.is_empty();
+
+        let (lo, hi) = if const { is_fastest::<W>() } {
+            (scale_down(self.lo + rhs.lo), scale_up(self.hi + rhs.hi))
         } else if const { residual_add::<W>() } {
             let (sl, rl) = two_sum(self.lo, rhs.lo);
             let (sh, rh) = two_sum(self.hi, rhs.hi);
-            Self::from_bounds_unchecked(residual_down(sl, rl), residual_up(sh, rh))
+            (residual_down(sl, rl), residual_up(sh, rh))
         } else {
-            Self::from_bounds_unchecked(bump_down(self.lo + rhs.lo), bump_up(self.hi + rhs.hi))
-        }
+            (bump_down(self.lo + rhs.lo), bump_up(self.hi + rhs.hi))
+        };
+
+        Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
     }
 
     /// Interval subtraction: `[lo1 - hi2, hi1 - lo2]`.
@@ -138,6 +179,55 @@ impl<V: IntervalFloatVector, W: WideningPolicy> Interval<V, W> {
             poison.select(V::INFINITY, res.lo),
             poison.select(V::NEG_INFINITY, res.hi),
         )
+    }
+
+    /// The fused multiply-add `self * m + a`, as ONE interval operation.
+    ///
+    /// The enclosure of `{x*m + a}` is `(X*M) + A`, and adding a fixed endpoint of
+    /// `A` is monotone, so the bounds are the four corner products offset by one
+    /// endpoint of `A`: `a.lo` against every corner for the lower bound, `a.hi` for
+    /// the upper. Each candidate is then a single fused multiply-add, one rounding
+    /// of the exact `x*m + a`, so the result widens once. Multiplying and then
+    /// adding rounds twice and widens twice, so across a chain of them (a dot
+    /// product, a Newton step) this halves the accumulated width.
+    ///
+    /// Falls back to multiplying and then adding where the fused form would buy
+    /// nothing (see [`fuses_fma`]). That costs the second rounding and the second
+    /// widening, but agrees on every identity below.
+    #[inline(always)]
+    pub fn mul_add_interval(self, m: Self, a: Self) -> Self {
+        let (lo, hi) = if const { fuses_fma::<V, W>() } {
+            let (c0, d0) = fma_corner(self.lo, m.lo, a.lo, a.hi);
+            let (c1, d1) = fma_corner(self.lo, m.hi, a.lo, a.hi);
+            let (c2, d2) = fma_corner(self.hi, m.lo, a.lo, a.hi);
+            let (c3, d3) = fma_corner(self.hi, m.hi, a.lo, a.hi);
+
+            let lo = c0.min(c1).min(c2.min(c3));
+            let hi = d0.max(d1).max(d2.max(d3));
+
+            // One widening for the one rounding. `next_down`/`next_up` are monotone,
+            // so stepping the min/max is the same as stepping every candidate first.
+            if const { is_fastest::<W>() } {
+                (scale_down(lo), scale_up(hi))
+            } else {
+                (bump_down(lo), bump_up(hi))
+            }
+        } else {
+            let c = self.mul_interval(m).add_interval(a);
+            (c.lo, c.hi)
+        };
+
+        // `X * Z + A` is exactly `A` (Boost.Interval's `? * Z -> Z`, carried through
+        // the addend). A degenerate zero factor makes every product exactly zero, and
+        // the widening must not fatten what it adds. The fused corners already return
+        // `A`. This exists for the composed path, which would otherwise disagree by an ulp.
+        let exact_zero = (self.lo.is_zero() & self.hi.is_zero()) | (m.lo.is_zero() & m.hi.is_zero());
+        let (lo, hi) = (exact_zero.select(a.lo, lo), exact_zero.select(a.hi, hi));
+
+        // Empty in, empty out. This outranks the zero identity above.
+        let poison = self.is_empty() | m.is_empty() | a.is_empty();
+
+        Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
     }
 
     /// Interval division.
@@ -310,7 +400,7 @@ impl<V: IntervalFloatVector, W: WideningPolicy> Interval<V, W> {
 
 /// `0 * inf` (and `inf - inf` style) artifacts inside legitimate endpoint
 /// combinations: the set-limit value is 0, so NaN products are patched to
-/// zero. Genuinely-invalid inputs are handled by the callers' empty masks.
+/// zero. Invalid inputs are handled by the callers' empty masks instead.
 #[inline(always)]
 fn unpoison<V: IntervalFloatVector>(p: V) -> V {
     p.is_nan().select(V::ZERO, p)
@@ -418,26 +508,34 @@ where
 
 // --- MulAddExt: mul-then-add, both enclosing ---------------------------------
 //
-// An interval "FMA" is NOT endpoint-FMA (Pitfall 4 in the plan): it is a full
-// interval multiply followed by a full interval add, each outward-rounded.
-// The `_e` estimating forms are identical, as there is no cheaper valid form to
-// estimate with.
+// An interval "FMA" is NOT endpoint-FMA over an already-rounded product (Pitfall 4
+// in the plan): it is the enclosure of `{x*m + a}`, built in `mul_add_interval` from
+// the four corners with a real fused multiply-add per candidate where the inner
+// vector has one, and from a full interval multiply followed by a full interval add
+// where it does not. The `_e` estimating forms are identical, as there is no cheaper
+// valid form to estimate with.
+//
+// `HAS_NATIVE_FMA` says whether a caller restructuring its arithmetic around
+// `mul_add` gains anything, so it forwards `V` for the tiers that fuse and is
+// `False` at `Tightest`, which multiplies and adds whatever the hardware offers.
 
 #[rustfmt::skip]
 impl<V: IntervalFloatVector, W: WideningPolicy> MulAddExt<Self, Self> for Interval<V, W> {
     type Output = Self;
 
-    const HAS_NATIVE_FMA: Tribool = V::HAS_NATIVE_FMA;
+    const HAS_NATIVE_FMA: Tribool = if fuses_fma::<V, W>() { V::HAS_NATIVE_FMA } else { tribool::False };
 
-    #[inline(always)] fn mul_add(self, m: Self, a: Self) -> Self { self * m + a }
-    #[inline(always)] fn mul_sub(self, m: Self, a: Self) -> Self { self * m - a }
-    #[inline(always)] fn nmul_add(self, m: Self, a: Self) -> Self { a - self * m }
-    #[inline(always)] fn nmul_sub(self, m: Self, a: Self) -> Self { (self * m + a).negate() }
+    // Negating an interval is exact, so the sign variants are the one kernel with
+    // `[-hi, -lo]` inputs rather than four more corner expansions.
+    #[inline(always)] fn mul_add(self, m: Self, a: Self) -> Self { self.mul_add_interval(m, a) }
+    #[inline(always)] fn mul_sub(self, m: Self, a: Self) -> Self { self.mul_add_interval(m, a.negate()) }
+    #[inline(always)] fn nmul_add(self, m: Self, a: Self) -> Self { self.negate().mul_add_interval(m, a) }
+    #[inline(always)] fn nmul_sub(self, m: Self, a: Self) -> Self { self.negate().mul_add_interval(m, a.negate()) }
 
-    #[inline(always)] fn mul_adde(self, m: Self, a: Self) -> Self { self * m + a }
-    #[inline(always)] fn mul_sube(self, m: Self, a: Self) -> Self { self * m - a }
-    #[inline(always)] fn nmul_adde(self, m: Self, a: Self) -> Self { a - self * m }
-    #[inline(always)] fn nmul_sube(self, m: Self, a: Self) -> Self { (self * m + a).negate() }
+    #[inline(always)] fn mul_adde(self, m: Self, a: Self) -> Self { self.mul_add(m, a) }
+    #[inline(always)] fn mul_sube(self, m: Self, a: Self) -> Self { self.mul_sub(m, a) }
+    #[inline(always)] fn nmul_adde(self, m: Self, a: Self) -> Self { self.nmul_add(m, a) }
+    #[inline(always)] fn nmul_sube(self, m: Self, a: Self) -> Self { self.nmul_sub(m, a) }
 }
 
 // --- Square: the dependency-correct interval square --------------------------

@@ -534,18 +534,20 @@ fn real_scaling_agrees_with_the_widened_form() {
         "{a:?} vs {b:?}"
     );
 
-    // The real-multiplier FMA is one fused op per component, so it inherits the
-    // inner vector's true-FMA capability. The complex-by-complex one cannot: each
-    // component is a sum of two products, so it rounds more than once.
+    // Both FMA impls inherit the inner vector's answer. The flag reports whether the
+    // FMA is FAST (whether it dodges the slow software emulation), not whether
+    // it is a single rounding: the real multiplier is one inner FMA per component and
+    // the complex multiplier is two, so both are cheap exactly when the inner one is.
     assert_eq!(
         <C as MulAddExt<V, C>>::HAS_NATIVE_FMA,
         <V as MulAddExt<V, V>>::HAS_NATIVE_FMA,
         "complex-by-real FMA is exactly the inner FMA, per component"
     );
-    assert!(matches!(
+    assert_eq!(
         <C as MulAddExt<C, C>>::HAS_NATIVE_FMA,
-        thermite::tribool::False
-    ));
+        <V as MulAddExt<V, V>>::HAS_NATIVE_FMA,
+        "complex-by-complex FMA is two inner FMAs per component"
+    );
 }
 
 /// The masked `_c`/`_m`/`_z` forms are promised against a real RHS too.

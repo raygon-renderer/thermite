@@ -226,7 +226,7 @@ fn polygamma_c_dual_low_orders_differentiate() {
 }
 
 // `Complex<Dual>` has no element tables for the higher orders, so `polygamma(n >= 2)` is
-// unimplemented rather than undefined, and says so out loud. It used to return NaN, which is
+// unimplemented rather than undefined, and panics. It used to return NaN, which is
 // indistinguishable from a genuine domain result and propagates silently. The owner's call
 // (2026-08-30) is that a missing implementation should panic.
 //

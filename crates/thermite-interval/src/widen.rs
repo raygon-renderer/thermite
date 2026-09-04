@@ -22,6 +22,14 @@
 //! | `Fastest`  | scale     | scale                | 2x the throughput of bump, ~3x looser |
 //! | `Balanced` | bump      | residual (FMA), else bump | best serial latency, sound at overflow for free |
 //! | `Tightest` | residual  | residual (Veltkamp on non-FMA) | tightest representable, exact ops do not widen |
+//!
+//! `MulAddExt` is its own operation rather than a multiply and an add: where the
+//! inner vector has a hardware FMA, `Fastest` and `Balanced` build each endpoint
+//! from one fused rounding and widen once, which under cancellation is the
+//! difference between an ulp of the product and an ulp of the (much smaller)
+//! result. `Tightest` keeps multiply-then-add, whose `two_prod`/`two_sum` pair
+//! already gives it residual widening. A fused form there would need the fma's
+//! exact residual (ErrFma), which is not built yet.
 
 /// Selects the outward-rounding strategy for every operation on an
 /// [`Interval`](crate::Interval) carrying it. See the module docs.

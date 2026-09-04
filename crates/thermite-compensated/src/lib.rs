@@ -1209,7 +1209,10 @@ impl<V: ScalarValue> MulAddExt<Self, V> for Compensated<V> {
         let (p, e_prod_base) = V::two_prod(self.value, a.value);
         let (s, e_sum) = V::two_sum(p, b);
 
-        let e_prod = self.error.mul_add(a.value, self.value.mul_add(a.error, e_prod_base + e_sum));
+        // Estimating FMAs, like the sibling impls: this is the second-order error term,
+        // where a rounding is already below the result's last bit, so it is not worth an
+        // emulated FMA on a backend without one.
+        let e_prod = self.error.mul_adde(a.value, self.value.mul_adde(a.error, e_prod_base + e_sum));
 
         Self::renormalized(s, e_prod)
     }

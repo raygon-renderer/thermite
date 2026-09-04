@@ -4,7 +4,7 @@
 //! different algorithm family from the plain-f64 kernels the interval
 //! endpoints use).
 //!
-//! Also checks the two-policy story: a loose math policy must widen the
+//! Also checks the two-policy contract: a loose math policy must widen the
 //! enclosure, never invalidate it.
 
 use thermite::math::policy::policies::{Performance, Precision, UltraPerformance};
@@ -231,7 +231,7 @@ fn domains() {
     assert!(lo <= -std::f64::consts::FRAC_PI_2 && hi >= 0.5f64.asin());
 }
 
-/// The two-policy story: a looser math policy widens but never invalidates.
+/// The two-policy contract: a looser math policy widens but never invalidates.
 #[test]
 fn loose_policy_widens_but_contains() {
     let mut state = 777;
