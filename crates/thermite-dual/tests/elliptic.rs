@@ -12,6 +12,7 @@
 #![cfg(feature = "special")]
 
 use thermite::prelude::*;
+use thermite::vector::ops::MulAddExt;
 use thermite_dual::Dual;
 use thermite_special::SpecialMath;
 use thermite_special::elliptic::{
@@ -40,6 +41,18 @@ fn central<F: Fn(f64) -> f64>(f: F, x: f64) -> f64 {
     let h = 1e-6 * x.abs().max(1.0);
     (f(x + h) - f(x - h)) / (2.0 * h)
 }
+
+/// The dual and the plain vector must agree on the kernels' FMA gate,
+/// `matches!(HAS_NATIVE_FMA, True)`, or the Carlson duplication runs its fused reduction for
+/// one and the add-then-scale form for the other: same math, two roundings, and the primal
+/// stops being bit-identical. `Dual` forwards the inner vector's answer for exactly this
+/// reason - the flag is about FMA speed, and a dual FMA is `N + 1` inner FMAs.
+const _: () = assert!(matches!(
+    (<D as MulAddExt>::HAS_NATIVE_FMA, <V as MulAddExt>::HAS_NATIVE_FMA),
+    (thermite::tribool::True, thermite::tribool::True)
+        | (thermite::tribool::False, thermite::tribool::False)
+        | (thermite::tribool::Indeterminate, thermite::tribool::Indeterminate)
+));
 
 /// `got` is the dual evaluation with argument `i` seeded. `plain` evaluates the real function
 /// with argument `i` replaced. Value to the bit, derivative against a central difference.

@@ -703,8 +703,8 @@ fn atanhc_derivative() {
         let v = x.atanh() / x;
         assert!(close(r.re.extract::<0>(), v, v.abs() * 1e-13), "atanhc({x})");
 
-        // The derivative is not, near zero, and the tolerance says so rather than hiding
-        // it. Both terms of (1/(1-x^2) - atanhc(x)) tend to 1 and differ by 2x^2/3, so the
+        // The derivative is not, near zero, so the tolerance scales with the loss.
+        // Both terms of (1/(1-x^2) - atanhc(x)) tend to 1 and differ by 2x^2/3, so the
         // subtraction loses ~1.5*eps/x^2 in relative terms, a couple of ulp by |x| = 0.2,
         // about 2e-4 at 1e-6. `sinc`'s override has the identical shape and the identical
         // limitation, and fixing either properly wants an `atanhc_m1`-style primitive.

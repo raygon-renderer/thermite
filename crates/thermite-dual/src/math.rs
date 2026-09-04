@@ -54,12 +54,17 @@ impl<V: DualMathVector, const N: usize> SpecializedCoreMath<Dual<V::Element, N>>
     /// a constant, so only the value part moves. The default would lift `a` into a
     /// `Dual` with `N` zero derivatives and add those too, and `d + 0.0` does not fold
     /// to `d` (it is wrong for `-0.0`), so those adds would survive to run time.
+    ///
+    /// The value is the inner `mul_adde`, the same op the plain vector's default uses,
+    /// so the primal stays bit-identical to the plain evaluation. A multiply followed
+    /// by an add rounds twice and drifted by an ulp from the plain `poly_primal` on
+    /// hardware with FMA (aarch64, where the scalar backend fuses).
     #[inline(always)]
     fn mul_add_primal<P: Policy>(self, m: Self, a: Self::Primal) -> Self {
         let prod = self * m;
 
         Dual {
-            re: prod.re + V::from_primal(a),
+            re: self.re.mul_adde(m.re, V::from_primal(a)),
             dual: prod.dual,
         }
     }
@@ -81,7 +86,7 @@ impl<V: DualMathVector, const N: usize> SpecializedCoreMath<Dual<V::Element, N>>
         }
 
         Dual {
-            re: V::from_primal(a) - prod.re,
+            re: self.re.nmul_adde(m.re, V::from_primal(a)),
             dual,
         }
     }

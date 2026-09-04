@@ -454,9 +454,14 @@ where
 // derivative of `self*a` is `self.re*a' + self.dual*a.re` by the product rule,
 // so each part folds into two nested FMAs.
 //
-// There is no "true" hardware FMA for a multidual (each derivative part rounds
-// independently), so `HAS_NATIVE_FMA` is `False`; the `_e` variants use the inner
-// estimating FMA while the exact variants use the inner exact FMA.
+// `HAS_NATIVE_FMA` forwards the inner type's answer, because the flag is about
+// SPEED, not about a single rounding: every variant here is `N + 1` inner FMAs, so
+// it avoids the slow emulation exactly when the inner type does. Reporting `False`
+// on FMA hardware would push kernels that pick a reduction under that gate onto
+// their non-FMA arm for duals only - slower, and a different rounding of the same
+// math, which breaks the primal's bit-identity with the plain vector. The `_e`
+// variants use the inner estimating FMA, the exact ones the inner exact FMA, so
+// the two coincide for a dual exactly when they coincide inside.
 
 macro_rules! dual_fma {
     ($($name:ident => $re_op:ident, $outer:ident, $inner:ident);* $(;)?) => {
@@ -480,7 +485,7 @@ macro_rules! dual_fma {
 impl<V: DualValue, const N: usize> MulAddExt<Self, Self> for Dual<V, N> {
     type Output = Self;
 
-    const HAS_NATIVE_FMA: Tribool = tribool::False;
+    const HAS_NATIVE_FMA: Tribool = <V as MulAddExt<V, V>>::HAS_NATIVE_FMA;
 
     dual_fma! {
         mul_add   => mul_add,   mul_add,   mul_add;
