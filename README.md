@@ -258,9 +258,10 @@ Same policy system as the core, so `x.erf_p::<UltraPerformance>()` and
 auto-implemented for every float vector, and `ScalarSpecialMath` gives the same
 set under `scalar_`-prefixed names for a bare `f32` or `f64`.
 
-Not everything is finished. `bessel_j` is limited to f32 `J_0`, and the gamma
-family and `bessel_j` are unimplemented on `Dual` and `Compensated`. Grep for
-`todo!` before relying on a specific function.
+That list is the core of it, not the whole of it. The Bessel and Airy families
+at any real order, the zeta and polylogarithm functions, the Fresnel and
+sine/cosine integrals, the normal distribution's CDF and tails, and the Jacobi
+elliptic functions are all in there too. docs.rs has the full set.
 
 ### `thermite-dual`
 
@@ -275,10 +276,7 @@ pass.
 `f32`/`f64` at the element level. Derivative components live in a separate
 `[V; N]`, so the layout is struct-of-arrays.
 
-This is a first-order multidual. It tracks gradients, not Hessians. `trigamma`
-is deliberately unimplemented, because the Gamma-derivative family isn't closed
-under differentiation (psi_1' is psi_2, whose derivative is psi_3, and so on),
-so closing it properly needs a general `polygamma(n)`.
+This is a first-order multidual. It tracks gradients, not Hessians.
 
 ### `thermite-compensated`
 
@@ -302,11 +300,6 @@ Reassociable float arithmetic is exactly what destroys error terms: LLVM may
 fold `(a - (s - v)) + (b - v)` to zero, and then every error term silently
 vanishes. Results stay plausible and lose all of the extra precision the crate
 exists to provide, so the combination is refused.
-
-The Gamma family (`tgamma`, `lgamma`, `lgamma_r`, `digamma`, `trigamma`, `beta`)
-is still `todo!()` and will panic if called. Those need genuine double-double
-algorithms, a Lanczos or Stirling evaluation carried in compensated arithmetic,
-not delegation to the inner `V`.
 
 ### `thermite-complex`
 
@@ -333,11 +326,9 @@ Optional features add complex special functions including the Faddeeva function
 
 ## Status
 
-Core `thermite` is `0.2.1` and the API is settling. The seven other publishable
+Core `thermite` is `0.3.0` and the API is settling. The seven other publishable
 crates move in lockstep on the same version. The vector-trait surfaces are
-complete across all of them, but a handful of special functions still `todo!()`
-rather than compute, mostly in the gamma family and on the composite types, so
-grep before depending on one.
+complete across all of them.
 
 MSRV is 1.95 on stable, edition 2024. Nightly is only needed for opt-in paths:
 SPIR-V, wasm64, `algebraic-scalar`, and the const-splat fast path.

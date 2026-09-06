@@ -2014,7 +2014,7 @@ where
 {
     #[inline(always)]
     fn mask_from(value: Storage<ArrayRegister<FROM, N>>) -> Storage<Self> {
-        Self(array_zip1(value.0, INTO::mask_from))
+        Self(array_zip1(value.0, #[inline(always)] |v| INTO::mask_from(v)))
     }
 }
 
@@ -2025,15 +2025,15 @@ where
     Const<N>: ToUInt<Output: ArrayLength + Mul<FROM::Lanes, Output: Lanes>>,
 {
     fn cast_from(value: Storage<ArrayRegister<FROM, N>>) -> Storage<Self> {
-        Self(array_zip1(value.0, INTO::cast_from))
+        Self(array_zip1(value.0, #[inline(always)] |v| INTO::cast_from(v)))
     }
 
     fn fast_cast_from(value: Storage<ArrayRegister<FROM, N>>) -> Storage<Self> {
-        Self(array_zip1(value.0, INTO::fast_cast_from))
+        Self(array_zip1(value.0, #[inline(always)] |v| INTO::fast_cast_from(v)))
     }
 
     fn saturating_cast_from(value: Storage<ArrayRegister<FROM, N>>) -> Storage<Self> {
-        Self(array_zip1(value.0, INTO::saturating_cast_from))
+        Self(array_zip1(value.0, #[inline(always)] |v| INTO::saturating_cast_from(v)))
     }
 }
 
@@ -2044,7 +2044,7 @@ where
 {
     #[inline(always)]
     fn from_bits(value: Storage<ArrayRegister<FROM, N>>) -> Storage<Self> {
-        Self(array_zip1(value.0, INTO::from_bits))
+        Self(array_zip1(value.0, #[inline(always)] |v| INTO::from_bits(v)))
     }
 }
 

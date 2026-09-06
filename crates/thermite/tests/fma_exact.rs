@@ -158,6 +158,7 @@ fn f32_oracle_matches_hardware() {
 macro_rules! ctx {
     () => {
         #[allow(dead_code)]
+        #[inline(always)] // inside a dispatched body; plain fns here compiled featureless
         fn emul64(a: f64, b: f64, c: f64) -> f64 {
             f64x2::splat(a)
                 .mul_add(f64x2::splat(b), f64x2::splat(c))
@@ -165,6 +166,7 @@ macro_rules! ctx {
         }
 
         #[allow(dead_code)]
+        #[inline(always)] // inside a dispatched body; plain fns here compiled featureless
         fn emul32(a: f32, b: f32, c: f32) -> f32 {
             f32x4::splat(a)
                 .mul_add(f32x4::splat(b), f32x4::splat(c))
@@ -172,6 +174,7 @@ macro_rules! ctx {
         }
 
         #[allow(dead_code)]
+        #[inline(always)] // inside a dispatched body; plain fns here compiled featureless
         fn assert_case64(a: f64, b: f64, c: f64, tag: &str) {
             let want = hw_fma64(a, b, c);
             let got = emul64(a, b, c);

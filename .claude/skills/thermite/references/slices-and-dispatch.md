@@ -138,7 +138,10 @@ runtime branch). This is how a reusable kernel gets correct per-ISA codegen.
 #[thermite::dispatch(Self)]
 impl Kernel {
     pub fn run<S: FloatSimd<f32>>(&self, data: &mut [f32]) {
-        let (_, chunks, _) = data.try_aligned_simd_iter_mut::<Vector<S::fxN>>();
+        // Not `S::fxN`: on a bare `FloatSimd<f32>` bound rustc rejects that as
+        // ambiguous (E0221, two supertrait paths to `SizedSimd`). Name the path.
+        type V<S> = Vector<<S as SizedSimd<f32, i32, u32>>::fxN>;
+        let (_, chunks, _) = data.try_aligned_simd_iter_mut::<V<S>>();
         for v in chunks { *v = v.sin(); }
     }
     #[skip_dispatch]                 // opt an individual method out
@@ -151,7 +154,7 @@ impl Kernel { #[thermite::dispatch(Kernel)] fn process(&self) { /* ... */ } }
 
 // Free function generic over the backend:
 #[thermite::dispatch(S)]
-fn kernel<S: FloatSimd<f32>>(data: &mut [f32]) { /* uses S::fxN, S::f32x8, ... */ }
+fn kernel<S: FloatSimd<f32>>(data: &mut [f32]) { /* uses <S as SizedSimd<f32, i32, u32>>::fxN, S::f32x8, ... */ }
 ```
 
 The two compose: `dispatch_dyn!` is the runtime boundary that picks `S`; the
@@ -184,17 +187,30 @@ integer type together; otherwise prefer plain `V: FloatVector`.
 
 ```rust
 use thermite::simd::FloatSimd;
-use thermite::element::WellFormedFloatElement;
+use thermite::element::FloatElementWithBits;
+use thermite::register::well_formed::WellFormedFloatElement;
+
+// The element's own bit types name the `SizedSimd` path; `S::fxN` is E0221 here too.
+type V<S, F> = Vector<
+    <S as SizedSimd<F, <F as FloatElementWithBits>::SignedBits, <F as FloatElementWithBits>::Bits>>::fxN,
+>;
 
 fn process<S, F>(data: &mut [F])
 where
-    F: WellFormedFloatElement,
+    F: WellFormedFloatElement + FloatElementWithBits,
     S: FloatSimd<F>,
-    Vector<S::fxN>: thermite::math::TranscendentalMath,
+    V<S, F>: thermite::math::TranscendentalMath,
 {
-    let (_, chunks, _) = data.try_aligned_simd_iter_mut::<Vector<S::fxN>>();
+    let (_, chunks, _) = data.try_aligned_simd_iter_mut::<V<S, F>>();
     for v in chunks { *v = v.sin(); }
 }
+```
+
+Both spellings are compile-checked by `bin/thermite-audit/examples/bound_spellings.rs`
+(`cargo check -p thermite-audit --example bound_spellings`); keep it in step with
+this file.
+
+```rust
 ```
 
 Hierarchy: `HasIsa -> NativeIsa -> NativeSimd -> Simd -> SizedSimd<F,I,U> -> FloatSimd<F>`.

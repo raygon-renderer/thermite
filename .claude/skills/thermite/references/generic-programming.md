@@ -198,8 +198,7 @@ More constant idioms:
   inside of a `dispatch_dyn!` boundary.
 - **Never drop to the Register layer** (`R::method(...)`, `Storage<R>`) in user
   or generic code. It is the backend-implementation surface: no operators, no
-  ergonomics, and its semantics can differ from the vector layer (e.g.
-  `R::bitandnot(lhs, rhs)` = `!lhs & rhs` while `a.bitandnot(b)` = `a & !b`).
+  ergonomics, and it works in raw `Storage` types rather than `Vector`/`Mask`.
   If an op you need is missing from the `*Vector` traits, that's a Thermite
   change ([development.md](development.md)), not a reason to call registers.
 - **`V::LANES` is backend-dependent.** Never assume 4 or 8. Use slice iterators

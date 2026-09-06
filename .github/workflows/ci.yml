@@ -214,3 +214,29 @@ jobs:
           valColorRange: ${{ env.COVERAGE }}
           minColorRange: 50
           maxColorRange: 95
+
+  # Dispatch audit: every lib/bin/test/bench/example of the core and published
+  # crates is built with --emit=llvm-ir (dev profile: the stricter audit, see
+  # notes/thermite-audit) and scanned for kernels compiled without their
+  # backend's target features. x86 only on purpose. NEON and simd128 are
+  # baseline on the ARM and wasm jobs' targets, so the audit skips those.
+  audit:
+    name: Dispatch audit (dev, x86)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-thermite-audit
+        run: cargo install --path bin/cargo-thermite-audit --locked
+
+      - name: Audit thermite (all targets)
+        run: cargo thermite-audit $PKG_CORE --all-targets --features std
+
+      - name: Audit published crates (all targets)
+        run: >
+          cargo thermite-audit $PKGS_PUBLISHED --all-targets
+          --features thermite-complex/dual,thermite-complex/special,thermite-complex/compensated

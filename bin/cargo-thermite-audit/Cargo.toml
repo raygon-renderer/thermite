@@ -1,0 +1,18 @@
+[package]
+name = "cargo-thermite-audit"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "cargo subcommand: scan LLVM IR for Thermite kernels compiled without their backend's target features"
+
+# The binary is `cargo-thermite-audit`, so `cargo thermite-audit ...` finds it
+# once it is on PATH (`cargo install --path bin/cargo-thermite-audit`).
+
+[dependencies]
+rustc-demangle = "0.1"
+serde_json = "1"
+
+# Only for examples/: positive_control.rs (the kernel the audit must catch)
+# and bound_spellings.rs (compile-checks the thermite skill's fxN spellings).
+[dev-dependencies]
+thermite = { workspace = true, features = ["std"] }

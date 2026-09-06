@@ -479,13 +479,6 @@ pub fn array_impl_inner(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
             match arrays.len() {
                 0 => quote!({ ArrayRegister(#call) }),
-
-                1 => {
-                    let a0 = &arrays[0];
-                    let p0 = &closure_params[0];
-                    quote!({ ArrayRegister(#a0.map(#[inline(always)] |#p0| #call)) })
-                }
-
                 n => {
                     let array_zip = format_ident!("array_zip{n}");
 

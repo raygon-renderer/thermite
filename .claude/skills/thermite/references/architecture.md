@@ -22,8 +22,8 @@ Element   ->   Register   ->   Vector
   `fn(Storage<Self>, ...) -> Storage<Self>` -- no `&self`, no operators. This is
   what backends implement -- and the ONLY thing it is for. **User and generic
   code must never call register methods directly**: the vector layer is the
-  public API, and register semantics can differ from it (e.g. `bitandnot`
-  operand order is reversed between the layers). Traits: `CoreRegister ->
+  public API, and the register layer is raw `Storage` with no operators and no
+  ergonomics. Traits: `CoreRegister ->
   BitwiseRegister -> Register -> NumericRegister -> FloatRegister` (mirrors the
   vector hierarchy).
 - **Vector** (`vector/`): the `#[repr(transparent)] struct Vector<R>(Storage<R>)`

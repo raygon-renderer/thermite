@@ -121,8 +121,8 @@ fn main() {
 Constrain on **traits**, never a concrete backend/width -- that is the whole point.
 Layer discipline: user code targets the `*Vector` traits ONLY. The `*Register`
 layer (`R::op(storage)`) is backend-implementation machinery -- never call it
-from user or generic code (its semantics can even differ from the vector layer,
-e.g. `bitandnot` operand order). Concrete `Vector<R>` types are a last resort
+from user or generic code (raw `Storage` types, no operators, no ergonomics).
+Concrete `Vector<R>` types are a last resort
 too: legitimate mainly as the scalar 1-lane seeds (`Vector<f32>`/`Vector<f64>`)
 and at `dispatch_dyn!` boundaries; anything reusable stays generic over bounds.
 See [references/generic-programming.md](references/generic-programming.md) (read
@@ -199,7 +199,7 @@ separate library step.
 - **Math trait names are `use`d anonymously by the prelude** (`as _`): methods work, but to write `<V: TranscendentalMath>` you must `use thermite::math::TranscendentalMath;`.
 - **Prefer `mul_adde` (estimating FMA) over `mul_add` for speed.** On non-FMA backends `mul_add` lowers to a vectorized emulated FMA that is **correctly rounded -- bit-identical to a true hardware FMA for every input** (Boldo-Melquiond round-to-odd, `fmadd_ro`/`fmadd_widen_ro` in `backend/generic/polyfills/math.rs`), unconditionally -- no feature changes this, and it never goes scalar or touches libm. On wasm, a one-time canary detects whether the engine's relaxed madd is a true FMA and then uses that single instruction instead (bit-identical either way). So `mul_add` is a full accuracy guarantee everywhere; gate on `matches!(V::HAS_NATIVE_FMA, tribool::True)` only to avoid the emulation *cost* (~2-4x a plain multiply-add; free on fusing wasm engines). `HAS_NATIVE_FMA` is a `tribool::Tribool` (re-exported from thermite), NOT a bool: `True` = fused, `False` = definitely unfused, `Indeterminate` = decided at runtime (wasm). Uniform-rounding exactness arguments ("two rounded products cancel exactly") must gate on `matches!(.., tribool::False)` instead. Treating `Indeterminate` as unfused breaks them on fusing wasm engines.
 - **`>>` is LOGICAL even on signed vectors.** Use `srai`/`sra`/`srav` for sign-filling shifts.
-- **`bitandnot` differs by layer**: `a.bitandnot(b)` on `Vector`/`Mask` = `a & !b`, but the register layer `R::bitandnot(lhs, rhs)` = `!lhs & rhs` (x86 convention) -- the vector impls swap operands when delegating.
+- **`bitandnot` negates its SECOND operand**: `a.bitandnot(b)` = `a & !b`, and `R::bitandnot(lhs, rhs)` = `lhs & !rhs` -- the same at the vector, mask and register layers. Backends whose `andnot` instruction negates its first operand (x86, AVX-512 opmasks) swap inside the backend impl.
 - **`V::load` is an ALIGNED load.** Loading a table from a plain `Box`/`Vec` faults nondeterministically; use `load_unaligned` or an aligned container.
 - **Masked access does not license going out of bounds.** `store_masked` (and any masked-load idiom) is UB in Rust if the full-width access extends past the allocation, even on ISAs that guarantee the masked-off lanes never fault. A ragged tail therefore cannot be a masked access at `len - LANES + k`. Fill a zeroed vector's lanes directly instead, or use the slice iterators, which never form the out-of-bounds access.
 - **`thermite-sort`: instantiate it at a NATIVE register width** (`i32x8` on AVX2, `i32x4` on SSE4.2/NEON), never an `ArrayRegister` composite - a two-chunk composite sorts ~30% slower than the width it is built from, because `compress` and the merge swizzles do not scale across sub-registers. See [references/sort.md](references/sort.md).

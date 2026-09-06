@@ -410,6 +410,7 @@ impl IntegerRegister for U64x2Wasm {
 #[thermite_macros::inline_always]
 impl UnsignedIntegerRegister for U64x2Wasm {}
 
+#[thermite_macros::inline_always]
 impl ConcatRegister<u64> for U64x2Wasm {
     fn concat(lo: Storage<u64>, hi: Storage<u64>) -> Storage<Self> {
         arch::u64x2(lo, hi)

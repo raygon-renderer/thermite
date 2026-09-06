@@ -766,13 +766,13 @@ workflow deploys docs (KaTeX header) for the `rewrite` branch.
 - **Marker eligibility.** Only a single `Storage<Self>` (register) / `Self`
   (vector) return gets variants; tuple/`Element`/foreign-`Storage` returns are
   skipped even if marked.
-- **The vector API may reverse register operand order.** `R::bitandnot(lhs, rhs)`
-  = `!lhs & rhs` (x86 convention), but `Vector`/`Mask` `a.bitandnot(b)` = `a & !b`
-  -- the ops.rs impls deliberately swap (`R::bitandnot(rhs.0, self.0)`). When
-  porting a backend, also watch the intrinsic's own convention: NEON `vbic` and
-  wasm `andnot` negate the SECOND operand -- swap args vs x86. A self-cancelling
-  wrapper bug here passes internal use and only diff tests catch it. Check the
-  delegation in `vector/ops.rs` before assuming layers agree.
+- **Watch each intrinsic's own operand convention.** `bitandnot(lhs, rhs)` is
+  `lhs & !rhs` at EVERY layer (register, `Vector`, `Mask`) -- `vector/ops.rs`
+  delegates straight through with no swap. NEON `vbic` and wasm `andnot` match
+  that directly; x86 `andnot` and the AVX-512 `vandn`/`kandn` opmask forms
+  negate their FIRST operand, so those backend impls swap the arguments
+  internally. A self-cancelling wrapper bug here passes internal use and only
+  diff tests catch it.
 - **A default-bodied register/vector method is auto-`#[inline(always)]`.** Keep
   defaults expressible purely in other trait ops; hardware-specific bodies
   belong in backend impls.

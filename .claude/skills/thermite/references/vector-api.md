@@ -123,9 +123,8 @@ v.map(|x| ...)   v.fold(init, |acc, x| ...)   v.reduce(|a, b| ...)
 ## 2. BitwiseVector / BitshiftVector
 
 ```rust
-a & b   a | b   a ^ b   !a              a.bitandnot(b)   // a & !b at the VECTOR/MASK layer.
-    // NOTE the register layer is the x86 convention R::bitandnot(lhs, rhs) = !lhs & rhs;
-    // the Vector/Mask impls swap operands when delegating ("exposed logic is reversed").
+a & b   a | b   a ^ b   !a              a.bitandnot(b)   // a & !b -- the SECOND operand is negated.
+    // The register layer agrees: R::bitandnot(lhs, rhs) = lhs & !rhs.
 V::ternlog::<IMM>(a, b, c)              V::bilog::<IMM>(a, b)   // see ternlog_imm! macro
 a << n  a >> n   (n: u32 or V::Unsigned)
 a.shli::<I>()  a.shri::<I>()  a.shl(n)  a.shr(n)  a.shlv(unsigned)  a.shrv(unsigned)

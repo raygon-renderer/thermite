@@ -31,7 +31,7 @@ M::LANES  M::lanes()  M::Lanes                   // lane count: const, runtime, 
 m.select(t, f) -> S       // per-lane: mask ? t : f   (one instruction; S: GenericSelectable)
 
 // bitwise combine
-m1 & m2     m1 | m2     m1 ^ m2     !m     m1.bitandnot(m2)   // m1 & !m2 (register layer is reversed)
+m1 & m2     m1 | m2     m1 ^ m2     !m     m1.bitandnot(m2)   // m1 & !m2 (same at the register layer)
 Mask::ternlog::<IMM>(a, b, c)
 
 // constants

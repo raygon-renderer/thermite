@@ -289,6 +289,7 @@ impl InterleaveRegister for U64x4V3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl<I> IndexableRegister<I> for U64x4V3
 where
     I: UnsignedIntegerRegister<Lanes = Self::Lanes>,

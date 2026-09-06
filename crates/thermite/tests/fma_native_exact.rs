@@ -41,11 +41,15 @@ fn fma32<S: Simd>(a: f32, b: f32, c: f32) -> f32 {
 
 macro_rules! ctx {
     () => {
+        // `#[inline(always)]`: these live inside a dispatched body, and a plain
+        // fn here compiled featureless (thermite-audit, 2026-09-06).
         #[allow(dead_code)]
+        #[inline(always)]
         fn fma64(a: f64, b: f64, c: f64) -> f64 {
             super::super::fma64::<S>(a, b, c)
         }
         #[allow(dead_code)]
+        #[inline(always)]
         fn fma32(a: f32, b: f32, c: f32) -> f32 {
             super::super::fma32::<S>(a, b, c)
         }

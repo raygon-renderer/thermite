@@ -147,23 +147,23 @@ pub trait RealMathWithPolicyFfi: RealMathWithPolicy + RealPrimalMathWithPolicy {
     /// 3rd-order smoothstep
     #[inline(always)]
     fn smoothstep_p<P: Policy>(self) -> Self {
-        RealMathWithPolicy::smoothstep_n_p::<P, 2>(self, None)
+        RealMathWithPolicy::smoothstep_p::<P, 2>(self, None)
     }
 
     #[inline(always)]
     fn inverse_smoothstep_p<P: Policy>(self) -> Self {
-        RealMathWithPolicy::inverse_smoothstep_n_p::<P, 2>(self, None)
+        RealMathWithPolicy::inverse_smoothstep_p::<P, 2>(self, None)
     }
 
     /// 5th-order smoothstep
     #[inline(always)]
     fn smootherstep_p<P: Policy>(self) -> Self {
-        RealMathWithPolicy::smoothstep_n_p::<P, 3>(self, None)
+        RealMathWithPolicy::smoothstep_p::<P, 3>(self, None)
     }
 
     #[inline(always)]
     fn inverse_smootherstep_p<P: Policy>(self) -> Self {
-        RealMathWithPolicy::inverse_smoothstep_n_p::<P, 3>(self, None)
+        RealMathWithPolicy::inverse_smoothstep_p::<P, 3>(self, None)
     }
 
     #[inline(always)]

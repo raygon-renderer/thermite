@@ -301,6 +301,7 @@ impl InterleaveRegister for I64x4V3 {
     }
 }
 
+#[thermite_macros::inline_always]
 impl IndexableRegister<super::U64x4V3> for I64x4V3 {
     unsafe fn gather(ptr: *const <I64x4V3 as Register>::Element, indices: Storage<super::U64x4V3>) -> Storage<I64x4V3> {
         unsafe { arch::_mm256_i64gather_epi64::<8>(ptr as *const _, indices) }

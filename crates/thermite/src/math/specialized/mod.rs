@@ -411,7 +411,12 @@ impl<P: Policy, const N: usize, V: FloatVector> AsFloatVectorWithBitsKernel<V, N
         self,
         v: [W; N],
     ) -> Self::Output {
-        v.map(|v| W::cast_into(v.flush_denormals::<P>()))
+        let mut out: [core::mem::MaybeUninit<V>; N] = [const { core::mem::MaybeUninit::uninit() }; N];
+        for i in 0..N {
+            out[i].write(W::cast_into(v[i].flush_denormals::<P>()));
+        }
+        // SAFETY: every slot was written by the loop above.
+        unsafe { core::mem::transmute_copy(&out) }
     }
 }
 

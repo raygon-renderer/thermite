@@ -19,7 +19,10 @@ generic over `<P: Policy>`) and default-policy `*Math` (same methods, no suffix,
 | `SpatialMath` | `CoreMath` | `hypot`, `hypot_n`, `inv_hypot_n`, `l1_norm`, `l2_norm`, `l2_norm_squared` |
 | `RealMath` | `Transcendental + Spatial` | `atan2`, `lerp`, `rescale`, `to_degrees`, `to_radians`, `wrap_angle`, `angle_diff`, `logaddexp`, `smoothstep`, `inverse_smoothstep`, `smoothstep_derivative`, `smooth_interpolator`, `step` |
 
-**Degree naming rule.** Every method with a compile-time degree or order carries an `_n` suffix (`nth_root_n::<3>()`, `log_n_n::<10>()`, `smoothstep_n::<2>(edges)`, `expint_n::<1>()`, `sph_bessel_n::<J, 2>()`), and the plain name is the runtime-degree form taking `n: u32` last (`nth_root(3)`, `smoothstep(edges, 2)`, `expint(n)`). Same bits either way (the runtime forms index precomputed per-degree tables rather than recompute), so use the const form when the degree is a literal and the runtime form when it is a value. Never build a `match n` ladder of const instantiations.
+**Degree naming rule.** Every method with a compile-time degree or order carries an `_n` suffix (`nth_root_n::<3>()`, `log_n_n::<10>()`, `expint_n::<1>()`, `sph_bessel_n::<J, 2>()`), and the plain name is the runtime-degree form taking `n: u32` last (`nth_root(3)`, `expint(n)`). Same bits either way (the runtime forms index precomputed per-degree tables rather than recompute), so use the const form when the degree is a literal and the runtime form when it is a value. Never build a `match n` ladder of const instantiations.
+
+**Exception: the `smoothstep` family is const-generic only.** `smoothstep::<N>(edges)`, `inverse_smoothstep::<N>(edges)` and `smoothstep_derivative::<N>(edges)` take the degree in the type and have no runtime-degree twin - the polynomial is a handful of FMAs, so there is nothing a table-driven runtime form could win. A caller with a runtime degree writes its own small ladder.
+
 
 To *name* these in a bound, import explicitly (prelude imports them anonymously):
 
