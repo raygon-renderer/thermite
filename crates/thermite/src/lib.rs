@@ -336,11 +336,13 @@ cfg_if::cfg_if! {
 macro_rules! ternlog_imm {
     ($($tt:tt)*) => {
         const {
-            const A: i32 = 0xF0; // Binary 11110000
-            const B: i32 = 0xCC; // Binary 11001100
-            const C: i32 = 0xAA; // Binary 10101010
+            #[allow(dead_code)] const A: i32 = 0xF0; // Binary 11110000
+            #[allow(dead_code)] const B: i32 = 0xCC; // Binary 11001100
+            #[allow(dead_code)] const C: i32 = 0xAA; // Binary 10101010
 
-            $($tt)*
+            // Mask to 8 bits so that expressions using `!` (which sets the high
+            // bits of an i32) still produce a valid ternlog immediate.
+            ($($tt)*) & 0xFF
         }
     };
 }
