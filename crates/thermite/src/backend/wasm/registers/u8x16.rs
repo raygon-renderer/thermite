@@ -118,7 +118,7 @@ impl BitwiseRegister for U8x16Wasm {
         arch::v128_and(lhs, rhs)
     }
     fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::v128_andnot(rhs, lhs)
+        arch::v128_andnot(lhs, rhs)
     }
     fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         arch::v128_or(lhs, rhs)

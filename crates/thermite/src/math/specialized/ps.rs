@@ -1123,7 +1123,7 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedTranscendentalMath<f32> f
             let mut u1 = u1.min(V::ONE).max(V::ZERO);
 
             if const { P::POLICY.precision.eq(PrecisionPolicy::Medium) } {
-                u1 = u1.smoothstep_n_p::<P, 2>(None);
+                u1 = u1.smoothstep_p::<P, 2>(None);
             }
 
             // ResourceFunction["MiniMaxApproximation"][Log[x] - Log[1 - Exp[-x]], {x, {0.01, 20.0}, 3, 5}]

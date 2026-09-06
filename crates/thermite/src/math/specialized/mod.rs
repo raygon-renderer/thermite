@@ -1052,7 +1052,7 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
 
             y = ar * y0.square().mul_adde(nx2, threehalfs);
 
-            if const { P::POLICY.check_overflow } {
+            if const { P::POLICY.check_overflow && cfg!(not(target_arch = "aarch64")) } {
                 // The step is only valid where the estimate is finite and nonzero, which
                 // is exactly the interior of the domain. At both ends it manufactures a
                 // NaN out of a correct answer:
@@ -1071,6 +1071,19 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
                 // wrong, here the estimate is right and the refinement breaks it.
                 y = y0.is_finite().bitandnot(y0.is_zero()).select(y, ar);
             }
+        }
+
+        #[cfg(target_arch = "aarch64")]
+        if const { P::POLICY.check_overflow } {
+            // NEON's register-level `rsqrt` is NaN at both ends itself (see
+            // `inverse_sqrt_internal`), so the raw estimate cannot be kept and even the raw
+            // tier needs the patch. Keyed on the denominator, not the estimate: `ar` mixes
+            // in the numerator's own zeros and infinities, which are interior points.
+            // `a * (+inf | 0)` gives `a/sqrt(0)` (signed infinity, NaN for a = 0) and
+            // `a/sqrt(inf)` (signed zero, NaN for an infinite `a`) for free.
+            let zero = denom.is_zero();
+            let fixed = self * zero.select(Self::INFINITY, Self::ZERO);
+            y = (zero | denom.cmp_eq(Self::INFINITY)).select(fixed, y);
         }
 
         y
@@ -2115,7 +2128,7 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
     }
 
     #[inline(always)]
-    fn smoothstep_n<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
+    fn smoothstep<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
         let mut t = self;
 
         #[cfg(not(target_arch = "spirv"))]
@@ -2161,24 +2174,8 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         }
     }
 
-    /// The runtime twin of [`smoothstep_n`](Self::smoothstep_n): a ladder over the degrees
-    /// worth having, `0..=4`, each arm the const form with its folded coefficients. The
-    /// polynomial is a handful of FMAs, so a coefficient table walked by a loop would cost more
-    /// than the branch that picks an instantiation. Degrees past 4 return NaN.
     #[inline(always)]
-    fn smoothstep<P: Policy>(self, edges: Option<(Self, Self)>, n: u32) -> Self {
-        match n {
-            0 => Self::smoothstep_n::<P, 0>(self, edges),
-            1 => Self::smoothstep_n::<P, 1>(self, edges),
-            2 => Self::smoothstep_n::<P, 2>(self, edges),
-            3 => Self::smoothstep_n::<P, 3>(self, edges),
-            4 => Self::smoothstep_n::<P, 4>(self, edges),
-            _ => Self::NAN,
-        }
-    }
-
-    #[inline(always)]
-    fn smoothstep_derivative_n<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
+    fn smoothstep_derivative<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
         let mut t = self;
         let mut dt_dx = Self::ONE;
 
@@ -2228,25 +2225,9 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         }
     }
 
-    /// The runtime twin of [`smoothstep_derivative_n`](Self::smoothstep_derivative_n), the same
-    /// `0..=4` ladder as [`smoothstep`](Self::smoothstep).
     #[inline(always)]
-    fn smoothstep_derivative<P: Policy>(self, edges: Option<(Self, Self)>, n: u32) -> Self {
-        match n {
-            0 => Self::smoothstep_derivative_n::<P, 0>(self, edges),
-            1 => Self::smoothstep_derivative_n::<P, 1>(self, edges),
-            2 => Self::smoothstep_derivative_n::<P, 2>(self, edges),
-            3 => Self::smoothstep_derivative_n::<P, 3>(self, edges),
-            4 => Self::smoothstep_derivative_n::<P, 4>(self, edges),
-            _ => Self::NAN,
-        }
-    }
-
-    #[inline(always)]
-    fn inverse_smoothstep_n<P: Policy, const N: usize>(mut y: Self, edges: Option<(Self, Self)>) -> Self {
+    fn inverse_smoothstep<P: Policy, const N: usize>(mut y: Self, edges: Option<(Self, Self)>) -> Self {
         let mut ba = Self::ONE;
-        let mut bar = Self::ONE;
-        let mut bar_a = Self::ONE; // (b - a) * a
 
         #[cfg(not(target_arch = "spirv"))]
         if let Some(new_y) = FlushDenormals::<P>::flush_denormals([y]) {
@@ -2256,27 +2237,26 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
         //                             // Initial guess: y - 2y * (1 - y) * (y - 0.5)
         // While we have a good initial guess for the inverse, S-curves are most stable at the
         // midpoint, so start there. Converges much faster this way.
-        let mut x0 = Self::HALF; //(y + y).nmul_adde((Self::ONE - y) * (y - Self::HALF), y);
+        //
+        // The search always runs in unit t-space and rescales once at the end: mapping the
+        // bracket through an approximate reciprocal of (b - a) put the endpoints a rounding
+        // error inside [0, 1], so S(t_max) < 1 and y = 1 had no bracket.
+        let x0 = Self::HALF; //(y + y).nmul_adde((Self::ONE - y) * (y - Self::HALF), y);
 
         if let Some((a, b)) = edges {
             ba = b - a;
 
-            if const { P::POLICY.precision.le(PrecisionPolicy::Worst) } {
-                bar = ba.rcp();
-                bar_a = bar * a;
-            } else {
-                bar = ba.approx_reciprocal_p::<P>();
-                bar_a = a / ba;
-            }
-
             match N {
                 0 => return y.step_p::<P>(Self::HALF).mul_adde(ba, a),
                 1 => return y.mul_adde(ba, a),
-
-                // scale the initial guess to fit the edges
-                _ => x0 = x0.mul_adde(ba, a),
+                _ => {}
             }
         }
+
+        // The bracket needs f(0) = -y strictly negative and f(1) = 1 - y not, so the solve
+        // runs on y clamped into (0, 1]; lanes at or past either end get the exact endpoint
+        // afterwards (S(0) = 0, S(1) = 1), which also covers out-of-range y.
+        let ys = y.clamp(Self::MIN_POSITIVE, Self::ONE);
 
         match N {
             0 => return y.step_p::<P>(Self::HALF),
@@ -2305,18 +2285,10 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
             _ => {}
         }
 
-        let bounds = edges.or(Some((Self::ZERO, Self::ONE)));
+        let bounds = Some((Self::ZERO, Self::ONE));
 
         #[rustfmt::skip]
-        let (v, _converged) = algorithms::newtons_method::<Self, P, _>(x0, Self::tolerance::<P>(), GenericMask::TRUTHY, bounds, #[inline(always)] move |x: Self| {
-            let mut t = x;
-            let dt_dx = bar;
-
-            if edges.is_some() {
-                // adjust by precalculated scales
-                t = t.mul_sube(bar, bar_a);
-            }
-
+        let (v, _converged) = algorithms::newtons_method::<Self, P, _>(x0, Self::tolerance::<P>(), GenericMask::TRUTHY, bounds, #[inline(always)] move |t: Self| {
             // This closure is only reached for N >= 3, but it is still monomorphized
             // (and its const-generic arithmetic const-evaluated) for N = 0/1, where
             // `N - 1` / `2*N - 1` would underflow `usize` at compile time.
@@ -2342,23 +2314,15 @@ pub trait SpecializedRealMath<E>: SpecializedTranscendentalMath<E> + Specialized
             }
 
             // NOTE: derivative does not need to be clamped here, since Newton is bracketed.
-            (t.mul_sube(xn1 * fx, y), fpx * dt_dx * xn1)
+            (t.mul_sube(xn1 * fx, ys), fpx * xn1)
         });
 
-        v
-    }
+        let t = y.cmp_le(Self::ZERO).select(Self::ZERO, v);
+        let t = y.cmp_ge(Self::ONE).select(Self::ONE, t);
 
-    /// The runtime twin of [`inverse_smoothstep_n`](Self::inverse_smoothstep_n), the same
-    /// `0..=4` ladder as [`smoothstep`](Self::smoothstep).
-    #[inline(always)]
-    fn inverse_smoothstep<P: Policy>(y: Self, edges: Option<(Self, Self)>, n: u32) -> Self {
-        match n {
-            0 => Self::inverse_smoothstep_n::<P, 0>(y, edges),
-            1 => Self::inverse_smoothstep_n::<P, 1>(y, edges),
-            2 => Self::inverse_smoothstep_n::<P, 2>(y, edges),
-            3 => Self::inverse_smoothstep_n::<P, 3>(y, edges),
-            4 => Self::inverse_smoothstep_n::<P, 4>(y, edges),
-            _ => Self::NAN,
+        match edges {
+            Some((a, _)) => t.mul_adde(ba, a),
+            None => t,
         }
     }
 
@@ -2528,7 +2492,7 @@ impl<const N: usize> Smoothstep<N> {
         let mut coeffs = [0; N];
         // `N as i32 - 1` (not `(N - 1) as i32`) so the N=0 case, an empty coeff
         // array whose loop never runs and leaves `n` unused, doesn't underflow `usize`
-        // at compile time. This lets `smoothstep`/`inverse_smoothstep_n::<0>` compile.
+        // at compile time. This lets `smoothstep`/`inverse_smoothstep::<0>` compile.
         let n = N as i32 - 1;
 
         let mut k = 0;

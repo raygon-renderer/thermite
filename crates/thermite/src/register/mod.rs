@@ -339,9 +339,9 @@ pub trait BitwiseRegister: CoreRegister {
     #[conditional] fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self>;
     #[conditional] fn not(value: Storage<Self>) -> Storage<Self>;
 
-    /// !lhs & rhs
+    /// lhs & !rhs
     #[conditional] fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        Self::bitand(Self::not(lhs), rhs)
+        Self::bitand(lhs, Self::not(rhs))
     }
 
     /// Whether [`ternlog`](Self::ternlog) is a single native instruction
@@ -361,7 +361,7 @@ pub trait BitwiseRegister: CoreRegister {
 
         if const { IMM == 0xCA } {
             // Special case for select pattern `a ? b : c` to improve debug builds
-            return Self::bitor(Self::bitand(a, b), Self::bitandnot(a, c));
+            return Self::bitor(Self::bitand(a, b), Self::bitandnot(c, a));
         }
 
         // Combine cases using Disjunctive Normal Form (DNF)
@@ -370,13 +370,13 @@ pub trait BitwiseRegister: CoreRegister {
             ($bit:expr, $expr:expr) => { if const { (IMM & (1 << $bit)) != 0 } { acc = Self::bitor(acc, $expr); } };
         }
 
-        case!(0, Self::bitandnot(a, Self::bitandnot(b, Self::not(c)))); // Case 0: inputs are 0, 0, 0
-        case!(1, Self::bitandnot(a, Self::bitandnot(b, c)));            // Case 1: inputs are 0, 0, 1
-        case!(2, Self::bitandnot(a, Self::bitandnot(c, b)));            // Case 2: inputs are 0, 1, 0; b, c swapped to save a NOT
-        case!(3, Self::bitandnot(a, Self::bitand(b, c)));               // Case 3: inputs are 0, 1, 1
-        case!(4, Self::bitandnot(c, Self::bitandnot(b, a)));            // Case 4: inputs are 1, 0, 0; a, c swapped to save a NOT
-        case!(5, Self::bitand(a, Self::bitandnot(b, c)));               // Case 5: inputs are 1, 0, 1
-        case!(6, Self::bitand(a, Self::bitandnot(c, b)));               // Case 6: inputs are 1, 1, 0; b, c swapped to save a NOT
+        case!(0, Self::bitandnot(Self::bitandnot(Self::not(c), b), a)); // Case 0: inputs are 0, 0, 0
+        case!(1, Self::bitandnot(Self::bitandnot(c, b), a));            // Case 1: inputs are 0, 0, 1
+        case!(2, Self::bitandnot(Self::bitandnot(b, c), a));            // Case 2: inputs are 0, 1, 0
+        case!(3, Self::bitandnot(Self::bitand(b, c), a));               // Case 3: inputs are 0, 1, 1
+        case!(4, Self::bitandnot(Self::bitandnot(a, b), c));            // Case 4: inputs are 1, 0, 0
+        case!(5, Self::bitand(a, Self::bitandnot(c, b)));               // Case 5: inputs are 1, 0, 1
+        case!(6, Self::bitand(a, Self::bitandnot(b, c)));               // Case 6: inputs are 1, 1, 0
         case!(7, Self::bitand(a, Self::bitand(b, c)));                  // Case 7: inputs are 1, 1, 1
 
         acc
@@ -388,8 +388,8 @@ pub trait BitwiseRegister: CoreRegister {
 
         // Disjunctive Normal Form (DNF) again
         if const { (IMM & (1 << 0)) != 0 } { acc = Self::not(Self::bitor(a, b)); } // Case 0: inputs are 0, 0, simplified
-        if const { (IMM & (1 << 1)) != 0 } { acc = Self::bitor(acc, Self::bitandnot(a, b)); } // Case 1: inputs are 0, 1
-        if const { (IMM & (1 << 2)) != 0 } { acc = Self::bitor(acc, Self::bitandnot(b, a)); } // Case 2: inputs are 1, 0
+        if const { (IMM & (1 << 1)) != 0 } { acc = Self::bitor(acc, Self::bitandnot(b, a)); } // Case 1: inputs are 0, 1
+        if const { (IMM & (1 << 2)) != 0 } { acc = Self::bitor(acc, Self::bitandnot(a, b)); } // Case 2: inputs are 1, 0
         if const { (IMM & (1 << 3)) != 0 } { acc = Self::bitor(acc, Self::bitand(a, b)); } // Case 3: inputs are 1, 1
 
         acc
@@ -2853,15 +2853,23 @@ pub trait NumericRegister:
         let lo = Self::as_slice(&lo);
         let hi = Self::as_slice(&hi);
 
-        let mut result = Self::EMPTY;
-
-        let out = Self::as_mut_slice(&mut result);
-        for i in 0..half {
-            out[i] = lo[2 * i] + lo[2 * i + 1];
-            out[i + half] = hi[2 * i] + hi[2 * i + 1];
+        // Route the pairs into an evens/odds register pair and add THOSE:
+        // `Self::add` wraps, while scalar `+` on `Element` panics on integer
+        // overflow in debug builds.
+        let mut evens = Self::EMPTY;
+        let mut odds = Self::EMPTY;
+        {
+            let e = Self::as_mut_slice(&mut evens);
+            let o = Self::as_mut_slice(&mut odds);
+            for i in 0..half {
+                e[i] = lo[2 * i];
+                o[i] = lo[2 * i + 1];
+                e[i + half] = hi[2 * i];
+                o[i + half] = hi[2 * i + 1];
+            }
         }
 
-        result
+        Self::add(evens, odds)
     }
 
     fn relaxed_pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
@@ -2892,7 +2900,7 @@ pub trait SignedRegister: NumericRegister<Element: num_traits::Signed> {
             let is_zero = Self::from_mask(is_zero);
 
             // so use a bitandnot to zero out the result when is_zero is true
-            Self::bitandnot(is_zero, sign)
+            Self::bitandnot(sign, is_zero)
         } else {
             Self::blendv(is_zero, sign, Self::ZERO)
         }
@@ -3008,8 +3016,12 @@ pub trait UnsignedIntegerRegister:
     }
 
     fn is_power_of_two(value: Storage<Self>) -> Storage<Self::Mask> {
-        // f = (v & (v - 1)) == 0
-        Self::eq(Self::ZERO, Self::bitand(value, Self::sub(value, Self::ONE)))
+        // v ^ (v - 1) is the lowest set bit and everything below it, i.e.
+        // 2*lowbit - 1; that exceeds v - 1 exactly when v == lowbit. Unlike
+        // (v & (v - 1)) == 0 this rejects zero (v - 1 wraps to MAX), matching
+        // the scalar backend and `uN::is_power_of_two`.
+        let vm1 = Self::sub(value, Self::ONE);
+        Self::gt(Self::bitxor(value, vm1), vm1)
     }
 
     /// Per-lane inclusive unsigned range test: a mask of `lo <= value <= hi`,
@@ -3507,7 +3519,7 @@ pub trait FloatRegister:
         let bits: Storage<Self::Bits> = <Self::Bits as BitCastRegister<Self>>::from_bits(value);
 
         let exp = Self::Bits::bitand(Self::EXP_MASK, bits); // extract exponent bits
-        let rest = Self::Bits::bitandnot(Self::EXP_MASK, bits); // extract mantissa + sign bits
+        let rest = Self::Bits::bitandnot(bits, Self::EXP_MASK); // extract mantissa + sign bits
 
         // shift mantissa to remove sign bit, and even though it's offset
         // it'll still work since we're just checking for zero
@@ -3518,7 +3530,7 @@ pub trait FloatRegister:
         let mantissa_is_zero = Self::Bits::eq(mantissa, Self::Bits::ZERO);
 
         // float is subnormal if mantissa != 0 && exp == 0, and by using bitandnot we can avoid using ne above
-        let is_subnormal = <Self::Bits as CoreRegister>::Mask::bitandnot(mantissa_is_zero, exp_is_zero);
+        let is_subnormal = <Self::Bits as CoreRegister>::Mask::bitandnot(exp_is_zero, mantissa_is_zero);
 
         // convert back to self mask register
         <Self::Mask as CastMaskRegister<<Self::Bits as CoreRegister>::Mask>>::mask_from(is_subnormal)
@@ -3919,7 +3931,7 @@ where
     let mut mag = B::blendv(sub, mag_normal, q);
 
     // Overflow of a normal (subnormals can't overflow) -> inf / saturate.
-    let overflow = M::<B>::bitandnot(sub, B::gt(e_carried, B::splat(S::MAX_FINITE_EXP_FIELD)));
+    let overflow = M::<B>::bitandnot(B::gt(e_carried, B::splat(S::MAX_FINITE_EXP_FIELD)), sub);
     mag = B::blendv(overflow, mag, B::splat(S::OVERFLOW_BITS));
     mag = B::blendv(tiny, mag, B::ZERO);
 
@@ -3938,7 +3950,7 @@ where
 
     // f32 inf / NaN. inf shares OVERFLOW_BITS with the overflow case; NaN uses NAN_OUT_BITS.
     let special = B::eq(f32_exp, B::splat(spec::F32_EXP_FIELD_MAX));
-    let is_nan = M::<B>::bitandnot(B::eq(f32_mant, B::ZERO), special);
+    let is_nan = M::<B>::bitandnot(special, B::eq(f32_mant, B::ZERO));
     let is_inf = M::<B>::bitand(special, B::eq(f32_mant, B::ZERO));
     mag = B::blendv(is_inf, mag, B::splat(S::OVERFLOW_BITS));
     mag = B::blendv(is_nan, mag, B::splat(S::NAN_OUT_BITS));

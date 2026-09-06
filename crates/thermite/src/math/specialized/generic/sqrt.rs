@@ -48,7 +48,7 @@ where
         // one iteration of Newton's method
         y = y0 * y0.square().mul_adde(nx2, threehalfs);
 
-        if const { P::POLICY.check_overflow } {
+        if const { P::POLICY.check_overflow && cfg!(not(target_arch = "aarch64")) } {
             // The step is only valid where the estimate is finite and nonzero, which is
             // exactly the interior of the domain. At either end it manufactures a NaN out
             // of an answer that was already right:
@@ -66,6 +66,17 @@ where
             // both the cheapest fix and the exactly correct one.
             y = y0.is_finite().bitandnot(y0.is_zero()).select(y, y0);
         }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    if const { V::HAS_APPROX_RSQRT && P::POLICY.check_overflow } {
+        // NEON's register-level `rsqrt` already carries a `vrsqrts` step and is NaN at
+        // both ends of the domain itself (`0 * inf` inside the step), so the estimate
+        // cannot be kept as on x86 and even the raw tier needs the patch. `rsqrt` stays
+        // raw by design; the policy fixes it here: `+-0 -> +-inf`, `+inf -> +0`.
+        let zero = x.is_zero();
+        let fixed = zero.select(V::INFINITY, V::ZERO).copysign(x);
+        y = (zero | x.cmp_eq(V::INFINITY)).select(fixed, y);
     }
 
     y

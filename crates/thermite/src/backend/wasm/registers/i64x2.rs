@@ -59,7 +59,7 @@ impl BitwiseRegister for I64x2Wasm {
     }
 
     fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::v128_andnot(rhs, lhs) // NOTE: WASM andnot has operands reversed vs. the trait
+        arch::v128_andnot(lhs, rhs)
     }
 
     fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {

@@ -240,55 +240,53 @@ impl<R: SignedRegister> NegMasked<Mask<R>> for Vector<R> {
     }
 }
 
-// NOTE: BitAndNot is unique in that the BitwiseRegister trait expects !lhs & rhs,
-// but since we want lhs & !rhs, the order of parameters is reversed here.
 impl<R: BitwiseRegister + Register> BitAndNot<Self> for Vector<R> {
     type Output = Self;
 
     #[inline(always)]
     fn bitandnot(self, rhs: Self) -> Self::Output {
-        Vector(R::bitandnot(rhs.0, self.0))
+        Vector(R::bitandnot(self.0, rhs.0))
     }
 }
 
 impl<R: BitwiseRegister + Register> BitAndNotMasked<Mask<R>, Self> for Vector<R> {
     #[inline(always)]
     fn bitandnot_c(self, mask: Mask<R>, rhs: Self) -> Self::Output {
-        Vector(R::bitandnot_c(mask.0, rhs.0, self.0))
+        Vector(R::bitandnot_c(mask.0, self.0, rhs.0))
     }
 
     #[inline(always)]
     fn bitandnot_m(self, src: Self, mask: Mask<R>, rhs: Self) -> Self::Output {
-        Vector(R::bitandnot_m(src.0, mask.0, rhs.0, self.0))
+        Vector(R::bitandnot_m(src.0, mask.0, self.0, rhs.0))
     }
 
     #[inline(always)]
     fn bitandnot_z(self, mask: Mask<R>, rhs: Self) -> Self::Output {
-        Vector(R::bitandnot_z(mask.0, rhs.0, self.0))
+        Vector(R::bitandnot_z(mask.0, self.0, rhs.0))
     }
 }
 
 impl<R: BitwiseRegister + Register> BitAndNotAssign<Self> for Vector<R> {
     #[inline(always)]
     fn bitandnot_assign(&mut self, rhs: Self) {
-        self.0 = R::bitandnot(rhs.0, self.0);
+        self.0 = R::bitandnot(self.0, rhs.0);
     }
 }
 
 impl<R: BitwiseRegister + Register> BitAndNotAssignMasked<Mask<R>, Self> for Vector<R> {
     #[inline(always)]
     fn bitandnot_assign_c(&mut self, mask: Mask<R>, rhs: Self) {
-        self.0 = R::bitandnot_c(mask.0, rhs.0, self.0);
+        self.0 = R::bitandnot_c(mask.0, self.0, rhs.0);
     }
 
     #[inline(always)]
     fn bitandnot_assign_m(&mut self, src: Self, mask: Mask<R>, rhs: Self) {
-        self.0 = R::bitandnot_m(src.0, mask.0, rhs.0, self.0);
+        self.0 = R::bitandnot_m(src.0, mask.0, self.0, rhs.0);
     }
 
     #[inline(always)]
     fn bitandnot_assign_z(&mut self, mask: Mask<R>, rhs: Self) {
-        self.0 = R::bitandnot_z(mask.0, rhs.0, self.0);
+        self.0 = R::bitandnot_z(mask.0, self.0, rhs.0);
     }
 }
 

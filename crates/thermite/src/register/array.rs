@@ -104,8 +104,30 @@ where
     fn zz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {}
     fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {}
 
-    fn zeroupper_z<Z: ZeroUpper>(_value: Storage<Self>) -> Storage<Self> {
-        panic!("ArrayRegister does not support zeroupper operations");
+    // Zero every lane at global index >= Z::N. Whole chunks below the cut are
+    // kept, whole chunks above it become EMPTY, and the one straddling chunk
+    // (if Z::N is not a multiple of the chunk width) is zeroed from the
+    // remainder up via the inner register. Reached by `ReducedRegister` over
+    // an array (Scalar's `f32x3A` is `Reduced<ArrayRegister<f32, 4>, U1>`).
+    fn zeroupper_z<Z: ZeroUpper>(mut value: Storage<Self>) -> Storage<Self> {
+        struct Rem<Z, R>(PhantomData<(Z, R)>);
+        impl<Z: ZeroUpper, R: CoreRegister> ZeroUpper for Rem<Z, R> {
+            const N: usize = Z::N % <R::Lanes as Unsigned>::USIZE;
+        }
+
+        let chunk = <R::Lanes as Unsigned>::USIZE;
+        let full = Z::N / chunk;
+        let rem = Z::N % chunk;
+        let mut k = 0;
+        while k < N {
+            if k > full || (k == full && rem == 0) {
+                value.0[k] = R::EMPTY;
+            } else if k == full {
+                value.0[k] = R::zeroupper_z::<Rem<Z, R>>(value.0[k]);
+            }
+            k += 1;
+        }
+        value
     }
 
     fn from_mask(mask: Storage<Self::Mask>) -> Storage<Self> {}

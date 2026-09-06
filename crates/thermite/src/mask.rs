@@ -524,16 +524,14 @@ impl<R: Register> BitAndNot for Mask<R> {
 
     #[inline(always)]
     fn bitandnot(self, rhs: Self) -> Self::Output {
-        // exposed logic is reversed from register operation
-        Self(<R::Mask as BitwiseRegister>::bitandnot(rhs.0, self.0))
+        Self(<R::Mask as BitwiseRegister>::bitandnot(self.0, rhs.0))
     }
 }
 
 impl<R: Register> BitAndNotAssign for Mask<R> {
     #[inline(always)]
     fn bitandnot_assign(&mut self, rhs: Self) {
-        // exposed logic is reversed from register operation
-        self.0 = <R::Mask as BitwiseRegister>::bitandnot(rhs.0, self.0);
+        self.0 = <R::Mask as BitwiseRegister>::bitandnot(self.0, rhs.0);
     }
 }
 

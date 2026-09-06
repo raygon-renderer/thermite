@@ -342,12 +342,11 @@ macro_rules! stamp_type_layer {
             unsafe { $from_u([<veorq_ $us>]($to_u(a), $to_u(b))) }
         }
 
-        /// `!a & b` - the trait's `bitandnot(lhs, rhs)` operand order (x86
-        /// `andnot` convention: the FIRST operand is inverted). NEON `vbic(x, y)`
-        /// computes `x & !y`, so the operands swap here.
+        /// `a & !b` - the trait's `bitandnot(lhs, rhs)` operand order, which is
+        /// exactly NEON `vbic(a, b)`.
         #[inline(always)]
         pub fn [<neon_andnot_ $s>](a: $ty, b: $ty) -> $ty {
-            unsafe { $from_u([<vbicq_ $us>]($to_u(b), $to_u(a))) }
+            unsafe { $from_u([<vbicq_ $us>]($to_u(a), $to_u(b))) }
         }
 
         /// Bitwise select in `vbsl` operand order: `(mask & on_true) | (!mask & on_false)`.

@@ -141,7 +141,7 @@ impl BitwiseRegister for F64x2V2 {
     }
 
     fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_andnot_pd(lhs, rhs) }
+        unsafe { arch::_mm_andnot_pd(rhs, lhs) }
     }
 
     fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
@@ -393,12 +393,12 @@ impl SignedRegister for F64x2V2 {
     }
 
     fn abs(value: Storage<Self>) -> Storage<Self> {
-        Self::bitandnot(Self::NEG_ZERO, value)
+        Self::bitandnot(value, Self::NEG_ZERO)
     }
 
     fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         // take everything but the sign from lhs, and copy the sign from rhs
-        Self::bitor(Self::bitandnot(Self::NEG_ZERO, lhs), Self::bitand(Self::NEG_ZERO, rhs))
+        Self::bitor(Self::bitandnot(lhs, Self::NEG_ZERO), Self::bitand(Self::NEG_ZERO, rhs))
     }
 
     fn signum(value: Storage<Self>) -> Storage<Self> {

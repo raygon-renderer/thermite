@@ -1014,18 +1014,10 @@ thermite_macros::math_traits! {
         ///
         /// // Standard 3rd-order smoothstep (N = 2) over the default [0, 1] edges:
         /// // 3t^2 - 2t^3
-        /// let y = V::splat(0.25).smoothstep_n::<2>(None);
+        /// let y = V::splat(0.25).smoothstep::<2>(None);
         /// assert!((y.extract::<0>() - 0.15625).abs() < 1e-15);
         /// ```
-        fn smoothstep_n<const N: usize>(self, edges: Option<(Self, Self)>) -> Self;
-
-        /// The order-`2n-1` smoothstep for a degree known only at runtime.
-        ///
-        /// The runtime twin of [`smoothstep_n`](RealMath::smoothstep_n): a branch over the const
-        /// forms for `n` in `0..=4`, which is the const form's own code with its folded coefficients.
-        /// The polynomial is too small for a table-driven loop to compete with that. `n` above 4
-        /// returns NaN.
-        fn smoothstep(self, edges: Option<(Self, Self)>, n: u32) -> Self;
+        fn smoothstep<const N: usize>(self, edges: Option<(Self, Self)>) -> Self;
 
         /// Returns the inverse smoothstep of `self`, which is the value that would produce `self` when passed to `smoothstep`.
         ///
@@ -1043,22 +1035,14 @@ thermite_macros::math_traits! {
         /// type V = Vector<f64>;
         ///
         /// let x = V::splat(1.0 / 16.0);
-        /// let y = x.smoothstep_n::<12>(None);
-        /// let x_back = y.inverse_smoothstep_n::<12>(None);
+        /// let y = x.smoothstep::<12>(None);
+        /// let x_back = y.inverse_smoothstep::<12>(None);
         /// assert!((x_back.extract::<0>() - x.extract::<0>()).abs() < 1e-9);
         /// ```
-        fn inverse_smoothstep_n<const N: usize>(self, edges: Option<(Self, Self)>) -> Self;
+        fn inverse_smoothstep<const N: usize>(self, edges: Option<(Self, Self)>) -> Self;
 
-        /// The inverse of [`smoothstep`](RealMath::smoothstep) for a degree known only at runtime.
-        /// See [`inverse_smoothstep_n`](RealMath::inverse_smoothstep_n), whose runtime twin this is.
-        fn inverse_smoothstep(self, edges: Option<(Self, Self)>, n: u32) -> Self;
-
-        /// Derivative of the `smoothstep` function of order `2N-1`, at the given point.
-        fn smoothstep_derivative_n<const N: usize>(self, edges: Option<(Self, Self)>) -> Self;
-
-        /// Derivative of [`smoothstep`](RealMath::smoothstep) for a degree known only at runtime.
-        /// See [`smoothstep_derivative_n`](RealMath::smoothstep_derivative_n), whose runtime twin this is.
-        fn smoothstep_derivative(self, edges: Option<(Self, Self)>, n: u32) -> Self;
+        /// Derivative of the [`smoothstep`](RealMath::smoothstep) function of order `2N-1`, at the given point.
+        fn smoothstep_derivative<const N: usize>(self, edges: Option<(Self, Self)>) -> Self;
 
         /// C∞-smooth interpolation factor between the given edges (defaulting to 0 and 1).
         ///

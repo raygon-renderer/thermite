@@ -1672,8 +1672,6 @@ pub trait GenericVector: 'static + Sized + Default + Copy + core::fmt::Debug
 ///
 /// Implemented by integer and mask vectors. Float vectors have no direct bitwise
 /// ops, so reach their bits through [`FloatVectorWithBits`] first.
-///
-/// Note that `a.bitandnot(b)` is `a & !b` at this layer.
 #[rustfmt::skip] #[thermite_macros::vector_trait]
 #[diagnostic::on_unimplemented(
     message = "`{Self}` does not support bitwise vector operations",
@@ -2695,6 +2693,7 @@ pub trait SignedIntegerVector: SignedVector + IntegerVector<Element: crate::elem
 pub trait UnsignedIntegerVector: IntegerVector<Element: crate::element::UnsignedIntegerElement> {
     /// Determines if each unsigned integer element in the vector is a
     /// power of two, returning a mask indicating whether or not it is.
+    /// Zero is not a power of two, matching `uN::is_power_of_two`.
     fn is_power_of_two(self) -> Self::Mask;
 
     /// Per-lane inclusive unsigned range test: a mask of `lo <= self <= hi`,

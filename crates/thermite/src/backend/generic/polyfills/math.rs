@@ -448,8 +448,8 @@ fn fmadd_ro_rescue<R: FloatRegister>(a: Storage<R>, b: Storage<R>, c: Storage<R>
     let sticky = R::bitor(R::signed_zero(c), sticky_mag);
     let use_sticky = <R::Mask as CastMaskRegister<<SB<R> as CoreRegister>::Mask>>::mask_from(case_p);
     let use_sticky = R::Mask::bitandnot(
-        <R::Mask as CastMaskRegister<R::Mask>>::mask_from(R::eq(c, R::ZERO)),
         use_sticky,
+        <R::Mask as CastMaskRegister<R::Mask>>::mask_from(R::eq(c, R::ZERO)),
     );
     let c_in = R::blendv(use_sticky, c_scaled, sticky);
 
@@ -559,7 +559,7 @@ fn fmadd_ro_rescue<R: FloatRegister>(a: Storage<R>, b: Storage<R>, c: Storage<R>
         // zero), or on a true tie when the kept part is odd (ties-to-even).
         let tie_up = B::<R>::bitor(
             B::<R>::bitand(res_nonzero, away),
-            B::<R>::bitandnot(res_nonzero, kept_odd), // !nonzero & odd
+            B::<R>::bitandnot(kept_odd, res_nonzero), // odd & !nonzero
         );
         let round_up = B::<R>::bitor(
             B::<R>::bitand(B::<R>::from_mask(B::<R>::gt(rem, half)), B::<R>::ONE),
@@ -574,7 +574,7 @@ fn fmadd_ro_rescue<R: FloatRegister>(a: Storage<R>, b: Storage<R>, c: Storage<R>
         let z_sub = <R as BitCastRegister<B<R>>>::from_bits(z_sub_bits);
 
         let dest_sub = <R::Mask as CastMaskRegister<<SB<R> as CoreRegister>::Mask>>::mask_from(dest_sub);
-        let dest_sub = R::Mask::bitandnot(<R::Mask as CastMaskRegister<R::Mask>>::mask_from(s_zero), dest_sub);
+        let dest_sub = R::Mask::bitandnot(dest_sub, <R::Mask as CastMaskRegister<R::Mask>>::mask_from(s_zero));
         R::blendv(dest_sub, z_norm, z_sub)
     };
 
@@ -587,8 +587,8 @@ fn fmadd_ro_rescue<R: FloatRegister>(a: Storage<R>, b: Storage<R>, c: Storage<R>
     let b_fin = R::is_finite(b);
     let ab_fin = R::Mask::bitand(a_fin, b_fin);
     let case_c = <R::Mask as CastMaskRegister<<SB<R> as CoreRegister>::Mask>>::mask_from(case_c);
-    let case_c = R::Mask::bitandnot(R::eq(c, R::ZERO), case_c);
-    let c_nonfin = R::Mask::bitandnot(R::is_finite(c), ab_fin);
+    let case_c = R::Mask::bitandnot(case_c, R::eq(c, R::ZERO));
+    let c_nonfin = R::Mask::bitandnot(ab_fin, R::is_finite(c));
     let z = R::blendv(R::Mask::bitor(case_c, c_nonfin), z, c);
 
     // Non-finite or zero a/b: IEEE-identical naive form (their `K` is garbage).

@@ -155,7 +155,7 @@ impl BitwiseRegister for I16x16V3 {
         unsafe { arch::_mm256_and_si256(lhs, rhs) }
     }
     fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm256_andnot_si256(lhs, rhs) }
+        unsafe { arch::_mm256_andnot_si256(rhs, lhs) }
     }
     fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm256_or_si256(lhs, rhs) }

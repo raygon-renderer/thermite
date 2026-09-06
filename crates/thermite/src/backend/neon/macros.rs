@@ -206,8 +206,8 @@ macro_rules! neon_mask_core {
                 }
 
                 fn nz(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
-                    // keep value where mask is false: !mask & value
-                    arch::[<neon_andnot_ $s>](mask, value)
+                    // keep value where mask is false: value & !mask
+                    arch::[<neon_andnot_ $s>](value, mask)
                 }
 
                 fn zeroupper_z<Z: ZeroUpper>(value: Storage<Self>) -> Storage<Self> {
@@ -1280,8 +1280,8 @@ macro_rules! neon_float_register {
                 }
 
                 fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-                    // (!(-0.0) & lhs) | (-0.0 & rhs): lhs's magnitude, rhs's sign
-                    Self::bitor(Self::bitandnot(Self::NEG_ZERO, lhs), Self::bitand(Self::NEG_ZERO, rhs))
+                    // (lhs & !(-0.0)) | (-0.0 & rhs): lhs's magnitude, rhs's sign
+                    Self::bitor(Self::bitandnot(lhs, Self::NEG_ZERO), Self::bitand(Self::NEG_ZERO, rhs))
                 }
 
                 fn signum(value: Storage<Self>) -> Storage<Self> {

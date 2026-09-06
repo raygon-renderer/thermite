@@ -110,7 +110,7 @@ impl BitwiseRegister for U64x2V3 {
     }
 
     fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_andnot_si128(lhs, rhs) }
+        unsafe { arch::_mm_andnot_si128(rhs, lhs) }
     }
 
     fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
@@ -195,7 +195,7 @@ impl Register for U64x2V3 {
 
     unsafe fn load_m(src: Storage<Self>, mask: Storage<Self::Mask>, ptr: *const Self::Element) -> Storage<Self> {
         // use load_z + 2 bitwise ops to emulate load_m without blendv or scalar fallbacks
-        unsafe { Self::bitor(Self::load_z(mask, ptr), Self::bitandnot(mask, src)) }
+        unsafe { Self::bitor(Self::load_z(mask, ptr), Self::bitandnot(src, mask)) }
     }
 
     unsafe fn load_z(mask: Storage<Self::Mask>, ptr: *const Self::Element) -> Storage<Self> {

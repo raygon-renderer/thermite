@@ -62,7 +62,7 @@ impl BitwiseRegister for F32x4Wasm {
     }
 
     fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        arch::v128_andnot(rhs, lhs) // NOTE: WASM andnot has operands reversed vs. the trait
+        arch::v128_andnot(lhs, rhs)
     }
 
     fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
@@ -356,7 +356,7 @@ impl SignedRegister for F32x4Wasm {
     }
 
     fn copysign(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        Self::bitor(Self::bitandnot(Self::NEG_ZERO, lhs), Self::bitand(Self::NEG_ZERO, rhs))
+        Self::bitor(Self::bitandnot(lhs, Self::NEG_ZERO), Self::bitand(Self::NEG_ZERO, rhs))
     }
 
     fn signum(value: Storage<Self>) -> Storage<Self> {

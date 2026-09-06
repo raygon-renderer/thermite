@@ -131,7 +131,7 @@ impl BitwiseRegister for U16x8V1 {
         unsafe { arch::_mm_and_si128(lhs, rhs) }
     }
     fn bitandnot(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
-        unsafe { arch::_mm_andnot_si128(lhs, rhs) }
+        unsafe { arch::_mm_andnot_si128(rhs, lhs) }
     }
     fn bitor(lhs: Storage<Self>, rhs: Storage<Self>) -> Storage<Self> {
         unsafe { arch::_mm_or_si128(lhs, rhs) }
