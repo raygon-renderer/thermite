@@ -7,8 +7,9 @@ pub mod thermite {
         X86V1,
         X86V2,
         X86V3,
-        Neon,
-        WasmSimd128,
+        X86V4,
+        NEON,
+        WASM32,
     }
 
     pub trait HasIsa {

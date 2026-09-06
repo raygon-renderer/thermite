@@ -54,7 +54,7 @@
 
 #![allow(non_camel_case_types)]
 
-use crate::cpu::x86::Avx512Tier;
+use crate::isa::x86::Avx512Tier;
 
 /// Which AVX-512 sub-extensions a given instantiation of the x86-v4 backend may
 /// use.
@@ -281,6 +281,33 @@ pub mod arch {
     // the whole avx2-and-below ladder (prefetch, denormal toggles, ...), while
     // the tier modules re-export only their own extensions -- the
     // `pub(super)` glob inside `tiers` does not propagate the base set.
-    pub use crate::backend::x86::avx512f::*;
     pub use crate::backend::x86::avx512f::tiers::tier3::*;
+    pub use crate::backend::x86::avx512f::*;
+}
+
+/// Software fills. Inherits the whole x86 chain (generic < v1 < v2 < v3).
+/// The v4-specific helpers (`*x_v4` naming) land here as registers need them.
+#[cfg(feature = "avx512-tier1")]
+#[macro_use]
+mod macros;
+
+#[cfg(feature = "avx512-tier1")]
+pub mod polyfills;
+
+#[cfg(feature = "avx512-tier1")]
+pub mod registers;
+
+#[cfg(feature = "avx512-tier1")]
+pub use registers::kmask::{KMask2, KMask4, KMask8, KMask16, KMask32, KMask64};
+
+#[cfg(feature = "avx512-tier1")]
+decl_aliases!(X86V4Default);
+#[cfg(feature = "avx512-tier1")]
+pub use self::aliases::*;
+
+#[cfg(feature = "avx512-tier1")]
+pub mod prelude {
+    pub use super::X86V4Default;
+    pub use super::aliases::*;
+    pub use crate::prelude::*;
 }

@@ -12,32 +12,46 @@
     target_arch = "aarch64"
 ))]
 
+mod harness;
+
 use thermite::Vector;
 use thermite::math::CoreMath;
 use thermite::prelude::*;
+use thermite::simd::Simd;
 
-type D = Vector<f64>;
-type F = Vector<f32>;
+macro_rules! ctx {
+    () => {
+        #[allow(dead_code)]
+        type D = Vector<<S as Simd>::f64x4>;
+        #[allow(dead_code)]
+        type F = Vector<<S as Simd>::f32x8>;
 
-#[track_caller]
-fn close(name: &str, got: f64, want: f64, tol: f64) {
-    let rel = if want == 0.0 {
-        got.abs()
-    } else {
-        ((got - want) / want).abs()
+        #[allow(dead_code)]
+        #[track_caller]
+        fn close(name: &str, got: f64, want: f64, tol: f64) {
+            let rel = if want == 0.0 {
+                got.abs()
+            } else {
+                ((got - want) / want).abs()
+            };
+            assert!(rel <= tol, "{name}: got {got:?}, want {want:?} (rel {rel:e})");
+        }
+
+        #[allow(dead_code)]
+        fn hm<const N: usize>(xs: [f64; N]) -> f64 {
+            D::harmonic_mean_n(xs.map(D::splat)).extract::<0>()
+        }
+        #[allow(dead_code)]
+        fn isi<const N: usize>(xs: [f64; N]) -> f64 {
+            D::inv_sum_inv_n(xs.map(D::splat)).extract::<0>()
+        }
     };
-    assert!(rel <= tol, "{name}: got {got:?}, want {want:?} (rel {rel:e})");
 }
 
-fn hm<const N: usize>(xs: [f64; N]) -> f64 {
-    D::harmonic_mean_n(xs.map(D::splat)).extract::<0>()
-}
-fn isi<const N: usize>(xs: [f64; N]) -> f64 {
-    D::inv_sum_inv_n(xs.map(D::splat)).extract::<0>()
-}
+for_each_backend_concrete! {
 
-#[test]
 fn matches_the_reference() {
+    ctx!();
     // (harmonic_mean, inv_sum_inv) from mpmath at 60 digits.
     close("hm[1,2,4]", hm([1.0, 2.0, 4.0]), 1.7142857142857142, 4.0 * f64::EPSILON);
     close(
@@ -83,8 +97,8 @@ fn matches_the_reference() {
     close("f32 hm", got, 1.7142857142857142, 8.0 * f32::EPSILON as f64);
 }
 
-#[test]
 fn differ_by_exactly_n() {
+    ctx!();
     // The identity that tells them apart, and the one a caller reaching for the wrong name
     // will violate: N copies of x give x and x/N.
     for &x in &[0.5_f64, 3.0, 1e10] {
@@ -111,8 +125,8 @@ fn differ_by_exactly_n() {
     );
 }
 
-#[test]
 fn the_scaled_sum_survives_inputs_the_direct_form_cannot() {
+    ctx!();
     // sum(1/x_i) overflows the moment any x_i is denormal, taking the answer to zero when
     // the true value is merely small. Scaling every reciprocal by the smallest element caps
     // the sum at N and removes the failure entirely.
@@ -129,8 +143,8 @@ fn the_scaled_sum_survives_inputs_the_direct_form_cannot() {
     close("isi extreme spread", isi([5e-324, 1e300]), 5e-324, 0.5);
 }
 
-#[test]
 fn zeros_and_infinities_take_their_limits() {
+    ctx!();
     // A zero anywhere sends one reciprocal to infinity, so the mean is zero. This is the
     // limit, not a convention.
     assert_eq!(hm([0.0, 1.0, 2.0]), 0.0);
@@ -150,8 +164,8 @@ fn zeros_and_infinities_take_their_limits() {
     assert!(hm([f64::NAN, 1.0]).is_nan());
 }
 
-#[test]
 fn bounded_by_the_smallest_and_the_arithmetic_mean() {
+    ctx!();
     // min <= harmonic <= arithmetic, the defining inequality, and a decent check that
     // nothing is inverted or scaled wrong.
     for xs in [
@@ -170,10 +184,9 @@ fn bounded_by_the_smallest_and_the_arithmetic_mean() {
     }
 }
 
-#[test]
 fn lanes_stay_independent() {
-    use thermite::backend::scalar::Scalar;
-    type D4 = thermite::simd::f64x4<Scalar>;
+    ctx!();
+    type D4 = thermite::simd::f64x4<S>;
 
     // One lane per branch: ordinary, a zero, a denormal, an infinity.
     let a = [1.0, 0.0, 1e-320, f64::INFINITY];
@@ -186,10 +199,10 @@ fn lanes_stay_independent() {
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[test]
 fn wide_backend_agrees_with_scalar() {
+    ctx!();
     use thermite::simd::Simd;
-    type W = Vector<<thermite::backend::x86_v3::X86V3 as Simd>::f64x4>;
+    type W = Vector<<S as Simd>::f64x4>;
 
     let a = [1.0, 0.0, 1e-320, 6.0];
     let b = [2.0, 3.0, 1.0, 3.0];
@@ -201,4 +214,6 @@ fn wide_backend_agrees_with_scalar() {
         assert_eq!(h.as_slice()[lane], hm([a[lane], b[lane]]), "wide hm lane {lane}");
         assert_eq!(s.as_slice()[lane], isi([a[lane], b[lane]]), "wide isi lane {lane}");
     }
+}
+
 }

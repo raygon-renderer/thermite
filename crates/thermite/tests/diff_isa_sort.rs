@@ -1,8 +1,8 @@
-//! Coverage for two previously-0% modules:
+//! Coverage for two modules:
 //!   * `isa/mod.rs`: `InstructionSet` detection plus the `num_registers`/`has_fma`
 //!     classifiers (const fns, covered only when called at *runtime*).
 //!   * `backend/generic/polyfills/sort.rs`: the sorting networks (`sort_2`/`_4`/
-//!     `_8`/`sort_any`) reached through `NumericRegister::sort`.
+//!     `_8`/`sort_any`) reached through `NumericRegister::sort`, on every backend.
 //!
 //! Sorting is checked by the identity `sort([n-1, ..., 1, 0]) == [0, 1, ..., n-1]`:
 //! `indexed()` is a known distinct ascending ramp, so its reverse must sort back
@@ -14,6 +14,8 @@
     target_arch = "aarch64"
 ))]
 
+mod harness;
+
 use thermite::Vector;
 // Which of these are used varies by backend cfg (x86 / wasm / neon).
 #[allow(unused_imports)]
@@ -21,8 +23,6 @@ use thermite::isa::InstructionSet;
 use thermite::prelude::*;
 use thermite::register::NumericRegister;
 use thermite::simd::Simd;
-
-use thermite::backend::scalar::Scalar;
 
 // ISA detection/ordering is x86-specific (on wasm `get()` returns a WASM set).
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
@@ -57,13 +57,16 @@ fn instruction_set() {
         let _ = format!("{is:?}"); // Debug
     }
 
-    // the derived ordering reflects increasing capability
+    // the derived ordering reflects increasing capability (the harness's ISA
+    // gate relies on this)
+    assert!(InstructionSet::X86V4 > InstructionSet::X86V3);
     assert!(InstructionSet::X86V3 > InstructionSet::X86V2);
     assert!(InstructionSet::X86V2 > InstructionSet::X86V1);
     assert!(InstructionSet::Scalar < InstructionSet::X86V1);
     assert!(InstructionSet::X86V3.has_fma() && !InstructionSet::X86V2.has_fma());
 }
 
+#[inline(always)]
 fn check_sort<R>(label: &str)
 where
     R: NumericRegister,
@@ -81,54 +84,28 @@ where
     );
 }
 
-macro_rules! sort_suite {
-    ($modname:ident, $backend:ty, $bl:expr) => {
-        mod $modname {
-            use super::*;
-            macro_rules! t {
-                ($name:ident, $reg:ident) => {
-                    #[test]
-                    fn $name() {
-                        check_sort::<<$backend as Simd>::$reg>(concat!($bl, " ", stringify!($reg)));
-                    }
-                };
-            }
-            t!(f32x4, f32x4);
-            t!(f32x8, f32x8);
-            t!(f64x2, f64x2);
-            t!(f64x4, f64x4);
-            t!(i32x4, i32x4);
-            t!(i32x8, i32x8);
-            t!(i64x2, i64x2);
-            t!(u32x4, u32x4);
-            t!(u64x2, u64x2);
-        }
+macro_rules! sort {
+    ($S:ty, $reg:ident) => {
+        check_sort::<<$S as Simd>::$reg>(&harness::label::<$S>(stringify!($reg)))
     };
 }
 
-sort_suite!(scalar, Scalar, "scalar");
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86 {
-    use super::*;
-    use thermite::backend::x86_v1::X86V1;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
-    sort_suite!(v3, X86V3, "x86_v3");
-    sort_suite!(v2, X86V2, "x86_v2");
-    sort_suite!(v1, X86V1, "x86_v1");
-}
-
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-    sort_suite!(wasm, Wasm, "wasm");
-}
-
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-    sort_suite!(neon, Neon, "neon");
+for_each_backend! {
+    fn f32x4<S: Simd>() { sort!(S, f32x4) }
+    fn f32x8<S: Simd>() { sort!(S, f32x8) }
+    fn f32x16<S: Simd>() { sort!(S, f32x16) }
+    fn f64x2<S: Simd>() { sort!(S, f64x2) }
+    fn f64x4<S: Simd>() { sort!(S, f64x4) }
+    fn f64x8<S: Simd>() { sort!(S, f64x8) }
+    fn i32x4<S: Simd>() { sort!(S, i32x4) }
+    fn i32x8<S: Simd>() { sort!(S, i32x8) }
+    fn i32x16<S: Simd>() { sort!(S, i32x16) }
+    fn i64x2<S: Simd>() { sort!(S, i64x2) }
+    fn i64x4<S: Simd>() { sort!(S, i64x4) }
+    fn u32x4<S: Simd>() { sort!(S, u32x4) }
+    fn u32x8<S: Simd>() { sort!(S, u32x8) }
+    fn u64x2<S: Simd>() { sort!(S, u64x2) }
+    fn u64x4<S: Simd>() { sort!(S, u64x4) }
+    fn i16x8<S: Simd>() { sort!(S, i16x8) }
+    fn u16x16<S: Simd>() { sort!(S, u16x16) }
 }

@@ -269,14 +269,14 @@ fn inverse_smoothstep_implicit_derivative() {
     // derivative d/dy inverse(y) = 1 / smoothstep'(x), NOT a value from differentiating
     // through Newton.
     let x0 = 0.3_f64;
-    let y0 = V::splat(x0).smoothstep_n::<3>(None).extract::<0>();
+    let y0 = V::splat(x0).smoothstep::<3>(None).extract::<0>();
 
     let y = D::variable(V::splat(y0), 0);
-    let t = y.inverse_smoothstep_n::<3>(None);
+    let t = y.inverse_smoothstep::<3>(None);
 
     assert!(close(t.re.extract::<0>(), x0, 1e-6)); // round-trip
 
-    let sd = V::splat(x0).smoothstep_derivative_n::<3>(None).extract::<0>();
+    let sd = V::splat(x0).smoothstep_derivative::<3>(None).extract::<0>();
     assert!(close(t.dual[0].extract::<0>(), 1.0 / sd, 1e-6));
 }
 

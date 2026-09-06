@@ -9,9 +9,15 @@
 //! Everything here runs at **every policy tier**, because the kernel
 //! is policy-invariant by design. A tier appearing in a failure message is the point:
 //! it means the invariance broke.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
 
-use thermite::backend::x86_v3::prelude::*;
+mod harness;
+
 use thermite::math::SpatialMathWithPolicy;
 use thermite::math::policy::DefaultPolicy;
 use thermite::math::policy::policies::{HighPerformance, Performance, Precision, Reference, Size, UltraPerformance};
@@ -108,11 +114,12 @@ fn ulps_f64(got: f64, want: f64) -> f64 {
 const ULP_TOL: f64 = 2.0;
 const INV_REL_TOL: f32 = 1e-2;
 
+for_each_backend_concrete! {
+
 // ---------------------------------------------------------------------------
 // 1. The full exponent cross-product, both dtypes, every tier.
 // ---------------------------------------------------------------------------
 
-#[test]
 fn f32_every_binade_pair_at_every_tier() {
     // -149 is the smallest subnormal, 127 the largest binade. Step 3 with the
     // near-equal band filled in: far-apart pairs answer trivially (the result IS the
@@ -159,7 +166,6 @@ fn f32_every_binade_pair_at_every_tier() {
     });
 }
 
-#[test]
 fn f64_every_binade_pair_at_every_tier() {
     let mut exps: Vec<i32> = (-1074..=1023).step_by(29).collect();
     exps.extend(-6..=6);
@@ -206,7 +212,6 @@ fn f64_every_binade_pair_at_every_tier() {
 // ---------------------------------------------------------------------------
 
 /// Every one of these returned a wrong answer somewhere before the rewrite.
-#[test]
 fn the_regressions_that_motivated_the_rewrite() {
     // (x, y, what was wrong before)
     let cases: [(f32, f32, &str); 8] = [
@@ -244,7 +249,6 @@ fn the_regressions_that_motivated_the_rewrite() {
 /// The old kernel lost it asymmetrically: `maxps`/`minps` return their *second* operand
 /// when either input is NaN, so `hypot(NaN, 1.0)` came back **1.4142135** and
 /// `hypot(NaN, 0.0)` came back **0.0**, while `hypot(1.0, NaN)` was correctly NaN.
-#[test]
 fn nan_propagates_from_either_operand_at_every_tier() {
     let nan = f32::NAN;
     let others: [f32; 6] = [0.0, 1.0, -1.0, f32::MIN_POSITIVE, f32::MAX, nan];
@@ -262,7 +266,6 @@ fn nan_propagates_from_either_operand_at_every_tier() {
 /// `hypot(+-inf, y) == +inf` for ANY finite or NaN `y` (C99 F.10.4.3), on the tiers
 /// that check overflow. The tiers that do not are asserted to at least be finite-or-inf
 /// rather than silently something else.
-#[test]
 fn infinity_dominates_where_overflow_is_checked() {
     let inf = f32::INFINITY;
     let others: [f32; 5] = [0.0, 1.0, -3.5, f32::MAX, f32::NAN];
@@ -291,7 +294,6 @@ fn infinity_dominates_where_overflow_is_checked() {
 }
 
 /// Sign is dropped: `hypot` is a magnitude, so every result is non-negative.
-#[test]
 fn the_result_is_never_negative() {
     let vals: [f32; 9] = [-0.0, 0.0, -1.0, 1.0, -1e30, 1e30, -1e-40, 1e-40, -f32::MAX];
 
@@ -317,7 +319,6 @@ fn the_result_is_never_negative() {
 ///
 /// The old `min`/`max` form was NOT: with a NaN operand the answer depended on which
 /// side it arrived on.
-#[test]
 fn hypot_is_exactly_symmetric() {
     let mut vals: Vec<f32> = Vec::new();
     for e in (-149..=127).step_by(7) {
@@ -345,7 +346,6 @@ fn hypot_is_exactly_symmetric() {
 /// Scaling both operands by a power of two scales the result by the same factor,
 /// exactly. This is the property the rescaling implementation is built on, so if it
 /// ever stops holding the implementation is wrong in its core assumption.
-#[test]
 fn scaling_by_a_power_of_two_is_exact() {
     let pairs: [(f32, f32); 6] = [
         (3.0, 4.0),
@@ -378,7 +378,6 @@ fn scaling_by_a_power_of_two_is_exact() {
 }
 
 /// `hypot(x, 0) == |x|`, exactly, for every representable magnitude.
-#[test]
 fn hypot_with_zero_is_the_absolute_value() {
     for_each_tier!(|P, ti| {
         for e in -149..=127 {
@@ -401,7 +400,6 @@ fn hypot_with_zero_is_the_absolute_value() {
 
 /// The result is bracketed: `max(|x|,|y|) <= hypot <= max * sqrt(2)`, and it is never
 /// below either operand. A cheap invariant that no single-value test encodes.
-#[test]
 fn the_result_is_bracketed_by_its_operands() {
     let mut vals: Vec<f32> = Vec::new();
     for e in (-140..=120).step_by(4) {
@@ -434,7 +432,6 @@ fn the_result_is_bracketed_by_its_operands() {
 //    splatted test above and still be wrong in production.
 // ---------------------------------------------------------------------------
 
-#[test]
 fn lanes_do_not_influence_each_other() {
     let probe: [f32; 8] = [3.0, 1e-40, 1e30, 0.0, f32::NAN, f32::INFINITY, f32::MAX, 1.4];
     let other: [f32; 8] = [4.0, 1e-40, 1e30, 0.0, 1.0, 1.0, f32::MIN_POSITIVE, 2.7];
@@ -462,7 +459,6 @@ fn lanes_do_not_influence_each_other() {
 // 6. hypot_n at several N, and inv_hypot_n.
 // ---------------------------------------------------------------------------
 
-#[test]
 fn hypot_n_agrees_with_a_scalar_reference() {
     fn reference(vals: &[f64]) -> f64 {
         // Scaled explicitly so the reference itself cannot overflow.
@@ -510,7 +506,6 @@ fn hypot_n_agrees_with_a_scalar_reference() {
     });
 }
 
-#[test]
 fn hypot_n_of_one_and_zero_elements() {
     for_each_tier!(|P, ti| {
         // N == 1 is |x|.
@@ -530,7 +525,6 @@ fn hypot_n_of_one_and_zero_elements() {
     });
 }
 
-#[test]
 fn inv_hypot_n_is_the_reciprocal_of_hypot_n() {
     let sets: [[f32; 3]; 6] = [
         [3.0, 4.0, 0.0],
@@ -583,7 +577,6 @@ fn inv_hypot_n_is_the_reciprocal_of_hypot_n() {
 
 /// A 3-vector normalized by `inv_hypot_n` must come out unit length, which is what the
 /// function is actually used for.
-#[test]
 fn inv_hypot_n_normalizes_to_unit_length() {
     let vecs: [[f32; 3]; 6] = [
         [3.0, 4.0, 12.0],
@@ -612,19 +605,11 @@ fn inv_hypot_n_normalizes_to_unit_length() {
 }
 
 // ---------------------------------------------------------------------------
-// 7. Cross-backend agreement. The kernel is shared, but the lowering is not.
+// 7. Cross-width agreement. The kernel is shared, but the lowering is not. The
+//    per-backend stamping supplies the cross-backend half.
 // ---------------------------------------------------------------------------
 
-#[test]
-fn every_backend_agrees_with_the_scalar_backend() {
-    use thermite::backend::scalar::Scalar;
-    use thermite::backend::{x86_v1::X86V1, x86_v2::X86V2};
-    use thermite::simd::Simd;
-
-    type S1 = Vector<<Scalar as Simd>::f32x4>;
-    type V1 = Vector<<X86V1 as Simd>::f32x4>;
-    type V2 = Vector<<X86V2 as Simd>::f32x8>;
-
+fn every_width_agrees_with_the_reference() {
     let cases: [(f32, f32); 12] = [
         (3.0, 4.0),
         (0.0, 0.0),
@@ -643,15 +628,15 @@ fn every_backend_agrees_with_the_scalar_backend() {
     for &(x, y) in &cases {
         let want = libm::hypotf(x, y);
 
-        let s = S1::splat(x).hypot_p::<Precision>(S1::splat(y)).into_array()[0];
-        let v1 = V1::splat(x).hypot_p::<Precision>(V1::splat(y)).into_array()[0];
-        let v2 = V2::splat(x).hypot_p::<Precision>(V2::splat(y)).into_array()[0];
-        let v3 = f32x8::splat(x).hypot_p::<Precision>(f32x8::splat(y)).into_array()[0];
+        let v4 = f32x4::splat(x).hypot_p::<Precision>(f32x4::splat(y)).into_array()[0];
+        let v8 = f32x8::splat(x).hypot_p::<Precision>(f32x8::splat(y)).into_array()[0];
+        let v16 = f32x16::splat(x).hypot_p::<Precision>(f32x16::splat(y)).into_array()[0];
 
-        for (name, got) in [("scalar", s), ("x86_v1", v1), ("x86_v2", v2), ("x86_v3", v3)] {
+        for (name, got) in [("f32x4", v4), ("f32x8", v8), ("f32x16", v16)] {
             assert!(
                 ulps_f32(got, want) <= ULP_TOL,
-                "{name}: hypot({x}, {y}) = {got}, want {want}"
+                "{}: hypot({x}, {y}) = {got}, want {want}",
+                harness::label::<S>(name)
             );
         }
     }
@@ -667,7 +652,6 @@ fn every_backend_agrees_with_the_scalar_backend() {
 ///
 /// `Reference` is excluded: it calls scalar `libm` per lane by contract, so it is a
 /// different implementation rather than a different policy.
-#[test]
 fn every_non_reference_tier_returns_identical_bits() {
     let mut vals: Vec<f32> = Vec::new();
     for e in (-149..=127).step_by(5) {
@@ -700,4 +684,6 @@ fn every_non_reference_tier_returns_identical_bits() {
             }
         }
     }
+}
+
 }

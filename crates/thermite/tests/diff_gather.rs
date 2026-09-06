@@ -6,8 +6,10 @@
 //! Each is oracled against plain Rust slice indexing.
 //!
 //! One generic `fn check_gather::<V>()` over any `GenericVector`, instantiated
-//! per backend/width (Scalar + V2 + V3). Indices are the vector's own
+//! per backend/width by `for_each_backend!`. Indices are the vector's own
 //! `Unsigned` type. Values are bit-preserving, so NaN lanes must match too.
+//! On wasm gather is the scalar-fallback IndexableRegister path (no hw gather),
+//! which still validates the API.
 #![cfg(any(
     target_arch = "x86",
     target_arch = "x86_64",
@@ -24,8 +26,6 @@ use thermite::Vector;
 use thermite::mask::CastMask;
 use thermite::simd::Simd;
 use thermite::vector::{GenericVector, VectorIndices};
-
-use thermite::backend::scalar::Scalar;
 
 const TRIALS: usize = 256;
 
@@ -46,6 +46,7 @@ where
     <V::Unsigned as GenericVector>::from_slice(&e)
 }
 
+#[inline(always)]
 fn check_gather<V>(label: &str)
 where
     V: GenericVector<Element: Diff + Default>,
@@ -112,65 +113,29 @@ where
     }
 }
 
-macro_rules! gather_suite {
-    ($modname:ident, $backend:ty, $bl:expr) => {
-        mod $modname {
-            use super::*;
-            macro_rules! t {
-                ($name:ident, $reg:ident) => {
-                    #[test]
-                    fn $name() {
-                        check_gather::<Vector<<$backend as Simd>::$reg>>(concat!($bl, " ", stringify!($reg)));
-                    }
-                };
-            }
-            t!(f32x4, f32x4);
-            t!(f32x8, f32x8);
-            t!(f32x16, f32x16);
-            t!(f64x2, f64x2);
-            t!(f64x4, f64x4);
-            t!(f64x8, f64x8);
-            t!(i32x4, i32x4);
-            t!(i32x8, i32x8);
-            t!(i32x16, i32x16);
-            t!(i64x2, i64x2);
-            t!(i64x4, i64x4);
-            t!(i64x8, i64x8);
-            t!(u32x4, u32x4);
-            t!(u32x8, u32x8);
-            t!(u32x16, u32x16);
-            t!(u64x2, u64x2);
-            t!(u64x4, u64x4);
-            t!(u64x8, u64x8);
-        }
+macro_rules! gather {
+    ($S:ty, $reg:ident) => {
+        check_gather::<Vector<<$S as Simd>::$reg>>(&harness::label::<$S>(stringify!($reg)))
     };
 }
 
-// scalar is the always-available oracle, and on wasm gather is the scalar-fallback
-// IndexableRegister path (no hw gather), which still validates the API.
-gather_suite!(scalar, Scalar, "scalar");
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86 {
-    use super::*;
-    use thermite::backend::x86_v1::X86V1;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
-    gather_suite!(v3, X86V3, "x86_v3");
-    gather_suite!(v2, X86V2, "x86_v2");
-    gather_suite!(v1, X86V1, "x86_v1");
-}
-
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-    gather_suite!(wasm, Wasm, "wasm");
-}
-
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-    gather_suite!(neon, Neon, "neon");
+for_each_backend! {
+    fn f32x4<S: Simd>() { gather!(S, f32x4) }
+    fn f32x8<S: Simd>() { gather!(S, f32x8) }
+    fn f32x16<S: Simd>() { gather!(S, f32x16) }
+    fn f64x2<S: Simd>() { gather!(S, f64x2) }
+    fn f64x4<S: Simd>() { gather!(S, f64x4) }
+    fn f64x8<S: Simd>() { gather!(S, f64x8) }
+    fn i32x4<S: Simd>() { gather!(S, i32x4) }
+    fn i32x8<S: Simd>() { gather!(S, i32x8) }
+    fn i32x16<S: Simd>() { gather!(S, i32x16) }
+    fn i64x2<S: Simd>() { gather!(S, i64x2) }
+    fn i64x4<S: Simd>() { gather!(S, i64x4) }
+    fn i64x8<S: Simd>() { gather!(S, i64x8) }
+    fn u32x4<S: Simd>() { gather!(S, u32x4) }
+    fn u32x8<S: Simd>() { gather!(S, u32x8) }
+    fn u32x16<S: Simd>() { gather!(S, u32x16) }
+    fn u64x2<S: Simd>() { gather!(S, u64x2) }
+    fn u64x4<S: Simd>() { gather!(S, u64x4) }
+    fn u64x8<S: Simd>() { gather!(S, u64x8) }
 }

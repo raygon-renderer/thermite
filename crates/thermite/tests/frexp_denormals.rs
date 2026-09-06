@@ -3,7 +3,14 @@
 //!
 //! A flush path returns `(x, 0)` for a subnormal, so the identity holds while the
 //! normalization bound silently does not. These check every policy against libm.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
+
+mod harness;
 
 use thermite::math::policy::policies::{AvoidBranching, Performance, PreserveDenormals};
 use thermite::math::policy::{DenormalBehavior, Policy, PolicyParameters, PrecisionPolicy};
@@ -74,7 +81,7 @@ fn f64_cases() -> Vec<f64> {
 macro_rules! check_f32 {
     ($b:ty, $p:ty, $label:expr) => {{
         for x in f32_cases() {
-            let (f, e) = Vector::<<$b as Simd>::f32x8>::splat(x).frexp_p::<$p>();
+            let (f, e) = Vector::<<S as Simd>::f32x8>::splat(x).frexp_p::<$p>();
             let (gf, ge) = (f.extract::<0>(), e.extract::<0>());
             let (wf, we) = libm::frexpf(x);
 
@@ -105,7 +112,7 @@ macro_rules! check_f32 {
 macro_rules! check_f64 {
     ($b:ty, $p:ty, $label:expr) => {{
         for x in f64_cases() {
-            let (f, e) = Vector::<<$b as Simd>::f64x4>::splat(x).frexp_p::<$p>();
+            let (f, e) = Vector::<<S as Simd>::f64x4>::splat(x).frexp_p::<$p>();
             let (gf, ge) = (f.extract::<0>(), e.extract::<0>());
             let (wf, we) = libm::frexp(x);
 
@@ -129,62 +136,46 @@ macro_rules! check_f64 {
 macro_rules! check_specials {
     ($b:ty, $p:ty, $label:expr) => {{
         for x in [0.0f32, -0.0] {
-            let (f, e) = Vector::<<$b as Simd>::f32x8>::splat(x).frexp_p::<$p>();
+            let (f, e) = Vector::<<S as Simd>::f32x8>::splat(x).frexp_p::<$p>();
             assert_eq!(f.extract::<0>().to_bits(), x.to_bits(), "{} frexp({x}) frac", $label);
             assert_eq!(e.extract::<0>(), 0, "{} frexp({x}) exp", $label);
         }
         for x in [f32::INFINITY, f32::NEG_INFINITY] {
-            let (f, e) = Vector::<<$b as Simd>::f32x8>::splat(x).frexp_p::<$p>();
+            let (f, e) = Vector::<<S as Simd>::f32x8>::splat(x).frexp_p::<$p>();
             assert_eq!(f.extract::<0>(), x, "{} frexp({x}) frac", $label);
             assert_eq!(e.extract::<0>(), 0, "{} frexp({x}) exp", $label);
         }
-        let (f, _) = Vector::<<$b as Simd>::f32x8>::splat(f32::NAN).frexp_p::<$p>();
+        let (f, _) = Vector::<<S as Simd>::f32x8>::splat(f32::NAN).frexp_p::<$p>();
         assert!(f.extract::<0>().is_nan(), "{} frexp(NaN)", $label);
     }};
 }
 
-macro_rules! suite {
-    ($m:ident, $b:ty, $l:expr) => {
-        mod $m {
-            use super::*;
+for_each_backend_concrete! {
 
-            // the branchy fast path
-            #[test]
-            fn flush_f32() {
-                check_f32!($b, FlushPolicy, concat!($l, " flush"));
-            }
-            #[test]
-            fn flush_f64() {
-                check_f64!($b, FlushPolicy, concat!($l, " flush"));
-            }
+    // the branchy fast path
+    fn flush_f32() {
+        check_f32!(S, FlushPolicy, &harness::label::<S>("flush"));
+    }
+    fn flush_f64() {
+        check_f64!(S, FlushPolicy, &harness::label::<S>("flush"));
+    }
 
-            // the straight-line arm (Preserve)
-            #[test]
-            fn preserve_f32() {
-                check_f32!($b, PreserveDenormals<Performance>, concat!($l, " preserve"));
-            }
-            #[test]
-            fn preserve_f64() {
-                check_f64!($b, PreserveDenormals<Performance>, concat!($l, " preserve"));
-            }
+    // the straight-line arm (Preserve)
+    fn preserve_f32() {
+        check_f32!(S, PreserveDenormals<Performance>, &harness::label::<S>("preserve"));
+    }
+    fn preserve_f64() {
+        check_f64!(S, PreserveDenormals<Performance>, &harness::label::<S>("preserve"));
+    }
 
-            // the branchless arm under a flushing policy
-            #[test]
-            fn branchless_f32() {
-                check_f32!($b, AvoidBranching<FlushPolicy, true>, concat!($l, " branchless"));
-            }
+    // the branchless arm under a flushing policy
+    fn branchless_f32() {
+        check_f32!(S, AvoidBranching<FlushPolicy, true>, &harness::label::<S>("branchless"));
+    }
 
-            #[test]
-            fn specials() {
-                check_specials!($b, FlushPolicy, concat!($l, " flush"));
-                check_specials!($b, PreserveDenormals<Performance>, concat!($l, " preserve"));
-                check_specials!($b, AvoidBranching<FlushPolicy, true>, concat!($l, " branchless"));
-            }
-        }
-    };
+    fn specials() {
+        check_specials!(S, FlushPolicy, &harness::label::<S>("flush"));
+        check_specials!(S, PreserveDenormals<Performance>, &harness::label::<S>("preserve"));
+        check_specials!(S, AvoidBranching<FlushPolicy, true>, &harness::label::<S>("branchless"));
+    }
 }
-
-suite!(scalar, thermite::backend::scalar::Scalar, "scalar");
-suite!(x86_v1, thermite::backend::x86_v1::X86V1, "x86_v1");
-suite!(x86_v2, thermite::backend::x86_v2::X86V2, "x86_v2");
-suite!(x86_v3, thermite::backend::x86_v3::X86V3, "x86_v3");

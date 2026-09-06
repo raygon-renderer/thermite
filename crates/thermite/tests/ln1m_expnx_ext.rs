@@ -17,82 +17,99 @@
 //! `Medium` minimax form correct and `Performance` upward wrong, so grading tiers against
 //! `precision` reports the RIGHT ones as broken. And `Reference` shared it, having no
 //! `is_reference` arm of its own, so a `precision`-vs-`reference` cross-check passed too.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
+
+mod harness;
 
 use thermite::Vector;
 use thermite::math::TranscendentalMathWithPolicy;
 use thermite::math::policy::DefaultPolicy;
 use thermite::math::policy::policies::{HighPerformance, Performance, Precision, Reference, Size, UltraPerformance};
 use thermite::prelude::*;
+use thermite::simd::Simd;
 
-type D = Vector<f64>;
-type F = Vector<f32>;
+macro_rules! ctx {
+    () => {
+        #[allow(dead_code)]
+        type D = Vector<<S as Simd>::f64x4>;
+        #[allow(dead_code)]
+        type F = Vector<<S as Simd>::f32x8>;
 
-/// Spread across the two branches of the underlying kernel (it splits at `ln 2`) and well
-/// past the point where the naive form used to collapse.
-const PROBES: &[f64] = &[
-    2.98123126185601e-08,
-    1e-7,
-    1e-6,
-    1e-4,
-    1e-2,
-    0.25,
-    0.6931471805599453, // ln 2, the branch point itself
-    1.0,
-    5.0,
-    10.0,
-];
+        /// Spread across the two branches of the underlying kernel (it splits at `ln 2`) and well
+        /// past the point where the naive form used to collapse.
+        #[allow(dead_code)]
+        const PROBES: &[f64] = &[
+            2.98123126185601e-08,
+            1e-7,
+            1e-6,
+            1e-4,
+            1e-2,
+            0.25,
+            0.6931471805599453, // ln 2, the branch point itself
+            1.0,
+            5.0,
+            10.0,
+        ];
 
-/// Tiers whose own `ln` is accurate, so the hint is redundant and must be inert.
-///
-/// The two fast tiers are excluded from the STRICT invariant for a reason worth stating:
-/// `ln1m_expnx` at `<= Medium` calls `_ext` with `x.ln_p::<P>()`, its OWN logarithm, and
-/// at `Worst` that carries ~0.04 absolute error. A test that hands `_ext` an exact `ln(x)`
-/// is therefore giving it a better hint than the function gives itself, and the two
-/// legitimately disagree, by 2.3e-03 relative at x = 2.98e-08, with `_ext` the more
-/// accurate of the two. **The accuracy of `_ext` is bounded by the caller's `ln(x)`**,
-/// which is the whole point of the argument existing.
-macro_rules! for_each_accurate_tier {
-    (|$p:ident| $body:block) => {{
-        {
-            type $p = Performance;
-            $body
+        /// Tiers whose own `ln` is accurate, so the hint is redundant and must be inert.
+        ///
+        /// The two fast tiers are excluded from the STRICT invariant for a reason:
+        /// `ln1m_expnx` at `<= Medium` calls `_ext` with `x.ln_p::<P>()`, its OWN logarithm, and
+        /// at `Worst` that carries ~0.04 absolute error. A test that hands `_ext` an exact `ln(x)`
+        /// is therefore giving it a better hint than the function gives itself, and the two
+        /// legitimately disagree, by 2.3e-03 relative at x = 2.98e-08, with `_ext` the more
+        /// accurate of the two. **The accuracy of `_ext` is bounded by the caller's `ln(x)`**,
+        /// which is the whole point of the argument existing.
+        macro_rules! for_each_accurate_tier {
+            (|$p:ident| $body:block) => {{
+                {
+                    type $p = Performance;
+                    $body
+                }
+                {
+                    type $p = Size;
+                    $body
+                }
+                {
+                    type $p = DefaultPolicy;
+                    $body
+                }
+                {
+                    type $p = Precision;
+                    $body
+                }
+                {
+                    type $p = Reference;
+                    $body
+                }
+            }};
         }
-        {
-            type $p = Size;
-            $body
+
+        /// The two fast tiers, where the hint may improve on what the function computes itself.
+        macro_rules! for_each_fast_tier {
+            (|$p:ident| $body:block) => {{
+                {
+                    type $p = UltraPerformance;
+                    $body
+                }
+                {
+                    type $p = HighPerformance;
+                    $body
+                }
+            }};
         }
-        {
-            type $p = DefaultPolicy;
-            $body
-        }
-        {
-            type $p = Precision;
-            $body
-        }
-        {
-            type $p = Reference;
-            $body
-        }
-    }};
+    };
 }
 
-/// The two fast tiers, where the hint may improve on what the function computes itself.
-macro_rules! for_each_fast_tier {
-    (|$p:ident| $body:block) => {{
-        {
-            type $p = UltraPerformance;
-            $body
-        }
-        {
-            type $p = HighPerformance;
-            $body
-        }
-    }};
-}
+for_each_backend_concrete! {
 
-#[test]
 fn the_hint_does_not_change_the_answer_f32() {
+    ctx!();
     for_each_accurate_tier!(|P| {
         for &x in PROBES {
             let xv = F::splat(x as f32);
@@ -115,8 +132,8 @@ fn the_hint_does_not_change_the_answer_f32() {
     });
 }
 
-#[test]
 fn the_hint_does_not_change_the_answer_f64() {
+    ctx!();
     for_each_accurate_tier!(|P| {
         for &x in PROBES {
             let xv = D::splat(x);
@@ -138,8 +155,8 @@ fn the_hint_does_not_change_the_answer_f64() {
 /// The accurate tiers must actually be accurate in the small-x tail, where
 /// `ln(1 - e^-x) -> ln(x)`. Separate from the invariant above, because both forms agreeing
 /// on a wrong answer would satisfy that one.
-#[test]
 fn small_x_tail_is_accurate_at_average_and_above() {
+    ctx!();
     for &x in &[2.98123126185601e-08f64, 1e-7, 1e-6, 1e-4] {
         let want = (-((-x).exp_m1())).ln();
 
@@ -168,8 +185,8 @@ fn small_x_tail_is_accurate_at_average_and_above() {
 /// At `Worst` and `Medium` the hint may legitimately beat the function's own `ln(x)`, so
 /// the two forms are only required to stay in the same neighbourhood and, more to the
 /// point, on the same SIDE of zero. `ln(1 - e^-x)` is negative throughout its domain.
-#[test]
 fn the_fast_tiers_stay_in_range_f32() {
+    ctx!();
     for_each_fast_tier!(|P| {
         for &x in PROBES {
             let xv = F::splat(x as f32);
@@ -195,4 +212,6 @@ fn the_fast_tiers_stay_in_range_f32() {
             );
         }
     });
+}
+
 }

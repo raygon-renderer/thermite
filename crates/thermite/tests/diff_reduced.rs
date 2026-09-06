@@ -25,6 +25,14 @@ use thermite::vector::ops::DivMasked;
 use thermite::backend::scalar::Scalar;
 
 /// Binary op: `vop` on vectors vs `sop` per lane in Rust.
+// Label suffixing. Labels are runtime strings (`harness::label::<S>(..)`), so
+// `concat!` is out. This is its runtime twin.
+macro_rules! lbl {
+    ($l:expr, $s:literal) => {
+        &format!("{}{}", $l, $s)
+    };
+}
+
 macro_rules! bin {
     ($label:expr, $V:ty, $e:ty, $vop:expr, $sop:expr) => {{
         let mut rng = harness::rng();
@@ -36,7 +44,7 @@ macro_rules! bin {
             let g = vop(<$V>::from_slice(x), <$V>::from_slice(y)).into_array();
             let got = g.as_slice()[..3].to_vec();
             let want: Vec<$e> = (0..3).map(|i| sop(x[i], y[i])).collect();
-            harness::assert_lanes_eq($label, &[x.as_slice(), y.as_slice()], &got, &want, Tol::Exact);
+            harness::assert_lanes_eq(&$label, &[x.as_slice(), y.as_slice()], &got, &want, Tol::Exact);
         }
     }};
 }
@@ -51,256 +59,232 @@ macro_rules! un {
             let g = vop(<$V>::from_slice(&x)).into_array();
             let got = g.as_slice()[..3].to_vec();
             let want: Vec<$e> = (0..3).map(|i| sop(x[i])).collect();
-            harness::assert_lanes_eq($label, &[x.as_slice()], &got, &want, Tol::Exact);
+            harness::assert_lanes_eq(&$label, &[x.as_slice()], &got, &want, Tol::Exact);
         }
     }};
 }
 
 macro_rules! reduced_suite {
-    ($modname:ident, $backend:ty, $bl:expr) => {
-        mod $modname {
-            use super::*;
+    () => {
+        for_each_backend_concrete! {
 
-            #[test]
             fn float_f32() {
-                float_ops!(<$backend as Simd3A>::f32x3A, f32, concat!($bl, " f32x3A"));
+                float_ops!(<S as Simd3A>::f32x3A, f32, harness::label::<S>("f32x3A"));
             }
-            #[test]
             fn float_f64() {
-                float_ops!(<$backend as Simd3A>::f64x3A, f64, concat!($bl, " f64x3A"));
+                float_ops!(<S as Simd3A>::f64x3A, f64, harness::label::<S>("f64x3A"));
             }
-            #[test]
             fn int_i32() {
-                int_ops!(<$backend as Simd3A>::i32x3A, i32, concat!($bl, " i32x3A"));
+                int_ops!(<S as Simd3A>::i32x3A, i32, harness::label::<S>("i32x3A"));
                 un!(
-                    concat!($bl, " i32x3A [neg]"),
-                    Vector<<$backend as Simd3A>::i32x3A>,
+                    harness::label::<S>("i32x3A [neg]"),
+                    Vector<<S as Simd3A>::i32x3A>,
                     i32,
                     |a| -a,
                     |x: i32| x.wrapping_neg()
                 );
             }
-            #[test]
             fn int_u32() {
-                int_ops!(<$backend as Simd3A>::u32x3A, u32, concat!($bl, " u32x3A"));
+                int_ops!(<S as Simd3A>::u32x3A, u32, harness::label::<S>("u32x3A"));
             }
-            #[test]
             fn int_i64() {
-                int_ops!(<$backend as Simd3A>::i64x3A, i64, concat!($bl, " i64x3A"));
+                int_ops!(<S as Simd3A>::i64x3A, i64, harness::label::<S>("i64x3A"));
                 un!(
-                    concat!($bl, " i64x3A [neg]"),
-                    Vector<<$backend as Simd3A>::i64x3A>,
+                    harness::label::<S>("i64x3A [neg]"),
+                    Vector<<S as Simd3A>::i64x3A>,
                     i64,
                     |a| -a,
                     |x: i64| x.wrapping_neg()
                 );
             }
-            #[test]
             fn int_u64() {
-                int_ops!(<$backend as Simd3A>::u64x3A, u64, concat!($bl, " u64x3A"));
+                int_ops!(<S as Simd3A>::u64x3A, u64, harness::label::<S>("u64x3A"));
             }
 
             // --- ReducedRegister-specific logic (upper-lane masking) ---
 
-            #[test]
             fn reductions() {
                 // sum/prod/min/max must ignore the (zero-padded) 4th lane.
                 reduce!(
-                    Vector<<$backend as Simd3A>::f32x3A>,
+                    Vector<<S as Simd3A>::f32x3A>,
                     f32,
-                    concat!($bl, " f32x3A"),
+                    harness::label::<S>("f32x3A"),
                     Tol::Rel(2.0e-4)
                 );
                 reduce!(
-                    Vector<<$backend as Simd3A>::f64x3A>,
+                    Vector<<S as Simd3A>::f64x3A>,
                     f64,
-                    concat!($bl, " f64x3A"),
+                    harness::label::<S>("f64x3A"),
                     Tol::Rel(1.0e-12)
                 );
                 reduce!(
-                    Vector<<$backend as Simd3A>::i32x3A>,
+                    Vector<<S as Simd3A>::i32x3A>,
                     i32,
-                    concat!($bl, " i32x3A"),
+                    harness::label::<S>("i32x3A"),
                     Tol::Exact
                 );
             }
 
-            #[test]
             fn masks() {
                 // all/any/none/bitmask must be masked to 3 lanes (BITMASK).
-                maskt!(Vector<<$backend as Simd3A>::f32x3A>, f32, concat!($bl, " f32x3A"));
-                maskt!(Vector<<$backend as Simd3A>::i32x3A>, i32, concat!($bl, " i32x3A"));
+                maskt!(Vector<<S as Simd3A>::f32x3A>, f32, harness::label::<S>("f32x3A"));
+                maskt!(Vector<<S as Simd3A>::i32x3A>, i32, harness::label::<S>("i32x3A"));
             }
 
-            #[test]
             fn memory() {
                 // load/store roundtrip + masked gather/scatter over exactly 3 lanes.
-                memt!(Vector<<$backend as Simd3A>::f32x3A>, f32, concat!($bl, " f32x3A"));
-                memt!(Vector<<$backend as Simd3A>::i32x3A>, i32, concat!($bl, " i32x3A"));
+                memt!(Vector<<S as Simd3A>::f32x3A>, f32, harness::label::<S>("f32x3A"));
+                memt!(Vector<<S as Simd3A>::i32x3A>, i32, harness::label::<S>("i32x3A"));
             }
 
-            #[test]
             fn swizzle() {
                 // reverse/broadcast/extract/insert with the reduced index adjustment.
-                swiz!(Vector<<$backend as Simd3A>::f32x3A>, f32, concat!($bl, " f32x3A"));
-                swiz!(Vector<<$backend as Simd3A>::i32x3A>, i32, concat!($bl, " i32x3A"));
+                swiz!(Vector<<S as Simd3A>::f32x3A>, f32, harness::label::<S>("f32x3A"));
+                swiz!(Vector<<S as Simd3A>::i32x3A>, i32, harness::label::<S>("i32x3A"));
             }
 
-            #[test]
             fn byte_shifts() {
                 // elem-size byte shift = shift by exactly one lane
-                bshift!(<$backend as Simd3A>::u32x3A, u32, 4, concat!($bl, " u32x3A"));
-                bshift!(<$backend as Simd3A>::i32x3A, i32, 4, concat!($bl, " i32x3A"));
-                bshift!(<$backend as Simd3A>::u64x3A, u64, 8, concat!($bl, " u64x3A"));
+                bshift!(<S as Simd3A>::u32x3A, u32, 4, harness::label::<S>("u32x3A"));
+                bshift!(<S as Simd3A>::i32x3A, i32, 4, harness::label::<S>("i32x3A"));
+                bshift!(<S as Simd3A>::u64x3A, u64, 8, harness::label::<S>("u64x3A"));
             }
 
-            #[test]
             fn interleave() {
                 // 3-lane (4-lane storage reduced by 1), including the
                 // ReducedRegister-over-ArrayRegister case (f64x3A on v1/v2).
-                ileave!(<$backend as Simd3A>::f32x3A, f32, concat!($bl, " f32x3A"));
-                ileave!(<$backend as Simd3A>::f64x3A, f64, concat!($bl, " f64x3A"));
-                ileave!(<$backend as Simd3A>::i32x3A, i32, concat!($bl, " i32x3A"));
-                ileave!(<$backend as Simd3A>::u64x3A, u64, concat!($bl, " u64x3A"));
+                ileave!(<S as Simd3A>::f32x3A, f32, harness::label::<S>("f32x3A"));
+                ileave!(<S as Simd3A>::f64x3A, f64, harness::label::<S>("f64x3A"));
+                ileave!(<S as Simd3A>::i32x3A, i32, harness::label::<S>("i32x3A"));
+                ileave!(<S as Simd3A>::u64x3A, u64, harness::label::<S>("u64x3A"));
 
                 // 2-lane half registers (4-lane storage reduced by 2).
                 ileave!(
-                    <$backend as thermite::simd::Simd>::f32x2,
+                    <S as thermite::simd::Simd>::f32x2,
                     f32,
-                    concat!($bl, " f32x2")
+                    harness::label::<S>("f32x2")
                 );
                 ileave!(
-                    <$backend as thermite::simd::Simd>::i32x2,
+                    <S as thermite::simd::Simd>::i32x2,
                     i32,
-                    concat!($bl, " i32x2")
+                    harness::label::<S>("i32x2")
                 );
             }
 
             // --- broader register-trait coverage (the bulk of reduced.rs) ---
 
-            #[test]
             fn compares() {
                 // PartialOrdRegister: all six predicates -> Mask.
-                cmpt!(<$backend as Simd3A>::f32x3A, f32, concat!($bl, " f32x3A"));
-                cmpt!(<$backend as Simd3A>::i32x3A, i32, concat!($bl, " i32x3A"));
-                cmpt!(<$backend as Simd3A>::u32x3A, u32, concat!($bl, " u32x3A"));
-                cmpt!(<$backend as Simd3A>::i64x3A, i64, concat!($bl, " i64x3A"));
+                cmpt!(<S as Simd3A>::f32x3A, f32, harness::label::<S>("f32x3A"));
+                cmpt!(<S as Simd3A>::i32x3A, i32, harness::label::<S>("i32x3A"));
+                cmpt!(<S as Simd3A>::u32x3A, u32, harness::label::<S>("u32x3A"));
+                cmpt!(<S as Simd3A>::i64x3A, i64, harness::label::<S>("i64x3A"));
             }
 
-            #[test]
             fn predicates() {
                 // FloatRegister classification predicates -> Mask.
-                predt!(<$backend as Simd3A>::f32x3A, f32, concat!($bl, " f32x3A"));
-                predt!(<$backend as Simd3A>::f64x3A, f64, concat!($bl, " f64x3A"));
+                predt!(<S as Simd3A>::f32x3A, f32, harness::label::<S>("f32x3A"));
+                predt!(<S as Simd3A>::f64x3A, f64, harness::label::<S>("f64x3A"));
             }
 
-            #[test]
             fn signed_ops() {
                 // SignedRegister: signum + is_negative.
-                signedt!(<$backend as Simd3A>::i32x3A, i32, concat!($bl, " i32x3A"));
-                signedt!(<$backend as Simd3A>::i64x3A, i64, concat!($bl, " i64x3A"));
+                signedt!(<S as Simd3A>::i32x3A, i32, harness::label::<S>("i32x3A"));
+                signedt!(<S as Simd3A>::i64x3A, i64, harness::label::<S>("i64x3A"));
             }
 
-            #[test]
             fn float_extra() {
                 // copysign / min / max / mix (FloatRegister + NumericRegister).
                 fextra!(
-                    <$backend as Simd3A>::f32x3A,
+                    <S as Simd3A>::f32x3A,
                     f32,
-                    concat!($bl, " f32x3A"),
+                    harness::label::<S>("f32x3A"),
                     Tol::Rel(2.0e-4)
                 );
                 fextra!(
-                    <$backend as Simd3A>::f64x3A,
+                    <S as Simd3A>::f64x3A,
                     f64,
-                    concat!($bl, " f64x3A"),
+                    harness::label::<S>("f64x3A"),
                     Tol::Rel(1.0e-12)
                 );
             }
 
-            #[test]
             fn casts() {
                 // CastRegister + BitCastRegister.
                 castt!(
-                    <$backend as Simd3A>::f32x3A,
-                    <$backend as Simd3A>::i32x3A,
-                    <$backend as Simd3A>::u32x3A,
-                    concat!($bl, " f32x3A")
+                    <S as Simd3A>::f32x3A,
+                    <S as Simd3A>::i32x3A,
+                    <S as Simd3A>::u32x3A,
+                    harness::label::<S>("f32x3A")
                 );
             }
 
-            #[test]
             fn linalg3() {
                 // LinAlg3Register: dot3/cross3/zero4/one4/element3/mat3 ops.
                 linalg3!(
-                    <$backend as Simd3A>::f32x3A,
+                    <S as Simd3A>::f32x3A,
                     f32,
-                    concat!($bl, " f32x3A"),
+                    harness::label::<S>("f32x3A"),
                     Tol::Rel(2.0e-3)
                 );
                 linalg3!(
-                    <$backend as Simd3A>::f64x3A,
+                    <S as Simd3A>::f64x3A,
                     f64,
-                    concat!($bl, " f64x3A"),
+                    harness::label::<S>("f64x3A"),
                     Tol::Rel(1.0e-11)
                 );
             }
 
-            #[test]
             fn division() {
                 // Constant Divider (divv_branchfree): correct on every backend/type.
-                rdiv_const!(<$backend as Simd3A>::i32x3A, i32, true, concat!($bl, " i32x3A"));
-                rdiv_const!(<$backend as Simd3A>::u32x3A, u32, false, concat!($bl, " u32x3A"));
-                rdiv_const!(<$backend as Simd3A>::i64x3A, i64, true, concat!($bl, " i64x3A"));
-                rdiv_const!(<$backend as Simd3A>::u64x3A, u64, false, concat!($bl, " u64x3A"));
+                rdiv_const!(<S as Simd3A>::i32x3A, i32, true, harness::label::<S>("i32x3A"));
+                rdiv_const!(<S as Simd3A>::u32x3A, u32, false, harness::label::<S>("u32x3A"));
+                rdiv_const!(<S as Simd3A>::i64x3A, i64, true, harness::label::<S>("i64x3A"));
+                rdiv_const!(<S as Simd3A>::u64x3A, u64, false, harness::label::<S>("u64x3A"));
                 // Per-lane VectorDivider + masked div_c/_m/_z, all widths/backends
                 // (the 64-bit SSE variable-shift path is exercised here too).
-                rdiv_vec!(<$backend as Simd3A>::i32x3A, i32, true, concat!($bl, " i32x3A"));
-                rdiv_vec!(<$backend as Simd3A>::u32x3A, u32, false, concat!($bl, " u32x3A"));
-                rdiv_vec!(<$backend as Simd3A>::i64x3A, i64, true, concat!($bl, " i64x3A"));
-                rdiv_vec!(<$backend as Simd3A>::u64x3A, u64, false, concat!($bl, " u64x3A"));
+                rdiv_vec!(<S as Simd3A>::i32x3A, i32, true, harness::label::<S>("i32x3A"));
+                rdiv_vec!(<S as Simd3A>::u32x3A, u32, false, harness::label::<S>("u32x3A"));
+                rdiv_vec!(<S as Simd3A>::i64x3A, i64, true, harness::label::<S>("i64x3A"));
+                rdiv_vec!(<S as Simd3A>::u64x3A, u64, false, harness::label::<S>("u64x3A"));
             }
 
-            #[test]
             fn pow2() {
                 // UnsignedIntegerRegister::is_power_of_two (nonzero inputs; 0 is a
                 // documented divergence).
-                pow2t!(<$backend as Simd3A>::u32x3A, u32, concat!($bl, " u32x3A"));
-                pow2t!(<$backend as Simd3A>::u64x3A, u64, concat!($bl, " u64x3A"));
+                pow2t!(<S as Simd3A>::u32x3A, u32, harness::label::<S>("u32x3A"));
+                pow2t!(<S as Simd3A>::u64x3A, u64, harness::label::<S>("u64x3A"));
             }
 
-            #[test]
             fn masked() {
                 // CoreRegister blendv/zz/nz via masked arithmetic + zz/nz.
-                maskedi!(<$backend as Simd3A>::i32x3A, i32, concat!($bl, " i32x3A"));
-                maskedf!(<$backend as Simd3A>::f32x3A, f32, concat!($bl, " f32x3A"));
+                maskedi!(<S as Simd3A>::i32x3A, i32, harness::label::<S>("i32x3A"));
+                maskedf!(<S as Simd3A>::f32x3A, f32, harness::label::<S>("f32x3A"));
             }
 
-            #[test]
             fn numeric_extra() {
                 // indexed / is_all_zero / is_zero.
-                numx!(<$backend as Simd3A>::f32x3A, f32, concat!($bl, " f32x3A"));
-                numx!(<$backend as Simd3A>::i32x3A, i32, concat!($bl, " i32x3A"));
+                numx!(<S as Simd3A>::f32x3A, f32, harness::label::<S>("f32x3A"));
+                numx!(<S as Simd3A>::i32x3A, i32, harness::label::<S>("i32x3A"));
             }
 
-            #[test]
             fn swizzle_ops() {
                 // Register: runtime permute (vs Rust oracle) and the
                 // two-input swizzle (vs the scalar reduced backend, so the exact
                 // index contract need not be restated here).
-                sw_permute!(<$backend as Simd3A>::f32x3A, f32, concat!($bl, " f32x3A"));
-                sw_permute!(<$backend as Simd3A>::i32x3A, i32, concat!($bl, " i32x3A"));
+                sw_permute!(<S as Simd3A>::f32x3A, f32, harness::label::<S>("f32x3A"));
+                sw_permute!(<S as Simd3A>::i32x3A, i32, harness::label::<S>("i32x3A"));
                 sw_swizzle!(
-                    <$backend as Simd3A>::f32x3A,
+                    <S as Simd3A>::f32x3A,
                     <Scalar as Simd3A>::f32x3A,
                     f32,
-                    concat!($bl, " f32x3A")
+                    harness::label::<S>("f32x3A")
                 );
                 sw_swizzle!(
-                    <$backend as Simd3A>::i32x3A,
+                    <S as Simd3A>::i32x3A,
                     <Scalar as Simd3A>::i32x3A,
                     i32,
-                    concat!($bl, " i32x3A")
+                    harness::label::<S>("i32x3A")
                 );
             }
         }
@@ -328,7 +312,7 @@ macro_rules! bshift {
         // shift down one lane: [b0, a1, 0] - the buggy full-width shift gave [b0, a1, b1]
         let got = harness::read::<$rt>(&<$rt>::bshri::<$elem_bytes>(lo));
         harness::assert_lanes_eq(
-            concat!($l, " [bshri]"),
+            lbl!($l, " [bshri]"),
             &[&a_in, &b_in],
             &got,
             &[b_in[0], a_in[1], 0 as $e],
@@ -338,7 +322,7 @@ macro_rules! bshift {
         // shift up one lane: [0, a0, b0] (junk only moves further into padding)
         let got = harness::read::<$rt>(&<$rt>::bshli::<$elem_bytes>(lo));
         harness::assert_lanes_eq(
-            concat!($l, " [bshli]"),
+            lbl!($l, " [bshli]"),
             &[&a_in, &b_in],
             &got,
             &[0 as $e, a_in[0], b_in[0]],
@@ -375,14 +359,14 @@ macro_rules! ileave {
             let (lo, hi) = <$rt>::interleave(a, b);
 
             harness::assert_lanes_eq(
-                concat!($l, " [interleave lo]"),
+                lbl!($l, " [interleave lo]"),
                 &[a_in.as_slice(), b_in.as_slice()],
                 &harness::read::<$rt>(&lo),
                 &stream[..lanes],
                 Tol::Exact,
             );
             harness::assert_lanes_eq(
-                concat!($l, " [interleave hi]"),
+                lbl!($l, " [interleave hi]"),
                 &[a_in.as_slice(), b_in.as_slice()],
                 &harness::read::<$rt>(&hi),
                 &stream[lanes..],
@@ -392,14 +376,14 @@ macro_rules! ileave {
             let (ra, rb) = <$rt>::deinterleave(lo, hi);
 
             harness::assert_lanes_eq(
-                concat!($l, " [deinterleave a]"),
+                lbl!($l, " [deinterleave a]"),
                 &[a_in.as_slice(), b_in.as_slice()],
                 &harness::read::<$rt>(&ra),
                 a_in,
                 Tol::Exact,
             );
             harness::assert_lanes_eq(
-                concat!($l, " [deinterleave b]"),
+                lbl!($l, " [deinterleave b]"),
                 &[a_in.as_slice(), b_in.as_slice()],
                 &harness::read::<$rt>(&rb),
                 b_in,
@@ -412,29 +396,29 @@ macro_rules! ileave {
 macro_rules! float_ops {
     ($reg:ty, $e:ty, $l:expr) => {{
         type V = Vector<$reg>;
-        bin!(concat!($l, " [add]"), V, $e, |a, b| a + b, |x, y| x + y);
-        bin!(concat!($l, " [sub]"), V, $e, |a, b| a - b, |x, y| x - y);
-        bin!(concat!($l, " [mul]"), V, $e, |a, b| a * b, |x, y| x * y);
-        bin!(concat!($l, " [div]"), V, $e, |a, b| a / b, |x, y| x / y);
-        un!(concat!($l, " [neg]"), V, $e, |a| -a, |x| -x);
-        un!(concat!($l, " [abs]"), V, $e, |a| a.abs(), |x: $e| x.abs());
-        un!(concat!($l, " [sqrt]"), V, $e, |a| a.sqrt(), |x: $e| x.sqrt());
-        un!(concat!($l, " [floor]"), V, $e, |a| a.floor(), |x: $e| x.floor());
-        un!(concat!($l, " [ceil]"), V, $e, |a| a.ceil(), |x: $e| x.ceil());
-        un!(concat!($l, " [trunc]"), V, $e, |a| a.trunc(), |x: $e| x.trunc());
+        bin!(lbl!($l, " [add]"), V, $e, |a, b| a + b, |x, y| x + y);
+        bin!(lbl!($l, " [sub]"), V, $e, |a, b| a - b, |x, y| x - y);
+        bin!(lbl!($l, " [mul]"), V, $e, |a, b| a * b, |x, y| x * y);
+        bin!(lbl!($l, " [div]"), V, $e, |a, b| a / b, |x, y| x / y);
+        un!(lbl!($l, " [neg]"), V, $e, |a| -a, |x| -x);
+        un!(lbl!($l, " [abs]"), V, $e, |a| a.abs(), |x: $e| x.abs());
+        un!(lbl!($l, " [sqrt]"), V, $e, |a| a.sqrt(), |x: $e| x.sqrt());
+        un!(lbl!($l, " [floor]"), V, $e, |a| a.floor(), |x: $e| x.floor());
+        un!(lbl!($l, " [ceil]"), V, $e, |a| a.ceil(), |x: $e| x.ceil());
+        un!(lbl!($l, " [trunc]"), V, $e, |a| a.trunc(), |x: $e| x.trunc());
     }};
 }
 
 macro_rules! int_ops {
     ($reg:ty, $e:ty, $l:expr) => {{
         type V = Vector<$reg>;
-        bin!(concat!($l, " [add]"), V, $e, |a, b| a + b, |x, y| x.wrapping_add(y));
-        bin!(concat!($l, " [sub]"), V, $e, |a, b| a - b, |x, y| x.wrapping_sub(y));
-        bin!(concat!($l, " [mul]"), V, $e, |a, b| a * b, |x, y| x.wrapping_mul(y));
-        bin!(concat!($l, " [and]"), V, $e, |a, b| a & b, |x, y| x & y);
-        bin!(concat!($l, " [or]"), V, $e, |a, b| a | b, |x, y| x | y);
-        bin!(concat!($l, " [xor]"), V, $e, |a, b| a ^ b, |x, y| x ^ y);
-        un!(concat!($l, " [not]"), V, $e, |a| !a, |x| !x);
+        bin!(lbl!($l, " [add]"), V, $e, |a, b| a + b, |x, y| x.wrapping_add(y));
+        bin!(lbl!($l, " [sub]"), V, $e, |a, b| a - b, |x, y| x.wrapping_sub(y));
+        bin!(lbl!($l, " [mul]"), V, $e, |a, b| a * b, |x, y| x.wrapping_mul(y));
+        bin!(lbl!($l, " [and]"), V, $e, |a, b| a & b, |x, y| x & y);
+        bin!(lbl!($l, " [or]"), V, $e, |a, b| a | b, |x, y| x | y);
+        bin!(lbl!($l, " [xor]"), V, $e, |a, b| a ^ b, |x, y| x ^ y);
+        un!(lbl!($l, " [not]"), V, $e, |a| !a, |x| !x);
     }};
 }
 
@@ -459,28 +443,28 @@ macro_rules! reduce {
             let omin = x.iter().copied().reduce(|a, b| if b < a { b } else { a }).unwrap();
             let omax = x.iter().copied().reduce(|a, b| if b > a { b } else { a }).unwrap();
             harness::assert_lanes_eq(
-                concat!($l, " [sum_elements]"),
+                lbl!($l, " [sum_elements]"),
                 &[x.as_slice()],
                 &[v.sum_elements()],
                 &[osum],
                 $tol,
             );
             harness::assert_lanes_eq(
-                concat!($l, " [prod_elements]"),
+                lbl!($l, " [prod_elements]"),
                 &[x.as_slice()],
                 &[v.prod_elements()],
                 &[oprod],
                 $tol,
             );
             harness::assert_lanes_eq(
-                concat!($l, " [min_element]"),
+                lbl!($l, " [min_element]"),
                 &[x.as_slice()],
                 &[v.min_element()],
                 &[omin],
                 Tol::Exact,
             );
             harness::assert_lanes_eq(
-                concat!($l, " [max_element]"),
+                lbl!($l, " [max_element]"),
                 &[x.as_slice()],
                 &[v.max_element()],
                 &[omax],
@@ -504,13 +488,13 @@ macro_rules! maskt {
             let b = <$V>::from_slice(y);
             let m = a.cmp_lt(b);
             let exp = [x[0] < y[0], x[1] < y[1], x[2] < y[2]];
-            assert_eq!(m.all(), exp.iter().all(|&t| t), concat!($l, " mask.all"));
-            assert_eq!(m.any(), exp.iter().any(|&t| t), concat!($l, " mask.any"));
-            assert_eq!(m.none(), !exp.iter().any(|&t| t), concat!($l, " mask.none"));
+            assert_eq!(m.all(), exp.iter().all(|&t| t), "{} mask.all", $l);
+            assert_eq!(m.any(), exp.iter().any(|&t| t), "{} mask.any", $l);
+            assert_eq!(m.none(), !exp.iter().any(|&t| t), "{} mask.none", $l);
             // all/any/none above already exercise the BITMASK-gated `native_bitmask`.
             let gs = m.select(a, b).into_array().as_slice()[..3].to_vec();
             let ws: Vec<$e> = (0..3).map(|i| if x[i] < y[i] { x[i] } else { y[i] }).collect();
-            assert_eq!(gs, ws, concat!($l, " mask.select"));
+            assert_eq!(gs, ws, "{} mask.select", $l);
         }
     }};
 }
@@ -524,12 +508,8 @@ macro_rules! memt {
 
         let mut out = [0 as $e; 3];
         v.copy_to_slice(&mut out);
-        assert_eq!(out, x, concat!($l, " copy_to_slice"));
-        assert_eq!(
-            v.into_array().as_slice()[..3].to_vec(),
-            x.to_vec(),
-            concat!($l, " into_array")
-        );
+        assert_eq!(out, x, "{} copy_to_slice", $l);
+        assert_eq!(v.into_array().as_slice()[..3].to_vec(), x.to_vec(), "{} into_array", $l);
 
         let table = [10 as $e, 11 as $e, 12 as $e, 13 as $e, 14 as $e];
         let idx = U::from_slice(&[0u32, 2u32, 4u32]);
@@ -537,14 +517,15 @@ macro_rules! memt {
         assert_eq!(
             g.into_array().as_slice()[..3].to_vec(),
             vec![10 as $e, 12 as $e, 14 as $e],
-            concat!($l, " gather")
+            "{} gather",
+            $l
         );
 
         let mut dst = [0 as $e; 6];
         v.scatter(&mut dst, idx);
-        assert_eq!(dst[0], 1 as $e, concat!($l, " scatter[0]"));
-        assert_eq!(dst[2], 2 as $e, concat!($l, " scatter[2]"));
-        assert_eq!(dst[4], 3 as $e, concat!($l, " scatter[4]"));
+        assert_eq!(dst[0], 1 as $e, "{} scatter[0]", $l);
+        assert_eq!(dst[2], 2 as $e, "{} scatter[2]", $l);
+        assert_eq!(dst[4], 3 as $e, "{} scatter[4]", $l);
     }};
 }
 
@@ -556,18 +537,21 @@ macro_rules! swiz {
         assert_eq!(
             v.reverse().into_array().as_slice()[..3].to_vec(),
             vec![3 as $e, 2 as $e, 1 as $e],
-            concat!($l, " reverse")
+            "{} reverse",
+            $l
         );
         assert_eq!(
             v.broadcast::<1>().into_array().as_slice()[..3].to_vec(),
             vec![2 as $e; 3],
-            concat!($l, " broadcast")
+            "{} broadcast",
+            $l
         );
-        assert_eq!(v.extract::<2>(), 3 as $e, concat!($l, " extract"));
+        assert_eq!(v.extract::<2>(), 3 as $e, "{} extract", $l);
         assert_eq!(
             v.insert::<0>(9 as $e).into_array().as_slice()[..3].to_vec(),
             vec![9 as $e, 2 as $e, 3 as $e],
-            concat!($l, " insert")
+            "{} insert",
+            $l
         );
     }};
 }
@@ -585,7 +569,7 @@ macro_rules! bint {
             let g = vop(<$V>::from_slice(x), <$V>::from_slice(y)).into_array();
             let got = g.as_slice()[..3].to_vec();
             let want: Vec<$e> = (0..3).map(|i| sop(x[i], y[i])).collect();
-            harness::assert_lanes_eq($label, &[x.as_slice(), y.as_slice()], &got, &want, $tol);
+            harness::assert_lanes_eq(&$label, &[x.as_slice(), y.as_slice()], &got, &want, $tol);
         }
     }};
 }
@@ -670,18 +654,13 @@ macro_rules! signedt {
 macro_rules! fextra {
     ($reg:ty, $e:ty, $l:expr, $tol:expr) => {{
         type V = Vector<$reg>;
-        bin!(
-            concat!($l, " [copysign]"),
-            V,
-            $e,
-            |a, b| a.copysign(b),
-            |x: $e, y: $e| x.copysign(y)
-        );
+        bin!(lbl!($l, " [copysign]"), V, $e, |a, b| a.copysign(b), |x: $e, y: $e| x
+            .copysign(y));
         // Under `strict_ieee754` min/max define the tie semantics exactly:
         // min(-0, +0) = -0 and max(-0, +0) = +0 in either operand order, and
         // min/max(x, NaN) = x. The plain oracle leaves ties to operand order.
         bint!(
-            concat!($l, " [min]"),
+            lbl!($l, " [min]"),
             V,
             $e,
             |a, b| a.min(b),
@@ -706,7 +685,7 @@ macro_rules! fextra {
             Tol::ExactOrNan
         );
         bint!(
-            concat!($l, " [max]"),
+            lbl!($l, " [max]"),
             V,
             $e,
             |a, b| a.max(b),
@@ -743,7 +722,7 @@ macro_rules! fextra {
                 .as_slice()[..3]
                 .to_vec();
             let w: Vec<$e> = (0..3).map(|i| pa[i] * (1.0 as $e - t[i]) + pb[i] * t[i]).collect();
-            harness::assert_lanes_eq(concat!($l, " [mix]"), &[&t], &g, &w, $tol);
+            harness::assert_lanes_eq(lbl!($l, " [mix]"), &[&t], &g, &w, $tol);
         }
     }};
 }
@@ -797,26 +776,26 @@ macro_rules! linalg3 {
             let b = V::from_slice(&xb);
 
             let dot = xa[0] * xb[0] + xa[1] * xb[1] + xa[2] * xb[2];
-            harness::assert_lanes_eq(concat!($l, " [dot3]"), &[&xa, &xb], &[a.dot3(b)], &[dot], $tol);
+            harness::assert_lanes_eq(lbl!($l," [dot3]"), &[&xa, &xb], &[a.dot3(b)], &[dot], $tol);
 
             let cross = [
                 xa[1] * xb[2] - xa[2] * xb[1],
                 xa[2] * xb[0] - xa[0] * xb[2],
                 xa[0] * xb[1] - xa[1] * xb[0],
             ];
-            harness::assert_lanes_eq(concat!($l, " [cross3 exact]"), &[&xa, &xb], &r3(a.cross3::<true>(b)), &cross, $tol);
-            harness::assert_lanes_eq(concat!($l, " [cross3 fast]"), &[&xa, &xb], &r3(a.cross3::<false>(b)), &cross, $tol);
+            harness::assert_lanes_eq(lbl!($l," [cross3 exact]"), &[&xa, &xb], &r3(a.cross3::<true>(b)), &cross, $tol);
+            harness::assert_lanes_eq(lbl!($l," [cross3 fast]"), &[&xa, &xb], &r3(a.cross3::<false>(b)), &cross, $tol);
 
             // On a genuine 3-lane register zero4/one4 leave the visible lanes alone.
-            harness::assert_lanes_eq(concat!($l, " [zero4]"), &[&xa], &r3(a.zero4()), &xa, $tol);
-            harness::assert_lanes_eq(concat!($l, " [one4]"), &[&xa], &r3(a.one4()), &xa, $tol);
+            harness::assert_lanes_eq(lbl!($l," [zero4]"), &[&xa], &r3(a.zero4()), &xa, $tol);
+            harness::assert_lanes_eq(lbl!($l," [one4]"), &[&xa], &r3(a.one4()), &xa, $tol);
 
             let omin = xa[0].min(xa[1]).min(xa[2]);
             let omax = xa[0].max(xa[1]).max(xa[2]);
-            harness::assert_lanes_eq(concat!($l, " [min_element3]"), &[&xa], &[a.min_element3()], &[omin], Tol::Exact);
-            harness::assert_lanes_eq(concat!($l, " [max_element3]"), &[&xa], &[a.max_element3()], &[omax], Tol::Exact);
-            harness::assert_lanes_eq(concat!($l, " [sum_elements3]"), &[&xa], &[a.sum_elements3()], &[xa[0] + xa[1] + xa[2]], $tol);
-            harness::assert_lanes_eq(concat!($l, " [prod_elements3]"), &[&xa], &[a.prod_elements3()], &[xa[0] * xa[1] * xa[2]], $tol);
+            harness::assert_lanes_eq(lbl!($l," [min_element3]"), &[&xa], &[a.min_element3()], &[omin], Tol::Exact);
+            harness::assert_lanes_eq(lbl!($l," [max_element3]"), &[&xa], &[a.max_element3()], &[omax], Tol::Exact);
+            harness::assert_lanes_eq(lbl!($l," [sum_elements3]"), &[&xa], &[a.sum_elements3()], &[xa[0] + xa[1] + xa[2]], $tol);
+            harness::assert_lanes_eq(lbl!($l," [prod_elements3]"), &[&xa], &[a.prod_elements3()], &[xa[0] * xa[1] * xa[2]], $tol);
         }
 
         for _ in 0..200 {
@@ -827,14 +806,14 @@ macro_rules! linalg3 {
             let t = V::mat3_transpose(&cols);
             for i in 0..3 {
                 let want: [$e; 3] = core::array::from_fn(|j| cm[j][i]);
-                harness::assert_lanes_eq(concat!($l, " [mat3_transpose]"), &[&cm[0], &cm[1], &cm[2]], &r3(t[i]), &want, $tol);
+                harness::assert_lanes_eq(lbl!($l," [mat3_transpose]"), &[&cm[0], &cm[1], &cm[2]], &r3(t[i]), &want, $tol);
             }
 
             // column-major M*v = v.x*c0 + v.y*c1 + v.z*c2.
             let xv: [$e; 3] = core::array::from_fn(|_| rng.random_range(-8.0 as $e..8.0 as $e));
             let prod = V::from_slice(&xv).mat3_vec3_product::<true>(&cols);
             let want: [$e; 3] = core::array::from_fn(|row| xv[0] * cm[0][row] + xv[1] * cm[1][row] + xv[2] * cm[2][row]);
-            harness::assert_lanes_eq(concat!($l, " [mat3_vec3_product]"), &[&xv], &r3(prod), &want, $tol);
+            harness::assert_lanes_eq(lbl!($l," [mat3_vec3_product]"), &[&xv], &r3(prod), &want, $tol);
         }
     }};
 }
@@ -964,19 +943,19 @@ macro_rules! maskedf {
 
             let g = read(a.sqrt_c(m));
             let w: Vec<$e> = (0..3).map(|i| if mb[i] { x[i].sqrt() } else { x[i] }).collect();
-            harness::assert_lanes_eq(concat!($l, " [sqrt_c]"), &[x.as_slice()], &g, &w, Tol::Exact);
+            harness::assert_lanes_eq(lbl!($l, " [sqrt_c]"), &[x.as_slice()], &g, &w, Tol::Exact);
 
             let g = read(a.sqrt_z(m));
             let w: Vec<$e> = (0..3).map(|i| if mb[i] { x[i].sqrt() } else { 0 as $e }).collect();
-            harness::assert_lanes_eq(concat!($l, " [sqrt_z]"), &[x.as_slice()], &g, &w, Tol::Exact);
+            harness::assert_lanes_eq(lbl!($l, " [sqrt_z]"), &[x.as_slice()], &g, &w, Tol::Exact);
 
             let g = read(a.zz(m));
             let w: Vec<$e> = (0..3).map(|i| if mb[i] { x[i] } else { 0 as $e }).collect();
-            harness::assert_lanes_eq(concat!($l, " [zz]"), &[x.as_slice()], &g, &w, Tol::Exact);
+            harness::assert_lanes_eq(lbl!($l, " [zz]"), &[x.as_slice()], &g, &w, Tol::Exact);
 
             let g = read(a.nz(m));
             let w: Vec<$e> = (0..3).map(|i| if mb[i] { 0 as $e } else { x[i] }).collect();
-            harness::assert_lanes_eq(concat!($l, " [nz]"), &[x.as_slice()], &g, &w, Tol::Exact);
+            harness::assert_lanes_eq(lbl!($l, " [nz]"), &[x.as_slice()], &g, &w, Tol::Exact);
         }
     }};
 }
@@ -1045,27 +1024,7 @@ macro_rules! sw_swizzle {
     }};
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86 {
-    use super::*;
-    use thermite::backend::x86_v1::X86V1;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
-    reduced_suite!(v3, X86V3, "x86_v3");
-    reduced_suite!(v2, X86V2, "x86_v2");
-    reduced_suite!(v1, X86V1, "x86_v1");
-}
-
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-    reduced_suite!(wasm, Wasm, "wasm");
-}
-
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-    reduced_suite!(neon, Neon, "neon");
-}
+// The suite is a zero-arg macro only so that its body sits above the leaf
+// macros it uses (macro_rules are textually scoped) while the stamping
+// happens here, after them.
+reduced_suite!();

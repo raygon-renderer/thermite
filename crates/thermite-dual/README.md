@@ -69,10 +69,9 @@ Relationship to the other crates
 Status
 ------
 
-Pre-release. Core autodiff is complete and tested.
-`trigamma` is deliberately unimplemented: the Gamma-derivative family is not
-closed under differentiation (psi_1' is psi_2, whose derivative is psi_3, ...),
-so closing it properly needs a general `polygamma(n)`. See `src/special.rs`.
+Pre-release. Core autodiff is complete and tested, and the special functions in
+`thermite-special` differentiate too, the iterative ones through closed-form
+derivative rules rather than through their loops.
 
 License
 -------

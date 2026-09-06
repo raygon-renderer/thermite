@@ -11,6 +11,7 @@ description = "Procedural codegen macros for the Thermite SIMD library (use via 
 readme = "README.md"
 keywords = ["simd", "target-feature", "dispatch", "codegen", "proc-macro"]
 categories = ["development-tools::procedural-macro-helpers", "hardware-support", "no-std"]
+include = ["/src", "/README.md", "/LICENSE-APACHE", "/LICENSE-MIT"]
 
 [lints]
 workspace = true

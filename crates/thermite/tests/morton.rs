@@ -1,11 +1,13 @@
 //! Morton (Z-order curve) encode/decode correctness.
 //!
 //! Checks [`UnsignedIntegerRegister::morton`] / `reverse_morton` for every
-//! implemented backend and width against an independent pure-Rust per-lane
-//! bit-interleave oracle, plus a `reverse(morton(x)) == x` roundtrip. This
-//! exercises the generic shift/mask cascade, the CLMUL `N == 2` fast path on
-//! u64-lane v3 registers (default `avx2-pclmul`), the x86 `pshufb` and wasm
-//! `i8x16.swizzle` nibble-LUT paths on u16/u32 lanes.
+//! backend and width against an independent pure-Rust per-lane bit-interleave
+//! oracle, plus a `reverse(morton(x)) == x` roundtrip. This exercises the
+//! generic shift/mask cascade, the CLMUL `N == 2` fast path on u64-lane v3/v4
+//! registers (default `avx2-pclmul`), the x86 `pshufb` and wasm
+//! `i8x16.swizzle` nibble-LUT paths on u16/u32 lanes, the `ArrayRegister`
+//! chunk delegation into those, and the reduced (half) registers' wide
+//! delegation.
 #![cfg(any(
     target_arch = "x86",
     target_arch = "x86_64",
@@ -16,6 +18,7 @@
 mod harness;
 
 use generic_array::typenum::Unsigned;
+use thermite::register::array::ArrayRegister;
 use thermite::register::{CoreRegister, Storage, UnsignedIntegerRegister as _};
 use thermite::simd::Simd;
 
@@ -53,7 +56,7 @@ macro_rules! morton_check {
                         }
                     }
                 }
-                assert_eq!(got[lane] as u64, want, "{} morton lane {}", $label, lane);
+                assert_eq!(got[lane] as u64, want, "{} N={} morton lane {}", $label, N, lane);
             }
 
             // roundtrip: reverse_morton(morton(x)) == x masked to usable bits
@@ -62,83 +65,54 @@ macro_rules! morton_check {
                 let backd = read::<$ut>(&back[d]);
                 for lane in 0..lanes {
                     let want = (corpora[d][idx][lane] as u64) & mask;
-                    assert_eq!(backd[lane] as u64, want, "{} reverse d{} lane {}", $label, d, lane);
+                    assert_eq!(backd[lane] as u64, want, "{} N={} reverse d{} lane {}", $label, N, d, lane);
                 }
             }
         }
     }};
 }
 
-macro_rules! morton_suite {
-    ($name:ident, $ut:ty, $e:ty, $label:expr) => {
-        #[test]
-        fn $name() {
-            morton_check!(concat!($label, " N=1"), $ut, $e, 1);
-            morton_check!(concat!($label, " N=2"), $ut, $e, 2);
-            morton_check!(concat!($label, " N=3"), $ut, $e, 3);
-            morton_check!(concat!($label, " N=4"), $ut, $e, 4);
-        }
+/// N = 1..=4 for one register type.
+macro_rules! morton4 {
+    ($label:expr, $ut:ty, $e:ty) => {{
+        let label = $label;
+        morton_check!(label, $ut, $e, 1);
+        morton_check!(label, $ut, $e, 2);
+        morton_check!(label, $ut, $e, 3);
+        morton_check!(label, $ut, $e, 4);
+    }};
+}
+
+macro_rules! slot {
+    ($S:ty, $reg:ident, $e:ty) => {
+        morton4!(harness::label::<$S>(stringify!($reg)), <$S as Simd>::$reg, $e)
     };
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86 {
-    use super::*;
-    use thermite::backend::{x86_v1::X86V1, x86_v2::X86V2, x86_v3::X86V3};
-
-    // u64 v3 carries the CLMUL `N == 2` fast path, u16/u32 use the pshufb LUT, and
-    // u64x2/v1 and all N != 2 exercise the cascade.
-    morton_suite!(v3_u64x2, <X86V3 as Simd>::u64x2, u64, "v3 u64x2");
-    morton_suite!(v3_u64x4, <X86V3 as Simd>::u64x4, u64, "v3 u64x4");
-    morton_suite!(v3_u32x4, <X86V3 as Simd>::u32x4, u32, "v3 u32x4");
-    morton_suite!(v3_u32x8, <X86V3 as Simd>::u32x8, u32, "v3 u32x8");
-    morton_suite!(v3_u16x8, <X86V3 as Simd>::u16x8, u16, "v3 u16x8");
-    morton_suite!(v3_u16x16, <X86V3 as Simd>::u16x16, u16, "v3 u16x16");
-
-    morton_suite!(v2_u64x2, <X86V2 as Simd>::u64x2, u64, "v2 u64x2");
-    morton_suite!(v2_u32x4, <X86V2 as Simd>::u32x4, u32, "v2 u32x4");
-    morton_suite!(v2_u16x8, <X86V2 as Simd>::u16x8, u16, "v2 u16x8");
-
-    morton_suite!(v1_u64x2, <X86V1 as Simd>::u64x2, u64, "v1 u64x2");
-    morton_suite!(v1_u32x4, <X86V1 as Simd>::u32x4, u32, "v1 u32x4");
-    morton_suite!(v1_u16x8, <X86V1 as Simd>::u16x8, u16, "v1 u16x8");
-
-    // Composite widths: ArrayRegister chunk-delegates into the native fast
-    // paths (u64 CLMUL, u16/u32 pshufb LUT); reduced (half) registers
-    // wide-delegate into them.
-    use thermite::register::array::ArrayRegister;
-    morton_suite!(v3_u64x4_array2, ArrayRegister<<X86V3 as Simd>::u64x4, 2>, u64, "v3 ArrayRegister<u64x4, 2>");
-    morton_suite!(v3_u32x8_array2, ArrayRegister<<X86V3 as Simd>::u32x8, 2>, u32, "v3 ArrayRegister<u32x8, 2>");
-    morton_suite!(v3_u32x2_reduced, <X86V3 as Simd>::u32x2, u32, "v3 u32x2 (reduced)");
-    morton_suite!(v3_u16x4_reduced, <X86V3 as Simd>::u16x4, u16, "v3 u16x4 (reduced)");
-    morton_suite!(v2_u32x2_reduced, <X86V2 as Simd>::u32x2, u32, "v2 u32x2 (reduced)");
+for_each_backend! {
+    fn u16<S: Simd>() {
+        slot!(S, u16x8, u16);
+        slot!(S, u16x16, u16);
+        slot!(S, u16x4, u16); // reduced: wide-delegates
+    }
+    fn u32<S: Simd>() {
+        slot!(S, u32x4, u32);
+        slot!(S, u32x8, u32);
+        slot!(S, u32x16, u32);
+        slot!(S, u32x2, u32); // reduced: wide-delegates
+    }
+    fn u64<S: Simd>() {
+        slot!(S, u64x2, u64);
+        slot!(S, u64x4, u64);
+        slot!(S, u64x8, u64);
+    }
+    /// Composite widths: `ArrayRegister` chunk-delegates into the native fast paths.
+    fn arrays<S: Simd>() {
+        morton4!(harness::label::<S>("ArrayRegister<u64x4, 2>"), ArrayRegister<<S as Simd>::u64x4, 2>, u64);
+        morton4!(harness::label::<S>("ArrayRegister<u32x8, 2>"), ArrayRegister<<S as Simd>::u32x8, 2>, u32);
+    }
 }
 
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-
-    // u16/u32 use the `i8x16.swizzle` LUT; u64x2 and all N != 2 use the cascade.
-    morton_suite!(wasm_u16x8, <Wasm as Simd>::u16x8, u16, "wasm u16x8");
-    morton_suite!(wasm_u32x4, <Wasm as Simd>::u32x4, u32, "wasm u32x4");
-    morton_suite!(wasm_u64x2, <Wasm as Simd>::u64x2, u64, "wasm u64x2");
-}
-
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-
-    // u16/u32 use the `i8x16.swizzle` LUT; u64x2 and all N != 2 use the cascade.
-    // (inherited from the wasm section, revisit for NEON)
-    morton_suite!(neon_u16x8, <Neon as Simd>::u16x8, u16, "neon u16x8");
-    morton_suite!(neon_u32x4, <Neon as Simd>::u32x4, u32, "neon u32x4");
-    morton_suite!(neon_u64x2, <Neon as Simd>::u64x2, u64, "neon u64x2");
-}
-
-/// Exercise the user-facing `Vector<R>` layer (the `transmute_copy` delegation to
-/// the register methods), independent of backend. Uses a scalar `Vector<u32>`.
 #[test]
 fn vector_layer() {
     use thermite::prelude::*;
@@ -150,7 +124,6 @@ fn vector_layer() {
 
     let code = V::morton::<2>([x, y]);
 
-    // independent oracle for lane 0: bit i of x -> 2i, bit i of y -> 2i+1
     let mut want = 0u32;
     for i in 0..16u32 {
         want |= ((0x9ABCu32 >> i) & 1) << (2 * i);

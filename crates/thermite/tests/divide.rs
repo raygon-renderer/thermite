@@ -1,24 +1,16 @@
 #![allow(clippy::unnecessary_cast)]
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
 
-use thermite::{
-    backend::x86_v3::prelude::*,
-    divider::{BranchfreeDivider, Divider},
-};
+mod harness;
 
-// Edge case that failed before it was fixed
-#[test]
-fn test_failure1() {
-    let d = 4294967168u32;
-    let n = u32x4::new([4294967165, 4294967166, 4294967167, 4294967168]);
-
-    let expected = n.map(|v| v / d);
-
-    let d_divider = BranchfreeDivider::u32(d);
-    let result = n / d_divider;
-
-    assert_eq!(expected, result, "u32 division failed for d={}, n={:?}", d, n);
-}
+use thermite::divider::{BranchfreeDivider, Divider};
+use thermite::prelude::*;
+use thermite::simd::{Simd, i32x8, i64x8, u32x8, u64x8};
 
 /// Every divisor under test: the whole `i8` range plus the `i32` extremes.
 fn divisors() -> impl Iterator<Item = i64> {
@@ -31,7 +23,8 @@ fn divisors() -> impl Iterator<Item = i64> {
 ///
 /// The dividers are built once per `d`, not once per `(d, i)`: they are pure
 /// functions of `d`, and reconstructing them 65k times was most of the runtime.
-fn check_divisor(d: i64) {
+#[inline(always)]
+fn check_divisor<S: Simd>(d: i64) {
     if d == 0 {
         return;
     }
@@ -48,10 +41,10 @@ fn check_divisor(d: i64) {
     let unsigned_bf = (d != 1).then(|| (BranchfreeDivider::u32(d as u32), BranchfreeDivider::u64(d as u64)));
 
     for i in ((i16::MIN as i64)..=(i16::MAX as i64)).chain([i32::MIN as i64, i32::MAX as i64]) {
-        let x_i32 = i32x8::splat(i as i32) + i32x8::indexed();
-        let x_i64 = i64x8::splat(i as i64) + i64x8::indexed();
-        let x_u32 = u32x8::splat(i as u32) + u32x8::indexed();
-        let x_u64 = u64x8::splat(i as u64) + u64x8::indexed();
+        let x_i32 = i32x8::<S>::splat(i as i32) + i32x8::<S>::indexed();
+        let x_i64 = i64x8::<S>::splat(i as i64) + i64x8::<S>::indexed();
+        let x_u32 = u32x8::<S>::splat(i as u32) + u32x8::<S>::indexed();
+        let x_u64 = u64x8::<S>::splat(i as u64) + u64x8::<S>::indexed();
 
         let expected_i32 = x_i32.map(|v| v.wrapping_div(d as i32));
         let expected_i64 = x_i64.map(|v| v.wrapping_div(d as i64));
@@ -127,24 +120,41 @@ fn check_divisor(d: i64) {
 /// stride keeps each shard's mix of easy/hard divisors even.
 const SHARDS: usize = 16;
 
-fn run_shard(shard: usize) {
+#[inline(always)]
+fn run_shard<S: Simd>(shard: usize) {
     if cfg!(debug_assertions) {
         println!("Skipping divider tests in debug mode, run in release mode for full coverage.");
         return;
     }
 
     for d in divisors().skip(shard).step_by(SHARDS) {
-        check_divisor(d);
+        check_divisor::<S>(d);
     }
 }
 
 macro_rules! divide_shards {
-    ($($name:ident = $shard:expr),+ $(,)?) => {$(
-        #[test]
-        fn $name() {
-            run_shard($shard);
+    ($($name:ident = $shard:expr),+ $(,)?) => {
+        for_each_backend_concrete! {
+            // Edge case that failed before it was fixed
+            fn test_failure1() {
+                let d = 4294967168u32;
+                let n = u32x4::new([4294967165, 4294967166, 4294967167, 4294967168]);
+
+                let expected = n.map(|v| v / d);
+
+                let d_divider = BranchfreeDivider::u32(d);
+                let result = n / d_divider;
+
+                assert_eq!(expected, result, "u32 division failed for d={}, n={:?}", d, n);
+            }
+
+            $(
+                fn $name() {
+                    run_shard::<S>($shard);
+                }
+            )+
         }
-    )+};
+    };
 }
 
 divide_shards! {

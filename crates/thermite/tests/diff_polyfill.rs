@@ -2,17 +2,15 @@
 //!
 //! Operations with no native hardware instruction are emulated by a *polyfill*
 //! (`backend/*/polyfills/`). These are the highest-risk code in the library -
-//! this audit found **five** production bugs here (all since fixed). Every
+//! this audit found **six** production bugs here (all since fixed). Every
 //! polyfill-backed register op is checked against an **independent pure-Rust
 //! oracle** (not the scalar backend, which may route through the same generic
 //! polyfill and hide a shared bug).
 //!
-//! `mod fixed` contains regression tests for the four defects this file's
-//! audit found and that have been fixed (P1-P4). All tests here run in the
-//! default suite.
-//!
-//! `X86V2` and `X86V3` share these polyfills, so a defect in one is a defect
-//! in both, and the regression tests cover both backends.
+//! `fixed_*` are regression tests for the defects this file's audit found and
+//! that have been fixed (P1-P6). Everything runs on every backend: an op that
+//! is native on one backend is a polyfill on another, and the oracle does not
+//! care which.
 #![cfg(any(
     target_arch = "x86",
     target_arch = "x86_64",
@@ -30,6 +28,13 @@ use thermite::register::{
 };
 use thermite::simd::Simd;
 
+/// `"X86V3 i32x4"`-style label for a slot of `$S`.
+macro_rules! l {
+    ($S:ty, $reg:ident) => {
+        harness::label::<$S>(stringify!($reg))
+    };
+}
+
 // ===========================================================================
 // Verified-correct polyfills, always-green.
 // ===========================================================================
@@ -37,24 +42,18 @@ use thermite::simd::Simd;
 /// `mullo` (low half of the product), exercising the 64-bit
 /// `_mm{,256}_mullo_epi64x` emulation. Correct for every width.
 macro_rules! mullo_for {
-    ($($reg:ident: $b:ty, $e:ty, $l:expr);* $(;)?) => {
-        #[test]
-        fn mullo() {
-            $( oracle_binary!($l, <$b as Simd>::$reg, $e, mullo, |a, b| a.wrapping_mul(b), Tol::Exact); )*
-        }
+    ($S:ty; $($reg:ident: $e:ty),* $(,)?) => {
+        $( oracle_binary!(l!($S, $reg), <$S as Simd>::$reg, $e, mullo, |a, b| a.wrapping_mul(b), Tol::Exact); )*
     };
 }
 
 /// Bit population / scan ops that are correct everywhere they're tested here.
 macro_rules! popcount_for {
-    ($($reg:ident: $b:ty, $e:ty, $l:expr);* $(;)?) => {
-        #[test]
-        fn popcount() {
-            $(
-                oracle_unary!($l, <$b as Simd>::$reg, $e, count_ones, |x| x.count_ones() as $e, Tol::Exact);
-                oracle_unary!($l, <$b as Simd>::$reg, $e, count_zeros, |x| x.count_zeros() as $e, Tol::Exact);
-            )*
-        }
+    ($S:ty; $($reg:ident: $e:ty),* $(,)?) => {
+        $(
+            oracle_unary!(l!($S, $reg), <$S as Simd>::$reg, $e, count_ones, |x| x.count_ones() as $e, Tol::Exact);
+            oracle_unary!(l!($S, $reg), <$S as Simd>::$reg, $e, count_zeros, |x| x.count_zeros() as $e, Tol::Exact);
+        )*
     };
 }
 
@@ -66,13 +65,13 @@ macro_rules! check_rot_const {
             let got = harness::read::<$reg>(&<$reg>::roli::<$imm>($regv));
             let want: Vec<$e> = $input.iter().map(|&x| x.rotate_left($imm as u32)).collect();
             harness::assert_lanes_eq(
-                concat!($l, " [roli<", stringify!($imm), ">]"),
+                &format!("{} [roli<{}>]", $l, stringify!($imm)),
                 &[$input.as_slice()], &got, &want, Tol::Exact);
 
             let got = harness::read::<$reg>(&<$reg>::rori::<$imm>($regv));
             let want: Vec<$e> = $input.iter().map(|&x| x.rotate_right($imm as u32)).collect();
             harness::assert_lanes_eq(
-                concat!($l, " [rori<", stringify!($imm), ">]"),
+                &format!("{} [rori<{}>]", $l, stringify!($imm)),
                 &[$input.as_slice()], &got, &want, Tol::Exact);
         }
     )*};
@@ -80,91 +79,103 @@ macro_rules! check_rot_const {
 
 /// Byte/bit reversal and rotates, correct for every width.
 macro_rules! bitperm_for {
-    ($($reg:ident: $b:ty, $e:ty, $l:expr);* $(;)?) => {
-        #[test]
-        fn bitperm() {
-            $(
-                oracle_unary!($l, <$b as Simd>::$reg, $e, swap_bytes, |x| x.swap_bytes(), Tol::Exact);
-                oracle_unary!($l, <$b as Simd>::$reg, $e, reverse_bits, |x| x.reverse_bits(), Tol::Exact);
-                oracle_shift!($l, <$b as Simd>::$reg, $e, rol, |x, s| x.rotate_left(s));
-                oracle_shift!($l, <$b as Simd>::$reg, $e, ror, |x, s| x.rotate_right(s));
-            )*
-        }
+    ($S:ty; $($reg:ident: $e:ty),* $(,)?) => {
+        $(
+            oracle_unary!(l!($S, $reg), <$S as Simd>::$reg, $e, swap_bytes, |x| x.swap_bytes(), Tol::Exact);
+            oracle_unary!(l!($S, $reg), <$S as Simd>::$reg, $e, reverse_bits, |x| x.reverse_bits(), Tol::Exact);
+            oracle_shift!(l!($S, $reg), <$S as Simd>::$reg, $e, rol, |x, s| x.rotate_left(s));
+            oracle_shift!(l!($S, $reg), <$S as Simd>::$reg, $e, ror, |x, s| x.rotate_right(s));
+        )*
+    };
+}
 
-        /// Rotates by an amount >= the element width, and the const-generic
-        /// `roli`/`rori` forms.
-        ///
-        /// Rust's `rotate_left`/`rotate_right` (and hence the scalar backend,
-        /// which literally *is* those) reduce the amount modulo the width. An
-        /// unmasked `shr(v, width - shift)` underflows for `shift >= width` and
-        /// makes every vector backend return zeros, a silent divergence from the
-        /// scalar oracle. This pins the masked amount down.
-        #[test]
-        fn rotate_wraparound_and_const() {
-            $({
-                type R = <$b as Simd>::$reg;
-                let bits = (core::mem::size_of::<$e>() * 8) as u32;
-                let lanes = <<R as thermite::register::CoreRegister>::Lanes
-                    as generic_array::typenum::Unsigned>::USIZE;
-                let mut rng = harness::rng();
+/// Rotates by an amount >= the element width, and the const-generic
+/// `roli`/`rori` forms.
+///
+/// Rust's `rotate_left`/`rotate_right` (and hence the scalar backend,
+/// which literally _is_ those) reduce the amount modulo the width. An
+/// unmasked `shr(v, width - shift)` underflows for `shift >= width` and
+/// makes every vector backend return zeros, a silent divergence from the
+/// scalar oracle. This pins the masked amount down.
+macro_rules! rotate_wrap_for {
+    ($S:ty; $($reg:ident: $e:ty),* $(,)?) => {
+        $({
+            let label = l!($S, $reg);
+            let bits = (core::mem::size_of::<$e>() * 8) as u32;
+            let lanes = <<<$S as Simd>::$reg as thermite::register::CoreRegister>::Lanes
+                as generic_array::typenum::Unsigned>::USIZE;
+            let mut rng = harness::rng();
 
-                for input in harness::corpus::<$e>(lanes, &mut rng) {
-                    let reg = harness::make_array::<R>(&input);
+            for input in harness::corpus::<$e>(lanes, &mut rng) {
+                let reg = harness::make_array::<<$S as Simd>::$reg>(&input);
 
-                    // out-of-range amounts, including exactly `bits` and past it
-                    for extra in [0u32, 1, 3, bits / 2] {
-                        let sh = bits + extra;
-                        let got = harness::read::<R>(&R::rol(reg, sh));
-                        let want: Vec<$e> = input.iter().map(|&x| x.rotate_left(sh)).collect();
-                        harness::assert_lanes_eq(
-                            concat!($l, " [rol out-of-range]"), &[input.as_slice()], &got, &want, Tol::Exact);
+                // out-of-range amounts, including exactly `bits` and past it
+                for extra in [0u32, 1, 3, bits / 2] {
+                    let sh = bits + extra;
+                    let got = harness::read::<<$S as Simd>::$reg>(&<<$S as Simd>::$reg>::rol(reg, sh));
+                    let want: Vec<$e> = input.iter().map(|&x| x.rotate_left(sh)).collect();
+                    harness::assert_lanes_eq(
+                        &format!("{label} [rol out-of-range]"), &[input.as_slice()], &got, &want, Tol::Exact);
 
-                        let got = harness::read::<R>(&R::ror(reg, sh));
-                        let want: Vec<$e> = input.iter().map(|&x| x.rotate_right(sh)).collect();
-                        harness::assert_lanes_eq(
-                            concat!($l, " [ror out-of-range]"), &[input.as_slice()], &got, &want, Tol::Exact);
-                    }
-
-                    // const-generic forms (a representative spread, incl. 0)
-                    check_rot_const!($l, R, $e, input, reg, bits; 0, 1, 3, 7, 8, 15, 16, 31, 32, 63);
+                    let got = harness::read::<<$S as Simd>::$reg>(&<<$S as Simd>::$reg>::ror(reg, sh));
+                    let want: Vec<$e> = input.iter().map(|&x| x.rotate_right(sh)).collect();
+                    harness::assert_lanes_eq(
+                        &format!("{label} [ror out-of-range]"), &[input.as_slice()], &got, &want, Tol::Exact);
                 }
-            })*
-        }
+
+                // const-generic forms (a representative spread, incl. 0)
+                check_rot_const!(label, <$S as Simd>::$reg, $e, input, reg, bits; 0, 1, 3, 7, 8, 15, 16, 31, 32, 63);
+            }
+        })*
     };
 }
 
 macro_rules! for_lztz {
-    ($l:expr, $ut:ty, $e:ty) => {{
-        oracle_unary!($l, $ut, $e, leading_zeros, |x| x.leading_zeros() as $e, Tol::Exact);
-        oracle_unary!($l, $ut, $e, trailing_zeros, |x| x.trailing_zeros() as $e, Tol::Exact);
-    }};
+    ($S:ty; $($reg:ident: $e:ty),* $(,)?) => {$(
+        oracle_unary!(l!($S, $reg), <$S as Simd>::$reg, $e, leading_zeros, |x| x.leading_zeros() as $e, Tol::Exact);
+        oracle_unary!(l!($S, $reg), <$S as Simd>::$reg, $e, trailing_zeros, |x| x.trailing_zeros() as $e, Tol::Exact);
+    )*};
 }
 macro_rules! for_signed {
-    ($l:expr, $ut:ty, $e:ty, $w:ty) => {{
-        oracle_shift!($l, $ut, $e, sra, |x, s| x >> s);
-        oracle_binary!(
-            $l,
-            $ut,
-            $e,
-            avg_floor,
-            |a, b| (((a as $w) + (b as $w)) >> 1) as $e,
-            Tol::Exact
-        );
-        oracle_binary!(
-            $l,
-            $ut,
-            $e,
-            avg_ceil,
-            |a, b| (((a as $w) + (b as $w) + 1) >> 1) as $e,
-            Tol::Exact
-        );
-    }};
+    ($S:ty; $($reg:ident: $e:ty, $w:ty),* $(,)?) => {$(
+        oracle_shift!(l!($S, $reg), <$S as Simd>::$reg, $e, sra, |x, s| x >> s);
+        oracle_binary!(l!($S, $reg), <$S as Simd>::$reg, $e, avg_floor,
+            |a, b| (((a as $w) + (b as $w)) >> 1) as $e, Tol::Exact);
+        oracle_binary!(l!($S, $reg), <$S as Simd>::$reg, $e, avg_ceil,
+            |a, b| (((a as $w) + (b as $w) + 1) >> 1) as $e, Tol::Exact);
+    )*};
+}
+macro_rules! for_unsigned_avg {
+    ($S:ty; $($reg:ident: $e:ty, $w:ty),* $(,)?) => {$(
+        oracle_binary!(l!($S, $reg), <$S as Simd>::$reg, $e, avg,
+            |a, b| (((a as $w) + (b as $w) + 1) >> 1) as $e, Tol::Exact);
+    )*};
 }
 macro_rules! for_float {
-    ($l:expr, $ut:ty, $e:ty) => {{
-        oracle_binary!($l, $ut, $e, copysign, |a, b| a.copysign(b), Tol::Exact);
-        oracle_unary!($l, $ut, $e, fract, |x| x - x.trunc(), Tol::Exact);
-    }};
+    ($S:ty; $($reg:ident: $e:ty),* $(,)?) => {$(
+        oracle_binary!(l!($S, $reg), <$S as Simd>::$reg, $e, copysign, |a, b| a.copysign(b), Tol::Exact);
+        oracle_unary!(l!($S, $reg), <$S as Simd>::$reg, $e, fract, |x| x - x.trunc(), Tol::Exact);
+    )*};
+}
+macro_rules! for_rounding {
+    ($S:ty; $($reg:ident: $e:ty),* $(,)?) => {$(
+        oracle_unary!(l!($S, $reg), <$S as Simd>::$reg, $e, floor, |x: $e| x.floor(), Tol::Exact);
+        oracle_unary!(l!($S, $reg), <$S as Simd>::$reg, $e, ceil, |x: $e| x.ceil(), Tol::Exact);
+        oracle_unary!(l!($S, $reg), <$S as Simd>::$reg, $e, trunc, |x: $e| x.trunc(), Tol::Exact);
+        oracle_unary!(l!($S, $reg), <$S as Simd>::$reg, $e, round, |x: $e| x.round_ties_even(), Tol::Exact);
+    )*};
+}
+macro_rules! for_mulhi {
+    ($S:ty; $($reg:ident: $e:ty, $w:ty),* $(,)?) => {$(
+        oracle_binary!(l!($S, $reg), <$S as Simd>::$reg, $e, mulhi,
+            |a, b| (((a as $w) * (b as $w)) >> (core::mem::size_of::<$e>() * 8)) as $e, Tol::Exact);
+    )*};
+}
+macro_rules! for_saturating {
+    ($S:ty; $($reg:ident: $e:ty),* $(,)?) => {$(
+        oracle_binary!(l!($S, $reg), <$S as Simd>::$reg, $e, saturating_add, |a, b| a.saturating_add(b), Tol::Exact);
+        oracle_binary!(l!($S, $reg), <$S as Simd>::$reg, $e, saturating_sub, |a, b| a.saturating_sub(b), Tol::Exact);
+    )*};
 }
 
 // ===========================================================================
@@ -223,893 +234,187 @@ const LIMITED_UNSIGNED: &[u64] = &[
 ///
 /// That last part is the point of this test existing. These four are generic
 /// over `R`, but the wasm backend is the only caller, so until now they were
-/// reachable exclusively from a suite that does not run by default. A wrong
-/// unbias therefore shipped: the signed `pd -> epi64` direction used `bitxor`
-/// to remove the bias instead of subtracting it.
-///
-/// The magic constant is `1.5 * 2^52`, whose own mantissa has bit 51 set, so xor
-/// and subtract agree only where no bit-51 interaction occurs. That is every
-/// negative input (`-2` comes back as `2^52 - 2`, which is what makes wasm `powf`
-/// read a bogus exponent and overflow) **and** the positive endpoint `+2^51`,
-/// which is in the documented domain. Everything strictly between `0` and `2^51`
-/// was correct, which is exactly why a corpus of small naturals never noticed.
-/// The x86 suite is the one that runs, on hardware that could not see any of it.
-///
-/// Instantiating the polyfills here on x86 registers puts them in the default
-/// suite regardless of which backend calls them. That is the general rule for
-/// anything under `backend/generic/polyfills/`: test it **generically**, on a
-/// backend the default suite runs, rather than relying on the backend that
-/// happens to use it.
-///
-/// Inputs are integer-valued on purpose. The trick rounds to nearest rather
-/// than truncating, which is a documented `fast_cast` relaxation. On integers
-/// round and truncate agree, so the oracle stays exact and the test is not
-/// asserting a rounding mode the function never promised.
-macro_rules! limited_casts_for {
-    ($($name:ident: $b:ty, $f:ident, $i:ident, $u:ident);* $(;)?) => {$(
-        #[test]
-        fn $name() {
-            use generic_array::typenum::Unsigned;
-            use thermite::backend::generic::polyfills::casts as gc;
-            use thermite::register::CoreRegister;
+/// never executed on x86 at all.
+macro_rules! limited_casts {
+    ($S:ty, $f:ident, $i:ident, $u:ident) => {{
+        use generic_array::typenum::Unsigned;
+        use thermite::backend::generic::polyfills::casts as gc;
+        use thermite::register::CoreRegister;
 
-            type F = <$b as Simd>::$f;
-            type I = <$b as Simd>::$i;
-            type U = <$b as Simd>::$u;
+        let lanes = <<<$S as Simd>::$f as CoreRegister>::Lanes as Unsigned>::USIZE;
+        let label = l!($S, $f);
 
-            let lanes = <<F as CoreRegister>::Lanes as Unsigned>::USIZE;
-            let label = concat!(stringify!($name), " ", stringify!($f));
+        for start in 0..LIMITED_SIGNED.len() {
+            let ints: Vec<i64> = (0..lanes)
+                .map(|k| LIMITED_SIGNED[(start + k) % LIMITED_SIGNED.len()])
+                .collect();
+            let floats: Vec<f64> = ints.iter().map(|&x| x as f64).collect();
 
-            // Slide the probe list across the lanes so adjacent lanes differ,
-            // which catches lane-routing mistakes a broadcast would miss.
-            for start in 0..LIMITED_SIGNED.len() {
-                let ints: Vec<i64> = (0..lanes)
-                    .map(|k| LIMITED_SIGNED[(start + k) % LIMITED_SIGNED.len()])
-                    .collect();
-                let floats: Vec<f64> = ints.iter().map(|&x| x as f64).collect();
+            let got = harness::read::<<$S as Simd>::$i>(&gc::convert_pd_epi64_limited::<<$S as Simd>::$f>(
+                harness::make_array::<<$S as Simd>::$f>(&floats),
+            ));
+            harness::assert_lanes_eq(
+                &format!("convert_pd_epi64_limited {label}"),
+                &[ints.as_slice()],
+                &got,
+                &ints,
+                Tol::Exact,
+            );
 
-                let got = harness::read::<I>(&gc::convert_pd_epi64_limited::<F>(
-                    harness::make_array::<F>(&floats),
-                ));
-                harness::assert_lanes_eq(
-                    concat!("convert_pd_epi64_limited ", stringify!($name)),
-                    &[ints.as_slice()], &got, &ints, Tol::Exact,
-                );
+            let got = harness::read::<<$S as Simd>::$f>(&gc::convert_epi64_pd_limited::<<$S as Simd>::$f>(
+                harness::make_array::<<$S as Simd>::$i>(&ints),
+            ));
+            harness::assert_lanes_eq(
+                &format!("convert_epi64_pd_limited {label}"),
+                &[floats.as_slice()],
+                &got,
+                &floats,
+                Tol::Exact,
+            );
 
-                let got = harness::read::<F>(&gc::convert_epi64_pd_limited::<F>(
-                    harness::make_array::<I>(&ints),
-                ));
-                harness::assert_lanes_eq(
-                    concat!("convert_epi64_pd_limited ", stringify!($name)),
-                    &[floats.as_slice()], &got, &floats, Tol::Exact,
-                );
-
-                // Round trip, which pins the two against each other even where
-                // they might share a sign-handling mistake with the oracle.
-                let rt = harness::read::<I>(&gc::convert_pd_epi64_limited::<F>(
-                    gc::convert_epi64_pd_limited::<F>(harness::make_array::<I>(&ints)),
-                ));
-                harness::assert_lanes_eq(
-                    concat!("limited i64 round trip ", stringify!($name)),
-                    &[ints.as_slice()], &rt, &ints, Tol::Exact,
-                );
-            }
-
-            for start in 0..LIMITED_UNSIGNED.len() {
-                let ints: Vec<u64> = (0..lanes)
-                    .map(|k| LIMITED_UNSIGNED[(start + k) % LIMITED_UNSIGNED.len()])
-                    .collect();
-                let floats: Vec<f64> = ints.iter().map(|&x| x as f64).collect();
-
-                let got = harness::read::<U>(&gc::convert_pd_epu64_limited::<F>(
-                    harness::make_array::<F>(&floats),
-                ));
-                harness::assert_lanes_eq(
-                    concat!("convert_pd_epu64_limited ", stringify!($name)),
-                    &[], &got, &ints, Tol::Exact,
-                );
-
-                let got = harness::read::<F>(&gc::convert_epu64_pd_limited::<F>(
-                    harness::make_array::<U>(&ints),
-                ));
-                harness::assert_lanes_eq(
-                    concat!("convert_epu64_pd_limited ", stringify!($name)),
-                    &[floats.as_slice()], &got, &floats, Tol::Exact,
-                );
-
-                let rt = harness::read::<U>(&gc::convert_pd_epu64_limited::<F>(
-                    gc::convert_epu64_pd_limited::<F>(harness::make_array::<U>(&ints)),
-                ));
-                harness::assert_lanes_eq(
-                    concat!("limited u64 round trip ", stringify!($name)),
-                    &[ints.as_slice()], &rt, &ints, Tol::Exact,
-                );
-            }
-
-            let _ = label;
+            let rt = harness::read::<<$S as Simd>::$i>(&gc::convert_pd_epi64_limited::<<$S as Simd>::$f>(
+                gc::convert_epi64_pd_limited::<<$S as Simd>::$f>(harness::make_array::<<$S as Simd>::$i>(&ints)),
+            ));
+            harness::assert_lanes_eq(
+                &format!("limited i64 round trip {label}"),
+                &[ints.as_slice()],
+                &rt,
+                &ints,
+                Tol::Exact,
+            );
         }
-    )*};
+
+        for start in 0..LIMITED_UNSIGNED.len() {
+            let ints: Vec<u64> = (0..lanes)
+                .map(|k| LIMITED_UNSIGNED[(start + k) % LIMITED_UNSIGNED.len()])
+                .collect();
+            let floats: Vec<f64> = ints.iter().map(|&x| x as f64).collect();
+
+            let got = harness::read::<<$S as Simd>::$u>(&gc::convert_pd_epu64_limited::<<$S as Simd>::$f>(
+                harness::make_array::<<$S as Simd>::$f>(&floats),
+            ));
+            harness::assert_lanes_eq(
+                &format!("convert_pd_epu64_limited {label}"),
+                &[],
+                &got,
+                &ints,
+                Tol::Exact,
+            );
+
+            let got = harness::read::<<$S as Simd>::$f>(&gc::convert_epu64_pd_limited::<<$S as Simd>::$f>(
+                harness::make_array::<<$S as Simd>::$u>(&ints),
+            ));
+            harness::assert_lanes_eq(
+                &format!("convert_epu64_pd_limited {label}"),
+                &[floats.as_slice()],
+                &got,
+                &floats,
+                Tol::Exact,
+            );
+
+            let rt = harness::read::<<$S as Simd>::$u>(&gc::convert_pd_epu64_limited::<<$S as Simd>::$f>(
+                gc::convert_epu64_pd_limited::<<$S as Simd>::$f>(harness::make_array::<<$S as Simd>::$u>(&ints)),
+            ));
+            harness::assert_lanes_eq(
+                &format!("limited u64 round trip {label}"),
+                &[ints.as_slice()],
+                &rt,
+                &ints,
+                Tol::Exact,
+            );
+        }
+    }};
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod limited_casts_x86 {
-    use super::*;
-    use thermite::backend::x86_v1::X86V1;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
-
-    limited_casts_for! {
-        v1_x2: X86V1, f64x2, i64x2, u64x2;
-        v1_x4: X86V1, f64x4, i64x4, u64x4;
-        v2_x2: X86V2, f64x2, i64x2, u64x2;
-        v2_x4: X86V2, f64x4, i64x4, u64x4;
-        v3_x2: X86V3, f64x2, i64x2, u64x2;
-        v3_x4: X86V3, f64x4, i64x4, u64x4;
+for_each_backend! {
+    fn mullo<S: Simd>() {
+        mullo_for!(S; i32x4: i32, i32x8: i32, i32x16: i32, u32x4: u32, u32x8: u32, u32x16: u32,
+            i64x2: i64, i64x4: i64, i64x8: i64, u64x2: u64, u64x4: u64, u64x8: u64);
     }
-}
-
-#[cfg(target_arch = "wasm32")]
-mod limited_casts_wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-
-    limited_casts_for! {
-        wasm_x2: Wasm, f64x2, i64x2, u64x2;
-        wasm_x4: Wasm, f64x4, i64x4, u64x4;
+    fn popcount<S: Simd>() {
+        popcount_for!(S; i32x4: i32, i32x8: i32, i32x16: i32, u32x4: u32, u32x8: u32, u32x16: u32,
+            i64x2: i64, i64x4: i64, i64x8: i64, u64x2: u64, u64x4: u64, u64x8: u64);
     }
-}
-
-#[cfg(target_arch = "aarch64")]
-mod limited_casts_neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-
-    limited_casts_for! {
-        neon_x2: Neon, f64x2, i64x2, u64x2;
-        neon_x4: Neon, f64x4, i64x4, u64x4;
+    fn bitperm<S: Simd>() {
+        bitperm_for!(S; i32x4: i32, i32x8: i32, i32x16: i32, u32x4: u32, u32x8: u32, u32x16: u32,
+            i64x2: i64, i64x4: i64, i64x8: i64, u64x2: u64, u64x4: u64, u64x8: u64);
     }
-}
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86 {
-    use super::*;
-    use thermite::backend::x86_v1::X86V1;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
-
-    mod correct {
-        use super::*;
-
-        mullo_for! {
-            i32x4: X86V3, i32, "v3 i32x4"; i32x8: X86V3, i32, "v3 i32x8";
-            i64x2: X86V3, i64, "v3 i64x2"; i64x4: X86V3, i64, "v3 i64x4";
-            u32x4: X86V3, u32, "v3 u32x4"; u32x8: X86V3, u32, "v3 u32x8";
-            u64x2: X86V3, u64, "v3 u64x2"; u64x4: X86V3, u64, "v3 u64x4";
-            i32x4: X86V2, i32, "v2 i32x4"; i64x2: X86V2, i64, "v2 i64x2";
-            u32x4: X86V2, u32, "v2 u32x4"; u64x2: X86V2, u64, "v2 u64x2";
-        }
-        popcount_for! {
-            i32x4: X86V3, i32, "v3 i32x4"; u32x4: X86V3, u32, "v3 u32x4";
-            i64x2: X86V3, i64, "v3 i64x2"; u64x2: X86V3, u64, "v3 u64x2";
-            i32x8: X86V3, i32, "v3 i32x8"; u32x8: X86V3, u32, "v3 u32x8";
-            i64x4: X86V3, i64, "v3 i64x4"; u64x4: X86V3, u64, "v3 u64x4";
-            i32x4: X86V2, i32, "v2 i32x4"; u64x2: X86V2, u64, "v2 u64x2";
-        }
-        bitperm_for! {
-            i32x4: X86V3, i32, "v3 i32x4"; u32x4: X86V3, u32, "v3 u32x4";
-            i64x2: X86V3, i64, "v3 i64x2"; u64x2: X86V3, u64, "v3 u64x2";
-            i32x8: X86V3, i32, "v3 i32x8"; u32x8: X86V3, u32, "v3 u32x8";
-            i64x4: X86V3, i64, "v3 i64x4"; u64x4: X86V3, u64, "v3 u64x4";
-            i32x4: X86V2, i32, "v2 i32x4"; i64x2: X86V2, i64, "v2 i64x2";
-        }
-
-        // `mulhi` is correct for 64-bit lanes (wrong for 32-bit, see bugs::mulhi32).
-        #[test]
-        fn mulhi_64() {
-            oracle_binary!(
-                "v3 i64x2",
-                <X86V3 as Simd>::i64x2,
-                i64,
-                mulhi,
-                |a, b| (((a as i128) * (b as i128)) >> 64) as i64,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u64x2",
-                <X86V3 as Simd>::u64x2,
-                u64,
-                mulhi,
-                |a, b| (((a as u128) * (b as u128)) >> 64) as u64,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 i64x4",
-                <X86V3 as Simd>::i64x4,
-                i64,
-                mulhi,
-                |a, b| (((a as i128) * (b as i128)) >> 64) as i64,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u64x4",
-                <X86V3 as Simd>::u64x4,
-                u64,
-                mulhi,
-                |a, b| (((a as u128) * (b as u128)) >> 64) as u64,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v2 i64x2",
-                <X86V2 as Simd>::i64x2,
-                i64,
-                mulhi,
-                |a, b| (((a as i128) * (b as i128)) >> 64) as i64,
-                Tol::Exact
-            );
-        }
-
-        // saturating arithmetic is correct for the unsigned widths.
-        #[test]
-        fn saturating_unsigned() {
-            oracle_binary!(
-                "v3 u32x4",
-                <X86V3 as Simd>::u32x4,
-                u32,
-                saturating_add,
-                |a, b| a.saturating_add(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u32x4",
-                <X86V3 as Simd>::u32x4,
-                u32,
-                saturating_sub,
-                |a, b| a.saturating_sub(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u64x2",
-                <X86V3 as Simd>::u64x2,
-                u64,
-                saturating_add,
-                |a, b| a.saturating_add(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u64x2",
-                <X86V3 as Simd>::u64x2,
-                u64,
-                saturating_sub,
-                |a, b| a.saturating_sub(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u32x8",
-                <X86V3 as Simd>::u32x8,
-                u32,
-                saturating_add,
-                |a, b| a.saturating_add(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u32x8",
-                <X86V3 as Simd>::u32x8,
-                u32,
-                saturating_sub,
-                |a, b| a.saturating_sub(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u64x4",
-                <X86V3 as Simd>::u64x4,
-                u64,
-                saturating_add,
-                |a, b| a.saturating_add(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u64x4",
-                <X86V3 as Simd>::u64x4,
-                u64,
-                saturating_sub,
-                |a, b| a.saturating_sub(b),
-                Tol::Exact
-            );
-        }
-
-        // leading/trailing zeros are correct for everything except u64.
-        #[test]
-        fn bitscan_ok() {
-            for_lztz!("v3 i32x4", <X86V3 as Simd>::i32x4, i32);
-            for_lztz!("v3 u32x4", <X86V3 as Simd>::u32x4, u32);
-            for_lztz!("v3 i64x2", <X86V3 as Simd>::i64x2, i64);
-            for_lztz!("v3 i32x8", <X86V3 as Simd>::i32x8, i32);
-            for_lztz!("v3 u32x8", <X86V3 as Simd>::u32x8, u32);
-            for_lztz!("v3 i64x4", <X86V3 as Simd>::i64x4, i64);
-            for_lztz!("v2 i64x2", <X86V2 as Simd>::i64x2, i64);
-        }
-
-        // Signed-only: arithmetic shift right + floor/ceil averages.
-        #[test]
-        fn signed_extras() {
-            for_signed!("v3 i32x4", <X86V3 as Simd>::i32x4, i32, i64);
-            for_signed!("v3 i64x2", <X86V3 as Simd>::i64x2, i64, i128);
-            for_signed!("v3 i32x8", <X86V3 as Simd>::i32x8, i32, i64);
-            for_signed!("v3 i64x4", <X86V3 as Simd>::i64x4, i64, i128);
-            for_signed!("v2 i32x4", <X86V2 as Simd>::i32x4, i32, i64);
-            for_signed!("v2 i64x2", <X86V2 as Simd>::i64x2, i64, i128);
-        }
-
-        // Unsigned PAVG ceiling average.
-        #[test]
-        fn unsigned_avg() {
-            oracle_binary!(
-                "v3 u32x4",
-                <X86V3 as Simd>::u32x4,
-                u32,
-                avg,
-                |a, b| (((a as u64) + (b as u64) + 1) >> 1) as u32,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u64x2",
-                <X86V3 as Simd>::u64x2,
-                u64,
-                avg,
-                |a, b| (((a as u128) + (b as u128) + 1) >> 1) as u64,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u32x8",
-                <X86V3 as Simd>::u32x8,
-                u32,
-                avg,
-                |a, b| (((a as u64) + (b as u64) + 1) >> 1) as u32,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u64x4",
-                <X86V3 as Simd>::u64x4,
-                u64,
-                avg,
-                |a, b| (((a as u128) + (b as u128) + 1) >> 1) as u64,
-                Tol::Exact
-            );
-        }
-
-        // Float polyfills with bit-exact Rust oracles.
-        #[test]
-        fn float_ops() {
-            for_float!("v3 f32x8", <X86V3 as Simd>::f32x8, f32);
-            for_float!("v3 f64x4", <X86V3 as Simd>::f64x4, f64);
-            for_float!("v2 f32x4", <X86V2 as Simd>::f32x4, f32);
-            for_float!("v2 f64x2", <X86V2 as Simd>::f64x2, f64);
-        }
+    fn rotate_wraparound_and_const<S: Simd>() {
+        rotate_wrap_for!(S; i32x4: i32, i32x8: i32, u32x4: u32, u32x8: u32,
+            i64x2: i64, i64x4: i64, u64x2: u64, u64x4: u64);
     }
-
-    // ===========================================================================
-    // X86V1 (SSE2): these polyfills are *distinct implementations* from the
-    // v2/v3 ones (no SSE4.1 blendv, no pshufb, SWAR popcount, magic-number
-    // rounding), so they get their own full pass against the same Rust oracles.
-    // ===========================================================================
-    mod v1 {
-        use super::*;
-
-        mullo_for! {
-            i32x4: X86V1, i32, "v1 i32x4"; i64x2: X86V1, i64, "v1 i64x2";
-            u32x4: X86V1, u32, "v1 u32x4"; u64x2: X86V1, u64, "v1 u64x2";
+    /// 32-bit `mulhi` (P1) and the 64-bit limb decompositions.
+    fn mulhi<S: Simd>() {
+        for_mulhi!(S; i32x4: i32, i64, u32x4: u32, u64, i32x8: i32, i64, u32x8: u32, u64,
+            i32x16: i32, i64, u32x16: u32, u64,
+            i64x2: i64, i128, u64x2: u64, u128, i64x4: i64, i128, u64x4: u64, u128,
+            i64x8: i64, i128, u64x8: u64, u128);
+    }
+    /// Signed (P2) and unsigned saturating add/sub.
+    fn saturating<S: Simd>() {
+        for_saturating!(S; i32x4: i32, i32x8: i32, i32x16: i32, u32x4: u32, u32x8: u32, u32x16: u32,
+            i64x2: i64, i64x4: i64, i64x8: i64, u64x2: u64, u64x4: u64, u64x8: u64);
+    }
+    /// leading/trailing zeros, incl. the u64 forms (P3).
+    fn bitscan<S: Simd>() {
+        for_lztz!(S; i32x4: i32, i32x8: i32, i32x16: i32, u32x4: u32, u32x8: u32, u32x16: u32,
+            i64x2: i64, i64x4: i64, i64x8: i64, u64x2: u64, u64x4: u64, u64x8: u64);
+    }
+    fn signed_extras<S: Simd>() {
+        for_signed!(S; i32x4: i32, i64, i32x8: i32, i64, i32x16: i32, i64,
+            i64x2: i64, i128, i64x4: i64, i128, i64x8: i64, i128);
+    }
+    fn unsigned_avg<S: Simd>() {
+        for_unsigned_avg!(S; u32x4: u32, u64, u32x8: u32, u64, u32x16: u32, u64,
+            u64x2: u64, u128, u64x4: u64, u128, u64x8: u64, u128);
+    }
+    fn float_ops<S: Simd>() {
+        for_float!(S; f32x4: f32, f32x8: f32, f32x16: f32, f64x2: f64, f64x4: f64, f64x8: f64);
+    }
+    /// floor/ceil/trunc/round vs Rust (round = ties-to-even, deliberately
+    /// unlike std's `round`, and the SSE2 forms are polyfilled).
+    fn rounding<S: Simd>() {
+        for_rounding!(S; f32x4: f32, f32x8: f32, f64x2: f64, f64x4: f64);
+    }
+    /// P5: integer `copysign`.
+    fn fixed_copysign_int<S: Simd>() {
+        fn cs32(a: i32, b: i32) -> i32 {
+            if (a < 0) != (b < 0) { a.wrapping_neg() } else { a }
         }
-        popcount_for! {
-            i32x4: X86V1, i32, "v1 i32x4"; u32x4: X86V1, u32, "v1 u32x4";
-            i64x2: X86V1, i64, "v1 i64x2"; u64x2: X86V1, u64, "v1 u64x2";
+        fn cs64(a: i64, b: i64) -> i64 {
+            if (a < 0) != (b < 0) { a.wrapping_neg() } else { a }
         }
-        bitperm_for! {
-            i32x4: X86V1, i32, "v1 i32x4"; u32x4: X86V1, u32, "v1 u32x4";
-            i64x2: X86V1, i64, "v1 i64x2"; u64x2: X86V1, u64, "v1 u64x2";
-        }
+        oracle_binary!(l!(S, i32x4), <S as Simd>::i32x4, i32, copysign, cs32, Tol::Exact);
+        oracle_binary!(l!(S, i32x8), <S as Simd>::i32x8, i32, copysign, cs32, Tol::Exact);
+        oracle_binary!(l!(S, i64x2), <S as Simd>::i64x2, i64, copysign, cs64, Tol::Exact);
+        oracle_binary!(l!(S, i64x4), <S as Simd>::i64x4, i64, copysign, cs64, Tol::Exact);
+    }
+    /// P6: the reduced `u32x2 -> u64x2` widen.
+    fn fixed_cast_u32x2_to_u64x2<S: Simd>() {
+        use thermite::register::CastRegister;
 
-        #[test]
-        fn mulhi() {
-            oracle_binary!(
-                "v1 i32x4",
-                <X86V1 as Simd>::i32x4,
-                i32,
-                mulhi,
-                |a, b| (((a as i64) * (b as i64)) >> 32) as i32,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v1 u32x4",
-                <X86V1 as Simd>::u32x4,
-                u32,
-                mulhi,
-                |a, b| (((a as u64) * (b as u64)) >> 32) as u32,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v1 i64x2",
-                <X86V1 as Simd>::i64x2,
-                i64,
-                mulhi,
-                |a, b| (((a as i128) * (b as i128)) >> 64) as i64,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v1 u64x2",
-                <X86V1 as Simd>::u64x2,
-                u64,
-                mulhi,
-                |a, b| (((a as u128) * (b as u128)) >> 64) as u64,
-                Tol::Exact
-            );
-        }
+        let label = l!(S, u32x2);
+        let mut rng = harness::rng();
+        for input in harness::corpus::<u32>(2, &mut rng) {
+            let half = harness::make_array::<<S as Simd>::u32x2>(&input);
+            let full = <<S as Simd>::u64x2 as CastRegister<<S as Simd>::u32x2>>::cast_from(half);
 
-        // Exercises the fixed bitwise-blendv saturating add/sub (sign-broadcast masks).
-        #[test]
-        fn saturating() {
-            oracle_binary!(
-                "v1 i32x4",
-                <X86V1 as Simd>::i32x4,
-                i32,
-                saturating_add,
-                |a, b| a.saturating_add(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v1 i32x4",
-                <X86V1 as Simd>::i32x4,
-                i32,
-                saturating_sub,
-                |a, b| a.saturating_sub(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v1 i64x2",
-                <X86V1 as Simd>::i64x2,
-                i64,
-                saturating_add,
-                |a, b| a.saturating_add(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v1 i64x2",
-                <X86V1 as Simd>::i64x2,
-                i64,
-                saturating_sub,
-                |a, b| a.saturating_sub(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v1 u32x4",
-                <X86V1 as Simd>::u32x4,
-                u32,
-                saturating_add,
-                |a, b| a.saturating_add(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v1 u32x4",
-                <X86V1 as Simd>::u32x4,
-                u32,
-                saturating_sub,
-                |a, b| a.saturating_sub(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v1 u64x2",
-                <X86V1 as Simd>::u64x2,
-                u64,
-                saturating_add,
-                |a, b| a.saturating_add(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v1 u64x2",
-                <X86V1 as Simd>::u64x2,
-                u64,
-                saturating_sub,
-                |a, b| a.saturating_sub(b),
-                Tol::Exact
-            );
-        }
+            let got = harness::read::<<S as Simd>::u64x2>(&full);
+            let want: Vec<u64> = input.iter().map(|&x| x as u64).collect();
 
-        #[test]
-        fn bitscan() {
-            for_lztz!("v1 i32x4", <X86V1 as Simd>::i32x4, i32);
-            for_lztz!("v1 u32x4", <X86V1 as Simd>::u32x4, u32);
-            for_lztz!("v1 i64x2", <X86V1 as Simd>::i64x2, i64);
-            for_lztz!("v1 u64x2", <X86V1 as Simd>::u64x2, u64);
-        }
-
-        #[test]
-        fn signed_extras() {
-            for_signed!("v1 i32x4", <X86V1 as Simd>::i32x4, i32, i64);
-            for_signed!("v1 i64x2", <X86V1 as Simd>::i64x2, i64, i128);
-        }
-
-        // Float polyfills with bit-exact Rust oracles. `fract` routes through the
-        // magic-number `trunc` polyfill, so this covers the SSE2 rounding family.
-        #[test]
-        fn float_ops() {
-            for_float!("v1 f32x4", <X86V1 as Simd>::f32x4, f32);
-            for_float!("v1 f64x2", <X86V1 as Simd>::f64x2, f64);
-        }
-
-        // The SSE2 rounding polyfills, directly, against the Rust scalar ops.
-        #[test]
-        fn rounding() {
-            oracle_unary!(
-                "v1 f32x4",
-                <X86V1 as Simd>::f32x4,
-                f32,
-                floor,
-                |x: f32| x.floor(),
-                Tol::Exact
-            );
-            oracle_unary!(
-                "v1 f32x4",
-                <X86V1 as Simd>::f32x4,
-                f32,
-                ceil,
-                |x: f32| x.ceil(),
-                Tol::Exact
-            );
-            oracle_unary!(
-                "v1 f32x4",
-                <X86V1 as Simd>::f32x4,
-                f32,
-                trunc,
-                |x: f32| x.trunc(),
-                Tol::Exact
-            );
-            oracle_unary!(
-                "v1 f32x4",
-                <X86V1 as Simd>::f32x4,
-                f32,
-                round,
-                |x: f32| x.round_ties_even(),
-                Tol::Exact
-            );
-            oracle_unary!(
-                "v1 f64x2",
-                <X86V1 as Simd>::f64x2,
-                f64,
-                floor,
-                |x: f64| x.floor(),
-                Tol::Exact
-            );
-            oracle_unary!(
-                "v1 f64x2",
-                <X86V1 as Simd>::f64x2,
-                f64,
-                ceil,
-                |x: f64| x.ceil(),
-                Tol::Exact
-            );
-            oracle_unary!(
-                "v1 f64x2",
-                <X86V1 as Simd>::f64x2,
-                f64,
-                trunc,
-                |x: f64| x.trunc(),
-                Tol::Exact
-            );
-            oracle_unary!(
-                "v1 f64x2",
-                <X86V1 as Simd>::f64x2,
-                f64,
-                round,
-                |x: f64| x.round_ties_even(),
-                Tol::Exact
+            harness::assert_lanes_eq(
+                &format!("{label} [u32x2 -> u64x2 cast]"),
+                &[want.as_slice()],
+                &got,
+                &want,
+                Tol::Exact,
             );
         }
     }
-
-    // ===========================================================================
-    // Regression tests for the four polyfill defects the harness found.
-    //   P1 32-bit mulhi: `b` not shifted in _mm{,256}_mullhi_ep[iu]32x
-    //   P2 signed saturating add/sub: byte-granularity blendv mask in _mm_adds*_v2
-    //   P3 u64 lz/tz: 32-bit constant + count_ones copy-paste in U64x2 lz/tz
-    //   P4 u64 mullo: reuses the sign-agnostic mul emulation
-    // ===========================================================================
-    mod fixed {
-        use super::*;
-
-        #[test]
-        fn p1_mulhi32() {
-            oracle_binary!(
-                "v3 i32x4",
-                <X86V3 as Simd>::i32x4,
-                i32,
-                mulhi,
-                |a, b| (((a as i64) * (b as i64)) >> 32) as i32,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u32x4",
-                <X86V3 as Simd>::u32x4,
-                u32,
-                mulhi,
-                |a, b| (((a as u64) * (b as u64)) >> 32) as u32,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 i32x8",
-                <X86V3 as Simd>::i32x8,
-                i32,
-                mulhi,
-                |a, b| (((a as i64) * (b as i64)) >> 32) as i32,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u32x8",
-                <X86V3 as Simd>::u32x8,
-                u32,
-                mulhi,
-                |a, b| (((a as u64) * (b as u64)) >> 32) as u32,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v2 i32x4",
-                <X86V2 as Simd>::i32x4,
-                i32,
-                mulhi,
-                |a, b| (((a as i64) * (b as i64)) >> 32) as i32,
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v2 u32x4",
-                <X86V2 as Simd>::u32x4,
-                u32,
-                mulhi,
-                |a, b| (((a as u64) * (b as u64)) >> 32) as u32,
-                Tol::Exact
-            );
-        }
-
-        #[test]
-        fn p2_saturating_signed() {
-            oracle_binary!(
-                "v3 i32x4",
-                <X86V3 as Simd>::i32x4,
-                i32,
-                saturating_add,
-                |a, b| a.saturating_add(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 i32x4",
-                <X86V3 as Simd>::i32x4,
-                i32,
-                saturating_sub,
-                |a, b| a.saturating_sub(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 i64x2",
-                <X86V3 as Simd>::i64x2,
-                i64,
-                saturating_add,
-                |a, b| a.saturating_add(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 i64x2",
-                <X86V3 as Simd>::i64x2,
-                i64,
-                saturating_sub,
-                |a, b| a.saturating_sub(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v2 i32x4",
-                <X86V2 as Simd>::i32x4,
-                i32,
-                saturating_add,
-                |a, b| a.saturating_add(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v2 i64x2",
-                <X86V2 as Simd>::i64x2,
-                i64,
-                saturating_sub,
-                |a, b| a.saturating_sub(b),
-                Tol::Exact
-            );
-        }
-
-        #[test]
-        fn p3_bitscan_u64() {
-            oracle_unary!(
-                "v3 u64x2",
-                <X86V3 as Simd>::u64x2,
-                u64,
-                leading_zeros,
-                |x| x.leading_zeros() as u64,
-                Tol::Exact
-            );
-            oracle_unary!(
-                "v3 u64x2",
-                <X86V3 as Simd>::u64x2,
-                u64,
-                trailing_zeros,
-                |x| x.trailing_zeros() as u64,
-                Tol::Exact
-            );
-            oracle_unary!(
-                "v2 u64x2",
-                <X86V2 as Simd>::u64x2,
-                u64,
-                leading_zeros,
-                |x| x.leading_zeros() as u64,
-                Tol::Exact
-            );
-            oracle_unary!(
-                "v2 u64x2",
-                <X86V2 as Simd>::u64x2,
-                u64,
-                trailing_zeros,
-                |x| x.trailing_zeros() as u64,
-                Tol::Exact
-            );
-        }
-
-        #[test]
-        fn p4_mullo_u64() {
-            oracle_binary!(
-                "v3 u64x2",
-                <X86V3 as Simd>::u64x2,
-                u64,
-                mullo,
-                |a, b| a.wrapping_mul(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v3 u64x4",
-                <X86V3 as Simd>::u64x4,
-                u64,
-                mullo,
-                |a, b| a.wrapping_mul(b),
-                Tol::Exact
-            );
-            oracle_binary!(
-                "v2 u64x2",
-                <X86V2 as Simd>::u64x2,
-                u64,
-                mullo,
-                |a, b| a.wrapping_mul(b),
-                Tol::Exact
-            );
-        }
-
-        // P5: i32 `copysign` was implemented with `psignd`, which negates `lhs`
-        // whenever `rhs` is negative *regardless of `lhs`'s own sign* - wrong for
-        // every negative `lhs` (e.g. copysign(-3, -1) returned +3). True copysign
-        // negates exactly where the signs differ. (i64 always used the xor-of-signs
-        // form and is correct, pinned here too.)
-        #[test]
-        fn p5_copysign_int() {
-            fn cs32(a: i32, b: i32) -> i32 {
-                if (a < 0) != (b < 0) { a.wrapping_neg() } else { a }
-            }
-            fn cs64(a: i64, b: i64) -> i64 {
-                if (a < 0) != (b < 0) { a.wrapping_neg() } else { a }
-            }
-
-            oracle_binary!("v1 i32x4", <X86V1 as Simd>::i32x4, i32, copysign, cs32, Tol::Exact);
-            oracle_binary!("v2 i32x4", <X86V2 as Simd>::i32x4, i32, copysign, cs32, Tol::Exact);
-            oracle_binary!("v3 i32x4", <X86V3 as Simd>::i32x4, i32, copysign, cs32, Tol::Exact);
-            oracle_binary!("v3 i32x8", <X86V3 as Simd>::i32x8, i32, copysign, cs32, Tol::Exact);
-
-            oracle_binary!("v1 i64x2", <X86V1 as Simd>::i64x2, i64, copysign, cs64, Tol::Exact);
-            oracle_binary!("v2 i64x2", <X86V2 as Simd>::i64x2, i64, copysign, cs64, Tol::Exact);
-            oracle_binary!("v3 i64x2", <X86V3 as Simd>::i64x2, i64, copysign, cs64, Tol::Exact);
-            oracle_binary!("v3 i64x4", <X86V3 as Simd>::i64x4, i64, copysign, cs64, Tol::Exact);
-        }
-
-        // P6: the `u32x2 -> u64x2` zero-extending cast placed the u32 value in the
-        // *high* dword of each u64 lane (`setr_epi32(0, v, ...)`), effectively
-        // multiplying by 2^32. The value belongs in the low dword.
-        #[test]
-        fn p6_cast_u32x2_to_u64x2() {
-            macro_rules! check {
-                ($label:expr, $backend:ty) => {{
-                    use thermite::register::CastRegister;
-
-                    type Half = <$backend as Simd>::u32x2;
-                    type Full = <$backend as Simd>::u64x2;
-
-                    let mut rng = harness::rng();
-                    for input in harness::corpus::<u32>(2, &mut rng) {
-                        let half = harness::make_array::<Half>(&input);
-                        let full = <Full as CastRegister<Half>>::cast_from(half);
-
-                        let got = harness::read::<Full>(&full);
-                        let want: Vec<u64> = input.iter().map(|&x| x as u64).collect();
-
-                        harness::assert_lanes_eq(
-                            concat!($label, " [u32x2 -> u64x2 cast]"),
-                            &[want.as_slice()],
-                            &got,
-                            &want,
-                            Tol::Exact,
-                        );
-                    }
-                }};
-            }
-
-            check!("v1", X86V1);
-            check!("v2", X86V2);
-            check!("v3", X86V3);
-        }
+    fn limited_casts_x2<S: Simd>() {
+        limited_casts!(S, f64x2, i64x2, u64x2);
     }
-}
-
-// wasm: exercise the same backend-generic polyfill macros on Wasm's native types
-// (i32x4/u32x4/i64x2/u64x2 + f32x4/f64x2), validating wasm's count_ones/leading_zeros/
-// swap_bytes/reverse_bits/rotates/sra/avg/copysign/fract against scalar oracles.
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-
-    mullo_for! {
-        i32x4: Wasm, i32, "wasm i32x4"; i64x2: Wasm, i64, "wasm i64x2";
-        u32x4: Wasm, u32, "wasm u32x4"; u64x2: Wasm, u64, "wasm u64x2";
-    }
-    popcount_for! {
-        i32x4: Wasm, i32, "wasm i32x4"; u32x4: Wasm, u32, "wasm u32x4";
-        i64x2: Wasm, i64, "wasm i64x2"; u64x2: Wasm, u64, "wasm u64x2";
-    }
-    bitperm_for! {
-        i32x4: Wasm, i32, "wasm i32x4"; u32x4: Wasm, u32, "wasm u32x4";
-        i64x2: Wasm, i64, "wasm i64x2"; u64x2: Wasm, u64, "wasm u64x2";
-    }
-
-    #[test]
-    fn lztz_signed_float() {
-        for_lztz!("wasm i32x4", <Wasm as Simd>::i32x4, i32);
-        for_lztz!("wasm u32x4", <Wasm as Simd>::u32x4, u32);
-        for_lztz!("wasm i64x2", <Wasm as Simd>::i64x2, i64);
-        for_lztz!("wasm u64x2", <Wasm as Simd>::u64x2, u64);
-        for_signed!("wasm i32x4", <Wasm as Simd>::i32x4, i32, i64);
-        for_signed!("wasm i64x2", <Wasm as Simd>::i64x2, i64, i128);
-        for_float!("wasm f32x4", <Wasm as Simd>::f32x4, f32);
-        for_float!("wasm f64x2", <Wasm as Simd>::f64x2, f64);
-    }
-}
-
-// neon: exercise the same backend-generic polyfill macros on Neon's native types
-// (i32x4/u32x4/i64x2/u64x2 + f32x4/f64x2), validating neon's count_ones/leading_zeros/
-// swap_bytes/reverse_bits/rotates/sra/avg/copysign/fract against scalar oracles.
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-
-    mullo_for! {
-        i32x4: Neon, i32, "neon i32x4"; i64x2: Neon, i64, "neon i64x2";
-        u32x4: Neon, u32, "neon u32x4"; u64x2: Neon, u64, "neon u64x2";
-    }
-    popcount_for! {
-        i32x4: Neon, i32, "neon i32x4"; u32x4: Neon, u32, "neon u32x4";
-        i64x2: Neon, i64, "neon i64x2"; u64x2: Neon, u64, "neon u64x2";
-    }
-    bitperm_for! {
-        i32x4: Neon, i32, "neon i32x4"; u32x4: Neon, u32, "neon u32x4";
-        i64x2: Neon, i64, "neon i64x2"; u64x2: Neon, u64, "neon u64x2";
-    }
-
-    #[test]
-    fn lztz_signed_float() {
-        for_lztz!("neon i32x4", <Neon as Simd>::i32x4, i32);
-        for_lztz!("neon u32x4", <Neon as Simd>::u32x4, u32);
-        for_lztz!("neon i64x2", <Neon as Simd>::i64x2, i64);
-        for_lztz!("neon u64x2", <Neon as Simd>::u64x2, u64);
-        for_signed!("neon i32x4", <Neon as Simd>::i32x4, i32, i64);
-        for_signed!("neon i64x2", <Neon as Simd>::i64x2, i64, i128);
-        for_float!("neon f32x4", <Neon as Simd>::f32x4, f32);
-        for_float!("neon f64x2", <Neon as Simd>::f64x2, f64);
+    fn limited_casts_x4<S: Simd>() {
+        limited_casts!(S, f64x4, i64x4, u64x4);
     }
 }

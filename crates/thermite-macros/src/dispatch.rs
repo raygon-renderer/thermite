@@ -48,6 +48,18 @@ const X86V3_TARGET_FEATURE: &str = cfg_select! {
     _ => "avx2,fma,popcnt",
 };
 
+/// Target features for the x86-v4 (AVX-512) backend, per compiled tier. Kept in
+/// lockstep BY HAND with the `Avx512Features` consts in `backend::x86_v4`: a
+/// const being `true` there does not make an intrinsic callable here. Every tier
+/// includes the full v3 set plus `pclmulqdq` (the u64x2 Morton path uses the
+/// legacy `_mm_clmulepi64_si128`) and `bmi2` (the opmask interleave uses `pdep`).
+#[cfg(all(feature = "x86", feature = "avx512-tier1"))]
+const X86V4_TARGET_FEATURE: &str = cfg_select! {
+    feature = "avx512-tier3" => "avx2,fma,popcnt,f16c,pclmulqdq,bmi2,avx512f,avx512cd,avx512vl,avx512bw,avx512dq,avx512vbmi,avx512vbmi2,avx512vnni,avx512bitalg,avx512vpopcntdq,avx512ifma,gfni,vaes,vpclmulqdq,avx512bf16",
+    feature = "avx512-tier2" => "avx2,fma,popcnt,f16c,pclmulqdq,bmi2,avx512f,avx512cd,avx512vl,avx512bw,avx512dq,avx512vbmi,avx512vbmi2,avx512vnni,avx512bitalg,avx512vpopcntdq,avx512ifma,gfni,vaes,vpclmulqdq",
+    _ => "avx2,fma,popcnt,f16c,pclmulqdq,bmi2,avx512f,avx512cd,avx512vl,avx512bw,avx512dq",
+};
+
 static BACKENDS: &[Backend] = cfg_select! {
     feature = "x86" => &[
         Backend { isa: "Scalar", target_feature: "", simd_type: Some("backend::scalar::Scalar") },
@@ -59,20 +71,22 @@ static BACKENDS: &[Backend] = cfg_select! {
             isa: "X86V3", target_feature: X86V3_TARGET_FEATURE, simd_type: Some("backend::x86_v3::X86V3")
         },
 
-        // x86-v4 (AVX-512) deliberately maps to the *x86-v3* backend for now.
-        //
-        // The detector reports `X86V4` for any CPU with AVX-512F, but the x86-v4
-        // backend is still register stubs (`backend::x86_v4` has the `Avx512Features`
-        // tier ladder and nothing else). Without an arm here, V4 hardware falls into
-        // the `_ =>` scalar fallback and the entire library runs one lane wide -
-        // correct, and roughly an order of magnitude slower. Verified under Intel SDE
-        // on skx/icx/spr/gnr/dmr: `f32xN::LANES` came back 1.
-        //
-        // Every AVX-512F part is strictly newer than Haswell, so it has AVX2, FMA,
-        // POPCNT, F16C and PCLMULQDQ - the v3 trampoline's feature set is always
-        // satisfiable here, and this is the widest working backend until v4 lands.
-        // When the x86-v4 registers exist, point `simd_type` at them and give this
-        // entry its own `target_feature` string.
+        // x86-v4 (AVX-512): the real backend when a tier feature is on. The
+        // detector only reports `X86V4` when the CPU satisfies the COMPILED tier,
+        // so the trampoline's feature set is always satisfiable there.
+        #[cfg(feature = "avx512-tier1")]
+        Backend {
+            isa: "X86V4", target_feature: X86V4_TARGET_FEATURE, simd_type: Some("backend::x86_v4::X86V4Default")
+        },
+
+        // Without a tier feature the x86-v4 registers are not compiled, so V4
+        // hardware deliberately maps to the _x86-v3_ backend. Without an arm here
+        // it would fall into the `_ =>` scalar fallback and the entire library
+        // would run one lane wide: correct, and roughly an order of magnitude
+        // slower (verified under Intel SDE on skx/icx/spr/gnr/dmr: `f32xN::LANES`
+        // came back 1). Every AVX-512F part is strictly newer than Haswell, so
+        // the v3 trampoline's feature set is always satisfiable here.
+        #[cfg(not(feature = "avx512-tier1"))]
         Backend {
             isa: "X86V4", target_feature: X86V3_TARGET_FEATURE, simd_type: Some("backend::x86_v3::X86V3")
         },

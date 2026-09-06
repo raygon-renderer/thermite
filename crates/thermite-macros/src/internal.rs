@@ -29,8 +29,8 @@ const CONDITIONAL: &str = "conditional";
 ///
 /// Why each op qualifies:
 ///
-/// - `bitxor`/`bitor`: `x ^ 0 == x`, `x | 0 == x`. Not `bitand` (identity is
-///   all-ones) or `bitandnot` (`!lhs & 0 == 0`).
+/// - `bitxor`/`bitor`: `x ^ 0 == x`, `x | 0 == x`. Not `bitand`, whose identity
+///   is all-ones rather than zero.
 /// - `add`/`sub`: additive identity. `sub` is bit-exact everywhere (`-0.0 - 0.0`
 ///   is `-0.0`). `add` has one accepted deviation: `+0.0` is not the additive
 ///   identity under round-to-nearest, so a masked-off `-0.0` lane comes back

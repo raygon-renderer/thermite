@@ -12,9 +12,15 @@
 //!    `b = inf`, and the guard that keeps the raw estimate there is gated like every other
 //!    edge patch-up in this tree. Both sides of that gate are asserted, so making the
 //!    guard unconditional has to be a deliberate change rather than a silent one.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
 
-use thermite::backend::x86_v3::prelude::*;
+mod harness;
+
 use thermite::math::CoreMathWithPolicy;
 use thermite::math::policy::policies::{HighPerformance, Performance, Precision, Reference, Size, UltraPerformance};
 use thermite::math::policy::{DefaultPolicy, DenormalBehavior, Policy, PolicyParameters, PrecisionPolicy};
@@ -83,8 +89,42 @@ fn rel(got: f64, want: f64) -> f64 {
     }
 }
 
+/// A hand-built policy that keeps the estimate paths reachable on BOTH sides of the
+/// `strict_ieee754` feature: under strict every shipped tier is `Preserve` and takes the
+/// exact route, so exercising the strict-gated guards requires asking for flush semantics
+/// by name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct FlushAverage;
+impl Policy for FlushAverage {
+    const POLICY: PolicyParameters = PolicyParameters {
+        check_overflow: true,
+        unroll_loops: false,
+        precision: PrecisionPolicy::Average,
+        avoid_branching: false,
+        max_iterations: 50,
+        use_compensation: false,
+        denormal_behavior: DenormalBehavior::FlushToZero,
+    };
+}
+
+/// Same, at `Worst`: the only precision that reaches `approx_div`'s multiply-by-estimate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct FlushWorst;
+impl Policy for FlushWorst {
+    const POLICY: PolicyParameters = PolicyParameters {
+        check_overflow: true,
+        unroll_loops: false,
+        precision: PrecisionPolicy::Worst,
+        avoid_branching: false,
+        max_iterations: 50,
+        use_compensation: false,
+        denormal_behavior: DenormalBehavior::FlushToZero,
+    };
+}
+
+for_each_backend_concrete! {
+
 /// Ordinary arguments, every tier, against a binary64 oracle.
-#[test]
 fn matches_a_reference_at_every_tier() {
     let cases: [(f32, f32); 10] = [
         (1.0, 1.0),
@@ -120,7 +160,6 @@ fn matches_a_reference_at_every_tier() {
 /// already returns the correctly rounded `$a/s$`, so there is nothing there to recover.
 /// The equality is the design now: anything clever appearing on that path is either a
 /// regression or needs to re-argue the case this test closed.
-#[test]
 fn the_best_tier_is_exactly_the_naive_spelling() {
     let mut total = 0;
 
@@ -174,7 +213,6 @@ fn the_best_tier_is_exactly_the_naive_spelling() {
 ///
 /// So this asserts the shape of the disagreement rather than a tolerance: identical in the
 /// normal range, and the fused form winning the subnormal tail on balance.
-#[test]
 fn the_two_spellings_diverge_only_in_the_subnormal_tail() {
     let (mut normal_diff, mut sub_fused_better, mut sub_split_better) = (0, 0, 0);
 
@@ -240,7 +278,6 @@ fn the_two_spellings_diverge_only_in_the_subnormal_tail() {
 /// `approx_div_sqrt` case this was not a tier opting out of `check_overflow`, it was
 /// unguarded everywhere. `rsqrt` had already produced `+inf` and `0` correctly, and the
 /// refinement was what destroyed them.
-#[test]
 fn inverse_sqrt_edges_follow_the_overflow_policy() {
     for_each_tier!(|P, ti| {
         let f = |x: f32| f32x8::splat(x).inverse_sqrt_p::<P>().extract::<0>();
@@ -252,9 +289,14 @@ fn inverse_sqrt_edges_follow_the_overflow_policy() {
         let exact = const {
             <P as Policy>::POLICY.precision.ge(PrecisionPolicy::Best)
                 || matches!(<P as Policy>::POLICY.denormal_behavior, DenormalBehavior::Preserve)
+                || !f32x8::HAS_APPROX_RSQRT
         };
 
-        if exact || guarded || !refines {
+        // The patch is applied whenever `check_overflow` asks, at every tier on the
+        // estimate. Without it the answer is whatever the backend's raw estimate and the
+        // unguarded step give: `+inf` on x86 at the raw tier, NaN once refined, NaN on
+        // NEON even raw (`rsqrt` itself stays raw by design). Only garbage is ruled out.
+        if exact || guarded {
             assert!(
                 f(0.0).is_infinite() && f(0.0) > 0.0,
                 "{}: 1/sqrt(0) = {}",
@@ -269,10 +311,12 @@ fn inverse_sqrt_edges_follow_the_overflow_policy() {
                 f(f32::INFINITY)
             );
         } else {
+            let _ = refines;
             assert!(
-                f(0.0).is_nan(),
-                "{}: unguarded refinement gives NaN at 0",
-                TIER_NAMES[ti]
+                f(0.0).is_nan() || (f(0.0).is_infinite() && f(0.0) > 0.0),
+                "{}: unguarded 1/sqrt(0) = {}, want NaN or +inf",
+                TIER_NAMES[ti],
+                f(0.0)
             );
         }
 
@@ -287,9 +331,10 @@ fn inverse_sqrt_edges_follow_the_overflow_policy() {
     });
 }
 
-/// f64 as well, where x86 below AVX-512 has no approximate rsqrt at all, so every tier
-/// takes an exact route and the two spellings should agree closely throughout.
-#[test]
+/// f64 as well. Where the backend has no approximate f64 rsqrt (x86 below AVX-512, wasm,
+/// scalar) every tier takes an exact route and the two spellings agree closely
+/// throughout. Where it does (AVX-512's 14-bit `vrsqrt14pd`, NEON) the fast tiers keep
+/// the estimate and get the same per-tier budget as f32.
 fn f64_is_accurate_at_every_tier() {
     let cases: [(f64, f64); 6] = [
         (1.0, 2.0),
@@ -301,12 +346,18 @@ fn f64_is_accurate_at_every_tier() {
     ];
 
     for_each_tier!(|P, ti| {
+        let exact = const {
+            <P as Policy>::POLICY.precision.ge(PrecisionPolicy::Best)
+                || matches!(<P as Policy>::POLICY.denormal_behavior, DenormalBehavior::Preserve)
+        };
+        let tol = if exact || !f64x4::HAS_APPROX_RSQRT { 1e-15 } else { TOL_F32[ti] as f64 };
+
         for &(a, b) in &cases {
             let got = f64x4::splat(a).approx_div_sqrt_p::<P>(f64x4::splat(b)).extract::<0>();
             let naive = a / b.sqrt();
 
             assert!(
-                rel(got, naive) <= 1e-15,
+                rel(got, naive) <= tol,
                 "{}: {a}/sqrt({b}) = {got}, naive gives {naive}",
                 TIER_NAMES[ti]
             );
@@ -323,9 +374,9 @@ fn f64_is_accurate_at_every_tier() {
 /// operation refinement and the tiers that opt out are the ones paying for speed.
 ///
 /// So this asserts the real behavior on both sides of that gate rather than pretending it
-/// is uniform. `HighPerformance` is the only tier that lands in the second branch: it is
-/// the one combination of `check_overflow: false` with a precision high enough to refine.
-#[test]
+/// is uniform. Tiers without `check_overflow` land in the second branch, where the
+/// answer is whatever the raw estimate or the unguarded step gives (x86 raw: `+inf`,
+/// refined: NaN. NEON: NaN even raw, since its register `rsqrt` carries a step).
 fn edge_cases_follow_the_overflow_policy() {
     for_each_tier!(|P, ti| {
         let f = |a: f32, b: f32| f32x8::splat(a).approx_div_sqrt_p::<P>(f32x8::splat(b)).extract::<0>();
@@ -336,6 +387,7 @@ fn edge_cases_follow_the_overflow_policy() {
         let exact = const {
             <P as Policy>::POLICY.precision.ge(PrecisionPolicy::Best)
                 || matches!(<P as Policy>::POLICY.denormal_behavior, DenormalBehavior::Preserve)
+                || !f32x8::HAS_APPROX_RSQRT
         };
 
         // sqrt of a negative is NaN, and it propagates at every tier.
@@ -344,7 +396,7 @@ fn edge_cases_follow_the_overflow_policy() {
         // 0/sqrt(x) is a signed zero at every tier, an ordinary interior point.
         assert_eq!(f(0.0, 4.0), 0.0, "{}", TIER_NAMES[ti]);
 
-        if exact || guarded || !refines {
+        if exact || guarded {
             // a/sqrt(0) is a signed infinity, and the sign of the numerator carries.
             assert!(f(1.0, 0.0).is_infinite() && f(1.0, 0.0) > 0.0, "{}", TIER_NAMES[ti]);
             assert!(f(-1.0, 0.0).is_infinite() && f(-1.0, 0.0) < 0.0, "{}", TIER_NAMES[ti]);
@@ -352,14 +404,14 @@ fn edge_cases_follow_the_overflow_policy() {
             // a/sqrt(inf) is a signed zero.
             assert_eq!(f(1.0, f32::INFINITY), 0.0, "{}", TIER_NAMES[ti]);
         } else {
-            // Refining without the guard: documented, not accidental. If this ever starts
-            // returning infinity the guard became unconditional, which is a real change to
-            // the cost of the fast tiers and should be a deliberate one.
+            // Unpatched: the raw estimate (x86 `+inf`, NEON NaN) or the unguarded
+            // refinement (NaN). Documented, not accidental. Only garbage is ruled out.
+            let _ = refines;
+            let got = f(1.0, 0.0);
             assert!(
-                f(1.0, 0.0).is_nan(),
-                "{}: unguarded refinement should give NaN at b = 0, got {}",
-                TIER_NAMES[ti],
-                f(1.0, 0.0)
+                got.is_nan() || (got.is_infinite() && got > 0.0),
+                "{}: unpatched 1/sqrt(0) = {got}, want NaN or +inf",
+                TIER_NAMES[ti]
             );
         }
 
@@ -374,39 +426,6 @@ fn edge_cases_follow_the_overflow_policy() {
     });
 }
 
-/// A hand-built policy that keeps the estimate paths reachable on BOTH sides of the
-/// `strict_ieee754` feature: under strict every shipped tier is `Preserve` and takes the
-/// exact route, so exercising the strict-gated guards requires asking for flush semantics
-/// by name.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct FlushAverage;
-impl Policy for FlushAverage {
-    const POLICY: PolicyParameters = PolicyParameters {
-        check_overflow: true,
-        unroll_loops: false,
-        precision: PrecisionPolicy::Average,
-        avoid_branching: false,
-        max_iterations: 50,
-        use_compensation: false,
-        denormal_behavior: DenormalBehavior::FlushToZero,
-    };
-}
-
-/// Same, at `Worst`: the only precision that reaches `approx_div`'s multiply-by-estimate.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct FlushWorst;
-impl Policy for FlushWorst {
-    const POLICY: PolicyParameters = PolicyParameters {
-        check_overflow: true,
-        unroll_loops: false,
-        precision: PrecisionPolicy::Worst,
-        avoid_branching: false,
-        max_iterations: 50,
-        use_compensation: false,
-        denormal_behavior: DenormalBehavior::FlushToZero,
-    };
-}
-
 /// `approx_reciprocal`'s Newton step is invalid at `x = 0` and `x = inf`, where the estimate
 /// is already exactly right at both (`+-inf` and `+-0`), and refining it evaluates
 /// `inf * NaN`. That NaN is deliberate on the fast tiers: no guard is spent on it. Under
@@ -415,7 +434,6 @@ impl Policy for FlushWorst {
 /// lives at the backend layer, not in the kernel. Both sides asserted: the strict arm is
 /// what breaks if a backend ever keeps its estimate under strict, and the fast arm is
 /// what breaks if someone re-adds a guard.
-#[test]
 fn approx_reciprocal_edges_follow_strict_ieee754() {
     let f = |x: f32| f32x8::splat(x).approx_reciprocal_p::<FlushAverage>().extract::<0>();
 
@@ -423,7 +441,7 @@ fn approx_reciprocal_edges_follow_strict_ieee754() {
     assert!((f(4.0) - 0.25).abs() < 1e-5, "1/4 = {}", f(4.0));
     assert!((f(-3.0) + 1.0 / 3.0).abs() < 1e-5, "1/-3 = {}", f(-3.0));
 
-    if cfg!(feature = "strict_ieee754") {
+    if cfg!(feature = "strict_ieee754") || !f32x8::HAS_APPROX_RCP {
         assert!(f(0.0).is_infinite() && f(0.0) > 0.0, "strict: 1/0 = {}", f(0.0));
         assert!(f(-0.0).is_infinite() && f(-0.0) < 0.0, "strict: 1/-0 = {}", f(-0.0));
         assert_eq!(f(f32::INFINITY), 0.0, "strict: 1/inf");
@@ -438,7 +456,6 @@ fn approx_reciprocal_edges_follow_strict_ieee754() {
 /// nonzero numerator a wrong infinity whose correct answer is finite. No select can
 /// produce that finite quotient, so under `strict_ieee754` the whole estimate path is
 /// compiled out in favor of the real divide, asserted on both sides here.
-#[test]
 fn approx_div_denormal_divisor_follows_strict_ieee754() {
     let f = |a: f32, b: f32| {
         f32x8::splat(a)
@@ -455,6 +472,8 @@ fn approx_div_denormal_divisor_follows_strict_ieee754() {
         "test constant must be subnormal"
     );
 
+    // Not gated on `HAS_APPROX_RCP`: an exact-rcp backend under a flushing policy
+    // still flushes the divisor to zero and lands in the second branch.
     if cfg!(feature = "strict_ieee754") {
         // The real divide: IEEE everywhere, including the denormal divisor.
         assert_eq!(f(0.0, denormal), 0.0, "strict: 0/denormal");
@@ -476,4 +495,6 @@ fn approx_div_denormal_divisor_follows_strict_ieee754() {
             f(1e-3, denormal)
         );
     }
+}
+
 }

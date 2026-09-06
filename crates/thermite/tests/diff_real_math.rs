@@ -21,38 +21,47 @@ use thermite::Vector;
 use thermite::prelude::*;
 use thermite::simd::Simd;
 
-use thermite::backend::scalar::Scalar;
-
 const TRIALS: usize = 400;
 const PI: f64 = core::f64::consts::PI;
 
-macro_rules! real_suite {
-    ($mod:ident, $backend:ty, $reg:ident, $e:ty, $rel:expr) => {
-        mod $mod {
-            use super::*;
-            type V = Vector<<$backend as Simd>::$reg>;
-            const L: usize = <V as GenericVector>::LANES;
+macro_rules! ctx {
+    ($reg:ident, $e:ty, $rel:expr) => {
+        #[allow(dead_code)]
+        type V = Vector<<S as Simd>::$reg>;
+        #[allow(dead_code)]
+        const L: usize = <V as GenericVector>::LANES;
+        #[allow(dead_code)]
+        fn label() -> String {
+            harness::label::<S>(stringify!($reg))
+        }
 
+            #[allow(dead_code)]
             fn rd(v: V) -> Vec<f64> {
                 v.into_array().as_slice().iter().map(|&x| x as f64).collect()
             }
+            #[allow(dead_code)]
             fn mk(rng: &mut rand::rngs::SmallRng, lo: f64, hi: f64) -> (V, Vec<f64>) {
                 let a: Vec<$e> = (0..L).map(|_| rng.random_range(lo..hi) as $e).collect();
                 (V::from_slice(&a), a.iter().map(|&x| x as f64).collect())
             }
+            #[allow(dead_code)]
             #[track_caller]
             fn close(name: &str, got: &[f64], want: &[f64]) {
                 for (i, (&g, &w)) in got.iter().zip(want).enumerate() {
                     assert!(
                         (g - w).abs() <= ($rel) * w.abs().max(1.0),
                         "{} [{}] lane {}: got {} want {}",
-                        stringify!($mod), name, i, g, w
+                        label(), name, i, g, w
                     );
                 }
             }
+    };
+}
 
-            #[test]
-            fn norms_and_scale() {
+macro_rules! real_suite {
+    ($($sfx:ident: $reg:ident, $e:ty, $rel:expr),+ $(,)?) => { paste::paste! { for_each_backend_concrete! { $(
+            fn [<norms_and_scale _ $sfx>]() {
+                ctx!($reg, $e, $rel);
                 let mut rng = harness::rng();
                 for _ in 0..TRIALS {
                     let (v, x) = mk(&mut rng, -50.0, 50.0);
@@ -64,8 +73,8 @@ macro_rules! real_suite {
                 }
             }
 
-            #[test]
-            fn angle_wrapping() {
+            fn [<angle_wrapping _ $sfx>]() {
+                ctx!($reg, $e, $rel);
                 let mut rng = harness::rng();
                 let tol = ($rel as f64).max(1e-5) * 8.0;
                 for _ in 0..TRIALS {
@@ -73,25 +82,25 @@ macro_rules! real_suite {
                     // wrap_angle: in [-π, π) and congruent to x mod 2π.
                     let w = rd(v.wrap_angle());
                     for (i, &g) in w.iter().enumerate() {
-                        assert!(g >= -PI - tol && g < PI + tol, "{} wrap_angle lane {} out of range: {}", stringify!($mod), i, g);
+                        assert!(g >= -PI - tol && g < PI + tol, "{} wrap_angle lane {} out of range: {}", label(), i, g);
                         let d = g - x[i];
                         let k = (d / (2.0 * PI)).round();
-                        assert!((d - k * 2.0 * PI).abs() <= tol, "{} wrap_angle lane {} not congruent: {} vs {}", stringify!($mod), i, g, x[i]);
+                        assert!((d - k * 2.0 * PI).abs() <= tol, "{} wrap_angle lane {} not congruent: {} vs {}", label(), i, g, x[i]);
                     }
                     // angle_diff(a, b): in [-π, π) and congruent to (a-b) mod 2π.
                     let (vb, xb) = mk(&mut rng, -20.0, 20.0);
                     let dgot = rd(v.angle_diff(vb));
                     for (i, &g) in dgot.iter().enumerate() {
-                        assert!(g >= -PI - tol && g < PI + tol, "{} angle_diff lane {} out of range: {}", stringify!($mod), i, g);
+                        assert!(g >= -PI - tol && g < PI + tol, "{} angle_diff lane {} out of range: {}", label(), i, g);
                         let d = g - (x[i] - xb[i]);
                         let k = (d / (2.0 * PI)).round();
-                        assert!((d - k * 2.0 * PI).abs() <= tol, "{} angle_diff lane {} not congruent", stringify!($mod), i);
+                        assert!((d - k * 2.0 * PI).abs() <= tol, "{} angle_diff lane {} not congruent", label(), i);
                     }
                 }
             }
 
-            #[test]
-            fn interpolation() {
+            fn [<interpolation _ $sfx>]() {
+                ctx!($reg, $e, $rel);
                 let mut rng = harness::rng();
                 for _ in 0..TRIALS {
                     let (vt, t) = mk(&mut rng, 0.0, 1.0);
@@ -114,8 +123,8 @@ macro_rules! real_suite {
                 }
             }
 
-            #[test]
-            fn step_and_smoothstep() {
+            fn [<step_and_smoothstep _ $sfx>]() {
+                ctx!($reg, $e, $rel);
                 let mut rng = harness::rng();
                 for _ in 0..TRIALS {
                     // step(x, edge): 1 if x >= edge else 0
@@ -128,17 +137,17 @@ macro_rules! real_suite {
                     let (vs, s) = mk(&mut rng, -0.5, 1.5);
                     let clamp01 = |v: f64| v.clamp(0.0, 1.0);
                     // N=1: linear (clamped)
-                    close("smoothstep_n<1>", &rd(vs.smoothstep_n::<1>(None)), &s.iter().map(|&v| clamp01(v)).collect::<Vec<_>>());
+                    close("smoothstep<1>", &rd(vs.smoothstep::<1>(None)), &s.iter().map(|&v| clamp01(v)).collect::<Vec<_>>());
                     // N=2: 3t^2 - 2t^3
                     let want: Vec<f64> = s.iter().map(|&v| { let t = clamp01(v); t * t * (3.0 - 2.0 * t) }).collect();
-                    close("smoothstep_n<2>", &rd(vs.smoothstep_n::<2>(None)), &want);
+                    close("smoothstep<2>", &rd(vs.smoothstep::<2>(None)), &want);
                     // derivative of N=2: 6t - 6t^2 (0 in the clamped tails)
                     let want: Vec<f64> = s.iter().map(|&v| { let t = clamp01(v); 6.0 * t * (1.0 - t) }).collect();
-                    close("smoothstep_derivative_n<2>", &rd(vs.smoothstep_derivative_n::<2>(None)), &want);
+                    close("smoothstep_derivative<2>", &rd(vs.smoothstep_derivative::<2>(None)), &want);
 
                     // N=3 "smootherstep": 6t^5 - 15t^4 + 10t^3
                     let want: Vec<f64> = s.iter().map(|&v| { let t = clamp01(v); t * t * t * (t * (t * 6.0 - 15.0) + 10.0) }).collect();
-                    close("smoothstep_n<3>", &rd(vs.smoothstep_n::<3>(None)), &want);
+                    close("smoothstep<3>", &rd(vs.smoothstep::<3>(None)), &want);
 
                     // inverse_smoothstep round-trips smoothstep on [0,1] for N=1,2,3
                     let (vx, _x) = mk(&mut rng, 0.02, 0.98);
@@ -146,27 +155,27 @@ macro_rules! real_suite {
                     // policy the round-trip is only good to ~1e-2; the closed forms are tighter.
                     let rt = |g: V, want: V, tag: &str| {
                         for (i, (&a, &b)) in rd(g).iter().zip(rd(want).iter()).enumerate() {
-                            assert!((a - b).abs() <= 1.0e-2 + 80.0 * ($rel), "{} {} lane {}: got {} want {}", stringify!($mod), tag, i, a, b);
+                            assert!((a - b).abs() <= 1.0e-2 + 80.0 * ($rel), "{} {} lane {}: got {} want {}", label(), tag, i, a, b);
                         }
                     };
-                    rt(vx.smoothstep_n::<1>(None).inverse_smoothstep_n::<1>(None), vx, "inv_smoothstep<1>");
-                    rt(vx.smoothstep_n::<2>(None).inverse_smoothstep_n::<2>(None), vx, "inv_smoothstep<2>");
-                    rt(vx.smoothstep_n::<3>(None).inverse_smoothstep_n::<3>(None), vx, "inv_smoothstep<3>"); // Newton path
+                    rt(vx.smoothstep::<1>(None).inverse_smoothstep::<1>(None), vx, "inv_smoothstep<1>");
+                    rt(vx.smoothstep::<2>(None).inverse_smoothstep::<2>(None), vx, "inv_smoothstep<2>");
+                    rt(vx.smoothstep::<3>(None).inverse_smoothstep::<3>(None), vx, "inv_smoothstep<3>"); // Newton path
 
                     // with explicit edges [a,b]: smoothstep maps [a,b]->[0,1], inverse maps back
                     let edges = Some((V::splat(-2.0 as $e), V::splat(5.0 as $e)));
                     let (vxe, _) = mk(&mut rng, -1.8, 4.8);
-                    rt(vxe.smoothstep_n::<2>(edges).inverse_smoothstep_n::<2>(edges), vxe, "inv_smoothstep<2>+edges");
-                    rt(vxe.smoothstep_n::<3>(edges).inverse_smoothstep_n::<3>(edges), vxe, "inv_smoothstep<3>+edges");
+                    rt(vxe.smoothstep::<2>(edges).inverse_smoothstep::<2>(edges), vxe, "inv_smoothstep<2>+edges");
+                    rt(vxe.smoothstep::<3>(edges).inverse_smoothstep::<3>(edges), vxe, "inv_smoothstep<3>+edges");
 
                     // N=0 is the (non-invertible) step function, so just exercise both paths
-                    let _ = vx.inverse_smoothstep_n::<0>(None);
-                    let _ = vx.inverse_smoothstep_n::<0>(edges);
+                    let _ = vx.inverse_smoothstep::<0>(None);
+                    let _ = vx.inverse_smoothstep::<0>(edges);
                 }
             }
 
-            #[test]
-            fn power_variants() {
+            fn [<power_variants _ $sfx>]() {
+                ctx!($reg, $e, $rel);
                 let mut rng = harness::rng();
                 let loose = 5e-3_f64.max(60.0 * ($rel));
                 for _ in 0..TRIALS {
@@ -175,32 +184,32 @@ macro_rules! real_suite {
                     let e = <V as GenericVector>::Signed::indexed();
                     let want: Vec<f64> = (0..L).map(|i| x[i].powi(i as i32)).collect();
                     for (i, (&g, &w)) in rd(vx.powiv(e)).iter().zip(&want).enumerate() {
-                        assert!((g - w).abs() <= loose * w.abs().max(1.0), "{} powiv lane {}: {} vs {}", stringify!($mod), i, g, w);
+                        assert!((g - w).abs() <= loose * w.abs().max(1.0), "{} powiv lane {}: {} vs {}", label(), i, g, w);
                     }
                     // nth_root_n::<N> == x^(1/N)
                     for (n, root) in [(2i32, 0.5f64), (3, 1.0 / 3.0), (4, 0.25), (5, 0.2)] {
                         let want: Vec<f64> = x.iter().map(|&v| v.powf(root)).collect();
                         let got = match n { 2 => rd(vx.nth_root_n::<2>()), 3 => rd(vx.nth_root_n::<3>()), 4 => rd(vx.nth_root_n::<4>()), _ => rd(vx.nth_root_n::<5>()) };
                         for (i, (&g, &w)) in got.iter().zip(&want).enumerate() {
-                            assert!((g - w).abs() <= loose * w.abs().max(1.0), "{} nth_root_n<{}> lane {}: {} vs {}", stringify!($mod), n, i, g, w);
+                            assert!((g - w).abs() <= loose * w.abs().max(1.0), "{} nth_root_n<{}> lane {}: {} vs {}", label(), n, i, g, w);
                         }
                     }
                 }
             }
 
-            #[test]
-            fn smooth_interpolator_props() {
+            fn [<smooth_interpolator_props _ $sfx>]() {
+                ctx!($reg, $e, $rel);
                 let k = V::splat(0.5 as $e);
                 // midpoint maps to 0.5 (e == 0 -> 1/(exp(0)+1))
                 for &v in rd(V::splat(0.5 as $e).smooth_interpolator(None, k)).iter() {
-                    assert!((v - 0.5).abs() <= 1e-3, "{} smooth_interpolator(0.5) = {}", stringify!($mod), v);
+                    assert!((v - 0.5).abs() <= 1e-3, "{} smooth_interpolator(0.5) = {}", label(), v);
                 }
                 // clamps outside [0,1]
                 for &v in rd(V::splat(-0.3 as $e).smooth_interpolator(None, k)).iter() {
-                    assert!(v.abs() <= 1e-6, "{} smooth_interpolator(-0.3) = {}", stringify!($mod), v);
+                    assert!(v.abs() <= 1e-6, "{} smooth_interpolator(-0.3) = {}", label(), v);
                 }
                 for &v in rd(V::splat(1.3 as $e).smooth_interpolator(None, k)).iter() {
-                    assert!((v - 1.0).abs() <= 1e-6, "{} smooth_interpolator(1.3) = {}", stringify!($mod), v);
+                    assert!((v - 1.0).abs() <= 1e-6, "{} smooth_interpolator(1.3) = {}", label(), v);
                 }
                 // in-range outputs stay within [0,1]; exercise the edges-rescale path too
                 let mut rng = harness::rng();
@@ -208,17 +217,17 @@ macro_rules! real_suite {
                 for _ in 0..TRIALS {
                     let (vt, _) = mk(&mut rng, 0.05, 0.95);
                     for &v in rd(vt.smooth_interpolator(None, k)).iter() {
-                        assert!((-1e-6..=1.0 + 1e-6).contains(&v), "{} smooth_interpolator out of [0,1]: {}", stringify!($mod), v);
+                        assert!((-1e-6..=1.0 + 1e-6).contains(&v), "{} smooth_interpolator out of [0,1]: {}", label(), v);
                     }
                     let (vte, _) = mk(&mut rng, -1.8, 4.8);
                     for &v in rd(vte.smooth_interpolator(edges, k)).iter() {
-                        assert!((-1e-6..=1.0 + 1e-6).contains(&v), "{} smooth_interpolator+edges out of [0,1]: {}", stringify!($mod), v);
+                        assert!((-1e-6..=1.0 + 1e-6).contains(&v), "{} smooth_interpolator+edges out of [0,1]: {}", label(), v);
                     }
                 }
             }
 
-            #[test]
-            fn n_dimensional_hypot() {
+            fn [<n_dimensional_hypot _ $sfx>]() {
+                ctx!($reg, $e, $rel);
                 let mut rng = harness::rng();
                 for _ in 0..TRIALS {
                     let (va, a) = mk(&mut rng, -10.0, 10.0);
@@ -237,7 +246,7 @@ macro_rules! real_suite {
                     for i in 0..L {
                         if h2[i] > 0.5 {
                             let want = 1.0 / h2[i];
-                            assert!((inv[i] - want).abs() <= 1e-2 * want.abs().max(1.0), "{} inv_hypot_n<2> lane {}: {} vs {}", stringify!($mod), i, inv[i], want);
+                            assert!((inv[i] - want).abs() <= 1e-2 * want.abs().max(1.0), "{} inv_hypot_n<2> lane {}: {} vs {}", label(), i, inv[i], want);
                         }
                     }
                 }
@@ -246,8 +255,8 @@ macro_rules! real_suite {
             /// `logsumexp_n` against a direct oracle over a domain where the naive
             /// `ln(sum(exp))` is safe, plus the large-magnitude shift that makes the
             /// function worth having, plus the log-domain edge cases.
-            #[test]
-            fn log_domain_sum() {
+            fn [<log_domain_sum _ $sfx>]() {
+                ctx!($reg, $e, $rel);
                 let mut rng = harness::rng();
 
                 for _ in 0..TRIALS {
@@ -280,8 +289,8 @@ macro_rules! real_suite {
 
                 // N = 1 is the identity, N = 0 the identity element of logaddexp.
                 let x = V::splat(2.5 as $e);
-                assert_eq!(rd(V::logsumexp_n([x]))[0], 2.5, "{} logsumexp_n<1>", stringify!($mod));
-                assert!(rd(V::logsumexp_n::<0>([]))[0] == f64::NEG_INFINITY, "{} logsumexp_n<0>", stringify!($mod));
+                assert_eq!(rd(V::logsumexp_n([x]))[0], 2.5, "{} logsumexp_n<1>", label());
+                assert!(rd(V::logsumexp_n::<0>([]))[0] == f64::NEG_INFINITY, "{} logsumexp_n<0>", label());
 
                 // Ties must all count: three equal terms are ln(3) above one of them.
                 let t = V::splat(4.0 as $e);
@@ -292,20 +301,20 @@ macro_rules! real_suite {
                 assert_eq!(
                     rd(V::logsumexp_n([zero, zero, zero]))[0],
                     f64::NEG_INFINITY,
-                    "{} logsumexp_n(all -inf)", stringify!($mod)
+                    "{} logsumexp_n(all -inf)", label()
                 );
                 // ...and a -inf term is simply absent from the sum.
                 close("logsumexp_n with -inf term", &rd(V::logsumexp_n([t, zero, t])), &[4.0 + 2.0f64.ln(); L]);
                 assert!(
                     rd(V::logsumexp_n([V::INFINITY, t, t]))[0].is_infinite(),
-                    "{} logsumexp_n(+inf)", stringify!($mod)
+                    "{} logsumexp_n(+inf)", label()
                 );
             }
 
             /// `logsubexp` inverts `logaddexp`, and holds up where the naive
             /// `ln(e^a - e^b)` overflows.
-            #[test]
-            fn log_domain_difference() {
+            fn [<log_domain_difference _ $sfx>]() {
+                ctx!($reg, $e, $rel);
                 let mut rng = harness::rng();
 
                 for _ in 0..TRIALS {
@@ -355,14 +364,14 @@ macro_rules! real_suite {
                     assert!(
                         (got - want).abs() <= 1.0e-5 * want.abs(),
                         "{} logsubexp(a={}, gap={:e}): got {} want {} (rel {:e})",
-                        stringify!($mod), a, d_act, got, want, (got - want).abs() / want.abs()
+                        label(), a, d_act, got, want, (got - want).abs() / want.abs()
                     );
                 }
 
                 // a < b is out of domain above the Worst policy.
                 assert!(
                     rd(V::splat(1.0 as $e).logsubexp(V::splat(2.0 as $e)))[0].is_nan(),
-                    "{} logsubexp(a < b) should be NaN", stringify!($mod)
+                    "{} logsubexp(a < b) should be NaN", label()
                 );
 
                 // The `ln1m_expnx` kernel logsubexp delegates to, directly: a log-spaced
@@ -392,57 +401,27 @@ macro_rules! real_suite {
 
                     assert!(
                         (got - want).abs() <= 1.0e-5 * want.abs(),
-                        "{} ln1m_expnx({xa:e}): got {got:e} want {want:e}", stringify!($mod)
+                        "{} ln1m_expnx({xa:e}): got {got:e} want {want:e}", label()
                     );
                 }
 
                 // Domain edges: ln(1 - e^0) = ln(0) = -inf, and negative x is NaN.
-                assert_eq!(rd(V::ZERO.ln1m_expnx())[0], f64::NEG_INFINITY, "{} ln1m_expnx(0)", stringify!($mod));
-                assert!(rd(V::splat(-1.0 as $e).ln1m_expnx())[0].is_nan(), "{} ln1m_expnx(-1)", stringify!($mod));
+                assert_eq!(rd(V::ZERO.ln1m_expnx())[0], f64::NEG_INFINITY, "{} ln1m_expnx(0)", label());
+                assert!(rd(V::splat(-1.0 as $e).ln1m_expnx())[0].is_nan(), "{} ln1m_expnx(-1)", label());
 
                 // a == b is the log-domain zero, and all-(-inf) is 0 - 0 and must not be NaN.
                 let x = V::splat(3.0 as $e);
-                assert_eq!(rd(x.logsubexp(x))[0], f64::NEG_INFINITY, "{} logsubexp(a, a)", stringify!($mod));
+                assert_eq!(rd(x.logsubexp(x))[0], f64::NEG_INFINITY, "{} logsubexp(a, a)", label());
                 assert_eq!(
                     rd(V::NEG_INFINITY.logsubexp(V::NEG_INFINITY))[0],
                     f64::NEG_INFINITY,
-                    "{} logsubexp(-inf, -inf)", stringify!($mod)
+                    "{} logsubexp(-inf, -inf)", label()
                 );
             }
-        }
-    };
+        )+ } } };
 }
 
-// scalar is the always-available oracle (runs on every target).
-real_suite!(scalar_f32, Scalar, f32x4, f32, 2.0e-4);
-real_suite!(scalar_f64, Scalar, f64x4, f64, 1.0e-10);
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86 {
-    use super::*;
-    use thermite::backend::x86_v1::X86V1;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
-    real_suite!(v3_f32, X86V3, f32x4, f32, 2.0e-4);
-    real_suite!(v3_f64, X86V3, f64x4, f64, 1.0e-10);
-    real_suite!(v2_f32, X86V2, f32x4, f32, 2.0e-4);
-    real_suite!(v2_f64, X86V2, f64x4, f64, 1.0e-10);
-    real_suite!(v1_f32, X86V1, f32x4, f32, 2.0e-4);
-    real_suite!(v1_f64, X86V1, f64x4, f64, 1.0e-10);
-}
-
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-    real_suite!(wasm_f32, Wasm, f32x4, f32, 2.0e-4);
-    real_suite!(wasm_f64, Wasm, f64x4, f64, 1.0e-10);
-}
-
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-    real_suite!(neon_f32, Neon, f32x4, f32, 2.0e-4);
-    real_suite!(neon_f64, Neon, f64x4, f64, 1.0e-10);
+real_suite! {
+    f32: f32x4, f32, 2.0e-4,
+    f64: f64x4, f64, 1.0e-10,
 }

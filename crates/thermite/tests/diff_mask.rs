@@ -58,12 +58,9 @@ macro_rules! cmp {
                 let w = oracle(x[lane], y[lane]);
                 assert!(
                     g == w,
-                    concat!(
-                        $label,
-                        " [",
-                        stringify!($method),
-                        "]: lane {} mismatch\n  a = {:?}\n  b = {:?}\n  got = {}  want = {}"
-                    ),
+                    "{} [{}]: lane {} mismatch\n  a = {:?}\n  b = {:?}\n  got = {}  want = {}",
+                    $label,
+                    stringify!($method),
                     lane,
                     x[lane],
                     y[lane],
@@ -91,17 +88,17 @@ macro_rules! select {
             // blendv(mask, on_false, on_true) == mask ? on_true : on_false
             let got = harness::read::<$ut>(&<$ut>::blendv(mask, harness::make_array::<$ut>(f), harness::make_array::<$ut>(t)));
             let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { t[i] } else { f[i] }).collect();
-            harness::assert_lanes_eq(concat!($label, " [blendv]"), &[f.as_slice(), t.as_slice()], &got, &want, Tol::Exact);
+            harness::assert_lanes_eq(&format!("{} [blendv]", $label), &[f.as_slice(), t.as_slice()], &got, &want, Tol::Exact);
 
             // zz(mask, value) == mask ? value : 0
             let got = harness::read::<$ut>(&<$ut>::zz(mask, harness::make_array::<$ut>(t)));
             let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { t[i] } else { zero }).collect();
-            harness::assert_lanes_eq(concat!($label, " [zz]"), &[t.as_slice()], &got, &want, Tol::Exact);
+            harness::assert_lanes_eq(&format!("{} [zz]", $label), &[t.as_slice()], &got, &want, Tol::Exact);
 
             // nz(mask, value) == mask ? 0 : value
             let got = harness::read::<$ut>(&<$ut>::nz(mask, harness::make_array::<$ut>(t)));
             let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { zero } else { t[i] }).collect();
-            harness::assert_lanes_eq(concat!($label, " [nz]"), &[t.as_slice()], &got, &want, Tol::Exact);
+            harness::assert_lanes_eq(&format!("{} [nz]", $label), &[t.as_slice()], &got, &want, Tol::Exact);
         }
     }};
 }
@@ -129,15 +126,15 @@ macro_rules! masked_bin {
 
             let got = harness::read::<$ut>(&<$ut>::$c(mask, harness::make_array::<$ut>(x), harness::make_array::<$ut>(y)));
             let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { base[i] } else { x[i] }).collect();
-            harness::assert_lanes_eq(concat!($label, " [", stringify!($c), "]"), &[x.as_slice(), y.as_slice()], &got, &want, $tol);
+            harness::assert_lanes_eq(&format!("{} [{}]", $label, stringify!($c)), &[x.as_slice(), y.as_slice()], &got, &want, $tol);
 
             let got = harness::read::<$ut>(&<$ut>::$m(harness::make_array::<$ut>(s), mask, harness::make_array::<$ut>(x), harness::make_array::<$ut>(y)));
             let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { base[i] } else { s[i] }).collect();
-            harness::assert_lanes_eq(concat!($label, " [", stringify!($m), "]"), &[x.as_slice(), y.as_slice(), s.as_slice()], &got, &want, $tol);
+            harness::assert_lanes_eq(&format!("{} [{}]", $label, stringify!($m)), &[x.as_slice(), y.as_slice(), s.as_slice()], &got, &want, $tol);
 
             let got = harness::read::<$ut>(&<$ut>::$z(mask, harness::make_array::<$ut>(x), harness::make_array::<$ut>(y)));
             let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { base[i] } else { zero }).collect();
-            harness::assert_lanes_eq(concat!($label, " [", stringify!($z), "]"), &[x.as_slice(), y.as_slice()], &got, &want, $tol);
+            harness::assert_lanes_eq(&format!("{} [{}]", $label, stringify!($z)), &[x.as_slice(), y.as_slice()], &got, &want, $tol);
         }
     }};
 }
@@ -157,15 +154,15 @@ macro_rules! masked_un {
 
             let got = harness::read::<$ut>(&<$ut>::$c(mask, harness::make_array::<$ut>(v)));
             let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { base[i] } else { v[i] }).collect();
-            harness::assert_lanes_eq(concat!($label, " [", stringify!($c), "]"), &[v.as_slice()], &got, &want, $tol);
+            harness::assert_lanes_eq(&format!("{} [{}]", $label, stringify!($c)), &[v.as_slice()], &got, &want, $tol);
 
             let got = harness::read::<$ut>(&<$ut>::$m(harness::make_array::<$ut>(s), mask, harness::make_array::<$ut>(v)));
             let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { base[i] } else { s[i] }).collect();
-            harness::assert_lanes_eq(concat!($label, " [", stringify!($m), "]"), &[v.as_slice(), s.as_slice()], &got, &want, $tol);
+            harness::assert_lanes_eq(&format!("{} [{}]", $label, stringify!($m)), &[v.as_slice(), s.as_slice()], &got, &want, $tol);
 
             let got = harness::read::<$ut>(&<$ut>::$z(mask, harness::make_array::<$ut>(v)));
             let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { base[i] } else { zero }).collect();
-            harness::assert_lanes_eq(concat!($label, " [", stringify!($z), "]"), &[v.as_slice()], &got, &want, $tol);
+            harness::assert_lanes_eq(&format!("{} [{}]", $label, stringify!($z)), &[v.as_slice()], &got, &want, $tol);
         }
     }};
 }
@@ -189,15 +186,15 @@ macro_rules! masked_tern {
 
             let got = harness::read::<$ut>(&<$ut>::$c(mask, mk(x), mk(y), mk(z)));
             let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { base[i] } else { x[i] }).collect();
-            harness::assert_lanes_eq(concat!($label, " [", stringify!($c), "]"), &[x.as_slice(), y.as_slice(), z.as_slice()], &got, &want, $tol);
+            harness::assert_lanes_eq(&format!("{} [{}]", $label, stringify!($c)), &[x.as_slice(), y.as_slice(), z.as_slice()], &got, &want, $tol);
 
             let got = harness::read::<$ut>(&<$ut>::$m(mk(s), mask, mk(x), mk(y), mk(z)));
             let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { base[i] } else { s[i] }).collect();
-            harness::assert_lanes_eq(concat!($label, " [", stringify!($m), "]"), &[x.as_slice(), y.as_slice(), z.as_slice()], &got, &want, $tol);
+            harness::assert_lanes_eq(&format!("{} [{}]", $label, stringify!($m)), &[x.as_slice(), y.as_slice(), z.as_slice()], &got, &want, $tol);
 
             let got = harness::read::<$ut>(&<$ut>::$z(mask, mk(x), mk(y), mk(z)));
             let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { base[i] } else { zero }).collect();
-            harness::assert_lanes_eq(concat!($label, " [", stringify!($z), "]"), &[x.as_slice(), y.as_slice(), z.as_slice()], &got, &want, $tol);
+            harness::assert_lanes_eq(&format!("{} [{}]", $label, stringify!($z)), &[x.as_slice(), y.as_slice(), z.as_slice()], &got, &want, $tol);
         }
     }};
 }
@@ -221,15 +218,15 @@ macro_rules! masked_shift {
 
                 let got = harness::read::<$ut>(&<$ut>::$c(mask, mk(v), sh));
                 let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { base[i] } else { v[i] }).collect();
-                harness::assert_lanes_eq(concat!($label, " [", stringify!($c), "]"), &[v.as_slice()], &got, &want, Tol::Exact);
+                harness::assert_lanes_eq(&format!("{} [{}]", $label, stringify!($c)), &[v.as_slice()], &got, &want, Tol::Exact);
 
                 let got = harness::read::<$ut>(&<$ut>::$m(mk(s), mask, mk(v), sh));
                 let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { base[i] } else { s[i] }).collect();
-                harness::assert_lanes_eq(concat!($label, " [", stringify!($m), "]"), &[v.as_slice(), s.as_slice()], &got, &want, Tol::Exact);
+                harness::assert_lanes_eq(&format!("{} [{}]", $label, stringify!($m)), &[v.as_slice(), s.as_slice()], &got, &want, Tol::Exact);
 
                 let got = harness::read::<$ut>(&<$ut>::$z(mask, mk(v), sh));
                 let want: Vec<$e> = (0..lanes).map(|i| if bits[i] { base[i] } else { zero }).collect();
-                harness::assert_lanes_eq(concat!($label, " [", stringify!($z), "]"), &[v.as_slice()], &got, &want, Tol::Exact);
+                harness::assert_lanes_eq(&format!("{} [{}]", $label, stringify!($z)), &[v.as_slice()], &got, &want, Tol::Exact);
             }
         }
     }};
@@ -291,41 +288,42 @@ macro_rules! int_extra_masked {
 // ---------------------------------------------------------------------------
 // Per-(backend, width) test functions.
 // ---------------------------------------------------------------------------
-macro_rules! float_mask_tests {
-    ($name:ident, $backend:ty, $reg:ident, $label:expr) => {
-        #[test]
-        fn $name() {
-            type UT = <$backend as Simd>::$reg;
-            type E = <UT as Register>::Element;
-            numeric_common!(UT, E, $label, Tol::Rel(0.0));
+macro_rules! float_masks {
+    ($S:ty, $reg:ident, $e:ty) => {{
+        let label = harness::label::<$S>(stringify!($reg));
+        float_masks!(@body <$S as Simd>::$reg, $e, label.as_str());
+    }};
+    (@body $UT:ty, $E:ty, $label:expr) => {
+        {
+            numeric_common!($UT, $E, $label, Tol::Rel(0.0));
             // Signed / float-only masked ops. base op blended per the mask, so
             // approximate ops (rcp/rsqrt) are self-consistent (same value blended).
-            masked_bin!($label, UT, E, div, div_c, div_m, div_z, Tol::Rel(0.0));
-            masked_bin!($label, UT, E, rem, rem_c, rem_m, rem_z, Tol::Rel(0.0));
+            masked_bin!($label, $UT, $E, div, div_c, div_m, div_z, Tol::Rel(0.0));
+            masked_bin!($label, $UT, $E, rem, rem_c, rem_m, rem_z, Tol::Rel(0.0));
             masked_bin!(
                 $label,
-                UT,
-                E,
+                $UT,
+                $E,
                 mul_sign,
                 mul_sign_c,
                 mul_sign_m,
                 mul_sign_z,
                 Tol::Rel(0.0)
             );
-            masked_un!($label, UT, E, neg, neg_c, neg_m, neg_z, Tol::Rel(0.0));
-            masked_un!($label, UT, E, abs, abs_c, abs_m, abs_z, Tol::Rel(0.0));
-            masked_un!($label, UT, E, sqrt, sqrt_c, sqrt_m, sqrt_z, Tol::Rel(0.0));
-            masked_un!($label, UT, E, rcp, rcp_c, rcp_m, rcp_z, Tol::Rel(0.0));
-            masked_un!($label, UT, E, rsqrt, rsqrt_c, rsqrt_m, rsqrt_z, Tol::Rel(0.0));
-            masked_un!($label, UT, E, floor, floor_c, floor_m, floor_z, Tol::Rel(0.0));
-            masked_un!($label, UT, E, ceil, ceil_c, ceil_m, ceil_z, Tol::Rel(0.0));
-            masked_un!($label, UT, E, round, round_c, round_m, round_z, Tol::Rel(0.0));
-            masked_un!($label, UT, E, trunc, trunc_c, trunc_m, trunc_z, Tol::Rel(0.0));
-            masked_un!($label, UT, E, fract, fract_c, fract_m, fract_z, Tol::Rel(0.0));
+            masked_un!($label, $UT, $E, neg, neg_c, neg_m, neg_z, Tol::Rel(0.0));
+            masked_un!($label, $UT, $E, abs, abs_c, abs_m, abs_z, Tol::Rel(0.0));
+            masked_un!($label, $UT, $E, sqrt, sqrt_c, sqrt_m, sqrt_z, Tol::Rel(0.0));
+            masked_un!($label, $UT, $E, rcp, rcp_c, rcp_m, rcp_z, Tol::Rel(0.0));
+            masked_un!($label, $UT, $E, rsqrt, rsqrt_c, rsqrt_m, rsqrt_z, Tol::Rel(0.0));
+            masked_un!($label, $UT, $E, floor, floor_c, floor_m, floor_z, Tol::Rel(0.0));
+            masked_un!($label, $UT, $E, ceil, ceil_c, ceil_m, ceil_z, Tol::Rel(0.0));
+            masked_un!($label, $UT, $E, round, round_c, round_m, round_z, Tol::Rel(0.0));
+            masked_un!($label, $UT, $E, trunc, trunc_c, trunc_m, trunc_z, Tol::Rel(0.0));
+            masked_un!($label, $UT, $E, fract, fract_c, fract_m, fract_z, Tol::Rel(0.0));
             masked_un!(
                 $label,
-                UT,
-                E,
+                $UT,
+                $E,
                 signed_zero,
                 signed_zero_c,
                 signed_zero_m,
@@ -334,8 +332,8 @@ macro_rules! float_mask_tests {
             );
             masked_un!(
                 $label,
-                UT,
-                E,
+                $UT,
+                $E,
                 next_up,
                 next_up_c,
                 next_up_m,
@@ -344,8 +342,8 @@ macro_rules! float_mask_tests {
             );
             masked_un!(
                 $label,
-                UT,
-                E,
+                $UT,
+                $E,
                 next_down,
                 next_down_c,
                 next_down_m,
@@ -355,8 +353,8 @@ macro_rules! float_mask_tests {
             // FMA family (ternary): masked variants vs the backend's own unmasked op.
             masked_tern!(
                 $label,
-                UT,
-                E,
+                $UT,
+                $E,
                 mul_adde,
                 mul_adde_c,
                 mul_adde_m,
@@ -365,8 +363,8 @@ macro_rules! float_mask_tests {
             );
             masked_tern!(
                 $label,
-                UT,
-                E,
+                $UT,
+                $E,
                 mul_sube,
                 mul_sube_c,
                 mul_sube_m,
@@ -375,8 +373,8 @@ macro_rules! float_mask_tests {
             );
             masked_tern!(
                 $label,
-                UT,
-                E,
+                $UT,
+                $E,
                 nmul_adde,
                 nmul_adde_c,
                 nmul_adde_m,
@@ -385,8 +383,8 @@ macro_rules! float_mask_tests {
             );
             masked_tern!(
                 $label,
-                UT,
-                E,
+                $UT,
+                $E,
                 nmul_sube,
                 nmul_sube_c,
                 nmul_sube_m,
@@ -395,8 +393,8 @@ macro_rules! float_mask_tests {
             );
             masked_tern!(
                 $label,
-                UT,
-                E,
+                $UT,
+                $E,
                 mul_add,
                 mul_add_c,
                 mul_add_m,
@@ -405,8 +403,8 @@ macro_rules! float_mask_tests {
             );
             masked_tern!(
                 $label,
-                UT,
-                E,
+                $UT,
+                $E,
                 mul_sub,
                 mul_sub_c,
                 mul_sub_m,
@@ -415,8 +413,8 @@ macro_rules! float_mask_tests {
             );
             masked_tern!(
                 $label,
-                UT,
-                E,
+                $UT,
+                $E,
                 nmul_add,
                 nmul_add_c,
                 nmul_add_m,
@@ -425,8 +423,8 @@ macro_rules! float_mask_tests {
             );
             masked_tern!(
                 $label,
-                UT,
-                E,
+                $UT,
+                $E,
                 nmul_sub,
                 nmul_sub_c,
                 nmul_sub_m,
@@ -437,23 +435,24 @@ macro_rules! float_mask_tests {
     };
 }
 
-macro_rules! int_mask_tests {
-    ($name:ident, $backend:ty, $reg:ident, $label:expr, signed) => {
-        #[test]
-        fn $name() {
-            type UT = <$backend as Simd>::$reg;
-            type E = <UT as Register>::Element;
-            numeric_common!(UT, E, $label, Tol::Exact);
-            masked_bin!($label, UT, E, bitand, bitand_c, bitand_m, bitand_z, Tol::Exact);
-            masked_bin!($label, UT, E, bitor, bitor_c, bitor_m, bitor_z, Tol::Exact);
-            masked_bin!($label, UT, E, bitxor, bitxor_c, bitxor_m, bitxor_z, Tol::Exact);
-            masked_un!($label, UT, E, neg, neg_c, neg_m, neg_z, Tol::Exact);
-            masked_un!($label, UT, E, abs, abs_c, abs_m, abs_z, Tol::Exact);
-            int_extra_masked!(UT, E, $label);
+macro_rules! int_masks {
+    ($S:ty, $reg:ident, $e:ty, $sign:ident) => {{
+        let label = harness::label::<$S>(stringify!($reg));
+        int_masks!(@body <$S as Simd>::$reg, $e, label.as_str(), $sign);
+    }};
+    (@body $UT:ty, $E:ty, $label:expr, signed) => {
+        {
+            numeric_common!($UT, $E, $label, Tol::Exact);
+            masked_bin!($label, $UT, $E, bitand, bitand_c, bitand_m, bitand_z, Tol::Exact);
+            masked_bin!($label, $UT, $E, bitor, bitor_c, bitor_m, bitor_z, Tol::Exact);
+            masked_bin!($label, $UT, $E, bitxor, bitxor_c, bitxor_m, bitxor_z, Tol::Exact);
+            masked_un!($label, $UT, $E, neg, neg_c, neg_m, neg_z, Tol::Exact);
+            masked_un!($label, $UT, $E, abs, abs_c, abs_m, abs_z, Tol::Exact);
+            int_extra_masked!($UT, $E, $label);
             masked_bin!(
                 $label,
-                UT,
-                E,
+                $UT,
+                $E,
                 avg_floor,
                 avg_floor_c,
                 avg_floor_m,
@@ -462,152 +461,50 @@ macro_rules! int_mask_tests {
             );
             masked_bin!(
                 $label,
-                UT,
-                E,
+                $UT,
+                $E,
                 avg_ceil,
                 avg_ceil_c,
                 avg_ceil_m,
                 avg_ceil_z,
                 Tol::Exact
             );
-            masked_shift!($label, UT, E, sra, sra_c, sra_m, sra_z);
+            masked_shift!($label, $UT, $E, sra, sra_c, sra_m, sra_z);
         }
     };
-    ($name:ident, $backend:ty, $reg:ident, $label:expr, unsigned) => {
-        #[test]
-        fn $name() {
-            type UT = <$backend as Simd>::$reg;
-            type E = <UT as Register>::Element;
-            numeric_common!(UT, E, $label, Tol::Exact);
-            masked_bin!($label, UT, E, bitand, bitand_c, bitand_m, bitand_z, Tol::Exact);
-            masked_bin!($label, UT, E, bitor, bitor_c, bitor_m, bitor_z, Tol::Exact);
-            masked_bin!($label, UT, E, bitxor, bitxor_c, bitxor_m, bitxor_z, Tol::Exact);
-            int_extra_masked!(UT, E, $label);
-            masked_bin!($label, UT, E, avg, avg_c, avg_m, avg_z, Tol::Exact);
+    (@body $UT:ty, $E:ty, $label:expr, unsigned) => {
+        {
+            numeric_common!($UT, $E, $label, Tol::Exact);
+            masked_bin!($label, $UT, $E, bitand, bitand_c, bitand_m, bitand_z, Tol::Exact);
+            masked_bin!($label, $UT, $E, bitor, bitor_c, bitor_m, bitor_z, Tol::Exact);
+            masked_bin!($label, $UT, $E, bitxor, bitxor_c, bitxor_m, bitxor_z, Tol::Exact);
+            int_extra_masked!($UT, $E, $label);
+            masked_bin!($label, $UT, $E, avg, avg_c, avg_m, avg_z, Tol::Exact);
         }
     };
 }
 
-// --- X86V3 (AVX2 + FMA) ----------------------------------------------------
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86 {
-    use super::*;
-    use thermite::backend::x86_v1::X86V1;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
-    mod v3_float {
-        use super::*;
-        float_mask_tests!(f32x4, X86V3, f32x4, "x86_v3 f32x4");
-        float_mask_tests!(f32x8, X86V3, f32x8, "x86_v3 f32x8");
-        float_mask_tests!(f32x16, X86V3, f32x16, "x86_v3 f32x16");
-        float_mask_tests!(f64x2, X86V3, f64x2, "x86_v3 f64x2");
-        float_mask_tests!(f64x4, X86V3, f64x4, "x86_v3 f64x4");
-        float_mask_tests!(f64x8, X86V3, f64x8, "x86_v3 f64x8");
-    }
-    mod v3_int {
-        use super::*;
-        int_mask_tests!(i32x4, X86V3, i32x4, "x86_v3 i32x4", signed);
-        int_mask_tests!(i32x8, X86V3, i32x8, "x86_v3 i32x8", signed);
-        int_mask_tests!(i64x2, X86V3, i64x2, "x86_v3 i64x2", signed);
-        int_mask_tests!(i64x4, X86V3, i64x4, "x86_v3 i64x4", signed);
-        int_mask_tests!(u32x4, X86V3, u32x4, "x86_v3 u32x4", unsigned);
-        int_mask_tests!(u32x8, X86V3, u32x8, "x86_v3 u32x8", unsigned);
-        int_mask_tests!(u64x2, X86V3, u64x2, "x86_v3 u64x2", unsigned);
-        int_mask_tests!(u64x4, X86V3, u64x4, "x86_v3 u64x4", unsigned);
-    }
+// One #[test] per (backend, slot). The Scalar rows exercise the scalar register
+// impls and `ArrayRegister` lane delegation as the SUBJECT (elsewhere they are
+// only ever the oracle).
+for_each_backend! {
+    fn float_f32x4<S: Simd>() { float_masks!(S, f32x4, f32) }
+    fn float_f32x8<S: Simd>() { float_masks!(S, f32x8, f32) }
+    fn float_f32x16<S: Simd>() { float_masks!(S, f32x16, f32) }
+    fn float_f64x2<S: Simd>() { float_masks!(S, f64x2, f64) }
+    fn float_f64x4<S: Simd>() { float_masks!(S, f64x4, f64) }
+    fn float_f64x8<S: Simd>() { float_masks!(S, f64x8, f64) }
 
-    // --- X86V2 (SSE4.2) --------------------------------------------------------
-    mod v2_float {
-        use super::*;
-        float_mask_tests!(f32x4, X86V2, f32x4, "x86_v2 f32x4");
-        float_mask_tests!(f32x8, X86V2, f32x8, "x86_v2 f32x8");
-        float_mask_tests!(f64x2, X86V2, f64x2, "x86_v2 f64x2");
-        float_mask_tests!(f64x4, X86V2, f64x4, "x86_v2 f64x4");
-    }
-    mod v2_int {
-        use super::*;
-        int_mask_tests!(i32x4, X86V2, i32x4, "x86_v2 i32x4", signed);
-        int_mask_tests!(i32x8, X86V2, i32x8, "x86_v2 i32x8", signed);
-        int_mask_tests!(i64x2, X86V2, i64x2, "x86_v2 i64x2", signed);
-        int_mask_tests!(u32x4, X86V2, u32x4, "x86_v2 u32x4", unsigned);
-        int_mask_tests!(u64x2, X86V2, u64x2, "x86_v2 u64x2", unsigned);
-    }
-
-    // --- X86V1 (SSE2) -----------------------------------------------------------
-    mod v1_float {
-        use super::*;
-        float_mask_tests!(f32x4, X86V1, f32x4, "x86_v1 f32x4");
-        float_mask_tests!(f32x8, X86V1, f32x8, "x86_v1 f32x8");
-        float_mask_tests!(f64x2, X86V1, f64x2, "x86_v1 f64x2");
-        float_mask_tests!(f64x4, X86V1, f64x4, "x86_v1 f64x4");
-    }
-    mod v1_int {
-        use super::*;
-        int_mask_tests!(i32x4, X86V1, i32x4, "x86_v1 i32x4", signed);
-        int_mask_tests!(i32x8, X86V1, i32x8, "x86_v1 i32x8", signed);
-        int_mask_tests!(i64x2, X86V1, i64x2, "x86_v1 i64x2", signed);
-        int_mask_tests!(u32x4, X86V1, u32x4, "x86_v1 u32x4", unsigned);
-        int_mask_tests!(u64x2, X86V1, u64x2, "x86_v1 u64x2", unsigned);
-    }
-}
-
-// --- Scalar (reference backend as the *subject*, vs the same Rust oracle) ---
-// Covers the scalar register impls and `ArrayRegister` lane delegation, which
-// the differential suites only ever exercise as the oracle, never as the UUT.
-mod scalar_float {
-    use super::*;
-    float_mask_tests!(f32x4, Scalar, f32x4, "scalar f32x4");
-    float_mask_tests!(f32x8, Scalar, f32x8, "scalar f32x8");
-    float_mask_tests!(f64x2, Scalar, f64x2, "scalar f64x2");
-    float_mask_tests!(f64x4, Scalar, f64x4, "scalar f64x4");
-}
-mod scalar_int {
-    use super::*;
-    int_mask_tests!(i32x4, Scalar, i32x4, "scalar i32x4", signed);
-    int_mask_tests!(i32x8, Scalar, i32x8, "scalar i32x8", signed);
-    int_mask_tests!(i64x2, Scalar, i64x2, "scalar i64x2", signed);
-    int_mask_tests!(u32x4, Scalar, u32x4, "scalar u32x4", unsigned);
-    int_mask_tests!(u64x2, Scalar, u64x2, "scalar u64x2", unsigned);
-}
-
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-    mod wasm_float {
-        use super::*;
-        float_mask_tests!(f32x4, Wasm, f32x4, "wasm f32x4");
-        float_mask_tests!(f32x8, Wasm, f32x8, "wasm f32x8");
-        float_mask_tests!(f64x2, Wasm, f64x2, "wasm f64x2");
-        float_mask_tests!(f64x4, Wasm, f64x4, "wasm f64x4");
-    }
-    mod wasm_int {
-        use super::*;
-        int_mask_tests!(i32x4, Wasm, i32x4, "wasm i32x4", signed);
-        int_mask_tests!(i32x8, Wasm, i32x8, "wasm i32x8", signed);
-        int_mask_tests!(i64x2, Wasm, i64x2, "wasm i64x2", signed);
-        int_mask_tests!(u32x4, Wasm, u32x4, "wasm u32x4", unsigned);
-        int_mask_tests!(u64x2, Wasm, u64x2, "wasm u64x2", unsigned);
-    }
-}
-
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-    mod neon_float {
-        use super::*;
-        float_mask_tests!(f32x4, Neon, f32x4, "neon f32x4");
-        float_mask_tests!(f32x8, Neon, f32x8, "neon f32x8");
-        float_mask_tests!(f64x2, Neon, f64x2, "neon f64x2");
-        float_mask_tests!(f64x4, Neon, f64x4, "neon f64x4");
-    }
-    mod neon_int {
-        use super::*;
-        int_mask_tests!(i32x4, Neon, i32x4, "neon i32x4", signed);
-        int_mask_tests!(i32x8, Neon, i32x8, "neon i32x8", signed);
-        int_mask_tests!(i64x2, Neon, i64x2, "neon i64x2", signed);
-        int_mask_tests!(u32x4, Neon, u32x4, "neon u32x4", unsigned);
-        int_mask_tests!(u64x2, Neon, u64x2, "neon u64x2", unsigned);
-    }
+    fn int_i32x4<S: Simd>() { int_masks!(S, i32x4, i32, signed) }
+    fn int_i32x8<S: Simd>() { int_masks!(S, i32x8, i32, signed) }
+    fn int_i32x16<S: Simd>() { int_masks!(S, i32x16, i32, signed) }
+    fn int_i64x2<S: Simd>() { int_masks!(S, i64x2, i64, signed) }
+    fn int_i64x4<S: Simd>() { int_masks!(S, i64x4, i64, signed) }
+    fn int_i64x8<S: Simd>() { int_masks!(S, i64x8, i64, signed) }
+    fn int_u32x4<S: Simd>() { int_masks!(S, u32x4, u32, unsigned) }
+    fn int_u32x8<S: Simd>() { int_masks!(S, u32x8, u32, unsigned) }
+    fn int_u32x16<S: Simd>() { int_masks!(S, u32x16, u32, unsigned) }
+    fn int_u64x2<S: Simd>() { int_masks!(S, u64x2, u64, unsigned) }
+    fn int_u64x4<S: Simd>() { int_masks!(S, u64x4, u64, unsigned) }
+    fn int_u64x8<S: Simd>() { int_masks!(S, u64x8, u64, unsigned) }
 }

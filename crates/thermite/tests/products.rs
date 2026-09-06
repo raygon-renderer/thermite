@@ -22,56 +22,75 @@
     target_arch = "aarch64"
 ))]
 
+mod harness;
+
 use thermite::math::policy::policies::{HighPerformance, Performance, Precision};
 use thermite::math::{CoreMath, CoreMathWithPolicy};
 use thermite::prelude::*;
+use thermite::simd::Simd;
 use thermite::vector::ops::MulAddExt;
 
-type D = Vector<f64>;
-type F = Vector<f32>;
+macro_rules! ctx {
+    () => {
+        #[allow(dead_code)]
+        type D = Vector<<S as Simd>::f64x4>;
+        #[allow(dead_code)]
+        type F = Vector<<S as Simd>::f32x8>;
 
-/// Whether the scalar seed fuses. False on baseline x86, true on AArch64 and under
-/// `RUSTFLAGS="-C target-feature=+fma"`. Both arms are tested wherever the property
-/// holds unconditionally. This only gates the claims that differ by lowering.
-const SEED_FUSES: bool = matches!(<D as MulAddExt>::HAS_NATIVE_FMA, thermite::tribool::True);
+        /// Whether the scalar seed fuses. False on baseline x86, true on AArch64 and under
+        /// `RUSTFLAGS="-C target-feature=+fma"`. Both arms are tested wherever the property
+        /// holds unconditionally. This only gates the claims that differ by lowering.
+        #[allow(dead_code)]
+        const SEED_FUSES: bool = matches!(<D as MulAddExt>::HAS_NATIVE_FMA, thermite::tribool::True);
 
-/// Operand pairs whose product is not exactly representable, so a lowering that
-/// rounds one side and not the other cannot accidentally pass. The last pair sits
-/// near the top of the f64 range, where a compensated form that scales rather than
-/// rebalances would overflow.
-const PAIRS: &[(f64, f64)] = &[
-    (0.1, 0.3),
-    (1.0 / 3.0, 7.0 / 11.0),
-    (1e-8, 3.7e12),
-    (9.007199254740993e15, 1.0000000000000002),
-    (-2.718281828459045, 3.141592653589793),
-    (1.7976931348623157e150, 1.1102230246251565e-16),
-];
+        /// Operand pairs whose product is not exactly representable, so a lowering that
+        /// rounds one side and not the other cannot accidentally pass. The last pair sits
+        /// near the top of the f64 range, where a compensated form that scales rather than
+        /// rebalances would overflow.
+        #[allow(dead_code)]
+        const PAIRS: &[(f64, f64)] = &[
+            (0.1, 0.3),
+            (1.0 / 3.0, 7.0 / 11.0),
+            (1e-8, 3.7e12),
+            (9.007199254740993e15, 1.0000000000000002),
+            (-2.718281828459045, 3.141592653589793),
+            (1.7976931348623157e150, 1.1102230246251565e-16),
+        ];
 
-/// The f32 twin. Kept separate rather than cast down from [`PAIRS`]: the wide f64
-/// entries saturate to infinity in f32, and `inf - inf` is a correct NaN that has
-/// nothing to say about the lowering under test.
-const PAIRS32: &[(f32, f32)] = &[
-    (0.1, 0.3),
-    (1.0 / 3.0, 7.0 / 11.0),
-    (1e-8, 3.7e12),
-    (16777217.0, 1.0000001),
-    (-2.7182817, 3.1415927),
-    (1.9721523e30, 5.9604645e-8),
-];
+        /// The f32 twin. Kept separate rather than cast down from [`PAIRS`]: the wide f64
+        /// entries saturate to infinity in f32, and `inf - inf` is a correct NaN that has
+        /// nothing to say about the lowering under test.
+        #[allow(dead_code)]
+        const PAIRS32: &[(f32, f32)] = &[
+            (0.1, 0.3),
+            (1.0 / 3.0, 7.0 / 11.0),
+            (1e-8, 3.7e12),
+            (16777217.0, 1.0000001),
+            (-2.7182817, 3.1415927),
+            (1.9721523e30, 5.9604645e-8),
+        ];
 
-fn ulp(x: f64) -> f64 {
-    let a = x.abs();
-    if a == 0.0 { f64::MIN_POSITIVE } else { a.next_up() - a }
+        #[allow(dead_code)]
+        fn ulp(x: f64) -> f64 {
+            let a = x.abs();
+            if a == 0.0 {
+                f64::MIN_POSITIVE
+            } else {
+                a.next_up() - a
+            }
+        }
+    };
 }
+
+for_each_backend_concrete! {
 
 /// `a*b - b*a` is zero, at every tier that compensates.
 ///
 /// Both surviving arms give exact zero here (naive because the two products round
 /// identically, compensated because the residual it adds back is the one it just
 /// subtracted), so this holds with or without hardware FMA and needs no gate.
-#[test]
 fn equal_products_cancel_exactly() {
+    ctx!();
     for &(a, b) in PAIRS {
         let got = D::splat(a)
             .difference_of_products(D::splat(b), D::splat(b), D::splat(a))
@@ -94,8 +113,8 @@ fn equal_products_cancel_exactly() {
 
 /// The `sum_of_products` twin: `a*b + (-b)*a` is zero. The compensation enters with
 /// the opposite sign there, and getting that backwards is the easy mistake.
-#[test]
 fn sum_of_products_cancels_exactly() {
+    ctx!();
     for &(a, b) in PAIRS {
         let got = D::splat(a)
             .sum_of_products(D::splat(b), D::splat(-b), D::splat(a))
@@ -115,8 +134,8 @@ fn sum_of_products_cancels_exactly() {
 /// on this workspace's usual x86 hosts they disagree about it: the seed reads
 /// baseline target features (no FMA) while the AVX2 backend has it. So this is not a
 /// duplicate of the test above. It usually exercises the _other_ arm.
-#[test]
 fn equal_products_cancel_exactly_at_native_width() {
+    ctx!();
     for &(a, b) in PAIRS {
         let got = thermite::dispatch_dyn!(for<S> |a: f64, b: f64| -> f64 {
             f64xN::splat(a)
@@ -143,8 +162,8 @@ fn equal_products_cancel_exactly_at_native_width() {
 /// each product cancel and whatever error the products carry is all that survives.
 /// Exact value computed with `fractions.Fraction`. The compensated form's measured
 /// relative error is `1.6519e-16`, or 0.74 ulp.
-#[test]
 fn compensation_recovers_cancellation() {
+    ctx!();
     const A: f64 = 33962.035;
     const B: f64 = -30438.8;
     const C: f64 = 41563.4;
@@ -183,8 +202,8 @@ fn compensation_recovers_cancellation() {
 /// Below `Average` the one-sided form is deliberate, and on a fusing host it does
 /// _not_ give exact zero. Pinned as a positive statement so the tier boundary is
 /// visible in the test suite rather than only in the docs.
-#[test]
 fn low_tier_takes_the_one_sided_form() {
+    ctx!();
     let (a, b) = (0.1f64, 0.3f64);
 
     let got = D::splat(a)
@@ -207,8 +226,8 @@ fn low_tier_takes_the_one_sided_form() {
 ///
 /// Spelled out longhand rather than through `thermite-geometry` so this test does not
 /// depend on that crate having been migrated yet.
-#[test]
 fn self_cross_product_is_zero() {
+    ctx!();
     let v = [0.1f64, 0.3, -7.0 / 11.0];
 
     for (i, j, k) in [(0usize, 1usize, 2usize), (1, 2, 0), (2, 0, 1)] {
@@ -223,4 +242,6 @@ fn self_cross_product_is_zero() {
         .difference_of_products(D::splat(b), D::splat(a), D::splat(b))
         .extract::<0>();
     assert_eq!(det, 0.0, "det([[a, b], [a, b]]) was {det:e}");
+}
+
 }

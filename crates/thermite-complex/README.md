@@ -96,11 +96,9 @@ Relationship to the other crates
 Status
 ------
 
-Pre-release. The complex vector surface, the transcendental library and the
-Faddeeva implementation are complete and tested. The `Complex<Compensated<..>>`
-path is complete for the element-agnostic functions but still `todo!()`s the
-Gamma family, `lambert_w` and Faddeeva, which wait on the corresponding real
-double-double implementations in `thermite-compensated`.
+Pre-release. The complex vector surface, the transcendental library, the special
+functions (Gamma family, Bessel and Airy at real order, zeta, polylog, Faddeeva)
+are complete and tested, and `Dual` or `Compensated` can stand in as the storage.
 
 License
 -------

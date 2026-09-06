@@ -50,7 +50,7 @@
 //!   are `todo!()` until the interleaved memory layout is settled, so slice
 //!   iteration does not work yet.
 //! - Functions without a hand-written interval form (`tan`, `sin_pi`,
-//!   `smoothstep`, `logsumexp_n`, ...) fall back to the trait defaults.
+//!   `smoothstep_derivative`, `logsumexp_n`, ...) fall back to the trait defaults.
 //!   Those compose out of the enclosing arithmetic, so they are _valid_ but
 //!   can be very wide (the dependency problem). They are the next targets.
 //! - `Interval` deliberately does not implement `FloatVectorWithBits` (no

@@ -5,8 +5,11 @@
 //! the `SimdVectors` bound resolves through real backend types.
 #![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 
+mod harness;
+
 use thermite::element::float::spec::{Bf16, FloatSpec, Fp16, Fp16Fast};
 use thermite::register::{CoreRegister, Register};
+use thermite::simd::Simd;
 use thermite::vector::{GenericVector, PackedFloatVector, Vector};
 
 fn f32_eq(a: f32, b: f32) -> bool {
@@ -96,71 +99,29 @@ macro_rules! check_vector {
     }};
 }
 
-// fp16 + bf16, always (these match the oracle on both the generic default and the F16C path).
-macro_rules! vector_suite {
-    ($mod:ident, $u:ty, $f:ty) => {
-        mod $mod {
-            use super::*;
-            #[test]
-            fn fp16() {
-                check_vector!(Fp16, $u, $f);
-            }
-            #[test]
-            fn bf16() {
-                check_vector!(Bf16, $u, $f);
-            }
-        }
-    };
+/// AVX2-and-up rows take the F16C hardware path when the feature is on. Its fast unpack
+/// decodes the assumed-absent inf/NaN code points differently than the Unchecked oracle.
+fn f16c_hardware<S: thermite::simd::HasIsa>() -> bool {
+    cfg!(feature = "avx2-f16c") && S::ISA >= thermite::isa::InstructionSet::X86V3
 }
 
-// fp16fast as a separate test fn, added only where the generic default is wired. (The F16C
-// hardware fast unpack decodes the assumed-absent inf/NaN code points differently than the
-// Unchecked oracle, so it is excluded for v3 under avx2-f16c.)
-macro_rules! fast_test {
-    ($u:ty, $f:ty) => {
-        #[test]
-        fn fp16fast() {
-            check_vector!(Fp16Fast, $u, $f);
-        }
-    };
-}
-
-// 8-lane u16 <-> f32 on each backend (v3's f32x8 is native, on v1/v2 it's an ArrayRegister, so the
-// `PackedFloatVector` blanket handles both transparently).
-mod v1 {
-    use super::*;
-    use thermite::backend::x86_v1::registers::F32x4V1;
-    use thermite::backend::x86_v1::registers::U16x8V1;
-    use thermite::register::array::ArrayRegister;
-    vector_suite!(x8, U16x8V1, ArrayRegister<F32x4V1, 2>);
-    mod x8_fast {
-        use super::*;
-        fast_test!(U16x8V1, ArrayRegister<F32x4V1, 2>);
+// 8-lane u16 <-> f32 on each backend (v3's f32x8 is native, on v1/v2 it's an ArrayRegister, so
+// the `PackedFloatVector` blanket handles both transparently).
+for_each_backend_concrete! {
+    // fp16 + bf16 always: these match the oracle on both the generic default and the F16C path.
+    fn fp16() {
+        check_vector!(Fp16, <S as Simd>::u16x8, <S as Simd>::f32x8);
     }
-}
 
-mod v2 {
-    use super::*;
-    use thermite::backend::x86_v2::registers::F32x4V2;
-    use thermite::backend::x86_v2::registers::U16x8V2;
-    use thermite::register::array::ArrayRegister;
-    vector_suite!(x8, U16x8V2, ArrayRegister<F32x4V2, 2>);
-    mod x8_fast {
-        use super::*;
-        fast_test!(U16x8V2, ArrayRegister<F32x4V2, 2>);
+    fn bf16() {
+        check_vector!(Bf16, <S as Simd>::u16x8, <S as Simd>::f32x8);
     }
-}
 
-#[cfg(target_arch = "x86_64")]
-mod v3 {
-    use super::*;
-    use thermite::backend::x86_v3::registers::{F32x8V3, U16x8V3};
-    vector_suite!(x8, U16x8V3, F32x8V3);
-    // Fast suite only when v3 uses the generic default (no F16C); the hardware fast unpack
-    // diverges on reserved code points by design.
-    #[cfg(not(feature = "avx2-f16c"))]
-    mod x8_fast {
-        use super::*;
-        fast_test!(U16x8V3, F32x8V3);
+    // fp16fast only where the generic default is wired.
+    fn fp16fast() {
+        if f16c_hardware::<S>() {
+            return;
+        }
+        check_vector!(Fp16Fast, <S as Simd>::u16x8, <S as Simd>::f32x8);
     }
 }

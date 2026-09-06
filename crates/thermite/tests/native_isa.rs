@@ -117,6 +117,28 @@ fn isa_agrees_with_native_isa() {
     assert_isa_agrees::<i16x2<X86V3>>();
 }
 
+/// Same properties for the AVX-512 backend (type-level only, nothing here
+/// executes AVX-512 instructions, so it runs on any host).
+#[cfg(all(any(target_arch = "x86", target_arch = "x86_64"), feature = "avx512-tier1"))]
+#[test]
+fn x86_v4_slots_name_their_own_backend() {
+    use thermite::backend::x86_v4::X86V4Default as X86V4;
+
+    assert_native::<X86V4, X86V4>();
+    assert_native::<f32xN<X86V4>, X86V4>();
+    assert_native::<f32x4<X86V4>, X86V4>(); // quarter-width on a 512-bit backend
+    assert_native::<f32x8<X86V4>, X86V4>();
+    assert_native::<f64x16<X86V4>, X86V4>(); // ArrayRegister<F64x8V4, 2>
+    assert_native::<u8x16<X86V4>, X86V4>();
+    assert_native::<i16x2<X86V4>, Scalar>();
+
+    assert_isa_agrees::<X86V4>();
+    assert_isa_agrees::<f32xN<X86V4>>();
+    assert_isa_agrees::<f64x16<X86V4>>();
+    assert_isa_agrees::<i16x2<X86V4>>();
+    assert_eq!(<X86V4 as HasIsa>::ISA, thermite::isa::InstructionSet::X86V4);
+}
+
 /// The point of the whole thing: per-ISA properties reachable from a bound
 /// that never mentions the backend.
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]

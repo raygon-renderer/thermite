@@ -6,9 +6,15 @@
 //! a wrong answer rather than reduced precision. The `<= Average` tiers, which include
 //! `DefaultPolicy` on x86, did that until they were moved onto the two-scale
 //! reconstruction the accurate tiers already used.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
 
-use thermite::backend::x86_v3::prelude::*;
+mod harness;
+
 use thermite::math::policy::DefaultPolicy;
 use thermite::math::policy::policies::{Precision, Reference, Size};
 
@@ -43,7 +49,8 @@ fn last_finite_f64(f: impl Fn(f64) -> f64) -> f64 {
 const LN_MAX_F32: f32 = 88.72284;
 const LN_MAX_F64: f64 = 709.782712893384;
 
-#[test]
+for_each_backend_concrete! {
+
 fn exp_reaches_ln_max_at_every_overflow_checking_tier() {
     // Within 0.01 of the true limit. The remaining sliver is the rounded gate constant
     // (88.72 / 709.78), which is shared by every tier here and is not a tier divergence.
@@ -82,7 +89,6 @@ fn exp_reaches_ln_max_at_every_overflow_checking_tier() {
 }
 
 /// The specific results that used to come back as infinity.
-#[test]
 fn the_top_binade_of_exp_is_finite_and_correct() {
     let xs32: [f32; 8] = [88.0, 88.3, 88.4, 88.5, 88.6, 88.7, 88.72, 87.5];
     for (name, got) in [
@@ -125,7 +131,6 @@ fn the_top_binade_of_exp_is_finite_and_correct() {
 /// overflow: `compound(6.77, 43.2)` returned `inf` where the answer is 2.72e38, well
 /// inside float32. Kept as its own test because the failure was reported against
 /// `compound`, and a future reader should be able to find it under that name.
-#[test]
 fn compound_reaches_the_top_of_the_range() {
     let x: [f32; 8] = [6.7693954, 2.1459005, 4.1036143, 2.605822, 1.9016389, 5.0, 1.0, 0.5];
     let n: [f32; 8] = [43.166588, 77.04856, 54.38955, 52.417728, 74.708397, 49.0, 127.0, 200.0];
@@ -170,7 +175,6 @@ fn compound_reaches_the_top_of_the_range() {
 /// it silently vanish from the default build, so the expectation switches instead of the
 /// test. Under the default flush, a subnormal base genuinely IS zero by the time the
 /// kernel sees it and `0^negative = inf` is correct.
-#[test]
 fn powf_of_a_subnormal_base() {
     let b: [f32; 8] = [
         1.3754039e-39,
@@ -222,4 +226,6 @@ fn powf_of_a_subnormal_base() {
             }
         }
     }
+}
+
 }

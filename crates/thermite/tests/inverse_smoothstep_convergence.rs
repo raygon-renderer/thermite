@@ -35,14 +35,20 @@
 //! Four orders of margin on each side. This is deliberately NOT an accuracy test, since full
 //! precision needs a few more iterations than twelve and is covered by the tier sweeps.
 //! The only question here is whether the solver is converging or halving.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
+
+mod harness;
 
 use thermite::Vector;
 use thermite::math::RealMathWithPolicy;
 use thermite::math::policy::{DenormalBehavior, Policy, PolicyParameters, PrecisionPolicy};
 use thermite::prelude::*;
-
-type D = Vector<f64>;
+use thermite::simd::Simd;
 
 /// `Precision` in every respect except that the solver gets twelve iterations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -88,62 +94,130 @@ const PROBES: &[f64] = &[
     0.02, 0.05, 0.1, 0.2, 0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.7, 0.8, 0.9, 0.95, 0.98,
 ];
 
-macro_rules! check_order {
-    ($name:ident, $n:literal) => {
-        #[test]
-        fn $name() {
-            for &y in PROBES {
-                let x = D::splat(y)
-                    .inverse_smoothstep_n_p::<TightBudget, $n>(None)
-                    .extract::<0>();
+/// One order per test, every backend. The whole file is one stamper block.
+macro_rules! check_orders {
+    ($($name:ident = $n:literal),+ $(,)?) => {
+        for_each_backend_concrete! {
+            $(
+                fn $name() {
+                    type D = Vector<<S as Simd>::f64x4>;
+                    for &y in PROBES {
+                        let x = D::splat(y)
+                            .inverse_smoothstep_p::<TightBudget, $n>(None)
+                            .extract::<0>();
 
-                assert!(
-                    (0.0..=1.0).contains(&x),
-                    "n={}: inverse_smoothstep({y}) = {x}, outside [0, 1]",
-                    $n
-                );
+                        assert!(
+                            (0.0..=1.0).contains(&x),
+                            "n={}: inverse_smoothstep({y}) = {x}, outside [0, 1]",
+                            $n
+                        );
 
-                // Round trip. The forward map is well conditioned in the interior, so an
-                // unconverged root shows up here directly.
-                let back = smoothstep_ref(x, $n);
+                        // Round trip. The forward map is well conditioned in the interior, so an
+                        // unconverged root shows up here directly.
+                        let back = smoothstep_ref(x, $n);
 
-                assert!(
-                    (back - y).abs() <= 1e-8,
-                    "n={}: inverse_smoothstep({y}) = {x} round-trips to {back} \
-                     (off by {:.3e}) in {} iterations. A bisecting solver cannot resolve \
-                     an f64 this quickly - check the derivative returned to newtons_method.",
-                    $n,
-                    (back - y).abs(),
-                    TightBudget::POLICY.max_iterations
-                );
+                        assert!(
+                            (back - y).abs() <= 1e-8,
+                            "n={}: inverse_smoothstep({y}) = {x} round-trips to {back} \
+                             (off by {:.3e}) in {} iterations. A bisecting solver cannot resolve \
+                             an f64 this quickly - check the derivative returned to newtons_method.",
+                            $n,
+                            (back - y).abs(),
+                            TightBudget::POLICY.max_iterations
+                        );
+                    }
+                }
+            )+
+
+            /// With edges the inverse is the unit-space inverse rescaled once (`a + (b - a) t`),
+            /// exact in the scaling and round-tripping through an independent forward
+            /// evaluation, including at y = 0 and y = 1 where the old edge-space bracket
+            /// (mapped through an approximate reciprocal) had no sign change.
+            fn edges_are_a_single_exact_rescale() {
+                type D = Vector<<S as Simd>::f64x4>;
+                type F = Vector<<S as Simd>::f32x8>;
+                // The exact endpoints are in: the kernel hands them back without solving.
+                // Near-endpoint values are not, for the reason PROBES gives.
+                let mut ys: Vec<f64> = PROBES.to_vec();
+                ys.extend([0.0, 1.0]);
+                for (a, b) in [(-1.0f64, 3.0), (10.0, 12.5), (-7.5, -2.0)] {
+                    let ed = Some((D::splat(a), D::splat(b)));
+                    let ef = Some((F::splat(a as f32), F::splat(b as f32)));
+                    for &y in &ys {
+                        for n in [3usize, 4, 5] {
+                            let x = match n {
+                                3 => D::splat(y).inverse_smoothstep_p::<TightBudget, 3>(ed).extract::<0>(),
+                                4 => D::splat(y).inverse_smoothstep_p::<TightBudget, 4>(ed).extract::<0>(),
+                                _ => D::splat(y).inverse_smoothstep_p::<TightBudget, 5>(ed).extract::<0>(),
+                            };
+                            let t = match n {
+                                3 => D::splat(y).inverse_smoothstep_p::<TightBudget, 3>(None).extract::<0>(),
+                                4 => D::splat(y).inverse_smoothstep_p::<TightBudget, 4>(None).extract::<0>(),
+                                _ => D::splat(y).inverse_smoothstep_p::<TightBudget, 5>(None).extract::<0>(),
+                            };
+                            assert!(
+                                (a..=b).contains(&x),
+                                "n={n} edges=({a},{b}): inverse({y}) = {x} outside the edges"
+                            );
+                            // The scaling itself is one mul_add away from the unit result.
+                            let want_x = D::splat(t).mul_adde(D::splat(b - a), D::splat(a)).extract::<0>();
+                            assert_eq!(
+                                x.to_bits(),
+                                want_x.to_bits(),
+                                "n={n} edges=({a},{b}): inverse({y}) = {x} is not the rescaled unit inverse {want_x}"
+                            );
+                            // Round trip through the scalar forward reference.
+                            let back = smoothstep_ref(((x - a) / (b - a)).clamp(0.0, 1.0), n);
+                            assert!(
+                                (back - y).abs() <= 1e-8,
+                                "n={n} edges=({a},{b}): inverse({y}) = {x} round-trips to {back}"
+                            );
+                        }
+
+                        // f32 at the edge case that used to trip the bracket assert.
+                        let xf = F::splat(y as f32).inverse_smoothstep_p::<TightBudget, 4>(ef).extract::<0>();
+                        assert!(
+                            ((a as f32)..=(b as f32)).contains(&xf),
+                            "f32 n=4 edges=({a},{b}): inverse({y}) = {xf} outside the edges"
+                        );
+                        let back = smoothstep_ref((((xf as f64) - a) / (b - a)).clamp(0.0, 1.0), 4);
+                        // f32 in, f64 reference: a few f32 ulps of t, amplified by S'(t) <= 2.5.
+                        assert!(
+                            (back - y).abs() <= 1e-5,
+                            "f32 n=4 edges=({a},{b}): inverse({y}) = {xf} round-trips to {back}"
+                        );
+                    }
+                }
+            }
+
+            /// The symmetry `S(1 - x) = 1 - S(x)` makes the inverse antisymmetric about (0.5, 0.5).
+            /// Independent of the solver's speed, and a cheap check that the bracket handling is not
+            /// biased toward one side.
+            fn inverse_smoothstep_is_antisymmetric() {
+                type D = Vector<<S as Simd>::f64x4>;
+                for &y in PROBES {
+                    let a = D::splat(y)
+                        .inverse_smoothstep_p::<TightBudget, 3>(None)
+                        .extract::<0>();
+                    let b = D::splat(1.0 - y)
+                        .inverse_smoothstep_p::<TightBudget, 3>(None)
+                        .extract::<0>();
+
+                    assert!(
+                        (a + b - 1.0).abs() <= 1e-8,
+                        "inverse_smoothstep({y}) + inverse_smoothstep({}) = {}, want 1",
+                        1.0 - y,
+                        a + b
+                    );
+                }
             }
         }
     };
 }
 
-check_order!(inverse_smoothstep_n3_converges_in_12_iterations, 3);
-check_order!(inverse_smoothstep_n4_converges_in_12_iterations, 4);
-check_order!(inverse_smoothstep_n5_converges_in_12_iterations, 5);
-check_order!(inverse_smoothstep_n8_converges_in_12_iterations, 8);
-
-/// The symmetry `S(1 - x) = 1 - S(x)` makes the inverse antisymmetric about (0.5, 0.5).
-/// Independent of the solver's speed, and a cheap check that the bracket handling is not
-/// biased toward one side.
-#[test]
-fn inverse_smoothstep_is_antisymmetric() {
-    for &y in PROBES {
-        let a = D::splat(y)
-            .inverse_smoothstep_n_p::<TightBudget, 3>(None)
-            .extract::<0>();
-        let b = D::splat(1.0 - y)
-            .inverse_smoothstep_n_p::<TightBudget, 3>(None)
-            .extract::<0>();
-
-        assert!(
-            (a + b - 1.0).abs() <= 1e-8,
-            "inverse_smoothstep({y}) + inverse_smoothstep({}) = {}, want 1",
-            1.0 - y,
-            a + b
-        );
-    }
+check_orders! {
+    inverse_smoothstep_n3_converges_in_12_iterations = 3,
+    inverse_smoothstep_n4_converges_in_12_iterations = 4,
+    inverse_smoothstep_n5_converges_in_12_iterations = 5,
+    inverse_smoothstep_n8_converges_in_12_iterations = 8,
 }

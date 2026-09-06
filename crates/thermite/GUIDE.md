@@ -1376,10 +1376,8 @@ otherwise, and only assembly will tell you.
 fault, nondeterministically, depending on where the allocator put it. Use `load_unaligned`
 or an aligned container.
 
-**`bitandnot` means different things at different layers.** At the `Vector` and `Mask`
-layer, `a.bitandnot(b)` is `a & !b`. At the register layer it follows the x86 convention
-and is `!lhs & rhs`. The vector implementations swap operands when they delegate, so never
-infer one layer's behavior from the other.
+**`bitandnot` negates its SECOND operand.** `a.bitandnot(b)` is `a & !b`, and
+`R::bitandnot(lhs, rhs)` is `lhs & !rhs`.
 
 **Masked variants take the mask first**, except `_m`, which takes `src` first and then the
 mask. The generated documentation carries the exact signature for every method.

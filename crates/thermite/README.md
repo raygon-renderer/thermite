@@ -151,7 +151,13 @@ re-deriving the precedence itself.
 `std` (off by default, this crate is `no_std`) enables formatted panic messages
 and `num-traits/std`. `bitvec` (default) adds the `bitvec` mask integration.
 `partial-ord` adds `PartialOrd` for `Vector`, which only holds when every lane
-shares the order. `document_registers` (default) is documentation only.
+shares the order. `document_registers` (default) is documentation only. `rand`
+implements `rand`'s distributions for `Vector`. `outline_scalar_math` emits the
+scalar rounding fallbacks out of line instead of inlining them at every call
+site, trading constant folding for code size. `trace` makes the public math
+forwarders call the region markers on `GenericVector`, which only a symbolic
+vector type (`thermite-trace`) does anything with, so it changes nothing for a
+hardware register.
 
 ## Reaching the other backends
 

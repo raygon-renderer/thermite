@@ -10,9 +10,15 @@
 //! only the default policy.** A kernel branch that only compiles in below `Average` was
 //! never executed by any test. So every case here runs at all seven tiers, and the
 //! tolerance is *per tier* rather than one loose bound that a fast tier could hide in.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
 
-use thermite::backend::x86_v3::prelude::*;
+mod harness;
+
 use thermite::math::policy::DefaultPolicy;
 use thermite::math::policy::policies::{HighPerformance, Performance, Precision, Reference, Size, UltraPerformance};
 
@@ -104,6 +110,8 @@ fn ang_close(got: f32, want: f64, tol: f32) -> bool {
     ((got as f64) - want).abs() <= tol as f64
 }
 
+for_each_backend_concrete! {
+
 // ---------------------------------------------------------------------------
 // 1. The dense grid. This is what would have caught the bug on day one.
 // ---------------------------------------------------------------------------
@@ -114,7 +122,6 @@ fn ang_close(got: f32, want: f64, tol: f32) -> bool {
 /// entirely in which of the two got put in the numerator, so a grid that only sampled one
 /// side of `|y| == |x|` would have missed half of it and a grid that only sampled
 /// `|y| == |x|` would have missed all of it.
-#[test]
 fn dense_grid_every_quadrant_every_tier() {
     let mut pts: Vec<(f32, f32)> = Vec::new();
     for i in -32..=32 {
@@ -163,7 +170,6 @@ fn dense_grid_every_quadrant_every_tier() {
     });
 }
 
-#[test]
 fn dense_grid_f64_every_quadrant_every_tier() {
     let mut pts: Vec<(f64, f64)> = Vec::new();
     for i in -24..=24 {
@@ -221,7 +227,6 @@ fn dense_grid_f64_every_quadrant_every_tier() {
 /// for a fast tier. Here it is not: the sum is `pi/2` for the correct orientation and
 /// `3*pi/2 - 2*theta` for the inverted one, off by a full radian in the middle of the
 /// range.
-#[test]
 fn complementary_angle_identity() {
     let vals: [f32; 12] = [
         1.0, 2.0, 0.5, 3.0, 0.125, 7.0, 1e3, 1e-3, 1e8, 1e-8, 1.7320508, 0.57735026,
@@ -249,7 +254,6 @@ fn complementary_angle_identity() {
 ///
 /// A second, independent way of catching an inverted ratio: it ties `atan2` to the
 /// one-argument `atan`, which has its own tests and its own fit.
-#[test]
 fn first_quadrant_agrees_with_atan_of_the_ratio() {
     let ratios: [f32; 9] = [0.001, 0.1, 0.5, 0.9, 1.0, 1.1, 2.0, 10.0, 1000.0];
 
@@ -272,7 +276,6 @@ fn first_quadrant_agrees_with_atan_of_the_ratio() {
 // 3. Quadrants and signs, which a magnitude-only test cannot see.
 // ---------------------------------------------------------------------------
 
-#[test]
 fn every_quadrant_lands_in_its_own_range() {
     // (y, x, expected sign of result, expected |result| range)
     let cases: [(f32, f32, &str); 4] = [
@@ -307,7 +310,6 @@ fn every_quadrant_lands_in_its_own_range() {
 }
 
 /// Signed zero picks the branch cut: `atan2(+0, -1) == +pi`, `atan2(-0, -1) == -pi`.
-#[test]
 fn signed_zero_selects_the_branch() {
     let cases: [(f32, f32, f64); 8] = [
         (0.0, 1.0, 0.0),
@@ -346,7 +348,6 @@ fn signed_zero_selects_the_branch() {
 /// value there rather than an overflow edge, so it is not behind `check_overflow`. The
 /// float32 Medium branch used to gate it and return NaN, while the float32 `Best` branch
 /// and every float64 tier returned 0.
-#[test]
 fn the_origin_is_zero_at_every_tier() {
     let mut ti = 0;
     for_each_tier!(|P, tol| {
@@ -371,7 +372,6 @@ fn the_origin_is_zero_at_every_tier() {
 
 /// Ratios far past what a float can represent. These returned NaN before the fix,
 /// because an inverted ratio squared overflows once `max/min > 1.8e19`.
-#[test]
 fn extreme_magnitude_ratios() {
     let cases: [(f32, f32); 10] = [
         (3.7e-21, 207761.0),
@@ -406,7 +406,6 @@ fn extreme_magnitude_ratios() {
 /// Infinities. All four `(+-inf, +-inf)` corners are the diagonal angles, and a finite
 /// operand against an infinite one collapses to an axis. Only the `check_overflow` tiers
 /// promise this.
-#[test]
 fn infinite_operands_where_overflow_is_checked() {
     let inf = f32::INFINITY;
     let cases: [(f32, f32, f64); 8] = [
@@ -448,7 +447,6 @@ fn infinite_operands_where_overflow_is_checked() {
 // ---------------------------------------------------------------------------
 
 /// Lane independence: a packed call must equal the same pairs computed one at a time.
-#[test]
 fn lanes_do_not_influence_each_other() {
     let ys: [f32; 8] = [1.0, -2.0, 0.0, 1e20, 1e-20, f32::INFINITY, -0.0, 3.0];
     let xs: [f32; 8] = [2.0, 1.0, -1.0, 1e-20, 1e20, 1.0, -1.0, -4.0];
@@ -473,17 +471,9 @@ fn lanes_do_not_influence_each_other() {
     });
 }
 
-/// Every backend must agree. The kernel is shared but the lowering is not.
-#[test]
-fn every_backend_agrees() {
-    use thermite::backend::scalar::Scalar;
-    use thermite::backend::{x86_v1::X86V1, x86_v2::X86V2};
-    use thermite::simd::Simd;
-
-    type S1 = Vector<<Scalar as Simd>::f32x4>;
-    type V1 = Vector<<X86V1 as Simd>::f32x4>;
-    type V2 = Vector<<X86V2 as Simd>::f32x8>;
-
+/// Every width must agree with the reference. The kernel is shared but the lowering
+/// is not. The per-backend stamping supplies the cross-backend half of the check.
+fn every_width_agrees() {
     let cases: [(f32, f32); 10] = [
         (1.0, 2.0),
         (2.0, 1.0),
@@ -500,16 +490,18 @@ fn every_backend_agrees() {
     for &(y, x) in &cases {
         let want = (y as f64).atan2(x as f64);
 
-        let s = S1::splat(y).atan2_p::<Precision>(S1::splat(x)).into_array()[0];
-        let v1 = V1::splat(y).atan2_p::<Precision>(V1::splat(x)).into_array()[0];
-        let v2 = V2::splat(y).atan2_p::<Precision>(V2::splat(x)).into_array()[0];
-        let v3 = f32x8::splat(y).atan2_p::<Precision>(f32x8::splat(x)).into_array()[0];
+        let v4 = f32x4::splat(y).atan2_p::<Precision>(f32x4::splat(x)).into_array()[0];
+        let v8 = f32x8::splat(y).atan2_p::<Precision>(f32x8::splat(x)).into_array()[0];
+        let v16 = f32x16::splat(y).atan2_p::<Precision>(f32x16::splat(x)).into_array()[0];
 
-        for (name, got) in [("scalar", s), ("x86_v1", v1), ("x86_v2", v2), ("x86_v3", v3)] {
+        for (name, got) in [("f32x4", v4), ("f32x8", v8), ("f32x16", v16)] {
             assert!(
                 ang_close(got, want, 2.0e-7),
-                "{name}: atan2({y}, {x}) = {got}, want {want}"
+                "{}: atan2({y}, {x}) = {got}, want {want}",
+                harness::label::<S>(name)
             );
         }
     }
+}
+
 }

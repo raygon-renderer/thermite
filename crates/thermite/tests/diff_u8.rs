@@ -1,10 +1,10 @@
-//! Differential tests for the native-width 8-bit integer families (`Simd`):
-//! every backend register op vs. an element-wise scalar oracle, for i8/u8.
+//! Differential tests for the native-width 8-bit integer families (`NativeSimd`
+//! `i8xN`/`u8xN`): every backend register op vs. an element-wise scalar oracle.
 //!
-//! The 8-bit families exist only at native width (`i8xN`/`u8xN`), and there is no fixed-width
-//! ladder. The scalar backend's native 8-bit slot is 1-lane, so the differential reference is
-//! an `ArrayRegister<{i8,u8}, N>` (N = the backend's native byte width: 16 on SSE, 32 on
-//! AVX2), which is a pure element-wise scalar register of matching lane count.
+//! The native byte width is a per-backend type (16 on SSE/WASM/NEON, 32 on AVX2,
+//! 64 on AVX-512), and the scalar backend's own native 8-bit slot is 1-lane, so
+//! the reference is an `ArrayRegister<{i8,u8}, N>` of matching lane count,
+//! picked at runtime. The fixed-width ladder (x2..x16) is in `diff_i8.rs`.
 #![cfg(any(
     target_arch = "x86",
     target_arch = "x86_64",
@@ -14,37 +14,28 @@
 
 mod harness;
 
+use generic_array::typenum::Unsigned;
 use harness::Tol;
 
 use thermite::register::array::ArrayRegister;
 use thermite::register::{
-    BitshiftRegister as _, BitwiseRegister as _, IntegerRegister as _, NumericRegister as _,
+    BitshiftRegister as _, BitwiseRegister as _, CoreRegister, IntegerRegister as _, NumericRegister as _,
     SignedIntegerRegister as _, SignedRegister as _,
 };
-// Which of these are used varies by backend cfg (x86 / wasm / neon).
-#[allow(unused_imports)]
 use thermite::simd::{NativeSimd, Simd};
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use thermite::backend::x86_v1::X86V1;
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use thermite::backend::x86_v2::X86V2;
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-use thermite::backend::x86_v3::X86V3;
 
 // Uniform scalar-amount shift stamper (the harness only exports the vector-input variants).
 macro_rules! diff_shift {
     ($label:expr, $ut:ty, $rf:ty, $method:ident) => {{
         let mut rng = harness::rng();
-        type E = <$ut as thermite::register::Register>::Element;
         let lanes = <<$ut as thermite::register::CoreRegister>::Lanes as generic_array::typenum::Unsigned>::USIZE;
-        let bits = (core::mem::size_of::<E>() * 8) as u32;
-        for input in harness::corpus::<E>(lanes, &mut rng) {
+        let bits = (core::mem::size_of::<<$ut as thermite::register::Register>::Element>() * 8) as u32;
+        for input in harness::corpus::<<$ut as thermite::register::Register>::Element>(lanes, &mut rng) {
             for sh in 0..bits {
                 let got = harness::read::<$ut>(&<$ut>::$method(harness::make_array::<$ut>(&input), sh));
                 let want = harness::read::<$rf>(&<$rf>::$method(harness::make_array::<$rf>(&input), sh));
                 harness::assert_lanes_eq(
-                    concat!($label, " [", stringify!($method), "]"),
+                    &format!("{} [{}]", $label, stringify!($method)),
                     &[input.as_slice()],
                     &got,
                     &want,
@@ -89,72 +80,33 @@ macro_rules! int8_common {
     }};
 }
 
-macro_rules! int8_tests {
-    ($modname:ident, $ut:ty, $rf:ty, $label:expr, signed) => {
-        #[test]
-        fn $modname() {
-            int8_common!($ut, $rf, $label);
-            diff_unary!($label, $ut, $rf, neg, Tol::Exact);
-            diff_unary!($label, $ut, $rf, abs, Tol::Exact);
-            diff_shift!($label, $ut, $rf, sra); // arithmetic (sign-extending) shift
-            diff_varshift!($label, $ut, $rf, srav);
+macro_rules! int8_ops {
+    ($ut:ty, $rf:ty, $label:expr, signed) => {{
+        int8_common!($ut, $rf, $label);
+        diff_unary!($label, $ut, $rf, neg, Tol::Exact);
+        diff_unary!($label, $ut, $rf, abs, Tol::Exact);
+        diff_shift!($label, $ut, $rf, sra); // arithmetic (sign-extending) shift
+        diff_varshift!($label, $ut, $rf, srav);
+    }};
+    ($ut:ty, $rf:ty, $label:expr, unsigned) => {{
+        int8_common!($ut, $rf, $label);
+    }};
+}
+
+macro_rules! native8 {
+    ($S:ty, $slot:ident, $e:ty, $sign:ident) => {{
+        let label = harness::label::<$S>(stringify!($slot));
+        match <<<$S as NativeSimd>::$slot as CoreRegister>::Lanes as Unsigned>::USIZE {
+            1 => int8_ops!(<$S as NativeSimd>::$slot, ArrayRegister<$e, 1>, label.as_str(), $sign),
+            16 => int8_ops!(<$S as NativeSimd>::$slot, ArrayRegister<$e, 16>, label.as_str(), $sign),
+            32 => int8_ops!(<$S as NativeSimd>::$slot, ArrayRegister<$e, 32>, label.as_str(), $sign),
+            64 => int8_ops!(<$S as NativeSimd>::$slot, ArrayRegister<$e, 64>, label.as_str(), $sign),
+            n => panic!("{label}: unexpected native 8-bit width {n}"),
         }
-    };
-    ($modname:ident, $ut:ty, $rf:ty, $label:expr, unsigned) => {
-        #[test]
-        fn $modname() {
-            int8_common!($ut, $rf, $label);
-        }
-    };
+    }};
 }
 
-// --- X86V2 (SSE4.2): native 16-lane i8x16/u8x16 ---------------------------
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod v2 {
-    use super::*;
-
-    int8_tests!(i8x16, <X86V2 as NativeSimd>::i8xN, ArrayRegister<i8, 16>, "x86_v2 i8x16", signed);
-    int8_tests!(u8x16, <X86V2 as NativeSimd>::u8xN, ArrayRegister<u8, 16>, "x86_v2 u8x16", unsigned);
-}
-
-// --- X86V1 (SSE2): native 16-lane, many ops using SSE2 polyfills / scalar fallbacks ---
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod v1 {
-    use super::*;
-
-    int8_tests!(i8x16, <X86V1 as NativeSimd>::i8xN, ArrayRegister<i8, 16>, "x86_v1 i8x16", signed);
-    int8_tests!(u8x16, <X86V1 as NativeSimd>::u8xN, ArrayRegister<u8, 16>, "x86_v1 u8x16", unsigned);
-}
-
-// --- X86V3 (AVX2): native 32-lane i8x32/u8x32 (256-bit) + the fixed 128-bit i8x16 half ---
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod v3 {
-    use super::*;
-
-    int8_tests!(i8x32, <X86V3 as NativeSimd>::i8xN, ArrayRegister<i8, 32>, "x86_v3 i8x32", signed);
-    int8_tests!(u8x32, <X86V3 as NativeSimd>::u8xN, ArrayRegister<u8, 32>, "x86_v3 u8x32", unsigned);
-
-    // The fixed 128-bit i8x16/u8x16 slot (its own register on v3, distinct from the 256-bit native).
-    int8_tests!(i8x16, <X86V3 as Simd>::i8x16, ArrayRegister<i8, 16>, "x86_v3 i8x16", signed);
-    int8_tests!(u8x16, <X86V3 as Simd>::u8x16, ArrayRegister<u8, 16>, "x86_v3 u8x16", unsigned);
-}
-
-// --- WASM (SIMD128): native 16-lane i8x16/u8x16 (= the fixed i8x16 slot too) ---
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-
-    int8_tests!(i8x16, <Wasm as NativeSimd>::i8xN, ArrayRegister<i8, 16>, "wasm i8x16", signed);
-    int8_tests!(u8x16, <Wasm as NativeSimd>::u8xN, ArrayRegister<u8, 16>, "wasm u8x16", unsigned);
-}
-
-// --- NEON: native 16-lane i8x16/u8x16 (= the fixed i8x16 slot too) ---
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-
-    int8_tests!(i8x16, <Neon as NativeSimd>::i8xN, ArrayRegister<i8, 16>, "neon i8x16", signed);
-    int8_tests!(u8x16, <Neon as NativeSimd>::u8xN, ArrayRegister<u8, 16>, "neon u8x16", unsigned);
+for_each_backend! {
+    fn native_i8xN<S: Simd>() { native8!(S, i8xN, i8, signed) }
+    fn native_u8xN<S: Simd>() { native8!(S, u8xN, u8, unsigned) }
 }

@@ -1,6 +1,5 @@
 //! 3D/4D linear algebra (`LinAlg3Vector` / `LinAlg4Vector`), tested at the
-//! **`Vector` layer** for `Vector<f32x4>` / `Vector<f64x4>` on Scalar + V2 + V3.
-//! `register/linalg.rs` had essentially no coverage.
+//! **`Vector` layer** for `Vector<f32x4>` / `Vector<f64x4>` on every backend.
 //!
 //! Oracles are computed in `f64` and compared with a relative tolerance (the
 //! SIMD paths use FMA / different summation orders). Inputs are moderate finite
@@ -82,147 +81,126 @@ fn o_mat4_vec4_row(rows: [[f64; 4]; 4], v: [f64; 4]) -> [f64; 4] {
     r
 }
 
-macro_rules! linalg_suite {
-    ($modname:ident, $backend:ty, $reg:ident, $e:ty, $tol:expr, $bl:expr) => {
-        mod $modname {
-            use super::*;
-            type V = Vector<<$backend as Simd>::$reg>;
+/// Per-slot context: `V`, the random generators and the f64 readers. Emitted
+/// as items at the top of each test body (concrete stamper: `S` is an alias).
+macro_rules! ctx {
+    ($reg:ident, $e:ty) => {
+        type V = Vector<<S as Simd>::$reg>;
 
-            // moderate finite scalar
-            fn rs(rng: &mut rand::rngs::SmallRng) -> $e {
-                rng.random_range(-8.0..8.0)
-            }
-            fn rv(rng: &mut rand::rngs::SmallRng) -> ([$e; 4], V) {
-                let a = [rs(rng), rs(rng), rs(rng), rs(rng)];
-                (a, V::from_slice(&a))
-            }
-            fn f64x4(a: [$e; 4]) -> [f64; 4] {
-                [a[0] as f64, a[1] as f64, a[2] as f64, a[3] as f64]
-            }
-            fn rd(v: V) -> [f64; 4] {
-                let g = v.into_array();
-                [g[0] as f64, g[1] as f64, g[2] as f64, g[3] as f64]
-            }
-
-            #[test]
-            fn vector_ops() {
-                let mut rng = harness::rng();
-                for _ in 0..TRIALS {
-                    let (a, va) = rv(&mut rng);
-                    let (b, vb) = rv(&mut rng);
-                    let (af, bf) = (f64x4(a), f64x4(b));
-
-                    // dot3 / dot4 (scalars)
-                    harness::assert_lanes_eq(concat!($bl, " [dot3]"), &[], &[va.dot3(vb) as f64], &[o_dot3(af, bf)], Tol::Rel($tol));
-                    harness::assert_lanes_eq(concat!($bl, " [dot4]"), &[], &[va.dot4(vb) as f64], &[o_dot4(af, bf)], Tol::Rel($tol));
-
-                    // cross3 (both FAST modes), first 3 lanes
-                    let want3 = o_cross3(af, bf);
-                    let g = rd(va.cross3::<true>(vb));
-                    harness::assert_lanes_eq(concat!($bl, " [cross3<true>]"), &[], &g[..3], &want3, Tol::Rel($tol));
-                    let g = rd(va.cross3::<false>(vb));
-                    harness::assert_lanes_eq(concat!($bl, " [cross3<false>]"), &[], &g[..3], &want3, Tol::Rel($tol));
-
-                    // quat4_product (both FAST modes, full 4 lanes)
-                    let want_q = o_quat(af, bf);
-                    harness::assert_lanes_eq(concat!($bl, " [quat4_product<true>]"), &[], &rd(va.quat4_product::<true>(vb)), &want_q, Tol::Rel($tol));
-                    harness::assert_lanes_eq(concat!($bl, " [quat4_product<false>]"), &[], &rd(va.quat4_product::<false>(vb)), &want_q, Tol::Rel($tol));
-
-                    // sum_elements3 (first 3 lanes summed)
-                    let want_s = af[0] + af[1] + af[2];
-                    harness::assert_lanes_eq(concat!($bl, " [sum_elements3]"), &[], &[va.sum_elements3() as f64], &[want_s], Tol::Rel($tol));
-
-                    // zero4 / one4 (bit-exact lane set)
-                    harness::assert_lanes_eq(concat!($bl, " [zero4]"), &[], &rd(va.zero4()), &[af[0], af[1], af[2], 0.0], Tol::Exact);
-                    harness::assert_lanes_eq(concat!($bl, " [one4]"), &[], &rd(va.one4()), &[af[0], af[1], af[2], 1.0], Tol::Exact);
-                }
-            }
-
-            /// `q * conj(q)` must be exactly `(0, 0, 0, |q|^2)` under
-            /// `FAST = false`. This is a bit-exactness claim, not a tolerance:
-            /// the whole point of the non-fast arm is that the cancelling terms
-            /// meet as `fl(t)` against `fl(-t)`. `FAST = true` deliberately does
-            /// not hold this and is not asserted here.
-            #[test]
-            fn quat_conjugate_is_exact() {
-                let mut rng = harness::rng();
-                for _ in 0..TRIALS {
-                    let (q, vq) = rv(&mut rng);
-                    let conj = V::from_slice(&[-q[0], -q[1], -q[2], q[3]]);
-                    let got = rd(vq.quat4_product::<false>(conj));
-
-                    for (lane, &g) in got[..3].iter().enumerate() {
-                        assert!(
-                            g == 0.0,
-                            concat!($bl, " [quat*conj] lane {} = {:e}, expected exactly 0 (q = {:?})"),
-                            lane, g, q,
-                        );
-                    }
-
-                    // The w lane is a sum of four squares, with no cancellation, so
-                    // it only has to be the correctly-summed norm, not exact.
-                    let want_w: f64 = f64x4(q).iter().map(|v| v * v).sum();
-                    harness::assert_lanes_eq(
-                        concat!($bl, " [quat*conj w]"), &[], &got[3..], &[want_w], Tol::Rel($tol),
-                    );
-                }
-            }
-
-            #[test]
-            fn matrix_ops() {
-                let mut rng = harness::rng();
-                for _ in 0..TRIALS {
-                    let cols: [V; 4] = [rv(&mut rng).1, rv(&mut rng).1, rv(&mut rng).1, rv(&mut rng).1];
-                    let mf: [[f64; 4]; 4] = core::array::from_fn(|i| rd(cols[i]));
-                    let (v, vv) = rv(&mut rng);
-                    let vf = f64x4(v);
-
-                    // mat4_transpose (bit-exact lane routing)
-                    let t = V::mat4_transpose(&cols);
-                    let got_t: Vec<f64> = t.iter().flat_map(|&r| rd(r)).collect();
-                    let want_t: Vec<f64> = o_transpose(mf).iter().flatten().copied().collect();
-                    harness::assert_lanes_eq(concat!($bl, " [mat4_transpose]"), &[], &got_t, &want_t, Tol::Exact);
-
-                    // mat4_vec4_product, column-major and row-major
-                    harness::assert_lanes_eq(concat!($bl, " [mat4_vec4<col>]"), &[], &rd(vv.mat4_vec4_product::<true>(&cols)), &o_mat4_vec4_col(mf, vf), Tol::Rel($tol));
-                    harness::assert_lanes_eq(concat!($bl, " [mat4_vec4<row>]"), &[], &rd(vv.mat4_vec4_product::<false>(&cols)), &o_mat4_vec4_row(mf, vf), Tol::Rel($tol));
-                }
-            }
+        // moderate finite scalar
+        fn rs(rng: &mut rand::rngs::SmallRng) -> $e {
+            rng.random_range(-8.0..8.0)
+        }
+        fn rv(rng: &mut rand::rngs::SmallRng) -> ([$e; 4], V) {
+            let a = [rs(rng), rs(rng), rs(rng), rs(rng)];
+            (a, V::from_slice(&a))
+        }
+        fn f64x4(a: [$e; 4]) -> [f64; 4] {
+            [a[0] as f64, a[1] as f64, a[2] as f64, a[3] as f64]
+        }
+        fn rd(v: V) -> [f64; 4] {
+            let g = v.into_array();
+            [g[0] as f64, g[1] as f64, g[2] as f64, g[3] as f64]
         }
     };
 }
 
-linalg_suite!(scalar_f32, Scalar, f32x4, f32, 2.0e-3, "scalar f32x4");
-linalg_suite!(scalar_f64, Scalar, f64x4, f64, 1.0e-9, "scalar f64x4");
+macro_rules! vector_ops {
+    ($reg:ident, $e:ty, $tol:expr) => {{
+        ctx!($reg, $e);
+        let mut rng = harness::rng();
+        for _ in 0..TRIALS {
+            let (a, va) = rv(&mut rng);
+            let (b, vb) = rv(&mut rng);
+            let (af, bf) = (f64x4(a), f64x4(b));
 
-use thermite::backend::scalar::Scalar;
+            harness::assert_lanes_eq("[dot3]", &[], &[va.dot3(vb) as f64], &[o_dot3(af, bf)], Tol::Rel($tol));
+            harness::assert_lanes_eq("[dot4]", &[], &[va.dot4(vb) as f64], &[o_dot4(af, bf)], Tol::Rel($tol));
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86 {
-    use super::*;
-    use thermite::backend::x86_v1::X86V1;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
-    linalg_suite!(v3_f32, X86V3, f32x4, f32, 2.0e-3, "x86_v3 f32x4");
-    linalg_suite!(v3_f64, X86V3, f64x4, f64, 1.0e-9, "x86_v3 f64x4");
-    linalg_suite!(v2_f32, X86V2, f32x4, f32, 2.0e-3, "x86_v2 f32x4");
-    linalg_suite!(v2_f64, X86V2, f64x4, f64, 1.0e-9, "x86_v2 f64x4");
-    linalg_suite!(v1_f32, X86V1, f32x4, f32, 2.0e-3, "x86_v1 f32x4");
-    linalg_suite!(v1_f64, X86V1, f64x4, f64, 1.0e-9, "x86_v1 f64x4");
+            let want3 = o_cross3(af, bf);
+            let g = rd(va.cross3::<true>(vb));
+            harness::assert_lanes_eq("[cross3<true>]", &[], &g[..3], &want3, Tol::Rel($tol));
+            let g = rd(va.cross3::<false>(vb));
+            harness::assert_lanes_eq("[cross3<false>]", &[], &g[..3], &want3, Tol::Rel($tol));
+
+            let want_q = o_quat(af, bf);
+            harness::assert_lanes_eq("[quat4_product<true>]", &[], &rd(va.quat4_product::<true>(vb)), &want_q, Tol::Rel($tol));
+            harness::assert_lanes_eq("[quat4_product<false>]", &[], &rd(va.quat4_product::<false>(vb)), &want_q, Tol::Rel($tol));
+
+            let want_s = af[0] + af[1] + af[2];
+            harness::assert_lanes_eq("[sum_elements3]", &[], &[va.sum_elements3() as f64], &[want_s], Tol::Rel($tol));
+
+            harness::assert_lanes_eq("[zero4]", &[], &rd(va.zero4()), &[af[0], af[1], af[2], 0.0], Tol::Exact);
+            harness::assert_lanes_eq("[one4]", &[], &rd(va.one4()), &[af[0], af[1], af[2], 1.0], Tol::Exact);
+        }
+    }};
 }
 
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-    linalg_suite!(wasm_f32, Wasm, f32x4, f32, 2.0e-3, "wasm f32x4");
-    linalg_suite!(wasm_f64, Wasm, f64x4, f64, 1.0e-9, "wasm f64x4");
+/// `q * conj(q)` has an exactly-zero vector part on every backend (the products
+/// cancel term by term), and `w` = |q|^2.
+macro_rules! quat_conjugate_is_exact {
+    ($reg:ident, $e:ty, $tol:expr) => {{
+        ctx!($reg, $e);
+        let mut rng = harness::rng();
+        for _ in 0..TRIALS {
+            let (q, vq) = rv(&mut rng);
+            let conj = V::from_slice(&[-q[0], -q[1], -q[2], q[3]]);
+            let got = rd(vq.quat4_product::<false>(conj));
+
+            for (lane, &g) in got[..3].iter().enumerate() {
+                assert!(
+                    g == 0.0,
+                    "[quat*conj] lane {} = {:e}, expected exactly 0 (q = {:?})",
+                    lane,
+                    g,
+                    q,
+                );
+            }
+
+            let want_w: f64 = f64x4(q).iter().map(|v| v * v).sum();
+            harness::assert_lanes_eq("[quat*conj w]", &[], &got[3..], &[want_w], Tol::Rel($tol));
+        }
+    }};
 }
 
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-    linalg_suite!(neon_f32, Neon, f32x4, f32, 2.0e-3, "neon f32x4");
-    linalg_suite!(neon_f64, Neon, f64x4, f64, 1.0e-9, "neon f64x4");
+macro_rules! matrix_ops {
+    ($reg:ident, $e:ty, $tol:expr) => {{
+        ctx!($reg, $e);
+        let mut rng = harness::rng();
+        for _ in 0..TRIALS {
+            let cols: [V; 4] = [rv(&mut rng).1, rv(&mut rng).1, rv(&mut rng).1, rv(&mut rng).1];
+            let mf: [[f64; 4]; 4] = core::array::from_fn(|i| rd(cols[i]));
+            let (v, vv) = rv(&mut rng);
+            let vf = f64x4(v);
+
+            let t = V::mat4_transpose(&cols);
+            let got_t: Vec<f64> = t.iter().flat_map(|&r| rd(r)).collect();
+            let want_t: Vec<f64> = o_transpose(mf).iter().flatten().copied().collect();
+            harness::assert_lanes_eq("[mat4_transpose]", &[], &got_t, &want_t, Tol::Exact);
+
+            harness::assert_lanes_eq(
+                "[mat4_vec4<col>]",
+                &[],
+                &rd(vv.mat4_vec4_product::<true>(&cols)),
+                &o_mat4_vec4_col(mf, vf),
+                Tol::Rel($tol),
+            );
+            harness::assert_lanes_eq(
+                "[mat4_vec4<row>]",
+                &[],
+                &rd(vv.mat4_vec4_product::<false>(&cols)),
+                &o_mat4_vec4_row(mf, vf),
+                Tol::Rel($tol),
+            );
+        }
+    }};
+}
+
+for_each_backend_concrete! {
+    fn vector_ops_f32() { vector_ops!(f32x4, f32, 2.0e-3) }
+    fn vector_ops_f64() { vector_ops!(f64x4, f64, 1.0e-9) }
+    fn quat_conjugate_is_exact_f32() { quat_conjugate_is_exact!(f32x4, f32, 2.0e-3) }
+    fn quat_conjugate_is_exact_f64() { quat_conjugate_is_exact!(f64x4, f64, 1.0e-9) }
+    fn matrix_ops_f32() { matrix_ops!(f32x4, f32, 2.0e-3) }
+    fn matrix_ops_f64() { matrix_ops!(f64x4, f64, 1.0e-9) }
 }

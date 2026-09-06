@@ -18,26 +18,35 @@
     target_arch = "aarch64"
 ))]
 
+mod harness;
+
 use thermite::math::policy::policies::{Performance, Precision};
 use thermite::math::{TranscendentalMath, TranscendentalMathWithPolicy};
 use thermite::prelude::*;
+use thermite::simd::Simd;
 
-type D = Vector<f64>;
-type F = Vector<f32>;
+macro_rules! ctx {
+    () => {
+        #[allow(dead_code)]
+        type D = Vector<<S as Simd>::f64x4>;
+        #[allow(dead_code)]
+        type F = Vector<<S as Simd>::f32x8>;
 
-#[track_caller]
-fn close(name: &str, got: f64, want: f64, tol: f64) {
-    let rel = if want == 0.0 {
-        got.abs()
-    } else {
-        ((got - want) / want).abs()
-    };
-    assert!(rel <= tol, "{name}: got {got:?}, want {want:?} (rel {rel:e})");
-}
+        #[allow(dead_code)]
+        #[track_caller]
+        fn close(name: &str, got: f64, want: f64, tol: f64) {
+            let rel = if want == 0.0 {
+                got.abs()
+            } else {
+                ((got - want) / want).abs()
+            };
+            assert!(rel <= tol, "{name}: got {got:?}, want {want:?} (rel {rel:e})");
+        }
 
-fn compound_m1(x: f64, n: f64) -> f64 {
-    D::splat(x).compound_m1(D::splat(n)).extract::<0>()
-}
+        #[allow(dead_code)]
+        fn compound_m1(x: f64, n: f64) -> f64 {
+            D::splat(x).compound_m1(D::splat(n)).extract::<0>()
+        }
 
 /// `(x, n, (1+x)^n - 1, tolerance in ulps of one)` from mpmath at 60 digits. Computed as
 /// `power(1+x, n) - 1` in extended precision, so the reference does not share the kernel's
@@ -49,6 +58,7 @@ fn compound_m1(x: f64, n: f64) -> f64 {
 /// the same figure (the precision audit records 247 ulp there, and `thermite-interval`
 /// budgets 1024 for it); shrinking it needs the double-double log core, not a change here.
 #[rustfmt::skip]
+#[allow(dead_code)]
 const COMPOUND_M1: [(f64, f64, f64, f64); 12] = [
     (-0.9,      3.0,     -0.999,                  16.0),
     (-0.5,      2.5,     -0.8232233047033631,     16.0),
@@ -63,9 +73,13 @@ const COMPOUND_M1: [(f64, f64, f64, f64); 12] = [
     (3.0,       0.0,      0.0,                    16.0),
     (0.05,      10000.0,  7.81611065842881e211,  256.0),
 ];
+    };
+}
 
-#[test]
+for_each_backend_concrete! {
+
 fn matches_the_reference() {
+    ctx!();
     for &(x, n, want, ulps) in COMPOUND_M1.iter() {
         close(
             &format!("compound_m1({x}, {n})"),
@@ -76,8 +90,8 @@ fn matches_the_reference() {
     }
 }
 
-#[test]
 fn the_precision_tier_agrees_with_the_reference_too() {
+    ctx!();
     // The Dekker correction only runs at Best and above, so the table above exercises one
     // arm of the function. This runs the other.
     for &(x, n, want, ulps) in COMPOUND_M1.iter() {
@@ -86,8 +100,8 @@ fn the_precision_tier_agrees_with_the_reference_too() {
     }
 }
 
-#[test]
 fn small_x_survives_where_the_powf_m1_spelling_cannot() {
+    ctx!();
     // Forming 1 + x rounds x away entirely below the epsilon of one, so the alternative
     // spelling returns a flat zero. Measured, not claimed.
     for &(x, n) in &[(1e-20_f64, 0.5_f64), (1e-18, 3.0), (-1e-19, 2.0)] {
@@ -102,8 +116,8 @@ fn small_x_survives_where_the_powf_m1_spelling_cannot() {
     }
 }
 
-#[test]
 fn a_near_zero_result_survives_where_the_compound_spelling_cannot() {
+    ctx!();
     // The other end: x is ordinary but n is tiny, so (1+x)^n is a hair above one and
     // subtracting one afterwards cancels everything.
     for &(x, n) in &[(0.5_f64, 1e-18_f64), (3.0, 1e-20), (-0.5, 1e-17)] {
@@ -118,8 +132,8 @@ fn a_near_zero_result_survives_where_the_compound_spelling_cannot() {
     }
 }
 
-#[test]
 fn the_domain_edge_is_the_limit_at_every_tier() {
+    ctx!();
     // x = -1 is the edge: (1+x)^n = 0^n, so the answer is -1 for n > 0 and +inf for n < 0.
     // The Best-tier residual is inf - inf there, so without a guard the high tier returns
     // NaN where the cheap one is right, and the answer depends on the policy.
@@ -149,8 +163,8 @@ fn the_domain_edge_is_the_limit_at_every_tier() {
     assert!(compound_m1(1.0, f64::NAN).is_nan());
 }
 
-#[test]
 fn the_siblings_edges_are_the_limit_at_every_tier() {
+    ctx!();
     // The same residual guard in `compound` and `powf_m1`. `compound(-1, n) = 0^n` and
     // `powf_m1(0, e) = 0^e - 1`, both finite limits that Precision has to reach too.
     for &n in &[2.0_f64, 0.5, 3.0] {
@@ -176,8 +190,8 @@ fn the_siblings_edges_are_the_limit_at_every_tier() {
     }
 }
 
-#[test]
 fn it_agrees_with_compound_away_from_the_cancelling_regions() {
+    ctx!();
     // Where neither spelling is in trouble the two must not disagree, which catches a sign
     // or an off-by-one in the -1.
     for &(x, n) in &[(0.5_f64, 3.0_f64), (2.0, -1.5), (-0.5, 2.5), (100.0, 0.25)] {
@@ -187,8 +201,8 @@ fn it_agrees_with_compound_away_from_the_cancelling_regions() {
     }
 }
 
-#[test]
 fn f32_tracks_the_reference() {
+    ctx!();
     for &(x, n, want, _) in COMPOUND_M1.iter() {
         if want.abs() > 1e30 || (x != 0.0 && (x as f32) == 0.0) {
             continue;
@@ -204,10 +218,10 @@ fn f32_tracks_the_reference() {
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[test]
 fn lanes_stay_independent_on_a_wide_backend() {
+    ctx!();
     use thermite::simd::Simd;
-    type W = Vector<<thermite::backend::x86_v3::X86V3 as Simd>::f64x4>;
+    type W = Vector<<S as Simd>::f64x4>;
 
     // One lane at the domain edge, one in each cancelling region, one ordinary.
     let xs = [-1.0, 1e-20, 0.5, 2.0];
@@ -227,4 +241,6 @@ fn lanes_stay_independent_on_a_wide_backend() {
             16.0 * f64::EPSILON,
         );
     }
+}
+
 }

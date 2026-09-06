@@ -1194,7 +1194,7 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedRealMath<IntervalElem<
     /// inner kernel is called with `None` edges on in-range values, so its
     /// clamp policy no longer matters.
     #[inline(always)]
-    fn smoothstep_n<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
+    fn smoothstep<P: Policy, const N: usize>(self, edges: Option<(Self, Self)>) -> Self {
         let mut t = self;
         let mut poison = self.is_empty();
         if let Some((a, b)) = edges {
@@ -1209,8 +1209,8 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedRealMath<IntervalElem<
             .min_interval(Self::from_bounds_unchecked(V::ONE, V::ONE));
 
         let (lo, hi) = algo_widen::<V, P>(
-            t.lo.smoothstep_n_p::<KernelPolicy<P>, N>(None),
-            t.hi.smoothstep_n_p::<KernelPolicy<P>, N>(None),
+            t.lo.smoothstep_p::<KernelPolicy<P>, N>(None),
+            t.hi.smoothstep_p::<KernelPolicy<P>, N>(None),
         );
         // p(0) = 0 and p(1) = 1 exactly for every smoothstep polynomial, so
         // saturated endpoints are pinned rather than smeared by the widening
@@ -1221,26 +1221,4 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedRealMath<IntervalElem<
         Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
     }
 
-    /// [`smoothstep_n`](Self::smoothstep_n) for a runtime degree. Same endpoint map.
-    #[inline(always)]
-    fn smoothstep<P: Policy>(self, edges: Option<(Self, Self)>, n: u32) -> Self {
-        let mut t = self;
-        let mut poison = self.is_empty();
-        if let Some((a, b)) = edges {
-            poison = poison | a.is_empty() | b.is_empty();
-            t = t.sub_interval(a).div_interval(b.sub_interval(a));
-        }
-        let t = t
-            .max_interval(Self::from_bounds_unchecked(V::ZERO, V::ZERO))
-            .min_interval(Self::from_bounds_unchecked(V::ONE, V::ONE));
-
-        let (lo, hi) = algo_widen::<V, P>(
-            t.lo.smoothstep_p::<KernelPolicy<P>>(None, n),
-            t.hi.smoothstep_p::<KernelPolicy<P>>(None, n),
-        );
-        let lo = t.lo.cmp_eq(V::ONE).select(V::ONE, lo.max(V::ZERO));
-        let hi = t.hi.cmp_eq(V::ZERO).select(V::ZERO, hi.min(V::ONE));
-
-        Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
-    }
 }

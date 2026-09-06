@@ -375,6 +375,12 @@ pub mod avx512f {
     /// $GF(2^8)$.
     pub mod gfni {
         import_intrinsics! {
+            _mm_gf2p8affine_epi64_epi8,
+            _mm_gf2p8affineinv_epi64_epi8,
+            _mm_gf2p8mul_epi8,
+            _mm256_gf2p8affine_epi64_epi8,
+            _mm256_gf2p8affineinv_epi64_epi8,
+            _mm256_gf2p8mul_epi8,
             _mm256_mask_gf2p8affine_epi64_epi8,
             _mm256_mask_gf2p8affineinv_epi64_epi8,
             _mm256_mask_gf2p8mul_epi8,
@@ -4721,6 +4727,7 @@ pub mod avx512f {
         _mm_add_round_ss,
         _mm_alignr_epi32,
         _mm_alignr_epi64,
+        _mm_clmulepi64_si128,
         _mm_cmp_epi32_mask,
         _mm_cmp_epi64_mask,
         _mm_cmp_epu32_mask,

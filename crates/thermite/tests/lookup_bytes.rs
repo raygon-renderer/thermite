@@ -5,7 +5,14 @@
 //! Every index used here is in range, as `Register::lookup`'s safety contract
 //! requires. The overrides do not clamp or mask, so out-of-range indices are
 //! deliberately not exercised.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
+
+mod harness;
 
 use thermite::Vector;
 use thermite::simd::{NativeSimd, Simd};
@@ -17,6 +24,7 @@ fn table_value(i: usize) -> i8 {
     ((i * 5 + 11) % 128) as i8
 }
 
+#[inline(always)]
 fn check_lookup<V>(label: &str)
 where
     V: GenericVector<Element: TryFrom<i8> + PartialEq + core::fmt::Debug + Copy>,
@@ -61,39 +69,21 @@ where
     }
 }
 
-macro_rules! byte_suite {
-    ($modname:ident, $backend:ty, $bl:expr) => {
-        mod $modname {
-            use super::*;
+for_each_backend! {
+    fn u8x16<S: Simd>() {
+        check_lookup::<Vector<<S as Simd>::u8x16>>(&harness::label::<S>("u8x16"));
+    }
 
-            #[test]
-            fn u8x16() {
-                check_lookup::<Vector<<$backend as Simd>::u8x16>>(concat!($bl, " u8x16"));
-            }
+    fn i8x16<S: Simd>() {
+        check_lookup::<Vector<<S as Simd>::i8x16>>(&harness::label::<S>("i8x16"));
+    }
 
-            #[test]
-            fn i8x16() {
-                check_lookup::<Vector<<$backend as Simd>::i8x16>>(concat!($bl, " i8x16"));
-            }
+    // The native byte width: 128-bit on SSE/NEON/WASM, u8x32 on AVX2, u8x64 on AVX-512.
+    fn u8xn<S: NativeSimd>() {
+        check_lookup::<Vector<<S as NativeSimd>::u8xN>>(&harness::label::<S>("u8xN"));
+    }
 
-            // The native byte width: 128-bit on v2, 256-bit (u8x32/i8x32) on v3.
-            #[test]
-            fn u8xn() {
-                check_lookup::<Vector<<$backend as NativeSimd>::u8xN>>(concat!($bl, " u8xN"));
-            }
-
-            #[test]
-            fn i8xn() {
-                check_lookup::<Vector<<$backend as NativeSimd>::i8xN>>(concat!($bl, " i8xN"));
-            }
-        }
-    };
+    fn i8xn<S: NativeSimd>() {
+        check_lookup::<Vector<<S as NativeSimd>::i8xN>>(&harness::label::<S>("i8xN"));
+    }
 }
-
-use thermite::backend::scalar::Scalar;
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
-
-byte_suite!(scalar, Scalar, "scalar");
-byte_suite!(v2, X86V2, "x86_v2");
-byte_suite!(v3, X86V3, "x86_v3");

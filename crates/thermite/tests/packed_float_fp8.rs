@@ -10,8 +10,11 @@
 //! NaN, E5M2 is IEEE).
 #![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 
+mod harness;
+
 use thermite::element::float::spec::{FloatSpec, Fp8E4M3, Fp8E5M2};
 use thermite::register::{CoreRegister, PackedFloatRegister, Register, Storage};
+use thermite::simd::Simd;
 use thermite::vector::{GenericVector, PackedFloatVector, Vector};
 
 fn make<R: Register>(vals: &[R::Element]) -> Storage<R>
@@ -172,55 +175,22 @@ macro_rules! vec_roundtrip {
     }};
 }
 
-macro_rules! fp8_suite {
-    ($mod:ident, $u8x4:ty, $u8x8:ty, $u8x16:ty, $f32x4:ty, $f32x8:ty, $f32x16:ty) => {
-        mod $mod {
-            use super::*;
-            #[test]
-            fn e4m3() {
-                reg_unpack!(Fp8E4M3, $u8x4, $f32x4);
-                reg_unpack!(Fp8E4M3, $u8x8, $f32x8);
-                reg_unpack!(Fp8E4M3, $u8x16, $f32x16);
-                reg_pack!(Fp8E4M3, $u8x4, $f32x4);
-                reg_pack!(Fp8E4M3, $u8x8, $f32x8);
-                reg_pack!(Fp8E4M3, $u8x16, $f32x16);
-                vec_roundtrip!(Fp8E4M3, $u8x8, $f32x8);
+// Every backend's u8x4/u8x8/u8x16 <-> f32x4/f32x8/f32x16 slots: native or ArrayRegister
+// as the backend defines them (v1/v2 f32x8 is ArrayRegister<F32x4, 2>, v3's is native).
+macro_rules! fp8_tests {
+    ($($spec:ident => $name:ident),+ $(,)?) => {
+        for_each_backend_concrete! {$(
+            fn $name() {
+                reg_unpack!($spec, <S as Simd>::u8x4, <S as Simd>::f32x4);
+                reg_unpack!($spec, <S as Simd>::u8x8, <S as Simd>::f32x8);
+                reg_unpack!($spec, <S as Simd>::u8x16, <S as Simd>::f32x16);
+                reg_pack!($spec, <S as Simd>::u8x4, <S as Simd>::f32x4);
+                reg_pack!($spec, <S as Simd>::u8x8, <S as Simd>::f32x8);
+                reg_pack!($spec, <S as Simd>::u8x16, <S as Simd>::f32x16);
+                vec_roundtrip!($spec, <S as Simd>::u8x8, <S as Simd>::f32x8);
             }
-            #[test]
-            fn e5m2() {
-                reg_unpack!(Fp8E5M2, $u8x4, $f32x4);
-                reg_unpack!(Fp8E5M2, $u8x8, $f32x8);
-                reg_unpack!(Fp8E5M2, $u8x16, $f32x16);
-                reg_pack!(Fp8E5M2, $u8x4, $f32x4);
-                reg_pack!(Fp8E5M2, $u8x8, $f32x8);
-                reg_pack!(Fp8E5M2, $u8x16, $f32x16);
-                vec_roundtrip!(Fp8E5M2, $u8x8, $f32x8);
-            }
-        }
+        )+}
     };
 }
 
-mod v1 {
-    use super::*;
-    use thermite::backend::x86_v1::registers::half8::{U8x4V1, U8x8V1};
-    use thermite::backend::x86_v1::registers::{F32x4V1, U8x16V1};
-    use thermite::register::array::ArrayRegister;
-    fp8_suite!(t, U8x4V1, U8x8V1, U8x16V1, F32x4V1, ArrayRegister<F32x4V1, 2>, ArrayRegister<F32x4V1, 4>);
-}
-
-mod v2 {
-    use super::*;
-    use thermite::backend::x86_v2::registers::half8::{U8x4V2, U8x8V2};
-    use thermite::backend::x86_v2::registers::{F32x4V2, U8x16V2};
-    use thermite::register::array::ArrayRegister;
-    fp8_suite!(t, U8x4V2, U8x8V2, U8x16V2, F32x4V2, ArrayRegister<F32x4V2, 2>, ArrayRegister<F32x4V2, 4>);
-}
-
-#[cfg(target_arch = "x86_64")]
-mod v3 {
-    use super::*;
-    use thermite::backend::x86_v3::registers::half8::{U8x4V3, U8x8V3};
-    use thermite::backend::x86_v3::registers::{F32x4V3, F32x8V3, U8x16V3};
-    use thermite::register::array::ArrayRegister;
-    fp8_suite!(t, U8x4V3, U8x8V3, U8x16V3, F32x4V3, F32x8V3, ArrayRegister<F32x8V3, 2>);
-}
+fp8_tests! { Fp8E4M3 => e4m3, Fp8E5M2 => e5m2 }

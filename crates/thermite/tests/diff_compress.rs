@@ -1,18 +1,47 @@
-//! `Register::compress` / `compress_z` on the real x86 backends, checked against
-//! a scalar partition oracle. Exercises the wired `compress_via_table!` (<= 8
-//! lanes) and `compress_via_wide!` (16/32-lane) overrides.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+//! `Register::compress` / `compress_z` / `expand` / `expand_z` and their `_n`
+//! forms on every backend, checked against a scalar partition oracle. Exercises
+//! the wired `compress_via_table!` (<= 8 lanes) and `compress_via_wide!`
+//! (16/32/64-lane) overrides, the `ArrayRegister` merge trees, and the AVX-512
+//! `vpcompress`/`vpexpand` forms.
+//!
+//! Every shape runs on every backend. Which lowering a shape takes is the
+//! backend's business (an x2 slot is a table on x86 and scalar on `Scalar`).
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
+
+mod harness;
 
 use generic_array::{GenericArray, sequence::GenericSequence, typenum::Unsigned};
 
-use thermite::backend::x86_v2::X86V2;
-use thermite::backend::x86_v3::X86V3;
+use thermite::register::array::ArrayRegister;
 use thermite::register::{Element, Register, Storage};
 use thermite::simd::{NativeSimd, Simd};
 
+/// Mask patterns for an `n`-lane register: exhaustive up to 16 lanes, a
+/// deterministic xorshift sample above that.
+fn patterns(n: usize) -> Box<dyn Iterator<Item = u64>> {
+    if n <= 16 {
+        Box::new(0..(1u64 << n))
+    } else {
+        let mask = if n >= 64 { u64::MAX } else { (1u64 << n) - 1 };
+        let mut s = 0x9E37_79B9_7F4A_7C15u64;
+        Box::new((0..20000).map(move |_| {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            s & mask
+        }))
+    }
+}
+
 /// Compare `R::compress` (stable partition) and `R::compress_z` (zeroing) to
-/// scalar oracles over the given mask bit patterns.
-fn check<R: Register>(patterns: impl Iterator<Item = u64>) {
+/// scalar oracles over every mask pattern.
+#[inline(always)]
+fn check<R: Register>() {
     let n = <R::Lanes as Unsigned>::USIZE;
 
     // Distinct nonzero lane values so a dropped/misplaced lane is visible.
@@ -21,14 +50,14 @@ fn check<R: Register>(patterns: impl Iterator<Item = u64>) {
     }));
     let vals: Vec<R::Element> = R::as_slice(&v).to_vec();
 
-    for bits in patterns {
+    for bits in patterns(n) {
         let sel: GenericArray<R::Element, R::Lanes> =
             GenericArray::generate(|i| <R::Element as Element>::from_u8(((bits >> i) & 1) as u8));
         let mask = R::into_mask(R::new(sel));
 
         // Non-zeroing oracle: selected in order, then unselected in order.
-        let mut part = vec![R::Element::default(); n];
         // Zeroing oracle: selected in order, then zeros.
+        let mut part = vec![R::Element::default(); n];
         let mut zero = vec![R::Element::default(); n];
         let mut pos = 0;
         for l in 0..n {
@@ -53,30 +82,29 @@ fn check<R: Register>(patterns: impl Iterator<Item = u64>) {
 }
 
 /// Compare `R::expand` (the inverse stable partition) and `R::expand_z`
-/// (zeroing) to scalar oracles over the given mask bit patterns.
+/// (zeroing) to scalar oracles over every mask pattern.
 ///
-/// The `ArrayRegister` shapes below route both through the branchless wide
-/// scatter (`expand_permute_wide`) above 8 lanes. Before that they took the
-/// data-dependent branchy scalar default, which this test also covers on any
-/// shape the guard excludes.
-fn check_expand<R: Register>(patterns: impl Iterator<Item = u64>) {
+/// The `ArrayRegister` shapes route both through the branchless wide scatter
+/// (`expand_permute_wide`) above 8 lanes. Below that they take the scalar
+/// default, which this test also covers.
+#[inline(always)]
+fn check_expand<R: Register>() {
     let n = <R::Lanes as Unsigned>::USIZE;
 
-    // Distinct nonzero lane values so a dropped/misplaced lane is visible.
     let v: Storage<R> = R::new(GenericArray::generate(|i| {
         <R::Element as Element>::from_u8((i + 1) as u8)
     }));
     let vals: Vec<R::Element> = R::as_slice(&v).to_vec();
 
-    for bits in patterns {
+    for bits in patterns(n) {
         let sel: GenericArray<R::Element, R::Lanes> =
             GenericArray::generate(|i| <R::Element as Element>::from_u8(((bits >> i) & 1) as u8));
         let mask = R::into_mask(R::new(sel));
 
         // Non-zeroing oracle: selected lanes read the packed front in order,
         // unselected lanes read the tail in order.
-        let mut full = vec![R::Element::default(); n];
         // Zeroing oracle: selected lanes only, everything else zero.
+        let mut full = vec![R::Element::default(); n];
         let mut zero = vec![R::Element::default(); n];
         let mut pos = 0;
         for l in 0..n {
@@ -100,102 +128,6 @@ fn check_expand<R: Register>(patterns: impl Iterator<Item = u64>) {
     }
 }
 
-/// Deterministic sample of `count` mask patterns of `lanes` bits.
-fn sample(lanes: usize, count: usize) -> impl Iterator<Item = u64> {
-    let mask = if lanes >= 64 { u64::MAX } else { (1u64 << lanes) - 1 };
-    let mut s = 0x9E37_79B9_7F4A_7C15u64;
-    (0..count).map(move |_| {
-        s ^= s << 13;
-        s ^= s >> 7;
-        s ^= s << 17;
-        s & mask
-    })
-}
-
-#[test]
-fn v3_table() {
-    check::<<X86V3 as Simd>::f32x8>(0..256);
-    check::<<X86V3 as Simd>::i32x8>(0..256);
-    check::<<X86V3 as Simd>::u16x8>(0..256);
-    check::<<X86V3 as Simd>::f32x4>(0..16);
-    check::<<X86V3 as Simd>::f64x4>(0..16);
-    // The integer 64x4 registers route compress through their own `permutev`
-    // override (the doubled-index `vpermd`), not f64x4's, so cover both.
-    check::<<X86V3 as Simd>::i64x4>(0..16);
-    check::<<X86V3 as Simd>::u64x4>(0..16);
-    check::<<X86V3 as Simd>::i64x2>(0..4);
-    check::<<X86V3 as Simd>::f64x2>(0..4);
-}
-
-#[test]
-fn v3_wide() {
-    check::<<X86V3 as Simd>::i16x16>(0..(1 << 16));
-    check::<<X86V3 as Simd>::u16x16>(0..(1 << 16));
-    check::<<X86V3 as Simd>::i8x16>(0..(1 << 16));
-    check::<<X86V3 as Simd>::u8x16>(0..(1 << 16));
-    // Native-width byte vectors (32 lanes on AVX2), exercising 4-group routing.
-    check::<<X86V3 as NativeSimd>::i8xN>(sample(32, 20000));
-    check::<<X86V3 as NativeSimd>::u8xN>(sample(32, 20000));
-}
-
-#[test]
-fn v3_emulated() {
-    // f32x16 is `ArrayRegister<F32x8V3, 2>`: `compress_z` takes the merge tree
-    // (2x 8-lane chunk compress + one count-indexed merge), `compress` the
-    // stable-partition default.
-    check::<<X86V3 as Simd>::f32x16>(0..(1 << 16));
-    check::<<X86V3 as Simd>::i32x16>(0..(1 << 16));
-}
-
-#[test]
-fn merge_tree_shapes() {
-    // v2 f32x16 = ArrayRegister<F32x4V2, 4>: 4-lane chunks, N=4, a two-level
-    // pairwise tree, so the M=2 chunk-shift stage as well as M=1.
-    check::<<X86V2 as Simd>::f32x16>(0..(1 << 16));
-    check::<<X86V2 as Simd>::i32x16>(0..(1 << 16));
-    // v2 i16x16 = ArrayRegister<I16x8V2, 2>: 8-lane chunks, N=2.
-    check::<<X86V2 as Simd>::i16x16>(0..(1 << 16));
-    // Emulated 32-lane bytes: 16-lane chunks, N=2, one M=1 merge with each
-    // chunk taking its own native wide compress.
-    check::<thermite::register::array::ArrayRegister<<X86V2 as NativeSimd>::u8xN, 2>>(sample(32, 20000));
-    check::<thermite::register::array::ArrayRegister<<X86V3 as NativeSimd>::u8xN, 2>>(sample(64, 20000));
-}
-
-/// `expand` / `expand_z` on the emulated-wide `ArrayRegister` shapes, whose
-/// >8-lane arms route onto `expand_permute_wide` (branchless) rather than the
-/// scalar default. Same shape set as `merge_tree_shapes` plus the v3 pairs.
-#[test]
-fn array_expand_shapes() {
-    // v3 f32x16 = ArrayRegister<F32x8V3, 2>: 8-lane chunks.
-    check_expand::<<X86V3 as Simd>::f32x16>(0..(1 << 16));
-    check_expand::<<X86V3 as Simd>::i32x16>(0..(1 << 16));
-    // v2 f32x16 = ArrayRegister<F32x4V2, 4>: 4-lane chunks.
-    check_expand::<<X86V2 as Simd>::f32x16>(0..(1 << 16));
-    check_expand::<<X86V2 as Simd>::i32x16>(0..(1 << 16));
-    // v2 i16x16 = ArrayRegister<I16x8V2, 2>.
-    check_expand::<<X86V2 as Simd>::i16x16>(0..(1 << 16));
-    // Emulated byte arrays: 32 lanes (v2 chunks) and 64 lanes (v3 chunks).
-    check_expand::<thermite::register::array::ArrayRegister<<X86V2 as NativeSimd>::u8xN, 2>>(sample(32, 20000));
-    check_expand::<thermite::register::array::ArrayRegister<<X86V3 as NativeSimd>::u8xN, 2>>(sample(64, 20000));
-}
-
-/// `expand` / `expand_z` on the NATIVE wide registers, the `compress_via_wide!`
-/// shapes, where both arms are now grouped kernels (`expand_grouped` composing
-/// two `expand_z_grouped` trees). The mirror of `v3_wide`, which is the
-/// corresponding gate for `compress`/`compress_z`.
-#[test]
-fn native_wide_expand_shapes() {
-    check_expand::<<X86V3 as Simd>::i16x16>(0..(1 << 16));
-    check_expand::<<X86V3 as Simd>::u16x16>(0..(1 << 16));
-    check_expand::<<X86V3 as Simd>::i8x16>(0..(1 << 16));
-    check_expand::<<X86V3 as Simd>::u8x16>(0..(1 << 16));
-    check_expand::<<X86V2 as Simd>::i8x16>(0..(1 << 16));
-    check_expand::<<X86V2 as Simd>::u8x16>(0..(1 << 16));
-    // Native-width byte vectors (32 lanes on AVX2), 4-group routing.
-    check_expand::<<X86V3 as NativeSimd>::i8xN>(sample(32, 20000));
-    check_expand::<<X86V3 as NativeSimd>::u8xN>(sample(32, 20000));
-}
-
 /// The `_n` family: `compress_n` / `compress_z_n` / `expand_n` / `expand_z_n`
 /// must be **bit-identical** to `N` separate single-vector calls under the same
 /// mask, for every mask pattern.
@@ -207,18 +139,19 @@ fn native_wide_expand_shapes() {
 ///
 /// The `N` value registers carry disjoint value ranges so a lane leaking
 /// between values is visible, not just a lane leaking between positions.
-fn check_n<R: Register, const N: usize>(patterns: impl Iterator<Item = u64>) {
+#[inline(always)]
+fn check_n<R: Register, const N: usize>() {
     let n = <R::Lanes as Unsigned>::USIZE;
 
     let mut vals = [R::EMPTY; N];
     for (k, slot) in vals.iter_mut().enumerate() {
+        // Distinct per (value, lane), wrapped into the element's range.
         *slot = R::new(GenericArray::generate(|i| {
-            // Distinct per (value, lane), wrapped into the element's range.
             <R::Element as Element>::from_u8(((k * n + i + 1) % 251 + 1) as u8)
         }));
     }
 
-    for bits in patterns {
+    for bits in patterns(n) {
         let sel: GenericArray<R::Element, R::Lanes> =
             GenericArray::generate(|i| <R::Element as Element>::from_u8(((bits >> i) & 1) as u8));
         let mask = R::into_mask(R::new(sel));
@@ -253,49 +186,86 @@ fn check_n<R: Register, const N: usize>(patterns: impl Iterator<Item = u64>) {
     }
 }
 
-/// `_n` on the <= 8-lane table path (one row fetch, `N` `permutev_row`s).
-#[test]
-fn n_family_table() {
-    check_n::<<X86V3 as Simd>::i32x8, 2>(0..256);
-    check_n::<<X86V3 as Simd>::i32x8, 4>(0..256);
-}
+for_each_backend! {
+    /// <= 8-lane shapes (`compress_via_table!` on x86). The integer 64x4
+    /// registers route through their own `permutev` override (the
+    /// doubled-index `vpermd`), not f64x4's, so cover both.
+    fn compress_table<S: Simd>() {
+        check::<<S as Simd>::f32x8>();
+        check::<<S as Simd>::i32x8>();
+        check::<<S as Simd>::u16x8>();
+        check::<<S as Simd>::i16x8>();
+        check::<<S as Simd>::f32x4>();
+        check::<<S as Simd>::f64x4>();
+        check::<<S as Simd>::i64x4>();
+        check::<<S as Simd>::u64x4>();
+        check::<<S as Simd>::i64x2>();
+        check::<<S as Simd>::u64x2>();
+        check::<<S as Simd>::f64x2>();
+    }
 
-/// `_n` on the native grouped kernels (`compress_via_wide!`): one plan for the
-/// zeroing forms, two plus a shared shift control for the non-zeroing ones.
-#[test]
-fn n_family_grouped() {
-    check_n::<<X86V3 as Simd>::u16x16, 2>(0..(1 << 16));
-    check_n::<<X86V3 as Simd>::u16x16, 4>(0..(1 << 16));
+    /// 16-lane and native-width byte shapes (`compress_via_wide!` on x86,
+    /// 4-group routing at 32 lanes, 64 lanes on AVX-512).
+    fn compress_wide<S: Simd>() {
+        check::<<S as Simd>::i16x16>();
+        check::<<S as Simd>::u16x16>();
+        check::<<S as Simd>::i8x16>();
+        check::<<S as Simd>::u8x16>();
+        check::<<S as NativeSimd>::i8xN>();
+        check::<<S as NativeSimd>::u8xN>();
+        check::<<S as NativeSimd>::i16xN>();
+    }
 
-    // 32 lanes, 4 groups and two merge levels.
-    check_n::<<X86V3 as NativeSimd>::u8xN, 2>(sample(32, 20000));
-    check_n::<<X86V3 as NativeSimd>::u8xN, 4>(sample(32, 20000));
-}
+    /// Emulated-wide `ArrayRegister` shapes: `compress_z` takes the merge tree
+    /// (chunk compress + count-indexed merges), `compress` the stable-partition
+    /// default. f32x16 is 2x8 on AVX2 and 4x4 on the 128-bit backends (a
+    /// two-level pairwise tree, so the M=2 chunk-shift stage as well as M=1).
+    /// The byte arrays are built from the fixed 16-lane slot, not `u8xN`: a
+    /// `2 * Native8Width` lane count is not provable for a generic `S`.
+    fn compress_array<S: Simd>() {
+        check::<<S as Simd>::f32x16>();
+        check::<<S as Simd>::i32x16>();
+        check::<ArrayRegister<<S as Simd>::u8x16,2>>();
+    }
 
-/// `_n` on the emulated `ArrayRegister` shapes: `compress_z_n` takes the merge
-/// tree with shared counts/`merge_pair` controls and chunk-recursive `_n`
-/// calls, and the other three take the shared-index wide scatter.
-#[test]
-fn n_family_array() {
-    // v3 f32x16 = ArrayRegister<F32x8V3, 2>: 8-lane chunks, merge2.
-    check_n::<<X86V3 as Simd>::f32x16, 2>(0..(1 << 16));
-    check_n::<<X86V3 as Simd>::f32x16, 4>(0..(1 << 16));
-    // v2 f32x16 = ArrayRegister<F32x4V2, 4>: 4-lane chunks, merge4 (the M=2
-    // chunk-shift stage as well as M=1).
-    check_n::<<X86V2 as Simd>::f32x16, 2>(0..(1 << 16));
-    // 64 lanes over 8 chunks: merge8, the M=4 stage.
-    check_n::<thermite::register::array::ArrayRegister<<X86V2 as NativeSimd>::u8xN, 4>, 2>(sample(64, 20000));
-}
+    /// `expand` / `expand_z` on the emulated-wide `ArrayRegister` shapes, whose
+    /// >8-lane arms route onto `expand_permute_wide` (branchless).
+    fn expand_array<S: Simd>() {
+        check_expand::<<S as Simd>::f32x16>();
+        check_expand::<<S as Simd>::i32x16>();
+        check_expand::<<S as Simd>::i16x16>();
+        check_expand::<ArrayRegister<<S as Simd>::u8x16,2>>();
+    }
 
-#[test]
-fn v2() {
-    check::<<X86V2 as Simd>::f32x4>(0..16);
-    // The 64-bit v2 registers gained pshufb-based `permutev` overrides, and
-    // compress routes through them.
-    check::<<X86V2 as Simd>::f64x2>(0..4);
-    check::<<X86V2 as Simd>::i64x2>(0..4);
-    check::<<X86V2 as Simd>::u64x2>(0..4);
-    check::<<X86V2 as Simd>::i16x8>(0..256);
-    check::<<X86V2 as Simd>::i8x16>(0..(1 << 16));
-    check::<<X86V2 as Simd>::u8x16>(0..(1 << 16));
+    /// `expand` / `expand_z` on the native wide registers (the
+    /// `compress_via_wide!` shapes), where both arms are grouped kernels.
+    fn expand_wide<S: Simd>() {
+        check_expand::<<S as Simd>::u16x16>();
+        check_expand::<<S as Simd>::i8x16>();
+        check_expand::<<S as Simd>::u8x16>();
+        check_expand::<<S as NativeSimd>::i8xN>();
+        check_expand::<<S as NativeSimd>::u8xN>();
+    }
+
+    /// `_n` on the <= 8-lane table path (one row fetch, `N` `permutev_row`s).
+    fn n_family_table<S: Simd>() {
+        check_n::<<S as Simd>::i32x8, 2>();
+        check_n::<<S as Simd>::i32x8, 4>();
+    }
+
+    /// `_n` on the native grouped kernels: one plan for the zeroing forms, two
+    /// plus a shared shift control for the non-zeroing ones.
+    fn n_family_grouped<S: Simd>() {
+        check_n::<<S as Simd>::u16x16, 2>();
+        check_n::<<S as Simd>::u16x16, 4>();
+        check_n::<<S as NativeSimd>::u8xN, 2>();
+        check_n::<<S as NativeSimd>::u8xN, 4>();
+    }
+
+    /// `_n` on the emulated `ArrayRegister` shapes.
+    fn n_family_array<S: Simd>() {
+        check_n::<<S as Simd>::f32x16, 2>();
+        check_n::<<S as Simd>::f32x16, 4>();
+        check_n::<ArrayRegister<<S as Simd>::u8x16,4>, 2>();
+    }
 }

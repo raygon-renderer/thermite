@@ -1,20 +1,25 @@
-//! The runtime-degree forms (`nth_root(x, n)`, `log_n(x, n)`, the `smoothstep` family) against
-//! their const-generic twins (`*_n::<N>`), bit for bit.
+//! The runtime-degree forms (`nth_root(x, n)`, `log_n(x, n)`) against their const-generic
+//! twins (`*_n::<N>`), bit for bit.
 //!
 //! The runtime forms exist so a caller with a runtime degree (the Python bridge above all)
 //! does not need a ladder of const instantiations. Their contract is that they compute the
 //! same thing: same arithmetic, same table entries, same special cases, so the check is
 //! equality of bits, not a tolerance, at every degree the ladder used to cover and beyond.
 
-#![cfg(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64"))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
+
+mod harness;
 
 use thermite::Vector;
+use thermite::math::TranscendentalMathWithPolicy;
 use thermite::math::policy::policies::{Performance, Precision};
-use thermite::math::{RealMathWithPolicy, TranscendentalMathWithPolicy};
 use thermite::prelude::*;
-
-type D = Vector<f64>;
-type F = Vector<f32>;
+use thermite::simd::Simd;
 
 /// Calls the const form at a runtime `n`, one rung per degree the test sweeps.
 macro_rules! const_form {
@@ -80,8 +85,13 @@ fn roots_grid() -> Vec<f64> {
     xs
 }
 
-#[test]
+for_each_backend_concrete! {
+
 fn nth_root_matches_the_const_form() {
+    #[allow(dead_code)]
+    type D = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type F = Vector<<S as Simd>::f32x8>;
     for &n in &DEGREES {
         for &x in &roots_grid() {
             let d = D::splat(x);
@@ -113,8 +123,11 @@ fn nth_root_matches_the_const_form() {
     }
 }
 
-#[test]
 fn log_n_matches_the_const_form() {
+    #[allow(dead_code)]
+    type D = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type F = Vector<<S as Simd>::f32x8>;
     // Bases 0, 1, 2, 10 are special cases, 3..=32 are table entries, and the rest is the fallback.
     let bases: [u32; 14] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 16, 20];
     for &n in &bases {
@@ -148,8 +161,11 @@ fn log_n_matches_the_const_form() {
     }
 }
 
-#[test]
 fn log_n_past_the_table_matches_the_const_fallback() {
+    #[allow(dead_code)]
+    type D = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type F = Vector<<S as Simd>::f32x8>;
     let d = D::splat(1234.5);
     same_bits_f64(
         "log_n/33",
@@ -167,93 +183,4 @@ fn log_n_past_the_table_matches_the_const_fallback() {
     );
 }
 
-/// Points in `[0, 1]` plus the endpoints. The inverse's Newton iteration brackets a root
-/// on `[0, 1]` and asserts it, in both forms alike, so the grid stays inside.
-fn unit_grid() -> Vec<f64> {
-    let mut xs = vec![0.0, 1.0, 0.5];
-    let mut t = 0.0;
-    while t <= 1.0 {
-        xs.push(t);
-        t += 1.0 / 37.0;
-    }
-    xs
-}
-
-/// The smoothstep family's runtime forms are a ladder over `0..=4`, by design: the
-/// polynomial is a handful of FMAs and nothing table-driven competes with the folded form.
-const SMOOTHSTEP_DEGREES: [u32; 5] = [0, 1, 2, 3, 4];
-
-#[test]
-fn smoothstep_family_matches_the_const_form() {
-    let edges = [None, Some((-1.0, 3.0))];
-
-    for &n in &SMOOTHSTEP_DEGREES {
-        for &x in &unit_grid() {
-            for e in edges {
-                let d = D::splat(x);
-                let ed = e.map(|(a, b)| (D::splat(a), D::splat(b)));
-                let xd = e.map_or(x, |(a, b)| a + (b - a) * x);
-                let dd = D::splat(xd);
-
-                same_bits_f64(
-                    "smoothstep",
-                    n,
-                    xd,
-                    dd.smoothstep_p::<Precision>(ed, n).extract::<0>(),
-                    const_form!(dd, smoothstep_n_p, Precision, n, ed).extract::<0>(),
-                );
-                same_bits_f64(
-                    "smoothstep_derivative",
-                    n,
-                    xd,
-                    dd.smoothstep_derivative_p::<Precision>(ed, n).extract::<0>(),
-                    const_form!(dd, smoothstep_derivative_n_p, Precision, n, ed).extract::<0>(),
-                );
-                // The inverse takes the value as input, so it is fed the unit grid directly.
-                // Not at exactly 0: for n >= 3 both forms hand `[0, 1]` to `newtons_method`
-                // as a bracket, whose debug precondition wants f(min) strictly negative, and
-                // f(0) = -y is not. A pre-existing sharp edge of the const form, shared
-                // exactly, and not this test's to paper over.
-                if x != 0.0 {
-                    same_bits_f64(
-                        "inverse_smoothstep",
-                        n,
-                        x,
-                        d.inverse_smoothstep_p::<Precision>(ed, n).extract::<0>(),
-                        const_form!(d, inverse_smoothstep_n_p, Precision, n, ed).extract::<0>(),
-                    );
-                }
-
-                let f = F::splat(x as f32);
-                let ef = e.map(|(a, b)| (F::splat(a as f32), F::splat(b as f32)));
-                let ff = F::splat(xd as f32);
-                same_bits_f32(
-                    "smoothstep/f32",
-                    n,
-                    xd as f32,
-                    ff.smoothstep_p::<Performance>(ef, n).extract::<0>(),
-                    const_form!(ff, smoothstep_n_p, Performance, n, ef).extract::<0>(),
-                );
-                if x != 0.0 {
-                    same_bits_f32(
-                        "inverse_smoothstep/f32",
-                        n,
-                        x as f32,
-                        f.inverse_smoothstep_p::<Performance>(ef, n).extract::<0>(),
-                        const_form!(f, inverse_smoothstep_n_p, Performance, n, ef).extract::<0>(),
-                    );
-                }
-            }
-        }
-    }
-}
-
-#[test]
-fn smoothstep_past_the_ladder_is_nan() {
-    let d = D::splat(0.5);
-    assert!(d.smoothstep_p::<Precision>(None, 5).extract::<0>().is_nan());
-    assert!(d.smoothstep_derivative_p::<Precision>(None, 5).extract::<0>().is_nan());
-    assert!(d.inverse_smoothstep_p::<Precision>(None, 5).extract::<0>().is_nan());
-    // And the top rung is live.
-    assert!(!d.smoothstep_p::<Precision>(None, 4).extract::<0>().is_nan());
 }

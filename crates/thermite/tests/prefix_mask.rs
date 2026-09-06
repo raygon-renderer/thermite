@@ -6,11 +6,13 @@
 //! `ONE` vs `ZERO` through the produced mask and reading lanes back. Uses the
 //! always-available scalar backend so it runs on every target.
 
-use thermite::backend::scalar::prelude::*;
+mod harness;
+
+use thermite::prelude::*;
 
 macro_rules! check {
-    ($name:ident, $ty:ty, $lanes:expr) => {
-        #[test]
+    ($($name:ident: $ty:ty, $lanes:literal),+ $(,)?) => {
+        for_each_backend_concrete! {$(
         fn $name() {
             type V = $ty;
             const LANES: usize = $lanes;
@@ -37,11 +39,18 @@ macro_rules! check {
             assert!(V::prefix_mask(LANES + 7).all(), "prefix clamps to all-true");
             assert!(V::suffix_mask(LANES + 7).all(), "suffix clamps to all-true");
         }
+        )+}
     };
 }
 
-check!(prefix_suffix_f32x4, f32x4, 4);
-check!(prefix_suffix_f32x8, f32x8, 8);
-check!(prefix_suffix_u32x4, u32x4, 4);
-check!(prefix_suffix_f64x4, f64x4, 4);
-check!(prefix_suffix_i32x4, i32x4, 4);
+check! {
+    prefix_suffix_f32x4: f32x4, 4,
+    prefix_suffix_f32x8: f32x8, 8,
+    prefix_suffix_u32x4: u32x4, 4,
+    prefix_suffix_f64x4: f64x4, 4,
+    prefix_suffix_i32x4: i32x4, 4,
+    prefix_suffix_f32x16: f32x16, 16,
+    prefix_suffix_i16x8: thermite::simd::i16x8<S>, 8,
+    prefix_suffix_u8x16: thermite::simd::u8x16<S>, 16,
+    prefix_suffix_i64x2: i64x2, 2,
+}

@@ -1,8 +1,10 @@
 //! Differential tests: every SIMD backend register op vs. the `Scalar`
 //! reference, across the element-type x width matrix.
 //!
-//! See `harness/mod.rs` for the methodology. Only built where the x86 SIMD
-//! backends exist, since elsewhere there is nothing to differentiate against.
+//! See `harness/mod.rs` for the methodology. Each suite below is written once
+//! over `S: Simd`. `for_each_backend!` stamps it per compiled backend behind a
+//! runtime ISA gate, so every backend (including the emulated wide slots on the
+//! 128-bit ones) runs every row.
 #![cfg(any(
     target_arch = "x86",
     target_arch = "x86_64",
@@ -30,15 +32,14 @@ use thermite::backend::scalar::Scalar;
 macro_rules! diff_shift {
     ($label:expr, $ut:ty, $rf:ty, $method:ident) => {{
         let mut rng = harness::rng();
-        type E = <$ut as thermite::register::Register>::Element;
         let lanes = <<$ut as thermite::register::CoreRegister>::Lanes as generic_array::typenum::Unsigned>::USIZE;
-        let bits = (core::mem::size_of::<E>() * 8) as u32;
-        for input in harness::corpus::<E>(lanes, &mut rng) {
+        let bits = (core::mem::size_of::<<$ut as thermite::register::Register>::Element>() * 8) as u32;
+        for input in harness::corpus::<<$ut as thermite::register::Register>::Element>(lanes, &mut rng) {
             for sh in 0..bits {
                 let got = harness::read::<$ut>(&<$ut>::$method(harness::make_array::<$ut>(&input), sh));
                 let want = harness::read::<$rf>(&<$rf>::$method(harness::make_array::<$rf>(&input), sh));
                 harness::assert_lanes_eq(
-                    concat!($label, " [", stringify!($method), "]"),
+                    &format!("{} [{}]", $label, stringify!($method)),
                     &[input.as_slice()],
                     &got,
                     &want,
@@ -53,49 +54,58 @@ macro_rules! diff_shift {
 // stamper in the harness, so the 8-bit suites can use it too.
 
 // ---------------------------------------------------------------------------
-// Float register suite: one #[test] per (backend, width).
+// Float register suite, one slot of backend `$S` vs the same slot of Scalar.
 // ---------------------------------------------------------------------------
-macro_rules! float_reg_tests {
-    ($modname:ident, $ut_backend:ty, $reg:ident, $label:expr) => {
-        #[test]
-        fn $modname() {
-            type UT = <$ut_backend as Simd>::$reg;
-            type RF = <Scalar as Simd>::$reg;
+macro_rules! float_ops {
+    ($S:ty, $reg:ident) => {{
+        let label = harness::label::<$S>(stringify!($reg));
+        let label = label.as_str();
 
-            // IEEE-correctly-rounded ops: must be bit-exact vs. scalar.
-            diff_binary!($label, UT, RF, add, Tol::Exact);
-            diff_binary!($label, UT, RF, sub, Tol::Exact);
-            diff_binary!($label, UT, RF, mul, Tol::Exact);
-            diff_binary!($label, UT, RF, div, Tol::Exact);
-            diff_unary!($label, UT, RF, sqrt, Tol::Exact);
+        // IEEE-correctly-rounded ops: must be bit-exact vs. scalar.
+        diff_binary!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, add, Tol::Exact);
+        diff_binary!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, sub, Tol::Exact);
+        diff_binary!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, mul, Tol::Exact);
+        diff_binary!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, div, Tol::Exact);
+        diff_unary!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, sqrt, Tol::Exact);
 
-            // Sign / ordering: thermite-defined, scalar backend is the oracle.
-            diff_unary!($label, UT, RF, neg, Tol::Exact);
-            diff_unary!($label, UT, RF, abs, Tol::Exact);
-            // Rel(0.0) == exact, except it treats +0.0 and -0.0 as equal
-            // (numerically they are, and which signed zero min/max returns is
-            // unspecified and differs harmlessly between backends).
-            diff_binary_finite!($label, UT, RF, min, Tol::Rel(0.0));
-            diff_binary_finite!($label, UT, RF, max, Tol::Rel(0.0));
-            diff_unary!($label, UT, RF, floor, Tol::Exact);
-            diff_unary!($label, UT, RF, ceil, Tol::Exact);
-            diff_unary!($label, UT, RF, trunc, Tol::Exact);
-            // NOTE: `round` is intentionally excluded, as its half-way rounding
-            // direction diverges between backends (scalar = half-away-from-zero,
-            // x86 = half-to-even).
+        // Sign / ordering: thermite-defined, scalar backend is the oracle.
+        diff_unary!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, neg, Tol::Exact);
+        diff_unary!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, abs, Tol::Exact);
+        // Rel(0.0) == exact, except it treats +0.0 and -0.0 as equal
+        // (numerically they are, and which signed zero min/max returns is
+        // unspecified and differs harmlessly between backends).
+        diff_binary_finite!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, min, Tol::Rel(0.0));
+        diff_binary_finite!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, max, Tol::Rel(0.0));
+        diff_unary!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, floor, Tol::Exact);
+        diff_unary!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, ceil, Tol::Exact);
+        diff_unary!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, trunc, Tol::Exact);
+        // NOTE: `round` is intentionally excluded, as its half-way rounding
+        // direction diverges between backends (scalar = half-away-from-zero,
+        // x86 = half-to-even).
 
-            // NOTE: `rcp`/`rsqrt` are hardware approximations and flush
-            // denormals, so they are accuracy-tested as a property (rcp(x)*x ≈ 1)
-            // in `approx_recip.rs`, not differentially against exact scalar.
+        // NOTE: `rcp`/`rsqrt` are hardware approximations and flush
+        // denormals, so they are accuracy-tested as a property (rcp(x)*x ≈ 1)
+        // in `approx_recip.rs`, not differentially against exact scalar.
 
-            // Horizontal reductions. `sum_elements` is non-associative so its
-            // tree-vs-fold rounding diverges on adversarial inputs, so it gets a
-            // tame-input accuracy test in `approx_recip.rs` instead. min/max
-            // are associative, so they must agree (modulo NaN).
-            diff_reduce_finite!($label, UT, RF, min_element, Tol::Rel(0.0));
-            diff_reduce_finite!($label, UT, RF, max_element, Tol::Rel(0.0));
-        }
-    };
+        // Horizontal reductions. `sum_elements` is non-associative so its
+        // tree-vs-fold rounding diverges on adversarial inputs, so it gets a
+        // tame-input accuracy test in `approx_recip.rs` instead. min/max
+        // are associative, so they must agree (modulo NaN).
+        diff_reduce_finite!(
+            label,
+            <$S as Simd>::$reg,
+            <Scalar as Simd>::$reg,
+            min_element,
+            Tol::Rel(0.0)
+        );
+        diff_reduce_finite!(
+            label,
+            <$S as Simd>::$reg,
+            <Scalar as Simd>::$reg,
+            max_element,
+            Tol::Rel(0.0)
+        );
+    }};
 }
 
 // ---------------------------------------------------------------------------
@@ -103,30 +113,25 @@ macro_rules! float_reg_tests {
 // width/backend. The two defects the harness originally found here were
 // 32-bit reductions and 64-bit `mul`.
 // ---------------------------------------------------------------------------
-macro_rules! int_reg_tests {
-    ($modname:ident, $ut_backend:ty, $reg:ident, $label:expr, signed) => {
-        #[test]
-        fn $modname() {
-            type UT = <$ut_backend as Simd>::$reg;
-            type RF = <Scalar as Simd>::$reg;
-            int_common!(UT, RF, $label);
-            diff_unary!($label, UT, RF, neg, Tol::Exact);
-            diff_unary!($label, UT, RF, abs, Tol::Exact);
-            diff_varshift!($label, UT, RF, srav); // arithmetic (sign-extending) variable shift
-        }
-    };
-    ($modname:ident, $ut_backend:ty, $reg:ident, $label:expr, unsigned) => {
-        #[test]
-        fn $modname() {
-            type UT = <$ut_backend as Simd>::$reg;
-            type RF = <Scalar as Simd>::$reg;
-            int_common!(UT, RF, $label);
-        }
-    };
+macro_rules! int_ops {
+    ($S:ty, $reg:ident, signed) => {{
+        let label = harness::label::<$S>(stringify!($reg));
+        let label = label.as_str();
+        int_common!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg);
+        diff_unary!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, neg, Tol::Exact);
+        diff_unary!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, abs, Tol::Exact);
+        // arithmetic (sign-extending) variable shift
+        diff_varshift!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg, srav);
+    }};
+    ($S:ty, $reg:ident, unsigned) => {{
+        let label = harness::label::<$S>(stringify!($reg));
+        let label = label.as_str();
+        int_common!(label, <$S as Simd>::$reg, <Scalar as Simd>::$reg);
+    }};
 }
 
 macro_rules! int_common {
-    ($ut:ty, $rf:ty, $label:expr) => {{
+    ($label:expr, $ut:ty, $rf:ty) => {{
         diff_binary!($label, $ut, $rf, add, Tol::Exact);
         diff_binary!($label, $ut, $rf, sub, Tol::Exact);
         diff_binary!($label, $ut, $rf, mul, Tol::Exact);
@@ -150,122 +155,28 @@ macro_rules! int_common {
     }};
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86 {
-    use super::*;
-    use thermite::backend::x86_v1::X86V1;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
+// ---------------------------------------------------------------------------
+// One #[test] per (backend, slot). Native on some backends, ArrayRegister-
+// emulated on the rest. Both must agree with Scalar.
+// ---------------------------------------------------------------------------
+for_each_backend! {
+    fn float_f32x4<S: Simd>() { float_ops!(S, f32x4) }
+    fn float_f32x8<S: Simd>() { float_ops!(S, f32x8) }
+    fn float_f32x16<S: Simd>() { float_ops!(S, f32x16) }
+    fn float_f64x2<S: Simd>() { float_ops!(S, f64x2) }
+    fn float_f64x4<S: Simd>() { float_ops!(S, f64x4) }
+    fn float_f64x8<S: Simd>() { float_ops!(S, f64x8) }
 
-    // --- X86V3 (AVX2 + FMA) vs Scalar -----------------------------------------
-    mod v3_float {
-        use super::*;
-        float_reg_tests!(f32x4, X86V3, f32x4, "x86_v3 f32x4");
-        float_reg_tests!(f32x8, X86V3, f32x8, "x86_v3 f32x8");
-        float_reg_tests!(f32x16, X86V3, f32x16, "x86_v3 f32x16");
-        float_reg_tests!(f64x2, X86V3, f64x2, "x86_v3 f64x2");
-        float_reg_tests!(f64x4, X86V3, f64x4, "x86_v3 f64x4");
-        float_reg_tests!(f64x8, X86V3, f64x8, "x86_v3 f64x8");
-    }
-    mod v3_int {
-        use super::*;
-        int_reg_tests!(i32x4, X86V3, i32x4, "x86_v3 i32x4", signed);
-        int_reg_tests!(i32x8, X86V3, i32x8, "x86_v3 i32x8", signed);
-        int_reg_tests!(i64x2, X86V3, i64x2, "x86_v3 i64x2", signed);
-        int_reg_tests!(i64x4, X86V3, i64x4, "x86_v3 i64x4", signed);
-        int_reg_tests!(u32x4, X86V3, u32x4, "x86_v3 u32x4", unsigned);
-        int_reg_tests!(u32x8, X86V3, u32x8, "x86_v3 u32x8", unsigned);
-        int_reg_tests!(u64x2, X86V3, u64x2, "x86_v3 u64x2", unsigned);
-        int_reg_tests!(u64x4, X86V3, u64x4, "x86_v3 u64x4", unsigned);
-    }
-
-    // --- X86V2 (SSE4.2) vs Scalar ---------------------------------------------
-    mod v2_float {
-        use super::*;
-        float_reg_tests!(f32x4, X86V2, f32x4, "x86_v2 f32x4");
-        float_reg_tests!(f32x8, X86V2, f32x8, "x86_v2 f32x8");
-        float_reg_tests!(f64x2, X86V2, f64x2, "x86_v2 f64x2");
-        float_reg_tests!(f64x4, X86V2, f64x4, "x86_v2 f64x4");
-    }
-    mod v2_int {
-        use super::*;
-        int_reg_tests!(i32x4, X86V2, i32x4, "x86_v2 i32x4", signed);
-        int_reg_tests!(i32x8, X86V2, i32x8, "x86_v2 i32x8", signed);
-        int_reg_tests!(i64x2, X86V2, i64x2, "x86_v2 i64x2", signed);
-        int_reg_tests!(u32x4, X86V2, u32x4, "x86_v2 u32x4", unsigned);
-        int_reg_tests!(u64x2, X86V2, u64x2, "x86_v2 u64x2", unsigned);
-    }
-
-    // --- X86V1 (SSE2) vs Scalar ------------------------------------------------
-    mod v1_float {
-        use super::*;
-        float_reg_tests!(f32x4, X86V1, f32x4, "x86_v1 f32x4");
-        float_reg_tests!(f32x8, X86V1, f32x8, "x86_v1 f32x8");
-        float_reg_tests!(f64x2, X86V1, f64x2, "x86_v1 f64x2");
-        float_reg_tests!(f64x4, X86V1, f64x4, "x86_v1 f64x4");
-    }
-    mod v1_int {
-        use super::*;
-        int_reg_tests!(i32x4, X86V1, i32x4, "x86_v1 i32x4", signed);
-        int_reg_tests!(i32x8, X86V1, i32x8, "x86_v1 i32x8", signed);
-        int_reg_tests!(i64x2, X86V1, i64x2, "x86_v1 i64x2", signed);
-        int_reg_tests!(u32x4, X86V1, u32x4, "x86_v1 u32x4", unsigned);
-        int_reg_tests!(u64x2, X86V1, u64x2, "x86_v1 u64x2", unsigned);
-    }
-}
-
-// wasm: native f32x4/f64x2/i32x4/i64x2/u32x4/u64x2 (128-bit), wider via ArrayRegister.
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-
-    mod wasm_float {
-        use super::*;
-        float_reg_tests!(f32x4, Wasm, f32x4, "wasm f32x4");
-        float_reg_tests!(f32x8, Wasm, f32x8, "wasm f32x8");
-        float_reg_tests!(f32x16, Wasm, f32x16, "wasm f32x16");
-        float_reg_tests!(f64x2, Wasm, f64x2, "wasm f64x2");
-        float_reg_tests!(f64x4, Wasm, f64x4, "wasm f64x4");
-        float_reg_tests!(f64x8, Wasm, f64x8, "wasm f64x8");
-    }
-    mod wasm_int {
-        use super::*;
-        int_reg_tests!(i32x4, Wasm, i32x4, "wasm i32x4", signed);
-        int_reg_tests!(i32x8, Wasm, i32x8, "wasm i32x8", signed);
-        int_reg_tests!(i64x2, Wasm, i64x2, "wasm i64x2", signed);
-        int_reg_tests!(i64x4, Wasm, i64x4, "wasm i64x4", signed);
-        int_reg_tests!(u32x4, Wasm, u32x4, "wasm u32x4", unsigned);
-        int_reg_tests!(u32x8, Wasm, u32x8, "wasm u32x8", unsigned);
-        int_reg_tests!(u64x2, Wasm, u64x2, "wasm u64x2", unsigned);
-        int_reg_tests!(u64x4, Wasm, u64x4, "wasm u64x4", unsigned);
-    }
-}
-
-// neon: native f32x4/f64x2/i32x4/i64x2/u32x4/u64x2 (128-bit), wider via ArrayRegister.
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-
-    mod neon_float {
-        use super::*;
-        float_reg_tests!(f32x4, Neon, f32x4, "neon f32x4");
-        float_reg_tests!(f32x8, Neon, f32x8, "neon f32x8");
-        float_reg_tests!(f32x16, Neon, f32x16, "neon f32x16");
-        float_reg_tests!(f64x2, Neon, f64x2, "neon f64x2");
-        float_reg_tests!(f64x4, Neon, f64x4, "neon f64x4");
-        float_reg_tests!(f64x8, Neon, f64x8, "neon f64x8");
-    }
-    mod neon_int {
-        use super::*;
-        int_reg_tests!(i32x4, Neon, i32x4, "neon i32x4", signed);
-        int_reg_tests!(i32x8, Neon, i32x8, "neon i32x8", signed);
-        int_reg_tests!(i64x2, Neon, i64x2, "neon i64x2", signed);
-        int_reg_tests!(i64x4, Neon, i64x4, "neon i64x4", signed);
-        int_reg_tests!(u32x4, Neon, u32x4, "neon u32x4", unsigned);
-        int_reg_tests!(u32x8, Neon, u32x8, "neon u32x8", unsigned);
-        int_reg_tests!(u64x2, Neon, u64x2, "neon u64x2", unsigned);
-        int_reg_tests!(u64x4, Neon, u64x4, "neon u64x4", unsigned);
-    }
+    fn int_i32x4<S: Simd>() { int_ops!(S, i32x4, signed) }
+    fn int_i32x8<S: Simd>() { int_ops!(S, i32x8, signed) }
+    fn int_i32x16<S: Simd>() { int_ops!(S, i32x16, signed) }
+    fn int_i64x2<S: Simd>() { int_ops!(S, i64x2, signed) }
+    fn int_i64x4<S: Simd>() { int_ops!(S, i64x4, signed) }
+    fn int_i64x8<S: Simd>() { int_ops!(S, i64x8, signed) }
+    fn int_u32x4<S: Simd>() { int_ops!(S, u32x4, unsigned) }
+    fn int_u32x8<S: Simd>() { int_ops!(S, u32x8, unsigned) }
+    fn int_u32x16<S: Simd>() { int_ops!(S, u32x16, unsigned) }
+    fn int_u64x2<S: Simd>() { int_ops!(S, u64x2, unsigned) }
+    fn int_u64x4<S: Simd>() { int_ops!(S, u64x4, unsigned) }
+    fn int_u64x8<S: Simd>() { int_ops!(S, u64x8, unsigned) }
 }

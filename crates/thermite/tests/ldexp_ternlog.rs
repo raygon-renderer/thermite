@@ -12,7 +12,14 @@
 //! from the original. It is scaffolding with a defined end, not a permanent
 //! test - though it earned its keep by catching `ldexp(0.0, 300) == inf` in
 //! the *shipped* arm, which no other test covered.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
+
+mod harness;
 
 use thermite::element::FloatElementWithBits;
 use thermite::math::policy::{DenormalBehavior, Policy, PolicyParameters, PrecisionPolicy};
@@ -90,6 +97,7 @@ where
     ))
 }
 
+#[inline(always)]
 fn check_f32<S: Simd>(name: &str) {
     let cases: [f32; 14] = [
         1.0,
@@ -126,6 +134,7 @@ fn check_f32<S: Simd>(name: &str) {
     }
 }
 
+#[inline(always)]
 fn check_f64<S: Simd>(name: &str) {
     let cases: [f64; 12] = [
         1.0,
@@ -160,25 +169,13 @@ fn check_f64<S: Simd>(name: &str) {
     }
 }
 
-macro_rules! suite {
-    ($m:ident, $b:ty, $l:expr) => {
-        mod $m {
-            use super::*;
+for_each_backend_concrete! {
 
-            #[test]
-            fn f32_arms_agree() {
-                check_f32::<$b>($l);
-            }
+    fn f32_arms_agree() {
+        check_f32::<S>(&harness::label::<S>(""));
+    }
 
-            #[test]
-            fn f64_arms_agree() {
-                check_f64::<$b>($l);
-            }
-        }
-    };
+    fn f64_arms_agree() {
+        check_f64::<S>(&harness::label::<S>(""));
+    }
 }
-
-suite!(scalar, thermite::backend::scalar::Scalar, "scalar");
-suite!(x86_v1, thermite::backend::x86_v1::X86V1, "x86_v1");
-suite!(x86_v2, thermite::backend::x86_v2::X86V2, "x86_v2");
-suite!(x86_v3, thermite::backend::x86_v3::X86V3, "x86_v3");

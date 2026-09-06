@@ -9,27 +9,10 @@
 //! each needs its own probe shape:
 //!
 //! 1. **Does an implementation exist?** Asked with concrete backend types, which
-//!    resolve against the impls directly.
-//! 2. **Can generic code name it?** Asked with a generic body over `S: Simd` /
-//!    `S: SimdVectors`, which resolves against the *declared bounds*. An
-//!    implementation the traits never declare is unreachable from any generic
-//!    kernel, and the concrete probe cannot see that.
-//!
-//! Both must sit in a function **body**. The obvious `where`-clause form does
-//! not work and is not a hypothetical failure: it once reported this matrix
-//! complete while 106 pairs had no implementation whatsoever:
-//!
-//! ```ignore
-//! fn p<S: Simd>() { assert_cast::<S::f32x4, S::u64x4>(); }   // checks
-//! fn p<S: Simd>() where S::u64x4: CastRegister<S::f32x4> {}  // does NOT
-//! ```
-//!
-//! Nothing instantiates the second one, so rustc never resolves the bound.
-//!
-//! Coverage is 90 directed pairs per lane count (10 element types, self-pairs
-//! excluded) across the four power-of-two lane counts, for every backend the
-//! host architecture compiles. The 3-lane `Simd3`/`Simd3A` slots carry only the
-//! 32- and 64-bit types and are not covered here.
+//!    resolve against the impls directly. `for_each_backend_concrete!` asks it
+//!    once per compiled backend.
+//! 2. **Is it reachable from a generic bound?** Asked with `S: Simd` etc., which
+//!    resolve against the trait's declared bounds only.
 #![cfg(any(
     target_arch = "x86",
     target_arch = "x86_64",
@@ -37,23 +20,17 @@
     target_arch = "aarch64"
 ))]
 
+mod harness;
+
 use thermite::register::{CastRegister, CoreRegister};
-use thermite::simd::{Simd, SimdVectors};
+use thermite::simd::{Simd, Simd3, Simd3A, SimdVectors};
 use thermite::vector::CastVector;
 
 fn assert_cast<FROM: CoreRegister, TO: CastRegister<FROM>>() {}
 
-// Reached only from `generic_reachability`, which is deliberately never called.
 #[allow(dead_code)]
 fn assert_vcast<FROM, TO: CastVector<FROM>>() {}
 
-/// Every directed pair over a list of slot names, using concrete backend types.
-///
-/// Consumes the list head-first and pairs the head against each remaining
-/// element in **both** directions, then recurses on the tail. That yields each
-/// unordered pair exactly once and each directed pair exactly once, without
-/// needing to compare two idents for equality to skip the self-pairs, which
-/// `macro_rules!` cannot do.
 macro_rules! concrete_pairs_in {
     ($b:ty, $tr:ident;) => {};
     ($b:ty, $tr:ident; $head:ident $(, $tail:ident)*) => {
@@ -65,16 +42,12 @@ macro_rules! concrete_pairs_in {
     };
 }
 
-/// The power-of-two lane counts, whose slots live on `Simd`.
 macro_rules! concrete_pairs {
     ($b:ty; $($slot:ident),* $(,)?) => {
         concrete_pairs_in!($b, Simd; $($slot),*);
     };
 }
 
-/// As above, but generic over `S` and parameterised by which assertion to use,
-/// so one macro serves the register layer (`assert_cast`, bounds from `Simd`)
-/// and the vector layer (`assert_vcast`, bounds from `SimdVectors`).
 macro_rules! generic_pairs {
     ($assert:ident;) => {};
     ($assert:ident; $head:ident $(, $tail:ident)*) => {
@@ -86,11 +59,6 @@ macro_rules! generic_pairs {
     };
 }
 
-/// The ten element slots at one lane count, fed to whichever pair macro.
-///
-/// Slot names are spelled out per lane count because the `Simd` slots are plain
-/// associated-type names and there is no concatenating `i8` with `x4` without a
-/// proc macro.
 macro_rules! each_lane {
     ($mac:ident, $arg:tt) => {
         $mac!($arg; f32x2, f64x2, i8x2, u8x2, i16x2, u16x2, i32x2, u32x2, i64x2, u64x2);
@@ -100,59 +68,6 @@ macro_rules! each_lane {
     };
 }
 
-/// Question 1, per backend: every pair has an implementation.
-macro_rules! backend_exists {
-    ($($modname:ident => $b:ty),* $(,)?) => {$(
-        #[test]
-        fn $modname() {
-            each_lane!(concrete_pairs, $b);
-        }
-    )*};
-}
-
-// The scalar backend is repeated per architecture rather than hoisted: its slot
-// types are `ArrayRegister` composites over the host's own registers, so it is
-// not the same set of impls on each target.
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86 {
-    use super::*;
-
-    backend_exists! {
-        scalar_matrix_exists => thermite::backend::scalar::Scalar,
-        v1_matrix_exists => thermite::backend::x86_v1::X86V1,
-        v2_matrix_exists => thermite::backend::x86_v2::X86V2,
-        v3_matrix_exists => thermite::backend::x86_v3::X86V3,
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::*;
-
-    backend_exists! {
-        scalar_matrix_exists => thermite::backend::scalar::Scalar,
-        wasm_matrix_exists => thermite::backend::wasm::Wasm,
-    }
-}
-
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    use super::*;
-
-    backend_exists! {
-        scalar_matrix_exists => thermite::backend::scalar::Scalar,
-        neon_matrix_exists => thermite::backend::neon::Neon,
-    }
-}
-
-/// The 3-lane slots, which are a 6x6 matrix rather than 10x10: they carry only
-/// the 32- and 64-bit types, there being no 3-lane 8- or 16-bit register.
-///
-/// They are backed by `ReducedRegister<_, U1>` over the 4-lane registers, so
-/// every pair is implemented by the reduced blanket and none of this needs a
-/// backend lowering, but the bounds still have to be *declared* for generic
-/// code to reach them, on four traits rather than two (`Simd3A`/`Simd3` and
-/// their two vector mirrors).
 macro_rules! each_lane3 {
     ($mac:ident, $b:ty, $tr:ident, $vtr:ident) => {
         $mac!($b, $tr; f32x3A, f64x3A, i32x3A, u32x3A, i64x3A, u64x3A);
@@ -160,51 +75,30 @@ macro_rules! each_lane3 {
     };
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86_3lane {
-    use super::*;
-    use thermite::simd::{Simd3, Simd3A};
-
-    macro_rules! backend_exists3 {
-        ($($modname:ident => $b:ty),* $(,)?) => {$(
-            #[test]
-            fn $modname() {
-                each_lane3!(concrete_pairs_in, $b, Simd3A, Simd3);
-            }
-        )*};
+for_each_backend_concrete! {
+    /// Question 1 for the x2..x16 slots.
+    fn matrix_exists() {
+        each_lane!(concrete_pairs, S);
     }
-
-    backend_exists3! {
-        scalar_3lane_exists => thermite::backend::scalar::Scalar,
-        v1_3lane_exists => thermite::backend::x86_v1::X86V1,
-        v2_3lane_exists => thermite::backend::x86_v2::X86V2,
-        v3_3lane_exists => thermite::backend::x86_v3::X86V3,
+    /// Question 1 for the 3-lane slots (`Simd3A` and `Simd3`).
+    fn lanes3_exist() {
+        each_lane3!(concrete_pairs_in, S, Simd3A, Simd3);
     }
 }
 
-/// Question 2: every pair is reachable from generic code, at both layers.
-///
-/// These are never called. A generic body is type-checked against the trait's
-/// declared bounds regardless, which is the whole point. Calling them would
-/// only add the backend's impls back into scope and re-answer question 1.
 #[allow(dead_code)]
 mod generic_reachability {
     use super::*;
 
-    /// Register layer: bounds declared on `Simd`.
     pub fn registers<S: Simd>() {
         each_lane!(generic_pairs, assert_cast);
     }
 
-    /// Vector layer: bounds declared on `SimdVectors`, which does not inherit
-    /// them from `Simd`, since the mirror states its own `CastVector` bounds. This is
-    /// the layer user code actually touches.
     pub fn vectors<S: SimdVectors>() {
         each_lane!(generic_pairs, assert_vcast);
     }
 
-    // The 3-lane slots, on all four of the traits that carry them.
-    use thermite::simd::{Simd3, Simd3A, Simd3AVectors, Simd3Vectors};
+    use thermite::simd::{Simd3AVectors, Simd3Vectors};
 
     macro_rules! pairs3 {
         ($assert:ident; $($slot:ident),* $(,)?) => {

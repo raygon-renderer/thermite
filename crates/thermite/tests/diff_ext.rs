@@ -25,6 +25,14 @@ use thermite::simd::{Simd, Simd3A};
 
 use thermite::backend::scalar::Scalar;
 
+// Label suffixing: labels are runtime strings (`harness::label::<S>(..)`), so
+// `concat!` is out. The tail may be any `concat!`-able list.
+macro_rules! lbl {
+    ($l:expr, $($s:expr),+ $(,)?) => {
+        &format!("{}{}", $l, concat!($($s),+))
+    };
+}
+
 macro_rules! n_of {
     ($ut:ty) => {
         <<$ut as CoreRegister>::Lanes as Unsigned>::USIZE
@@ -47,13 +55,13 @@ macro_rules! mbin {
                 let (au, bu) = (harness::make_array::<$ut>(x), harness::make_array::<$ut>(y));
                 let (ar, br) = (harness::make_array::<$rf>(x), harness::make_array::<$rf>(y));
                 let (su, sr) = (harness::make_array::<$ut>(x), harness::make_array::<$rf>(x));
-                harness::assert_lanes_eq(concat!($label, " [", stringify!($method), "_c]"), &[x.as_slice(), y.as_slice()],
+                harness::assert_lanes_eq(lbl!($label," [", stringify!($method), "_c]"), &[x.as_slice(), y.as_slice()],
                     &harness::read::<$ut>(&<$ut>::[<$method _c>](mu, au, bu)),
                     &harness::read::<$rf>(&<$rf>::[<$method _c>](mr, ar, br)), $tol);
-                harness::assert_lanes_eq(concat!($label, " [", stringify!($method), "_m]"), &[x.as_slice(), y.as_slice()],
+                harness::assert_lanes_eq(lbl!($label," [", stringify!($method), "_m]"), &[x.as_slice(), y.as_slice()],
                     &harness::read::<$ut>(&<$ut>::[<$method _m>](su, mu, au, bu)),
                     &harness::read::<$rf>(&<$rf>::[<$method _m>](sr, mr, ar, br)), $tol);
-                harness::assert_lanes_eq(concat!($label, " [", stringify!($method), "_z]"), &[x.as_slice(), y.as_slice()],
+                harness::assert_lanes_eq(lbl!($label," [", stringify!($method), "_z]"), &[x.as_slice(), y.as_slice()],
                     &harness::read::<$ut>(&<$ut>::[<$method _z>](mu, au, bu)),
                     &harness::read::<$rf>(&<$rf>::[<$method _z>](mr, ar, br)), $tol);
             }
@@ -76,13 +84,13 @@ macro_rules! munary {
                 let (mu, mr) = (harness::build_mask::<$ut>(mp), harness::build_mask::<$rf>(mp));
                 let (vu, vr) = (harness::make_array::<$ut>(x), harness::make_array::<$rf>(x));
                 let (su, sr) = (harness::make_array::<$ut>(&ys[k % ys.len()]), harness::make_array::<$rf>(&ys[k % ys.len()]));
-                harness::assert_lanes_eq(concat!($label, " [", stringify!($method), "_c]"), &[x.as_slice()],
+                harness::assert_lanes_eq(lbl!($label," [", stringify!($method), "_c]"), &[x.as_slice()],
                     &harness::read::<$ut>(&<$ut>::[<$method _c>](mu, vu)),
                     &harness::read::<$rf>(&<$rf>::[<$method _c>](mr, vr)), $tol);
-                harness::assert_lanes_eq(concat!($label, " [", stringify!($method), "_m]"), &[x.as_slice()],
+                harness::assert_lanes_eq(lbl!($label," [", stringify!($method), "_m]"), &[x.as_slice()],
                     &harness::read::<$ut>(&<$ut>::[<$method _m>](su, mu, vu)),
                     &harness::read::<$rf>(&<$rf>::[<$method _m>](sr, mr, vr)), $tol);
-                harness::assert_lanes_eq(concat!($label, " [", stringify!($method), "_z]"), &[x.as_slice()],
+                harness::assert_lanes_eq(lbl!($label," [", stringify!($method), "_z]"), &[x.as_slice()],
                     &harness::read::<$ut>(&<$ut>::[<$method _z>](mu, vu)),
                     &harness::read::<$rf>(&<$rf>::[<$method _z>](mr, vr)), $tol);
             }
@@ -104,30 +112,30 @@ macro_rules! bcast {
                 let (vu, vr) = (harness::make_array::<$ut>(x), harness::make_array::<$rf>(x));
                 let (su, sr) = (harness::make_array::<$ut>(x), harness::make_array::<$rf>(x));
                 // broadcast::<0>
-                harness::assert_lanes_eq(concat!($label, " [broadcast0]"), &[x.as_slice()],
+                harness::assert_lanes_eq(lbl!($label," [broadcast0]"), &[x.as_slice()],
                     &harness::read::<$ut>(&<$ut>::broadcast::<0>(vu)),
                     &harness::read::<$rf>(&<$rf>::broadcast::<0>(vr)), $tol);
-                harness::assert_lanes_eq(concat!($label, " [broadcast0_c]"), &[x.as_slice()],
+                harness::assert_lanes_eq(lbl!($label," [broadcast0_c]"), &[x.as_slice()],
                     &harness::read::<$ut>(&<$ut>::broadcast_c::<0>(mu, vu)),
                     &harness::read::<$rf>(&<$rf>::broadcast_c::<0>(mr, vr)), $tol);
-                harness::assert_lanes_eq(concat!($label, " [broadcast0_m]"), &[x.as_slice()],
+                harness::assert_lanes_eq(lbl!($label," [broadcast0_m]"), &[x.as_slice()],
                     &harness::read::<$ut>(&<$ut>::broadcast_m::<0>(su, mu, vu)),
                     &harness::read::<$rf>(&<$rf>::broadcast_m::<0>(sr, mr, vr)), $tol);
-                harness::assert_lanes_eq(concat!($label, " [broadcast0_z]"), &[x.as_slice()],
+                harness::assert_lanes_eq(lbl!($label," [broadcast0_z]"), &[x.as_slice()],
                     &harness::read::<$ut>(&<$ut>::broadcast_z::<0>(mu, vu)),
                     &harness::read::<$rf>(&<$rf>::broadcast_z::<0>(mr, vr)), $tol);
                 // broadcastv(idx) for the last lane + masked variants
                 let idx = n - 1;
-                harness::assert_lanes_eq(concat!($label, " [broadcastv]"), &[x.as_slice()],
+                harness::assert_lanes_eq(lbl!($label," [broadcastv]"), &[x.as_slice()],
                     &harness::read::<$ut>(&<$ut>::broadcastv(vu, idx)),
                     &harness::read::<$rf>(&<$rf>::broadcastv(vr, idx)), $tol);
-                harness::assert_lanes_eq(concat!($label, " [broadcastv_c]"), &[x.as_slice()],
+                harness::assert_lanes_eq(lbl!($label," [broadcastv_c]"), &[x.as_slice()],
                     &harness::read::<$ut>(&<$ut>::broadcastv_c(mu, vu, idx)),
                     &harness::read::<$rf>(&<$rf>::broadcastv_c(mr, vr, idx)), $tol);
-                harness::assert_lanes_eq(concat!($label, " [broadcastv_m]"), &[x.as_slice()],
+                harness::assert_lanes_eq(lbl!($label," [broadcastv_m]"), &[x.as_slice()],
                     &harness::read::<$ut>(&<$ut>::broadcastv_m(su, mu, vu, idx)),
                     &harness::read::<$rf>(&<$rf>::broadcastv_m(sr, mr, vr, idx)), $tol);
-                harness::assert_lanes_eq(concat!($label, " [broadcastv_z]"), &[x.as_slice()],
+                harness::assert_lanes_eq(lbl!($label," [broadcastv_z]"), &[x.as_slice()],
                     &harness::read::<$ut>(&<$ut>::broadcastv_z(mu, vu, idx)),
                     &harness::read::<$rf>(&<$rf>::broadcastv_z(mr, vr, idx)), $tol);
             }
@@ -148,28 +156,28 @@ macro_rules! rev {
             let (vu, vr) = (harness::make_array::<$ut>(x), harness::make_array::<$rf>(x));
             let (su, sr) = (harness::make_array::<$ut>(x), harness::make_array::<$rf>(x));
             harness::assert_lanes_eq(
-                concat!($label, " [reverse]"),
+                lbl!($label, " [reverse]"),
                 &[x.as_slice()],
                 &harness::read::<$ut>(&<$ut>::reverse(vu)),
                 &harness::read::<$rf>(&<$rf>::reverse(vr)),
                 $tol,
             );
             harness::assert_lanes_eq(
-                concat!($label, " [reverse_c]"),
+                lbl!($label, " [reverse_c]"),
                 &[x.as_slice()],
                 &harness::read::<$ut>(&<$ut>::reverse_c(mu, vu)),
                 &harness::read::<$rf>(&<$rf>::reverse_c(mr, vr)),
                 $tol,
             );
             harness::assert_lanes_eq(
-                concat!($label, " [reverse_m]"),
+                lbl!($label, " [reverse_m]"),
                 &[x.as_slice()],
                 &harness::read::<$ut>(&<$ut>::reverse_m(su, mu, vu)),
                 &harness::read::<$rf>(&<$rf>::reverse_m(sr, mr, vr)),
                 $tol,
             );
             harness::assert_lanes_eq(
-                concat!($label, " [reverse_z]"),
+                lbl!($label, " [reverse_z]"),
                 &[x.as_slice()],
                 &harness::read::<$ut>(&<$ut>::reverse_z(mu, vu)),
                 &harness::read::<$rf>(&<$rf>::reverse_z(mr, vr)),
@@ -188,7 +196,7 @@ macro_rules! pred {
         for x in harness::corpus::<E>(n, &mut rng).iter().take(500) {
             let gm = harness::read_mask::<$ut>(<$ut>::$method(harness::make_array::<$ut>(x)), n);
             let wm = harness::read_mask::<$rf>(<$rf>::$method(harness::make_array::<$rf>(x)), n);
-            assert_eq!(gm, wm, concat!($label, " [", stringify!($method), "]"));
+            assert_eq!(gm, wm, "{} [{}]", $label, stringify!($method));
         }
     }};
 }
@@ -207,17 +215,19 @@ macro_rules! signed_ext {
             assert_eq!(
                 harness::read_mask::<$ut>(<$ut>::is_negative(harness::make_array::<$ut>(x)), n),
                 harness::read_mask::<$rf>(<$rf>::is_negative(harness::make_array::<$rf>(x)), n),
-                concat!($label, " [is_negative]"),
+                "{} [is_negative]",
+                $label,
             );
             assert_eq!(
                 harness::read_mask::<$ut>(<$ut>::is_positive(harness::make_array::<$ut>(x)), n),
                 harness::read_mask::<$rf>(<$rf>::is_positive(harness::make_array::<$rf>(x)), n),
-                concat!($label, " [is_positive]"),
+                "{} [is_positive]",
+                $label,
             );
             // select_negative(value, on_neg, on_pos): self<0 ? on_neg : on_pos
             let y = &ys[k % ys.len()];
             harness::assert_lanes_eq(
-                concat!($label, " [select_negative]"),
+                lbl!($label, " [select_negative]"),
                 &[x.as_slice(), y.as_slice()],
                 &harness::read::<$ut>(&<$ut>::select_negative(
                     harness::make_array::<$ut>(x),
@@ -239,14 +249,14 @@ macro_rules! signed_ext {
 macro_rules! offset_indexed {
     ($label:expr, $ut:ty, $rf:ty) => {{
         harness::assert_lanes_eq(
-            concat!($label, " [offset]"),
+            lbl!($label, " [offset]"),
             &[],
             &harness::read::<$ut>(&<$ut>::offset()),
             &harness::read::<$rf>(&<$rf>::offset()),
             Tol::Exact,
         );
         harness::assert_lanes_eq(
-            concat!($label, " [indexed]"),
+            lbl!($label, " [indexed]"),
             &[],
             &harness::read::<$ut>(&<$ut>::indexed()),
             &harness::read::<$rf>(&<$rf>::indexed()),
@@ -277,20 +287,8 @@ macro_rules! min_max {
             }
             let (gmin, gmax) = <$ut>::min_max_element(harness::make_array::<$ut>(x));
             let (wmin, wmax) = <$rf>::min_max_element(harness::make_array::<$rf>(x));
-            harness::assert_lanes_eq(
-                concat!($label, " [min_max.min]"),
-                &[x.as_slice()],
-                &[gmin],
-                &[wmin],
-                tol,
-            );
-            harness::assert_lanes_eq(
-                concat!($label, " [min_max.max]"),
-                &[x.as_slice()],
-                &[gmax],
-                &[wmax],
-                tol,
-            );
+            harness::assert_lanes_eq(lbl!($label, " [min_max.min]"), &[x.as_slice()], &[gmin], &[wmin], tol);
+            harness::assert_lanes_eq(lbl!($label, " [min_max.max]"), &[x.as_slice()], &[gmax], &[wmax], tol);
         }
     }};
 }
@@ -318,7 +316,7 @@ macro_rules! pairwise_inv {
                 harness::make_array::<$rf>(y),
             ));
             harness::assert_lanes_eq(
-                concat!($label, " [", stringify!($method), " total]"),
+                lbl!($label, " [", stringify!($method), " total]"),
                 &[x.as_slice(), y.as_slice()],
                 &[gt],
                 &[wt],
@@ -393,11 +391,11 @@ mod ext {
     /// f64x16 = Array<_,4>). Oracled against the scalar backend (`as` semantics);
     /// same-kind widen/narrow is exact on both sides.
     macro_rules! casts {
-        ($backend:ty, $bl:expr) => {{
+        () => {{
             cast_diff!(
-                concat!($bl, " f32->f64"),
-                <$backend as Simd>::f32x16,
-                <$backend as Simd>::f64x16,
+                harness::label::<S>("f32->f64"),
+                <S as Simd>::f32x16,
+                <S as Simd>::f64x16,
                 <Scalar as Simd>::f32x16,
                 <Scalar as Simd>::f64x16,
                 f32,
@@ -405,9 +403,9 @@ mod ext {
                 Tol::Exact
             );
             cast_diff!(
-                concat!($bl, " f64->f32"),
-                <$backend as Simd>::f64x16,
-                <$backend as Simd>::f32x16,
+                harness::label::<S>("f64->f32"),
+                <S as Simd>::f64x16,
+                <S as Simd>::f32x16,
                 <Scalar as Simd>::f64x16,
                 <Scalar as Simd>::f32x16,
                 f64,
@@ -415,9 +413,9 @@ mod ext {
                 Tol::Exact
             );
             cast_diff!(
-                concat!($bl, " i32->i64"),
-                <$backend as Simd>::i32x16,
-                <$backend as Simd>::i64x16,
+                harness::label::<S>("i32->i64"),
+                <S as Simd>::i32x16,
+                <S as Simd>::i64x16,
                 <Scalar as Simd>::i32x16,
                 <Scalar as Simd>::i64x16,
                 i32,
@@ -425,9 +423,9 @@ mod ext {
                 Tol::Exact
             );
             cast_diff!(
-                concat!($bl, " i64->i32"),
-                <$backend as Simd>::i64x16,
-                <$backend as Simd>::i32x16,
+                harness::label::<S>("i64->i32"),
+                <S as Simd>::i64x16,
+                <S as Simd>::i32x16,
                 <Scalar as Simd>::i64x16,
                 <Scalar as Simd>::i32x16,
                 i64,
@@ -435,9 +433,9 @@ mod ext {
                 Tol::Exact
             );
             cast_diff!(
-                concat!($bl, " u32->u64"),
-                <$backend as Simd>::u32x16,
-                <$backend as Simd>::u64x16,
+                harness::label::<S>("u32->u64"),
+                <S as Simd>::u32x16,
+                <S as Simd>::u64x16,
                 <Scalar as Simd>::u32x16,
                 <Scalar as Simd>::u64x16,
                 u32,
@@ -445,9 +443,9 @@ mod ext {
                 Tol::Exact
             );
             cast_diff!(
-                concat!($bl, " u64->u32"),
-                <$backend as Simd>::u64x16,
-                <$backend as Simd>::u32x16,
+                harness::label::<S>("u64->u32"),
+                <S as Simd>::u64x16,
+                <S as Simd>::u32x16,
                 <Scalar as Simd>::u64x16,
                 <Scalar as Simd>::u32x16,
                 u64,
@@ -457,115 +455,111 @@ mod ext {
         }};
     }
 
+    // Zero-arg only so the body sits above the leaf macros it uses while the
+    // stamping happens below them (macro_rules are textually scoped).
     macro_rules! suite {
-        ($modname:ident, $backend:ty, $bl:expr) => {
-            mod $modname {
-                use super::*;
-
-                #[test]
+        () => {
+            for_each_backend_concrete! {
                 fn floats() {
                     float_ext!(
-                        <$backend as Simd>::f32x16,
+                        <S as Simd>::f32x16,
                         <Scalar as Simd>::f32x16,
-                        concat!($bl, " f32x16")
+                        harness::label::<S>("f32x16")
                     );
                     float_ext!(
-                        <$backend as Simd>::f64x8,
+                        <S as Simd>::f64x8,
                         <Scalar as Simd>::f64x8,
-                        concat!($bl, " f64x8")
+                        harness::label::<S>("f64x8")
                     );
                     numred_basic!(
-                        concat!($bl, " f32x16"),
-                        <$backend as Simd>::f32x16,
+                        harness::label::<S>("f32x16"),
+                        <S as Simd>::f32x16,
                         <Scalar as Simd>::f32x16,
                         true
                     );
                     numred_basic!(
-                        concat!($bl, " f64x8"),
-                        <$backend as Simd>::f64x8,
+                        harness::label::<S>("f64x8"),
+                        <S as Simd>::f64x8,
                         <Scalar as Simd>::f64x8,
                         true
                     );
                 }
-                #[test]
                 fn ints() {
                     int_ext!(
-                        <$backend as Simd>::i32x16,
+                        <S as Simd>::i32x16,
                         <Scalar as Simd>::i32x16,
-                        concat!($bl, " i32x16")
+                        harness::label::<S>("i32x16")
                     );
                     int_ext!(
-                        <$backend as Simd>::u32x16,
+                        <S as Simd>::u32x16,
                         <Scalar as Simd>::u32x16,
-                        concat!($bl, " u32x16")
+                        harness::label::<S>("u32x16")
                     );
                     int_ext!(
-                        <$backend as Simd>::i64x8,
+                        <S as Simd>::i64x8,
                         <Scalar as Simd>::i64x8,
-                        concat!($bl, " i64x8")
+                        harness::label::<S>("i64x8")
                     );
                     int_ext!(
-                        <$backend as Simd>::u64x8,
+                        <S as Simd>::u64x8,
                         <Scalar as Simd>::u64x8,
-                        concat!($bl, " u64x8")
+                        harness::label::<S>("u64x8")
                     );
                     numred_int!(
-                        concat!($bl, " i32x16"),
-                        <$backend as Simd>::i32x16,
+                        harness::label::<S>("i32x16"),
+                        <S as Simd>::i32x16,
                         <Scalar as Simd>::i32x16
                     );
                     numred_int!(
-                        concat!($bl, " u64x8"),
-                        <$backend as Simd>::u64x8,
+                        harness::label::<S>("u64x8"),
+                        <S as Simd>::u64x8,
                         <Scalar as Simd>::u64x8
                     );
                     signed_ext!(
-                        concat!($bl, " i32x16"),
-                        <$backend as Simd>::i32x16,
+                        harness::label::<S>("i32x16"),
+                        <S as Simd>::i32x16,
                         <Scalar as Simd>::i32x16
                     );
                     signed_ext!(
-                        concat!($bl, " i64x8"),
-                        <$backend as Simd>::i64x8,
+                        harness::label::<S>("i64x8"),
+                        <S as Simd>::i64x8,
                         <Scalar as Simd>::i64x8
                     );
                 }
-                #[test]
                 fn casts() {
-                    casts!($backend, $bl);
+                    casts!();
                 }
-                #[test]
                 fn reduced() {
                     float_ext!(
-                        <$backend as Simd3A>::f32x3A,
+                        <S as Simd3A>::f32x3A,
                         <Scalar as Simd3A>::f32x3A,
-                        concat!($bl, " f32x3A")
+                        harness::label::<S>("f32x3A")
                     );
                     int_ext!(
-                        <$backend as Simd3A>::i32x3A,
+                        <S as Simd3A>::i32x3A,
                         <Scalar as Simd3A>::i32x3A,
-                        concat!($bl, " i32x3A")
+                        harness::label::<S>("i32x3A")
                     );
                     int_ext!(
-                        <$backend as Simd3A>::u64x3A,
+                        <S as Simd3A>::u64x3A,
                         <Scalar as Simd3A>::u64x3A,
-                        concat!($bl, " u64x3A")
+                        harness::label::<S>("u64x3A")
                     );
                     numred_basic!(
-                        concat!($bl, " i32x3A"),
-                        <$backend as Simd3A>::i32x3A,
+                        harness::label::<S>("i32x3A"),
+                        <S as Simd3A>::i32x3A,
                         <Scalar as Simd3A>::i32x3A,
                         false
                     );
                     numred_basic!(
-                        concat!($bl, " f32x3A"),
-                        <$backend as Simd3A>::f32x3A,
+                        harness::label::<S>("f32x3A"),
+                        <S as Simd3A>::f32x3A,
                         <Scalar as Simd3A>::f32x3A,
                         true
                     );
                     signed_ext!(
-                        concat!($bl, " i32x3A"),
-                        <$backend as Simd3A>::i32x3A,
+                        harness::label::<S>("i32x3A"),
+                        <S as Simd3A>::i32x3A,
                         <Scalar as Simd3A>::i32x3A
                     );
                 }
@@ -573,28 +567,5 @@ mod ext {
         };
     }
 
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    mod x86 {
-        use super::*;
-        use thermite::backend::x86_v1::X86V1;
-        use thermite::backend::x86_v2::X86V2;
-        use thermite::backend::x86_v3::X86V3;
-        suite!(v3, X86V3, "x86_v3");
-        suite!(v2, X86V2, "x86_v2");
-        suite!(v1, X86V1, "x86_v1");
-    }
-
-    #[cfg(target_arch = "wasm32")]
-    mod wasm {
-        use super::*;
-        use thermite::backend::wasm::Wasm;
-        suite!(wasm, Wasm, "wasm");
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    mod neon {
-        use super::*;
-        use thermite::backend::neon::Neon;
-        suite!(neon, Neon, "neon");
-    }
+    suite!();
 }

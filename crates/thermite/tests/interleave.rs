@@ -1,9 +1,17 @@
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-// NOTE: Specifically using x86-v2 here so that i32x16 = ArrayRegister<i32x4, 4>
-use generic_array::{GenericArray, sequence::GenericSequence};
-use thermite::backend::x86_v2::prelude::*;
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
+// i32x16 is ArrayRegister<i32x4, 4> on the 128-bit backends, <i32x8, 2> on AVX2,
+// native on AVX-512 and <i32, 16> on scalar: every chunk-chain shape gets exercised.
 
-#[test]
+mod harness;
+
+use generic_array::{GenericArray, sequence::GenericSequence};
+
+for_each_backend_concrete! {
 fn test_array_register_interleave() {
     // A = [0, 1, 2, ..., 15]
     let a_arr: GenericArray<i32, generic_array::typenum::U16> = GenericArray::generate(|i| i as i32);
@@ -43,4 +51,6 @@ fn test_array_register_interleave() {
 
     assert_eq!(a_out, a_arr.as_slice(), "Deinterleave A did not match original input A");
     assert_eq!(b_out, b_arr.as_slice(), "Deinterleave B did not match original input B");
+}
+
 }

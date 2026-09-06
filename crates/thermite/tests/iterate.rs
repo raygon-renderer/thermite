@@ -4,17 +4,20 @@
 //! the driver rather than at whatever kernel is riding on it. The per-lane test matters most:
 //! these run at a real register width, because `Vector<f64>` is the one-lane scalar seed and a
 //! packet test written against it is a single lane that proves nothing while passing.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
+
+mod harness;
 
 use thermite::Vector;
-use thermite::backend::x86_v2::X86V2;
 use thermite::math::algorithms::{lentz, prod_f, sum_counted, sum_f, sum_pair, sum_ratio};
 use thermite::math::policy::policies::Precision;
 use thermite::prelude::*;
-
-type V = Vector<f64>;
-/// A real register width, so the per-lane behaviour is actually exercised.
-type W = Vector<<X86V2 as Simd>::f64x2>;
+use thermite::simd::Simd;
 
 fn rel(got: f64, want: f64) -> f64 {
     if want == 0.0 {
@@ -23,12 +26,17 @@ fn rel(got: f64, want: f64) -> f64 {
     ((got - want) / want).abs()
 }
 
+for_each_backend_concrete! {
+
 /// `phi = 1 + 1/(1 + 1/(1 + ...))`, every `a_j` and `b_j` equal to one.
 ///
 /// The slowest-converging continued fraction there is (its convergents are ratios of
 /// consecutive Fibonacci numbers), so it exercises the iteration cap as well as the value.
-#[test]
 fn lentz_finds_the_golden_ratio() {
+    #[allow(dead_code)]
+    type V = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type W = Vector<<S as Simd>::f64x2>;
     let phi = (1.0 + 5.0f64.sqrt()) / 2.0;
     let tol = V::splat(1e-15);
 
@@ -42,8 +50,11 @@ fn lentz_finds_the_golden_ratio() {
 ///
 /// All terms share a sign for positive `x`, so this checks the driver rather than any
 /// cancellation behaviour.
-#[test]
 fn sum_ratio_reproduces_exp() {
+    #[allow(dead_code)]
+    type V = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type W = Vector<<S as Simd>::f64x2>;
     let tol = V::splat(1e-16);
 
     for &x in &[0.25f64, 1.0, 2.5, 8.0] {
@@ -59,8 +70,11 @@ fn sum_ratio_reproduces_exp() {
 
 /// The counted driver has no test at all, so at a term count past convergence it must agree
 /// with the converging one bit for bit.
-#[test]
 fn sum_counted_agrees_once_past_convergence() {
+    #[allow(dead_code)]
+    type V = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type W = Vector<<S as Simd>::f64x2>;
     let tol = V::splat(1e-16);
     let xv = V::splat(1.5);
 
@@ -84,8 +98,11 @@ fn sum_counted_agrees_once_past_convergence() {
 /// This is the property the `select` in `lentz` exists for: the fast lane converges first and
 /// must then be held, while the slow lane keeps iterating. Without the freeze, the fast lane
 /// would keep being multiplied by a delta that is only approximately one.
-#[test]
 fn lentz_freezes_lanes_independently() {
+    #[allow(dead_code)]
+    type V = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type W = Vector<<S as Simd>::f64x2>;
     // `sqrt(1+z) - 1` style fraction: b0 = 1, a_j = z, b_j = 2. Converges to `sqrt(1+z)` for
     // z > 0, and fast for small z, slowly for large.
     let z = W::splat(0.01).insert::<1>(3.0);
@@ -112,8 +129,11 @@ fn lentz_freezes_lanes_independently() {
 /// Terms are `1e-20 * 0.5^n`, summing to `2e-20`. An **absolute** tolerance of `1e-15` is
 /// already satisfied by the very first term, so the old code stopped immediately. Because
 /// it tested before accumulating, it discarded that term too and returned `Ok(0.0)`.
-#[test]
 fn sum_f_tolerance_is_relative_to_the_largest_term() {
+    #[allow(dead_code)]
+    type V = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type W = Vector<<S as Simd>::f64x2>;
     let tol = V::splat(1e-15);
     let tiny = |n: i64| V::splat(1e-20 * 0.5f64.powi(n as i32));
 
@@ -133,8 +153,11 @@ fn sum_f_tolerance_is_relative_to_the_largest_term() {
 ///
 /// The reduction is amortized over four iterations, so without the explicit final-iteration
 /// test a two-term series would converge and still be reported as a failure.
-#[test]
 fn sum_f_converges_inside_one_check_stride() {
+    #[allow(dead_code)]
+    type V = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type W = Vector<<S as Simd>::f64x2>;
     let tol = V::splat(1e-3);
     // 1, then 1e-9: the second term is far below tolerance relative to the first.
     let two = |n: i64| if n == 0 { V::ONE } else { V::splat(1e-9) };
@@ -149,8 +172,11 @@ fn sum_f_converges_inside_one_check_stride() {
 /// product happened to be. Scaling the whole product down by `1e-12` made the same factors
 /// converge instantly. The delta was tiny because the product was tiny, not because the
 /// factors had settled.
-#[test]
 fn prod_f_tolerance_applies_to_the_factor() {
+    #[allow(dead_code)]
+    type V = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type W = Vector<<S as Simd>::f64x2>;
     let tol = V::splat(1e-9);
 
     // Factors 1 + 0.5^(n+1), but the whole product pre-scaled to be minuscule. The factors are
@@ -179,8 +205,11 @@ fn prod_f_tolerance_applies_to_the_factor() {
 ///
 /// The old version returned the product from _before_ that factor, discarding one it had
 /// already paid to compute.
-#[test]
 fn prod_f_keeps_the_converging_factor() {
+    #[allow(dead_code)]
+    type V = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type W = Vector<<S as Simd>::f64x2>;
     // Two factors: 2, then exactly 1. The second trips convergence at any tolerance and
     // multiplying it in is a no-op, so the answer must be 2 either way, but a third factor
     // makes the discard visible.
@@ -205,8 +234,11 @@ fn prod_f_keeps_the_converging_factor() {
 /// Unlike the same property inside a Bessel arm (where a masked-but-iterating lane produces
 /// identical answers, so only a benchmark can catch a missing mask), here it is **directly
 /// observable**: lane 1 never converges at all, so a missing mask turns `Ok` into `Err`.
-#[test]
 fn an_inactive_lane_cannot_hold_the_loop_open() {
+    #[allow(dead_code)]
+    type V = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type W = Vector<<S as Simd>::f64x2>;
     let tol = W::splat(1e-12);
 
     // Lane 0: geometric, converges to 2. Lane 1: constant 1, never converges.
@@ -227,8 +259,11 @@ fn an_inactive_lane_cannot_hold_the_loop_open() {
 }
 
 /// A region no lane needs costs one reduction, not a loop.
-#[test]
 fn a_fully_inactive_call_short_circuits() {
+    #[allow(dead_code)]
+    type V = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type W = Vector<<S as Simd>::f64x2>;
     let tol = W::splat(1e-12);
     let none = <W as GenericVector>::Mask::FALSY;
 
@@ -243,8 +278,11 @@ fn a_fully_inactive_call_short_circuits() {
 ///
 /// `cosh` and `sinh` from `e^x`'s terms split by parity: one `x^k/k!` chain feeding two
 /// accumulators, which is the shape `sum_pair` exists for.
-#[test]
 fn sum_pair_reproduces_cosh_and_sinh() {
+    #[allow(dead_code)]
+    type V = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type W = Vector<<S as Simd>::f64x2>;
     let tol = W::splat(1e-16);
 
     for &x in &[0.25f64, 1.0, 2.5, 6.0] {
@@ -271,8 +309,11 @@ fn sum_pair_reproduces_cosh_and_sinh() {
 /// Boost's Temme series tests only its first accumulator, which is safe there and not in
 /// general. Nothing makes a second component's terms shrink at the same rate. Here the second
 /// never settles, so a first-component-only test would wrongly report success.
-#[test]
 fn sum_pair_requires_both_components() {
+    #[allow(dead_code)]
+    type V = Vector<<S as Simd>::f64x4>;
+    #[allow(dead_code)]
+    type W = Vector<<S as Simd>::f64x2>;
     let tol = W::splat(1e-12);
 
     let mut k = 0i64;
@@ -286,4 +327,6 @@ fn sum_pair_requires_both_components() {
         got.is_err(),
         "a non-converging second component must not report success"
     );
+}
+
 }

@@ -14,75 +14,80 @@
 //! Only backends WITHOUT hardware FMA take this path, so x86_v1 (SSE2) and x86_v2
 //! (SSE4.2) are what these pin.
 
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
+
+mod harness;
+
+use thermite::prelude::*;
+use thermite::vector::ops::MulAddExt;
 
 /// `x * (2^27 + 1)` overflows above this.
 const THRESH: f64 = 6.69692879491417e299;
 
-macro_rules! check_backend {
-    ($name:ident, $backend:path) => {
-        mod $name {
-            use super::THRESH;
-            use thermite::vector::ops::MulAddExt;
-            use $backend::*;
-
-            #[test]
-            fn mul_add_stays_finite_for_large_operands() {
-                assert!(
-                    !matches!(<f64x2 as MulAddExt>::HAS_NATIVE_FMA, thermite::tribool::True),
-                    "this backend must lack hardware FMA, or the test proves nothing"
-                );
-
-                for (x, m, a) in [
-                    (THRESH * 2.0, 3.0, 1.0),
-                    (f64::MAX, 0.5, 1.0),
-                    (-f64::MAX, 0.25, -7.0),
-                    (1.7e308, 1e-8, 2.0),
-                    (1e300, 1e-300, 0.0),
-                    (THRESH, 2.0, THRESH),
-                ] {
-                    let got = f64x2::splat(x)
-                        .mul_add(f64x2::splat(m), f64x2::splat(a))
-                        .extract::<0>();
-                    let want = x.mul_add(m, a);
-
-                    assert!(
-                        got.is_finite(),
-                        "mul_add({x:e}, {m:e}, {a:e}) = {got:e}, true fma = {want:e}"
-                    );
-                    // Dekker is not correctly rounded, so allow the inherent 1 ulp.
-                    let ulps = (got.to_bits() as i64 - want.to_bits() as i64).abs();
-                    assert!(ulps <= 1, "mul_add({x:e}, {m:e}, {a:e}) off by {ulps} ulp");
-                }
-            }
-
-            /// One huge lane must not disturb its neighbour: the rebalance is per lane.
-            #[test]
-            fn mixed_magnitude_lanes() {
-                let x = f64x2::new([f64::MAX, 3.0]);
-                let m = f64x2::new([0.5, 7.0]);
-                let a = f64x2::new([1.0, 2.0]);
-
-                let got = x.mul_add(m, a);
-
-                for (i, (xv, mv, av)) in [(f64::MAX, 0.5, 1.0), (3.0, 7.0, 2.0)].into_iter().enumerate() {
-                    let g = got.extractv(i);
-                    assert!(g.is_finite(), "lane {i} = {g:e}");
-                    let ulps = (g.to_bits() as i64 - xv.mul_add(mv, av).to_bits() as i64).abs();
-                    assert!(ulps <= 1, "lane {i} off by {ulps} ulp");
-                }
-            }
+// The guard lives in the emulated FMA. A hardware-FMA backend never takes that
+// path, so its rows return early (that it _does_ fuse is fma_native_exact's job).
+macro_rules! skip_if_native_fma {
+    () => {
+        if matches!(<f64x2 as MulAddExt>::HAS_NATIVE_FMA, thermite::tribool::True) {
+            return;
         }
     };
 }
 
-check_backend!(sse2, thermite::backend::x86_v1::prelude);
-check_backend!(sse42, thermite::backend::x86_v2::prelude);
+for_each_backend_concrete! {
+
+fn mul_add_stays_finite_for_large_operands() {
+    skip_if_native_fma!();
+
+    for (x, m, a) in [
+        (THRESH * 2.0, 3.0, 1.0),
+        (f64::MAX, 0.5, 1.0),
+        (-f64::MAX, 0.25, -7.0),
+        (1.7e308, 1e-8, 2.0),
+        (1e300, 1e-300, 0.0),
+        (THRESH, 2.0, THRESH),
+    ] {
+        let got = f64x2::splat(x)
+            .mul_add(f64x2::splat(m), f64x2::splat(a))
+            .extract::<0>();
+        let want = x.mul_add(m, a);
+
+        assert!(
+            got.is_finite(),
+            "mul_add({x:e}, {m:e}, {a:e}) = {got:e}, true fma = {want:e}"
+        );
+        // Dekker is not correctly rounded, so allow the inherent 1 ulp.
+        let ulps = (got.to_bits() as i64 - want.to_bits() as i64).abs();
+        assert!(ulps <= 1, "mul_add({x:e}, {m:e}, {a:e}) off by {ulps} ulp");
+    }
+}
+
+/// One huge lane must not disturb its neighbour: the rebalance is per lane.
+fn mixed_magnitude_lanes() {
+    skip_if_native_fma!();
+
+    let x = f64x2::new([f64::MAX, 3.0]);
+    let m = f64x2::new([0.5, 7.0]);
+    let a = f64x2::new([1.0, 2.0]);
+
+    let got = x.mul_add(m, a);
+
+    for (i, (xv, mv, av)) in [(f64::MAX, 0.5, 1.0), (3.0, 7.0, 2.0)].into_iter().enumerate() {
+        let g = got.extractv(i);
+        assert!(g.is_finite(), "lane {i} = {g:e}");
+        let ulps = (g.to_bits() as i64 - xv.mul_add(mv, av).to_bits() as i64).abs();
+        assert!(ulps <= 1, "lane {i} off by {ulps} ulp");
+    }
+}
 
 /// Ordinary magnitudes must be untouched by the guard.
-#[test]
 fn small_operands_unchanged() {
-    use thermite::backend::x86_v1::prelude::*;
+    skip_if_native_fma!();
 
     let mut s = 0x853C_49E6_748F_EA9Bu64;
     for _ in 0..50_000 {
@@ -99,4 +104,6 @@ fn small_operands_unchanged() {
         let got = f64x2::splat(x).mul_add(f64x2::splat(m), f64x2::splat(a)).extract::<0>();
         assert!(got.is_finite(), "x={x:e} m={m:e} a={a:e} -> {got:e}");
     }
+}
+
 }

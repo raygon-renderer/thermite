@@ -74,12 +74,9 @@ Relationship to the other crates
 Status
 ------
 
-Pre-release. Core arithmetic, the vector-trait surface, and the transcendental
-library are complete. The Gamma family
-(`tgamma`, `lgamma`, `lgamma_r`, `digamma`, `trigamma`, `beta`) is still
-`todo!()` in `src/special.rs` and will panic if called. Those need genuine
-double-double algorithms (a Lanczos or Stirling evaluation carried in
-compensated arithmetic), not delegation to the inner `V`.
+Pre-release. Core arithmetic, the vector-trait surface, the transcendental
+library and the Gamma family are complete, all carried in genuine double-double
+arithmetic rather than delegated to the inner `V`.
 
 License
 -------

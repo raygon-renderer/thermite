@@ -10,8 +10,11 @@
 //! NaN comparisons: the f32 side is NaN-insensitive, and the packed side treats two NaN code points as equal.
 #![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 
+mod harness;
+
 use thermite::element::float::spec::{Bf16, FloatSpec, Fp16, Fp16Fast};
 use thermite::register::{CoreRegister, PackedFloatRegister, Register, Storage};
+use thermite::simd::Simd;
 
 fn make<R: Register>(vals: &[R::Element]) -> Storage<R>
 where
@@ -126,100 +129,54 @@ macro_rules! check_pack {
     }};
 }
 
-/// The bf16 unpack+pack tests (bf16 always uses the generic default on every backend, including
-/// v3 where F16C does not apply to it).
-macro_rules! bf16_tests {
-    ($u16:ty, $f32:ty) => {
-        #[test]
-        fn bf16_unpack() {
+/// AVX2-and-up rows take the F16C hardware path when the feature is on. The binary16
+/// generic-default tests are only valid where that default is what is wired (below AVX2
+/// always, AVX2+ only with `avx2-f16c` off). The hardware path has its own suite in
+/// `packed_float_f16c.rs`, and its fast unpack intentionally diverges from the `Fp16Fast`
+/// oracle on the assumed-absent specials. bf16 always uses the generic default.
+fn f16c_hardware<S: thermite::simd::HasIsa>() -> bool {
+    cfg!(feature = "avx2-f16c") && S::ISA >= thermite::isa::InstructionSet::X86V3
+}
+
+/// Every backend's u16x4/u16x8/u16x16 <-> f32x4/f32x8/f32x16 slots, native or
+/// `ArrayRegister` as the backend defines them.
+macro_rules! native_tests {
+    ($($sfx:ident: $u16:ty, $f32:ty);+ $(;)?) => { paste::paste! { for_each_backend_concrete! { $(
+        fn [<bf16_unpack_ $sfx>]() {
             check_unpack!(Bf16, $u16, $f32);
         }
-        #[test]
-        fn bf16_pack() {
+        fn [<bf16_pack_ $sfx>]() {
             check_pack!(Bf16, $u16, $f32);
         }
-    };
-}
-
-/// The binary16 (Fp16 / Fp16Fast) unpack+pack tests against the generic-default impls. Only valid
-/// where the generic default is what's actually wired (v1/v2 always, v3 only when `avx2-f16c` is
-/// off, since with F16C the hardware path is tested separately in `packed_float_f16c.rs`, and its fast
-/// unpack intentionally diverges from the `Fp16Fast` oracle on the assumed-absent specials).
-macro_rules! fp16_tests {
-    ($u16:ty, $f32:ty) => {
-        #[test]
-        fn fp16_unpack() {
+        fn [<fp16_unpack_ $sfx>]() {
+            if f16c_hardware::<S>() {
+                return;
+            }
             check_unpack!(Fp16, $u16, $f32);
         }
-        #[test]
-        fn fp16_pack() {
+        fn [<fp16_pack_ $sfx>]() {
+            if f16c_hardware::<S>() {
+                return;
+            }
             check_pack!(Fp16, $u16, $f32);
         }
-        #[test]
-        fn fp16fast_unpack() {
+        fn [<fp16fast_unpack_ $sfx>]() {
+            if f16c_hardware::<S>() {
+                return;
+            }
             check_unpack!(Fp16Fast, $u16, $f32);
         }
-        #[test]
-        fn fp16fast_pack() {
+        fn [<fp16fast_pack_ $sfx>]() {
+            if f16c_hardware::<S>() {
+                return;
+            }
             check_pack!(Fp16Fast, $u16, $f32);
         }
-    };
+    )+ } } };
 }
 
-/// Full native suite (all three formats, generic defaults) for v1/v2.
-macro_rules! native_suite {
-    ($mod:ident, $u16:ty, $f32:ty) => {
-        mod $mod {
-            use super::*;
-            bf16_tests!($u16, $f32);
-            fp16_tests!($u16, $f32);
-        }
-    };
-}
-
-/// v3 native suite: bf16 always, and binary16 generic-default tests only when F16C is unavailable.
-macro_rules! native_suite_v3 {
-    ($mod:ident, $u16:ty, $f32:ty) => {
-        mod $mod {
-            use super::*;
-            bf16_tests!($u16, $f32);
-            #[cfg(not(feature = "avx2-f16c"))]
-            fp16_tests!($u16, $f32);
-        }
-    };
-}
-
-mod v1 {
-    use super::*;
-    use thermite::backend::x86_v1::registers::half16::U16x4V1;
-    use thermite::backend::x86_v1::registers::{F32x4V1, U16x8V1};
-    use thermite::register::array::ArrayRegister;
-
-    native_suite!(x4, U16x4V1, F32x4V1);
-    native_suite!(x8, U16x8V1, ArrayRegister<F32x4V1, 2>);
-    native_suite!(x16, ArrayRegister<U16x8V1, 2>, ArrayRegister<F32x4V1, 4>);
-}
-
-mod v2 {
-    use super::*;
-    use thermite::backend::x86_v2::registers::half16::U16x4V2;
-    use thermite::backend::x86_v2::registers::{F32x4V2, U16x8V2};
-    use thermite::register::array::ArrayRegister;
-
-    native_suite!(x4, U16x4V2, F32x4V2);
-    native_suite!(x8, U16x8V2, ArrayRegister<F32x4V2, 2>);
-    native_suite!(x16, ArrayRegister<U16x8V2, 2>, ArrayRegister<F32x4V2, 4>);
-}
-
-#[cfg(target_arch = "x86_64")]
-mod v3 {
-    use super::*;
-    use thermite::backend::x86_v3::registers::half16::U16x4V3;
-    use thermite::backend::x86_v3::registers::{F32x4V3, F32x8V3, U16x8V3, U16x16V3};
-    use thermite::register::array::ArrayRegister;
-
-    // v3 has native 8- and 16-lane 16-bit registers, and f32x8 is native (F32x8V3).
-    native_suite_v3!(x4, U16x4V3, F32x4V3);
-    native_suite_v3!(x8, U16x8V3, F32x8V3);
-    native_suite_v3!(x16, U16x16V3, ArrayRegister<F32x8V3, 2>);
+native_tests! {
+    x4: <S as Simd>::u16x4, <S as Simd>::f32x4;
+    x8: <S as Simd>::u16x8, <S as Simd>::f32x8;
+    x16: <S as Simd>::u16x16, <S as Simd>::f32x16;
 }

@@ -11,7 +11,14 @@
 //!
 //! It also pins the deliberate `<= Average` clamp for huge trig arguments, so
 //! that stays a decision rather than drifting into an accident.
-#![cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#![cfg(any(
+    target_arch = "x86",
+    target_arch = "x86_64",
+    target_arch = "wasm32",
+    target_arch = "aarch64"
+))]
+
+mod harness;
 
 use thermite::math::policy::policies::{MediumPrecision, Performance, Precision};
 use thermite::math::policy::{DenormalBehavior, Policy, PolicyParameters, PrecisionPolicy};
@@ -37,11 +44,14 @@ impl Policy for FlushPolicy {
     };
 }
 
+for_each_backend! {
+
 // -------------------------------------------------------
 // ln_1p f32, Medium precision
 // -------------------------------------------------------
 
-fn ln1p_f32_medium<S: Simd>(name: &str) {
+fn ln1p_f32_medium<S: Simd>() {
+    let name = harness::label::<S>("");
     // Medium tolerance is 10_000 * EPSILON ~= 1.19e-3 relative.
     const TOL: f32 = 1.2e-3;
 
@@ -79,7 +89,8 @@ fn ln1p_f32_medium<S: Simd>(name: &str) {
 // ldexp, default policy (FlushToZero + check_overflow)
 // -------------------------------------------------------
 
-fn ldexp_f32_flush_edges<S: Simd>(name: &str) {
+fn ldexp_f32_flush_edges<S: Simd>() {
+    let name = harness::label::<S>("");
     let ldexp = |x: f32, e: i32| -> f32 {
         Vector::<S::f32x8>::splat(x)
             .ldexp_p::<FlushPolicy>(Vector::<S::i32x8>::splat(e))
@@ -158,7 +169,8 @@ fn ldexp_f32_flush_edges<S: Simd>(name: &str) {
     }
 }
 
-fn ldexp_f64_flush_edges<S: Simd>(name: &str) {
+fn ldexp_f64_flush_edges<S: Simd>() {
+    let name = harness::label::<S>("");
     let ldexp = |x: f64, e: i64| -> f64 {
         Vector::<S::f64x4>::splat(x)
             .ldexp_p::<FlushPolicy>(Vector::<S::i64x4>::splat(e))
@@ -204,7 +216,8 @@ fn ldexp_f64_flush_edges<S: Simd>(name: &str) {
 // Large-argument trig
 // -------------------------------------------------------
 
-fn trig_large_args_best_f64<S: Simd>(name: &str) {
+fn trig_large_args_best_f64<S: Simd>() {
+    let name = harness::label::<S>("");
     // Payne-Hanek path: Best+ precision must agree with libm even for huge args.
     const TOL: f64 = 1.0e-12; // absolute; results are O(1)
 
@@ -250,7 +263,8 @@ fn trig_large_args_best_f64<S: Simd>(name: &str) {
     }
 }
 
-fn trig_large_args_best_f32<S: Simd>(name: &str) {
+fn trig_large_args_best_f32<S: Simd>() {
+    let name = harness::label::<S>("");
     const TOL: f32 = 1.0e-6;
 
     let cases: [f32; 6] = [1.0e5, 1.0e7, 1.0e8, 1.0e16, 1.0e30, f32::MAX];
@@ -287,7 +301,8 @@ fn trig_large_args_best_f32<S: Simd>(name: &str) {
 /// The <= Average tiers deliberately clamp out-of-range trig arguments to zero
 /// (sin -> 0, cos -> 1) instead of paying for Payne-Hanek. Pin that behavior so
 /// a change to it is a deliberate decision, not an accident.
-fn trig_large_args_average_clamp<S: Simd>(name: &str) {
+fn trig_large_args_average_clamp<S: Simd>() {
+    let name = harness::label::<S>("");
     // Pin the Performance (Average) policy explicitly: under `strict_ieee754`
     // the DEFAULT policy is Precision, which correctly uses Payne-Hanek instead.
     let (s, c) = Vector::<S::f64x4>::splat(1.0e16).sin_cos_p::<Performance>();
@@ -313,7 +328,8 @@ fn trig_large_args_average_clamp<S: Simd>(name: &str) {
 // - f32 `exph(88.9)` at Medium: NaN, 2^t overflowing before the halving
 // -------------------------------------------------------
 
-fn exp_shoulders_f64<S: Simd>(name: &str) {
+fn exp_shoulders_f64<S: Simd>() {
+    let name = harness::label::<S>("");
     type P = Precision;
 
     let e = |x: f64| Vector::<S::f64x4>::splat(x).exp_p::<P>().extract::<0>();
@@ -387,7 +403,8 @@ fn exp_shoulders_f64<S: Simd>(name: &str) {
     );
 }
 
-fn exp_shoulders_f32<S: Simd>(name: &str) {
+fn exp_shoulders_f32<S: Simd>() {
+    let name = harness::label::<S>("");
     // Best tier (already asymmetric): unchanged contract.
     let got = Vector::<S::f32x8>::splat(89.3f32).exph_p::<Precision>().extract::<0>();
     assert!(
@@ -451,7 +468,8 @@ fn exp_shoulders_f32<S: Simd>(name: &str) {
 // the refinement), and gives NaN at x = 0 and x = inf.
 // -------------------------------------------------------
 
-fn nth_root_extremes<S: Simd>(name: &str) {
+fn nth_root_extremes<S: Simd>() {
+    let name = harness::label::<S>("");
     fn check5<S: Simd>(name: &str, x: f64, want: f64) {
         let got = Vector::<S::f64x4>::splat(x)
             .nth_root_n_p::<Precision, 5>()
@@ -462,10 +480,10 @@ fn nth_root_extremes<S: Simd>(name: &str) {
         );
     }
 
-    check5::<S>(name, 1e300, 1e60);
-    check5::<S>(name, -1e300, -1e60);
-    check5::<S>(name, 1e-300, 1e-60);
-    check5::<S>(name, 1e269, 6.309573444801933e53); // the old overflow threshold
+    check5::<S>(&name,1e300, 1e60);
+    check5::<S>(&name,-1e300, -1e60);
+    check5::<S>(&name,1e-300, 1e-60);
+    check5::<S>(&name,1e269, 6.309573444801933e53); // the old overflow threshold
 
     // Degenerate inputs: the dimensionless step's q = y^N/x is 0/0 or inf/inf
     // here, and the guard hands back the (already exact) guess instead.
@@ -519,7 +537,8 @@ fn nth_root_extremes<S: Simd>(name: &str) {
 // ~110 bits. Expected values via mpmath.
 // -------------------------------------------------------
 
-fn wrap_angle_large_args<S: Simd>(name: &str) {
+fn wrap_angle_large_args<S: Simd>() {
+    let name = harness::label::<S>("");
     use thermite::vector::ops::MulAddExt;
 
     type Vd<S> = Vector<<S as Simd>::f64x4>;
@@ -581,67 +600,4 @@ fn wrap_angle_large_args<S: Simd>(name: &str) {
     );
 }
 
-// -------------------------------------------------------
-// Backend instantiations
-// -------------------------------------------------------
-
-macro_rules! suite {
-    ($mod_name:ident, $backend:ty, $label:expr) => {
-        mod $mod_name {
-            #[test]
-            fn ln1p_f32_medium() {
-                super::ln1p_f32_medium::<$backend>($label);
-            }
-
-            #[test]
-            fn ldexp_f32_flush_edges() {
-                super::ldexp_f32_flush_edges::<$backend>($label);
-            }
-
-            #[test]
-            fn ldexp_f64_flush_edges() {
-                super::ldexp_f64_flush_edges::<$backend>($label);
-            }
-
-            #[test]
-            fn trig_large_args_best_f64() {
-                super::trig_large_args_best_f64::<$backend>($label);
-            }
-
-            #[test]
-            fn trig_large_args_best_f32() {
-                super::trig_large_args_best_f32::<$backend>($label);
-            }
-
-            #[test]
-            fn trig_large_args_average_clamp() {
-                super::trig_large_args_average_clamp::<$backend>($label);
-            }
-
-            #[test]
-            fn exp_shoulders_f64() {
-                super::exp_shoulders_f64::<$backend>($label);
-            }
-
-            #[test]
-            fn exp_shoulders_f32() {
-                super::exp_shoulders_f32::<$backend>($label);
-            }
-
-            #[test]
-            fn nth_root_extremes() {
-                super::nth_root_extremes::<$backend>($label);
-            }
-
-            #[test]
-            fn wrap_angle_large_args() {
-                super::wrap_angle_large_args::<$backend>($label);
-            }
-        }
-    };
 }
-
-suite!(scalar, thermite::backend::scalar::Scalar, "scalar");
-suite!(x86_v1, thermite::backend::x86_v1::X86V1, "x86_v1");
-suite!(x86_v2, thermite::backend::x86_v2::X86V2, "x86_v2");
-suite!(x86_v3, thermite::backend::x86_v3::X86V3, "x86_v3");

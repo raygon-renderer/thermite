@@ -14,40 +14,59 @@
     target_arch = "aarch64"
 ))]
 
+mod harness;
+
 use thermite::register::{FloatRegister, Register};
-#[allow(unused_imports)]
-use thermite::simd::{NativeSimd, Simd};
+use thermite::simd::Simd;
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-type Backend = thermite::backend::x86_v3::X86V3;
-#[cfg(target_arch = "wasm32")]
-type Backend = thermite::backend::wasm::Wasm;
-#[cfg(target_arch = "aarch64")]
-type Backend = thermite::backend::neon::Neon;
-
-fn fma64(a: f64, b: f64, c: f64) -> f64 {
-    type R = <Backend as Simd>::f64x2;
-    R::as_slice(&R::mul_add(R::splat(a), R::splat(b), R::splat(c)))[0]
+// Every backend: hardware FMA where it exists, the correctly rounded emulation
+// elsewhere. Both must be bit-exact, so the same assertions apply to all rows.
+#[inline(always)]
+fn fma64<S: Simd>(a: f64, b: f64, c: f64) -> f64 {
+    <S::f64x2>::as_slice(&<S::f64x2>::mul_add(
+        <S::f64x2>::splat(a),
+        <S::f64x2>::splat(b),
+        <S::f64x2>::splat(c),
+    ))[0]
 }
 
-fn fma32(a: f32, b: f32, c: f32) -> f32 {
-    type R = <Backend as Simd>::f32x4;
-    R::as_slice(&R::mul_add(R::splat(a), R::splat(b), R::splat(c)))[0]
+#[inline(always)]
+fn fma32<S: Simd>(a: f32, b: f32, c: f32) -> f32 {
+    <S::f32x4>::as_slice(&<S::f32x4>::mul_add(
+        <S::f32x4>::splat(a),
+        <S::f32x4>::splat(b),
+        <S::f32x4>::splat(c),
+    ))[0]
 }
+
+macro_rules! ctx {
+    () => {
+        #[allow(dead_code)]
+        fn fma64(a: f64, b: f64, c: f64) -> f64 {
+            super::super::fma64::<S>(a, b, c)
+        }
+        #[allow(dead_code)]
+        fn fma32(a: f32, b: f32, c: f32) -> f32 {
+            super::super::fma32::<S>(a, b, c)
+        }
+    };
+}
+
+for_each_backend_concrete! {
 
 /// The case that separates a fused multiply-add from multiply-then-add:
 /// (1 + 2^-27)(1 - 2^-27) = 1 - 2^-54 exactly, the midpoint between
 /// 1 - 2^-53 and 1. Fused: -2^-54. Unfused: 0.
-#[test]
 fn f64_midpoint() {
+    ctx!();
     let a = 1.0 + 2.0_f64.powi(-27);
     let b = 1.0 - 2.0_f64.powi(-27);
     assert_eq!(fma64(a, b, -1.0).to_bits(), (-(2.0_f64.powi(-54))).to_bits());
     assert_eq!(fma64(a, b, 1.0).to_bits(), 2.0_f64.to_bits()); // 2 - 2^-54 rounds to 2
 }
 
-#[test]
 fn f32_midpoint() {
+    ctx!();
     let a = 1.0 + 2.0_f32.powi(-12);
     let b = 1.0 - 2.0_f32.powi(-12);
     assert_eq!(fma32(a, b, -1.0).to_bits(), (-(2.0_f32.powi(-24))).to_bits());
@@ -55,8 +74,8 @@ fn f32_midpoint() {
 
 /// Exact-zero signs per IEEE 754: -0 only when product and addend are both
 /// negative zeros. Exact cancellation of nonzero values gives +0.
-#[test]
 fn signed_zeros() {
+    ctx!();
     assert_eq!(fma64(-0.0, 3.0, -0.0).to_bits(), (-0.0_f64).to_bits());
     assert_eq!(fma64(0.0, 3.0, -0.0).to_bits(), 0.0_f64.to_bits());
     assert_eq!(fma64(2.0, 3.0, -6.0).to_bits(), 0.0_f64.to_bits());
@@ -64,15 +83,15 @@ fn signed_zeros() {
 }
 
 /// Subnormal addend against an ordinary product must neither perturb nor trap.
-#[test]
 fn subnormal_c() {
+    ctx!();
     assert_eq!(fma64(1.5, 3.0, f64::from_bits(1)).to_bits(), 4.5_f64.to_bits());
 }
 
 /// Subnormal-range results, computed exactly (no flush-to-zero on this path).
-#[test]
 #[cfg(not(feature = "ignore_denormals"))]
 fn subnormal_results() {
+    ctx!();
     // 2^-537 * 2^-538 = 2^-1075, exactly half the smallest subnormal: ties to 0.
     assert_eq!(
         fma64(2.0_f64.powi(-537), 2.0_f64.powi(-538), 0.0).to_bits(),
@@ -90,10 +109,12 @@ fn subnormal_results() {
 }
 
 /// Specials route correctly whatever the lowering.
-#[test]
 fn specials() {
+    ctx!();
     assert_eq!(fma64(f64::MAX, 2.0, -f64::MAX).to_bits(), f64::MAX.to_bits());
     assert!(fma64(f64::INFINITY, 0.0, 1.0).is_nan());
     assert_eq!(fma64(f64::MAX, 2.0, f64::NEG_INFINITY), f64::NEG_INFINITY);
     assert!(fma64(f64::NAN, 1.0, 2.0).is_nan());
+}
+
 }

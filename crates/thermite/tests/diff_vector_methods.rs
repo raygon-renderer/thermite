@@ -14,11 +14,11 @@
     target_arch = "aarch64"
 ))]
 
+mod harness;
+
 use thermite::Vector;
 use thermite::prelude::*;
 use thermite::simd::{Simd, Simd3A};
-
-use thermite::backend::scalar::Scalar;
 
 macro_rules! common_methods {
     ($V:ty, $e:ty, $L:expr) => {{
@@ -66,34 +66,6 @@ macro_rules! common_methods {
         assert_eq!(rd(a.reverse()), vec![2 as $e, 4 as $e, 1 as $e, 3 as $e], "{} reverse", $L);
     }};
 }
-
-macro_rules! methods_suite {
-    ($mod:ident, $backend:ty) => {
-        mod $mod {
-            use super::*;
-
-            #[test]
-            fn float_methods() {
-                common_methods!(
-                    Vector<<$backend as Simd>::f32x4>,
-                    f32,
-                    concat!(stringify!($mod), " f32x4")
-                );
-            }
-
-            #[test]
-            fn int_methods() {
-                common_methods!(
-                    Vector<<$backend as Simd>::i32x4>,
-                    i32,
-                    concat!(stringify!($mod), " i32x4")
-                );
-            }
-        }
-    };
-}
-
-methods_suite!(scalar, Scalar);
 
 /// `reverse` across widths/types/backends (`indexed()` reversed). Catches the
 /// per-register shuffle-immediate bugs (e.g. f32x4 swapping only lanes 1<->2).
@@ -449,104 +421,90 @@ macro_rules! radix_by_roundtrip {
     }};
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86 {
-    use super::*;
-    use thermite::backend::x86_v1::X86V1;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
+for_each_backend_concrete! {
+    fn float_methods() {
+        common_methods!(Vector<<S as Simd>::f32x4>, f32, harness::label::<S>("f32x4"));
+    }
 
-    methods_suite!(v3, X86V3);
-    methods_suite!(v2, X86V2);
-    methods_suite!(v1, X86V1);
+    fn int_methods() {
+        common_methods!(Vector<<S as Simd>::i32x4>, i32, harness::label::<S>("i32x4"));
+    }
 
-    /// The group-radix transpose primitive across the native AVX2 paths and the
-    /// emulated/lane-wise fallbacks.
-    #[test]
+    /// The group-radix transpose primitive across native paths and the
+    /// emulated/lane-wise fallbacks (which of those a shape takes varies by backend).
     fn radix_by_transpose_widths() {
-        // Native (4,2) f32 pair transpose: AVX2, plus ArrayRegister-emulated on v2/v1.
-        radix_by_transpose!(<X86V3 as Simd>::f32x8, f32, 4, 2);
-        radix_by_transpose!(<X86V2 as Simd>::f32x8, f32, 4, 2);
-        radix_by_transpose!(<X86V1 as Simd>::f32x8, f32, 4, 2);
-        // Native (8,1) full f32 8x8 transpose on AVX2 (transpose256_w32); emulated on v2/v1.
-        radix_by_transpose!(<X86V3 as Simd>::f32x8, f32, 8, 1);
-        radix_by_transpose!(<X86V2 as Simd>::f32x8, f32, 8, 1);
-        radix_by_transpose!(<X86V1 as Simd>::f32x8, f32, 8, 1);
-        // Same shared AVX2 transpose bodies reused by the integer 256-bit family via bit-cast:
-        // i32x8/u32x8 (8,1) -> transpose256_w32, (4,2) -> transpose256_w64.
-        radix_by_transpose!(<X86V3 as Simd>::i32x8, i32, 8, 1);
-        radix_by_transpose!(<X86V3 as Simd>::u32x8, u32, 8, 1);
-        radix_by_transpose!(<X86V3 as Simd>::i32x8, i32, 4, 2);
-        radix_by_transpose!(<X86V3 as Simd>::u32x8, u32, 4, 2);
-        // Native (4,1) 64-bit transpose (shared transpose256_w64): f64x4 direct, i64x4/u64x4
-        // via bit-cast into the same body.
-        radix_by_transpose!(<X86V3 as Simd>::f64x4, f64, 4, 1);
-        radix_by_transpose!(<X86V3 as Simd>::i64x4, i64, 4, 1);
-        radix_by_transpose!(<X86V3 as Simd>::u64x4, u64, 4, 1);
-        // Lane-wise / forwarding fallbacks (no native radix_by override for these).
-        radix_by_transpose!(<X86V3 as Simd>::i32x8, i32, 4, 2); // general lane-wise group loop
-        radix_by_transpose!(<X86V3 as Simd>::f32x4, f32, 2, 2); // N==2 -> deinterleave_by::<2>
-        radix_by_transpose!(<X86V3 as Simd>::f32x4, f32, 4, 1); // GROUP==1 -> deinterleave_radix::<4>
-        radix_by_transpose!(<X86V3 as Simd>::f64x4, f64, 2, 2); // N==2 -> native f64 deinterleave_by::<2>
+        // (4,2) f32 pair transpose: native on AVX2, ArrayRegister-emulated elsewhere.
+        radix_by_transpose!(<S as Simd>::f32x8, f32, 4, 2);
+        // (8,1) full f32 8x8 transpose: native on AVX2 (transpose256_w32), emulated elsewhere.
+        radix_by_transpose!(<S as Simd>::f32x8, f32, 8, 1);
+        // Integer 256-bit family via bit-cast into the same bodies.
+        radix_by_transpose!(<S as Simd>::i32x8, i32, 8, 1);
+        radix_by_transpose!(<S as Simd>::u32x8, u32, 8, 1);
+        radix_by_transpose!(<S as Simd>::i32x8, i32, 4, 2);
+        radix_by_transpose!(<S as Simd>::u32x8, u32, 4, 2);
+        // (4,1) 64-bit transpose: f64x4 direct, i64x4/u64x4 via bit-cast.
+        radix_by_transpose!(<S as Simd>::f64x4, f64, 4, 1);
+        radix_by_transpose!(<S as Simd>::i64x4, i64, 4, 1);
+        radix_by_transpose!(<S as Simd>::u64x4, u64, 4, 1);
+        // Lane-wise / forwarding fallbacks.
+        radix_by_transpose!(<S as Simd>::f32x4, f32, 2, 2); // N==2 -> deinterleave_by::<2>
+        radix_by_transpose!(<S as Simd>::f32x4, f32, 4, 1); // GROUP==1 -> deinterleave_radix::<4>
+        radix_by_transpose!(<S as Simd>::f64x4, f64, 2, 2); // N==2 -> f64 deinterleave_by::<2>
 
         // Non-square round-trips (general path, N != LANES/GROUP).
-        radix_by_roundtrip!(<X86V3 as Simd>::f32x8, f32, 3, 2); // 3 inputs, 4 pair-groups each
-        radix_by_roundtrip!(<X86V3 as Simd>::f32x8, f32, 2, 2); // N==2 forward
-        radix_by_roundtrip!(<X86V3 as Simd>::f32x8, f32, 5, 1); // GROUP==1 radix-5 forward
-        // GROUP==1 large N: now routes to the deinterleave_n stage engine, not the
-        // single-gather. Round-trip both the pow-2 (16, 32) and a non-pow-2 (12) case.
-        radix_by_roundtrip!(<X86V3 as Simd>::f32x8, f32, 16, 1);
-        radix_by_roundtrip!(<X86V3 as Simd>::f32x8, f32, 32, 1);
-        radix_by_roundtrip!(<X86V3 as Simd>::f32x8, f32, 12, 1);
+        radix_by_roundtrip!(<S as Simd>::f32x8, f32, 3, 2); // 3 inputs, 4 pair-groups each
+        radix_by_roundtrip!(<S as Simd>::f32x8, f32, 2, 2); // N==2 forward
+        radix_by_roundtrip!(<S as Simd>::f32x8, f32, 5, 1); // GROUP==1 radix-5 forward
+        // GROUP==1 large N routes to the deinterleave_n stage engine, not the
+        // single-gather. Both pow-2 (16, 32) and a non-pow-2 (12) case.
+        radix_by_roundtrip!(<S as Simd>::f32x8, f32, 16, 1);
+        radix_by_roundtrip!(<S as Simd>::f32x8, f32, 32, 1);
+        radix_by_roundtrip!(<S as Simd>::f32x8, f32, 12, 1);
         // Group-radix, large N (staged-vs-lane-wise dispatch): pow-2 N with GROUP 2 and 4.
-        radix_by_roundtrip!(<X86V3 as Simd>::f32x8, f32, 8, 2);
-        radix_by_roundtrip!(<X86V3 as Simd>::f32x8, f32, 16, 2);
-        radix_by_roundtrip!(<X86V3 as Simd>::f32x8, f32, 16, 4);
-        radix_by_roundtrip!(<X86V3 as Simd>::f32x8, f32, 8, 4);
+        radix_by_roundtrip!(<S as Simd>::f32x8, f32, 8, 2);
+        radix_by_roundtrip!(<S as Simd>::f32x8, f32, 16, 2);
+        radix_by_roundtrip!(<S as Simd>::f32x8, f32, 16, 4);
+        radix_by_roundtrip!(<S as Simd>::f32x8, f32, 8, 4);
     }
 
     /// Exact semantics of `(de)interleave_radix_by` for every pow-2 shape the certified
     /// ladder engine (`x86_v3::polyfills::transpose256`) may cover, both directions,
     /// plus non-pow-2 fallback shapes that validate the check itself against the
-    /// untouched lane-wise reference. A shape the ladder's compile-time search does not
-    /// certify silently falls back, so this sweep is correct regardless of which path
-    /// each shape actually takes. It pins the SEMANTICS, not the route.
-    #[test]
+    /// untouched lane-wise reference. A shape the ladder does not certify silently
+    /// falls back, so this sweep is correct regardless of which path each shape
+    /// actually takes on each backend. It pins the SEMANTICS, not the route.
     fn radix_by_ladder_shapes() {
         // f32x8: the full pow-2 (N, GROUP) battery.
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 2, 2);
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 2, 4);
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 4, 1);
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 4, 2); // native square
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 4, 4);
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 8, 1); // native square
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 8, 2);
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 8, 4);
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 16, 1);
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 16, 2);
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 16, 4);
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 32, 1);
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 32, 2);
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 32, 4);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 2, 2);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 2, 4);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 4, 1);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 4, 2); // native square on AVX2
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 4, 4);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 8, 1); // native square on AVX2
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 8, 2);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 8, 4);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 16, 1);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 16, 2);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 16, 4);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 32, 1);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 32, 2);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 32, 4);
         // Non-pow-2 N: never certified, exercises the lane-wise reference and thereby
         // validates the semantic formulas themselves.
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 3, 2);
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 6, 2);
-        radix_by_semantic!(<X86V3 as Simd>::f32x8, f32, 12, 1);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 3, 2);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 6, 2);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 12, 1);
         // Integer 32-bit family through the si cast adapter.
-        radix_by_semantic!(<X86V3 as Simd>::i32x8, i32, 8, 2);
-        radix_by_semantic!(<X86V3 as Simd>::i32x8, i32, 16, 1);
-        radix_by_semantic!(<X86V3 as Simd>::u32x8, u32, 16, 4);
+        radix_by_semantic!(<S as Simd>::i32x8, i32, 8, 2);
+        radix_by_semantic!(<S as Simd>::i32x8, i32, 16, 1);
+        radix_by_semantic!(<S as Simd>::u32x8, u32, 16, 4);
         // 64-bit family through the pd/si adapters (8-byte elements: GROUP scales x2).
-        radix_by_semantic!(<X86V3 as Simd>::f64x4, f64, 4, 2);
-        radix_by_semantic!(<X86V3 as Simd>::f64x4, f64, 8, 1);
-        radix_by_semantic!(<X86V3 as Simd>::f64x4, f64, 8, 2);
-        radix_by_semantic!(<X86V3 as Simd>::f64x4, f64, 16, 1);
-        radix_by_semantic!(<X86V3 as Simd>::i64x4, i64, 8, 1);
-        radix_by_semantic!(<X86V3 as Simd>::u64x4, u64, 4, 2);
-        // Emulated wide registers (ArrayRegister on v2/v1) must agree too.
-        radix_by_semantic!(<X86V2 as Simd>::f32x8, f32, 8, 2);
-        radix_by_semantic!(<X86V1 as Simd>::f32x8, f32, 16, 1);
+        radix_by_semantic!(<S as Simd>::f64x4, f64, 4, 2);
+        radix_by_semantic!(<S as Simd>::f64x4, f64, 8, 1);
+        radix_by_semantic!(<S as Simd>::f64x4, f64, 8, 2);
+        radix_by_semantic!(<S as Simd>::f64x4, f64, 16, 1);
+        radix_by_semantic!(<S as Simd>::i64x4, i64, 8, 1);
+        radix_by_semantic!(<S as Simd>::u64x4, u64, 4, 2);
     }
 
     /// `ArrayRegister`'s `(de)interleave_radix_by` chunk-chain (`register/array.rs`):
@@ -555,129 +513,109 @@ mod x86 {
     /// decomposition is subtle enough that round-trips are not enough, so these check both
     /// directions against the index formulas at every emulated width.
     ///
-    /// This is also the path that carries the AVX2 natives + ladder up to the emulated
-    /// widths: `f32x16 = ArrayRegister<F32x8V3, 2>` reaches `F32x8V3`'s `radix_by`
-    /// through here, and `f32x8` on v2/v1 reaches `F32x4`'s.
-    #[test]
+    /// This is also the path that carries native shuffles + the ladder up to the emulated
+    /// widths: on AVX2 `f32x16 = ArrayRegister<F32x8V3, 2>` reaches `F32x8V3` through
+    /// here. On 128-bit backends `f32x8` reaches `F32x4`.
     fn radix_by_array_register_chunk_chain() {
-        // f32x16 = ArrayRegister<F32x8V3, 2> (inner L = 8): GROUP 1/2/4/8 all divide L.
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 2, 1);
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 4, 1);
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 8, 1);
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 16, 1);
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 4, 2);
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 8, 2); // square: N == LANES/GROUP
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 16, 2);
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 4, 4); // square
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 8, 4);
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 2, 8); // square
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 4, 8);
-        // GROUP == 16 spans both chunks (> inner L = 8): must take the lane-wise fallback.
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 2, 16);
+        // f32x16 (2-chunk on AVX2 with inner L = 8, 4-chunk on 128-bit backends with inner L = 4).
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 2, 1);
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 4, 1);
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 8, 1);
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 16, 1);
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 4, 2);
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 8, 2); // square: N == LANES/GROUP
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 16, 2);
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 4, 4); // square
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 8, 4);
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 2, 8); // square
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 4, 8);
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 8, 8); // GROUP == AVX2 inner L
+        // GROUP == 16 spans every chunk: must take the lane-wise fallback.
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 2, 16);
         // Non-pow2 radix through the chunk-chain (inner picks its own strategy).
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 3, 2);
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 6, 4);
-        // f64x8 = ArrayRegister<F64x4V3, 2> (inner L = 4).
-        radix_by_semantic!(<X86V3 as Simd>::f64x8, f64, 4, 2);
-        radix_by_semantic!(<X86V3 as Simd>::f64x8, f64, 8, 1);
-        radix_by_semantic!(<X86V3 as Simd>::f64x8, f64, 2, 4); // GROUP == inner L
-        radix_by_semantic!(<X86V3 as Simd>::f64x8, f64, 2, 8); // GROUP > inner L -> fallback
-        // f32x8 on v2/v1 = ArrayRegister<F32x4, 2> (inner L = 4).
-        radix_by_semantic!(<X86V2 as Simd>::f32x8, f32, 4, 2);
-        radix_by_semantic!(<X86V2 as Simd>::f32x8, f32, 8, 1);
-        radix_by_semantic!(<X86V1 as Simd>::f32x8, f32, 4, 2);
-        radix_by_semantic!(<X86V1 as Simd>::f32x8, f32, 8, 1);
-        radix_by_semantic!(<X86V1 as Simd>::f32x8, f32, 2, 4);
-        radix_by_semantic!(<X86V3 as Simd>::f32x16, f32, 8, 8); // GROUP == inner L
-        // **4-chunk** arrays: f64x16 = ArrayRegister<F64x4V3, 4> (inner L = 4). The ONLY
-        // configs that exercise the flat-chunk `c / N`, `c % N` arithmetic with N > 2 -
-        // a 2-chunk array cannot distinguish several index mistakes.
-        radix_by_semantic!(<X86V3 as Simd>::f64x16, f64, 2, 1);
-        radix_by_semantic!(<X86V3 as Simd>::f64x16, f64, 4, 1);
-        radix_by_semantic!(<X86V3 as Simd>::f64x16, f64, 8, 1);
-        radix_by_semantic!(<X86V3 as Simd>::f64x16, f64, 16, 1);
-        radix_by_semantic!(<X86V3 as Simd>::f64x16, f64, 4, 2);
-        radix_by_semantic!(<X86V3 as Simd>::f64x16, f64, 8, 2); // square: N == LANES/GROUP
-        radix_by_semantic!(<X86V3 as Simd>::f64x16, f64, 2, 4);
-        radix_by_semantic!(<X86V3 as Simd>::f64x16, f64, 4, 4); // square
-        radix_by_semantic!(<X86V3 as Simd>::f64x16, f64, 3, 2); // non-pow2 through the chain
-        radix_by_semantic!(<X86V3 as Simd>::f64x16, f64, 2, 8); // GROUP > inner L -> fallback
-        // 4-chunk integer array too (i64x16 = ArrayRegister<I64x4V3, 4>).
-        radix_by_semantic!(<X86V3 as Simd>::i64x16, i64, 8, 2);
-        radix_by_semantic!(<X86V3 as Simd>::i64x16, i64, 4, 1);
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 3, 2);
+        radix_by_semantic!(<S as Simd>::f32x16, f32, 6, 4);
+        // f64x8 (2-chunk on AVX2, inner L = 4).
+        radix_by_semantic!(<S as Simd>::f64x8, f64, 4, 2);
+        radix_by_semantic!(<S as Simd>::f64x8, f64, 8, 1);
+        radix_by_semantic!(<S as Simd>::f64x8, f64, 2, 4); // GROUP == inner L
+        radix_by_semantic!(<S as Simd>::f64x8, f64, 2, 8); // GROUP > inner L -> fallback
+        // f32x8 (native on AVX2, ArrayRegister<F32x4, 2> on 128-bit backends).
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 4, 2);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 8, 1);
+        radix_by_semantic!(<S as Simd>::f32x8, f32, 2, 4);
+        // 4-chunk arrays: f64x16 = ArrayRegister<F64x4, 4> on AVX2 (inner L = 4). The ONLY
+        // configs there that exercise the flat-chunk `c / N`, `c % N` arithmetic with
+        // N > 2, since a 2-chunk array cannot distinguish several index mistakes.
+        radix_by_semantic!(<S as Simd>::f64x16, f64, 2, 1);
+        radix_by_semantic!(<S as Simd>::f64x16, f64, 4, 1);
+        radix_by_semantic!(<S as Simd>::f64x16, f64, 8, 1);
+        radix_by_semantic!(<S as Simd>::f64x16, f64, 16, 1);
+        radix_by_semantic!(<S as Simd>::f64x16, f64, 4, 2);
+        radix_by_semantic!(<S as Simd>::f64x16, f64, 8, 2); // square: N == LANES/GROUP
+        radix_by_semantic!(<S as Simd>::f64x16, f64, 2, 4);
+        radix_by_semantic!(<S as Simd>::f64x16, f64, 4, 4); // square
+        radix_by_semantic!(<S as Simd>::f64x16, f64, 3, 2); // non-pow2 through the chain
+        radix_by_semantic!(<S as Simd>::f64x16, f64, 2, 8); // GROUP > inner L -> fallback
+        // 4-chunk integer array too.
+        radix_by_semantic!(<S as Simd>::i64x16, i64, 8, 2);
+        radix_by_semantic!(<S as Simd>::i64x16, i64, 4, 1);
     }
 
     /// **The `ArrayRegister` chunk-chain override must equal the engine it replaced.**
     /// `register/array.rs` overrides `(de)interleave_radix_by` to delegate per chunk
-    /// position to the INNER register (which is how the AVX2 natives + certified ladder
-    /// reach the emulated widths, `f32x16 = ArrayRegister<F32x8V3, 2>`). Without the
-    /// override every one of these shapes runs `(de)interleave_radix_by_default` at the
-    /// full array width, and a specialization that silently diverges from what it
-    /// replaces is the exact bug this pins down.
-    ///
-    /// Covers all three array configs the backend actually builds: 2-chunk
-    /// (`f32x16`/`f64x8`/`i32x16`, and v2/v1 `f32x8 = ArrayRegister<F32x4, 2>`) and
-    /// **4-chunk** (`f64x16`/`i64x16`), plus the `GROUP > inner L` shapes where the
-    /// override declines and both sides must take the same fallback.
-    #[test]
+    /// position to the INNER register. Without the override every one of these shapes
+    /// runs `(de)interleave_radix_by_default` at the full array width, and a
+    /// specialization that silently diverges from what it replaces is the exact bug
+    /// this pins down. Covers 2-chunk and 4-chunk configs plus the `GROUP > inner L`
+    /// shapes where the override declines and both sides must take the same fallback.
     fn radix_by_array_register_matches_default() {
-        // 2-chunk, inner L = 8: every GROUP dividing 8.
-        radix_by_vs_default!(<X86V3 as Simd>::f32x16, f32, 4, 1);
-        radix_by_vs_default!(<X86V3 as Simd>::f32x16, f32, 8, 1);
-        radix_by_vs_default!(<X86V3 as Simd>::f32x16, f32, 16, 1);
-        radix_by_vs_default!(<X86V3 as Simd>::f32x16, f32, 4, 2);
-        radix_by_vs_default!(<X86V3 as Simd>::f32x16, f32, 8, 2);
-        radix_by_vs_default!(<X86V3 as Simd>::f32x16, f32, 16, 2);
-        radix_by_vs_default!(<X86V3 as Simd>::f32x16, f32, 4, 4);
-        radix_by_vs_default!(<X86V3 as Simd>::f32x16, f32, 8, 4);
-        radix_by_vs_default!(<X86V3 as Simd>::f32x16, f32, 2, 8);
-        radix_by_vs_default!(<X86V3 as Simd>::f32x16, f32, 3, 2); // non-pow2 radix
-        radix_by_vs_default!(<X86V3 as Simd>::f32x16, f32, 6, 4);
-        radix_by_vs_default!(<X86V3 as Simd>::f32x16, f32, 2, 16); // GROUP > L -> both fall back
-        // 4-chunk, inner L = 4: the N > 2 flat-chunk arithmetic.
-        radix_by_vs_default!(<X86V3 as Simd>::f64x16, f64, 4, 1);
-        radix_by_vs_default!(<X86V3 as Simd>::f64x16, f64, 8, 1);
-        radix_by_vs_default!(<X86V3 as Simd>::f64x16, f64, 16, 1);
-        radix_by_vs_default!(<X86V3 as Simd>::f64x16, f64, 4, 2);
-        radix_by_vs_default!(<X86V3 as Simd>::f64x16, f64, 8, 2);
-        radix_by_vs_default!(<X86V3 as Simd>::f64x16, f64, 2, 4);
-        radix_by_vs_default!(<X86V3 as Simd>::f64x16, f64, 4, 4);
-        radix_by_vs_default!(<X86V3 as Simd>::f64x16, f64, 3, 2);
-        radix_by_vs_default!(<X86V3 as Simd>::f64x16, f64, 2, 8); // GROUP > L -> both fall back
-        radix_by_vs_default!(<X86V3 as Simd>::i64x16, i64, 8, 2);
-        // 2-chunk 64-bit + integer.
-        radix_by_vs_default!(<X86V3 as Simd>::f64x8, f64, 4, 2);
-        radix_by_vs_default!(<X86V3 as Simd>::f64x8, f64, 8, 1);
-        radix_by_vs_default!(<X86V3 as Simd>::f64x8, f64, 2, 4);
-        radix_by_vs_default!(<X86V3 as Simd>::i32x16, i32, 8, 2);
-        radix_by_vs_default!(<X86V3 as Simd>::i32x16, i32, 16, 1);
-        // The emulated f32x8 on v2/v1 = ArrayRegister<F32x4, 2>, inner L = 4.
-        radix_by_vs_default!(<X86V2 as Simd>::f32x8, f32, 4, 2);
-        radix_by_vs_default!(<X86V2 as Simd>::f32x8, f32, 8, 1);
-        radix_by_vs_default!(<X86V1 as Simd>::f32x8, f32, 4, 2);
-        radix_by_vs_default!(<X86V1 as Simd>::f32x8, f32, 8, 1);
-        radix_by_vs_default!(<X86V1 as Simd>::f32x8, f32, 2, 4);
+        // f32x16: every GROUP dividing the inner width.
+        radix_by_vs_default!(<S as Simd>::f32x16, f32, 4, 1);
+        radix_by_vs_default!(<S as Simd>::f32x16, f32, 8, 1);
+        radix_by_vs_default!(<S as Simd>::f32x16, f32, 16, 1);
+        radix_by_vs_default!(<S as Simd>::f32x16, f32, 4, 2);
+        radix_by_vs_default!(<S as Simd>::f32x16, f32, 8, 2);
+        radix_by_vs_default!(<S as Simd>::f32x16, f32, 16, 2);
+        radix_by_vs_default!(<S as Simd>::f32x16, f32, 4, 4);
+        radix_by_vs_default!(<S as Simd>::f32x16, f32, 8, 4);
+        radix_by_vs_default!(<S as Simd>::f32x16, f32, 2, 8);
+        radix_by_vs_default!(<S as Simd>::f32x16, f32, 3, 2); // non-pow2 radix
+        radix_by_vs_default!(<S as Simd>::f32x16, f32, 6, 4);
+        radix_by_vs_default!(<S as Simd>::f32x16, f32, 2, 16); // GROUP > L -> both fall back
+        // f64x16: the N > 2 flat-chunk arithmetic.
+        radix_by_vs_default!(<S as Simd>::f64x16, f64, 4, 1);
+        radix_by_vs_default!(<S as Simd>::f64x16, f64, 8, 1);
+        radix_by_vs_default!(<S as Simd>::f64x16, f64, 16, 1);
+        radix_by_vs_default!(<S as Simd>::f64x16, f64, 4, 2);
+        radix_by_vs_default!(<S as Simd>::f64x16, f64, 8, 2);
+        radix_by_vs_default!(<S as Simd>::f64x16, f64, 2, 4);
+        radix_by_vs_default!(<S as Simd>::f64x16, f64, 4, 4);
+        radix_by_vs_default!(<S as Simd>::f64x16, f64, 3, 2);
+        radix_by_vs_default!(<S as Simd>::f64x16, f64, 2, 8); // GROUP > L -> both fall back
+        radix_by_vs_default!(<S as Simd>::i64x16, i64, 8, 2);
+        // 64-bit + integer 2-chunk (on AVX2) widths.
+        radix_by_vs_default!(<S as Simd>::f64x8, f64, 4, 2);
+        radix_by_vs_default!(<S as Simd>::f64x8, f64, 8, 1);
+        radix_by_vs_default!(<S as Simd>::f64x8, f64, 2, 4);
+        radix_by_vs_default!(<S as Simd>::i32x16, i32, 8, 2);
+        radix_by_vs_default!(<S as Simd>::i32x16, i32, 16, 1);
+        // f32x8 = ArrayRegister<F32x4, 2> on 128-bit backends (native on AVX2: trivial).
+        radix_by_vs_default!(<S as Simd>::f32x8, f32, 4, 2);
+        radix_by_vs_default!(<S as Simd>::f32x8, f32, 8, 1);
+        radix_by_vs_default!(<S as Simd>::f32x8, f32, 2, 4);
     }
 
-    #[test]
     fn interleave_roundtrip() {
-        ilv!(<X86V3 as Simd>::f32x4);
-        ilv!(<X86V3 as Simd>::f32x8);
-        ilv!(<X86V3 as Simd>::f64x2);
-        ilv!(<X86V3 as Simd>::f64x4);
-        ilv!(<X86V3 as Simd>::i32x4);
-        ilv!(<X86V3 as Simd>::i32x8);
-        ilv!(<X86V3 as Simd>::u32x4);
-        ilv!(<X86V3 as Simd>::i64x2);
-        ilv!(<X86V2 as Simd>::f32x4);
-        ilv!(<X86V2 as Simd>::f64x2);
-        ilv!(<X86V2 as Simd>::i32x4);
-        ilv!(<X86V2 as Simd>::i64x2);
-        ilv!(<X86V1 as Simd>::f32x4);
-        ilv!(<X86V1 as Simd>::f32x8); // ArrayRegister-emulated on v1
-        ilv!(<X86V1 as Simd>::f64x2);
-        ilv!(<X86V1 as Simd>::i32x4);
-        ilv!(<X86V1 as Simd>::i64x2);
+        ilv!(<S as Simd>::f32x4);
+        ilv!(<S as Simd>::f32x8);
+        ilv!(<S as Simd>::f32x16);
+        ilv!(<S as Simd>::f64x2);
+        ilv!(<S as Simd>::f64x4);
+        ilv!(<S as Simd>::i32x4);
+        ilv!(<S as Simd>::i32x8);
+        ilv!(<S as Simd>::u32x4);
+        ilv!(<S as Simd>::i64x2);
 
         // ReducedRegister (3-in-4 padded) types: radix-2 uses the native prefix
         // trick, radix 3/5 fall to the gather over the logical 3 lanes. This is
@@ -685,116 +623,45 @@ mod x86 {
         // no memory override, so it routes through the radix engine). Only the
         // radix ops are exercised, since `interleave2` (pairs) is ill-defined on an
         // odd lane count.
-        ilv_radix!(<X86V3 as Simd3A>::f32x3A);
-        ilv_radix!(<X86V3 as Simd3A>::i32x3A);
-        ilv_radix!(<X86V3 as Simd3A>::f64x3A);
-        ilv_radix!(<X86V2 as Simd3A>::f32x3A);
-        ilv_radix!(<X86V1 as Simd3A>::f32x3A);
+        ilv_radix!(<S as Simd3A>::f32x3A);
+        ilv_radix!(<S as Simd3A>::i32x3A);
+        ilv_radix!(<S as Simd3A>::f64x3A);
     }
 
-    /// Absolute-layout check for `interleave_radix::<3>`. Covers the native
-    /// backends (control), the `ArrayRegister`-emulated `f32x8` on v1/v2 (whose
-    /// override delegates radix-3 per chunk to the inner native sequence), and the
-    /// `ReducedRegister` `f32x3A` gather.
-    #[test]
+    /// Absolute-layout check for `interleave_radix::<3>`: native sequences, the
+    /// `ArrayRegister` per-chunk delegation, and the `ReducedRegister` gather.
     fn interleave_radix3_semantic() {
-        radix3_semantic!(<X86V3 as Simd>::f32x8, f32); // native AVX2
-        radix3_semantic!(<X86V3 as Simd>::f32x4, f32);
-        radix3_semantic!(<X86V3 as Simd>::i32x8, i32);
-        radix3_semantic!(<X86V2 as Simd>::f32x8, f32); // ArrayRegister on v2
-        radix3_semantic!(<X86V1 as Simd>::f32x8, f32); // ArrayRegister on v1
-        radix3_semantic!(<X86V1 as Simd>::i32x4, i32);
-        radix3_semantic!(<X86V3 as Simd3A>::f32x3A, f32); // ReducedRegister gather
+        radix3_semantic!(<S as Simd>::f32x8, f32);
+        radix3_semantic!(<S as Simd>::f32x4, f32);
+        radix3_semantic!(<S as Simd>::f32x16, f32);
+        radix3_semantic!(<S as Simd>::i32x8, i32);
+        radix3_semantic!(<S as Simd>::i32x4, i32);
+        radix3_semantic!(<S as Simd3A>::f32x3A, f32); // ReducedRegister gather
     }
 
-    /// Absolute-layout check for pair-granularity `interleave_by::<2>`. Covers the
-    /// native AVX2 override (`f32x8` v3), the lane-wise polyfill fallback (`f32x4`,
-    /// `f64x4`), and the `ArrayRegister`-emulated `f32x8` on v1/v2.
-    #[test]
+    /// Absolute-layout check for pair-granularity `interleave_by::<2>`: the native
+    /// override where one exists, the lane-wise polyfill, and the `ArrayRegister` path.
     fn interleave_by2_semantic() {
-        group2_semantic!(<X86V3 as Simd>::f32x8, f32); // native unpcklo/hi_pd
-        group2_semantic!(<X86V3 as Simd>::f32x4, f32); // lane-wise polyfill
-        group2_semantic!(<X86V3 as Simd>::f64x4, f64);
-        group2_semantic!(<X86V3 as Simd>::i32x8, i32);
-        group2_semantic!(<X86V2 as Simd>::f32x8, f32); // ArrayRegister on v2
-        group2_semantic!(<X86V1 as Simd>::f32x8, f32); // ArrayRegister on v1
+        group2_semantic!(<S as Simd>::f32x8, f32);
+        group2_semantic!(<S as Simd>::f32x4, f32);
+        group2_semantic!(<S as Simd>::f32x16, f32);
+        group2_semantic!(<S as Simd>::f64x4, f64);
+        group2_semantic!(<S as Simd>::i32x8, i32);
     }
 
-    #[test]
     fn reverse_widths() {
-        rev!(<X86V3 as Simd>::f32x4);
-        rev!(<X86V3 as Simd>::f32x8);
-        rev!(<X86V3 as Simd>::f64x2);
-        rev!(<X86V3 as Simd>::f64x4);
-        rev!(<X86V3 as Simd>::i32x8);
-        rev!(<X86V3 as Simd>::i64x4);
-        rev!(<X86V2 as Simd>::f32x4);
-        rev!(<X86V2 as Simd>::f32x8); // ArrayRegister-emulated on v2
-        rev!(<X86V2 as Simd>::f64x2);
-        rev!(<X86V2 as Simd>::i64x2);
-        rev!(<X86V1 as Simd>::f32x4);
-        rev!(<X86V1 as Simd>::f32x8); // ArrayRegister-emulated on v1
-        rev!(<X86V1 as Simd>::f64x2);
-        rev!(<X86V1 as Simd>::i64x2);
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-
-    methods_suite!(wasm, Wasm);
-
-    #[test]
-    fn interleave_roundtrip() {
-        ilv!(<Wasm as Simd>::f32x4);
-        ilv!(<Wasm as Simd>::f32x8);
-        ilv!(<Wasm as Simd>::f64x2);
-        ilv!(<Wasm as Simd>::f64x4);
-        ilv!(<Wasm as Simd>::i32x4);
-        ilv!(<Wasm as Simd>::i32x8);
-        ilv!(<Wasm as Simd>::u32x4);
-        ilv!(<Wasm as Simd>::i64x2);
-    }
-
-    #[test]
-    fn reverse_widths() {
-        rev!(<Wasm as Simd>::f32x4);
-        rev!(<Wasm as Simd>::f32x8);
-        rev!(<Wasm as Simd>::f64x2);
-        rev!(<Wasm as Simd>::f64x4);
-        rev!(<Wasm as Simd>::i32x8);
-        rev!(<Wasm as Simd>::i64x4);
-    }
-}
-
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-
-    methods_suite!(neon, Neon);
-
-    #[test]
-    fn interleave_roundtrip() {
-        ilv!(<Neon as Simd>::f32x4);
-        ilv!(<Neon as Simd>::f32x8);
-        ilv!(<Neon as Simd>::f64x2);
-        ilv!(<Neon as Simd>::f64x4);
-        ilv!(<Neon as Simd>::i32x4);
-        ilv!(<Neon as Simd>::i32x8);
-        ilv!(<Neon as Simd>::u32x4);
-        ilv!(<Neon as Simd>::i64x2);
-    }
-
-    #[test]
-    fn reverse_widths() {
-        rev!(<Neon as Simd>::f32x4);
-        rev!(<Neon as Simd>::f32x8);
-        rev!(<Neon as Simd>::f64x2);
-        rev!(<Neon as Simd>::f64x4);
-        rev!(<Neon as Simd>::i32x8);
-        rev!(<Neon as Simd>::i64x4);
+        rev!(<S as Simd>::f32x4);
+        rev!(<S as Simd>::f32x8);
+        rev!(<S as Simd>::f32x16);
+        rev!(<S as Simd>::f64x2);
+        rev!(<S as Simd>::f64x4);
+        rev!(<S as Simd>::f64x8);
+        rev!(<S as Simd>::i32x4);
+        rev!(<S as Simd>::i32x8);
+        rev!(<S as Simd>::i32x16);
+        rev!(<S as Simd>::i64x2);
+        rev!(<S as Simd>::i64x4);
+        rev!(<S as Simd>::i16x8);
+        rev!(<S as Simd>::u8x16);
     }
 }

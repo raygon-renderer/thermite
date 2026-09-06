@@ -15,46 +15,60 @@
     target_arch = "aarch64"
 ))]
 
+mod harness;
+
 use thermite::Vector;
 use thermite::math::{RealMath, TranscendentalMath};
 use thermite::prelude::*;
+use thermite::simd::Simd;
 
-type D = Vector<f64>;
-type F = Vector<f32>;
+macro_rules! ctx {
+    () => {
+        #[allow(dead_code)]
+        type D = Vector<<S as Simd>::f64x4>;
+        #[allow(dead_code)]
+        type F = Vector<<S as Simd>::f32x8>;
 
-#[track_caller]
-fn close(name: &str, got: f64, want: f64, tol: f64) {
-    let rel = if want == 0.0 {
-        got.abs()
-    } else {
-        ((got - want) / want).abs()
-    };
-    assert!(rel <= tol, "{name}: got {got:?}, want {want:?} (rel {rel:e})");
-}
+        #[allow(dead_code)]
+        #[track_caller]
+        fn close(name: &str, got: f64, want: f64, tol: f64) {
+            let rel = if want == 0.0 {
+                got.abs()
+            } else {
+                ((got - want) / want).abs()
+            };
+            assert!(rel <= tol, "{name}: got {got:?}, want {want:?} (rel {rel:e})");
+        }
 
-fn xlogy(x: f64, y: f64) -> f64 {
-    D::splat(x).xlogy(D::splat(y)).extract::<0>()
-}
-fn xlog1py(x: f64, y: f64) -> f64 {
-    D::splat(x).xlog1py(D::splat(y)).extract::<0>()
-}
-fn entr(x: f64) -> f64 {
-    D::splat(x).entr().extract::<0>()
-}
-fn rel_entr(x: f64, y: f64) -> f64 {
-    D::splat(x).rel_entr(D::splat(y)).extract::<0>()
-}
-fn kl_div(x: f64, y: f64) -> f64 {
-    D::splat(x).kl_div(D::splat(y)).extract::<0>()
-}
+        #[allow(dead_code)]
+        fn xlogy(x: f64, y: f64) -> f64 {
+            D::splat(x).xlogy(D::splat(y)).extract::<0>()
+        }
+        #[allow(dead_code)]
+        fn xlog1py(x: f64, y: f64) -> f64 {
+            D::splat(x).xlog1py(D::splat(y)).extract::<0>()
+        }
+        #[allow(dead_code)]
+        fn entr(x: f64) -> f64 {
+            D::splat(x).entr().extract::<0>()
+        }
+        #[allow(dead_code)]
+        fn rel_entr(x: f64, y: f64) -> f64 {
+            D::splat(x).rel_entr(D::splat(y)).extract::<0>()
+        }
+        #[allow(dead_code)]
+        fn kl_div(x: f64, y: f64) -> f64 {
+            D::splat(x).kl_div(D::splat(y)).extract::<0>()
+        }
 
-// --- interior values, mpmath at 40 digits ---
+        // --- interior values, mpmath at 40 digits ---
 
-// Several of these oracle values land on multiples of ln 2, since the tables use dyadic
-// arguments. They are mpmath output, not a constant spelled out by hand, and rewriting them
-// as `LN_2` expressions would hide where they came from.
+        // Several of these oracle values land on multiples of ln 2, since the tables use dyadic
+        // arguments. They are mpmath output, not a constant spelled out by hand, and rewriting them
+        // as `LN_2` expressions would hide where they came from.
 #[allow(clippy::approx_constant)]
 #[rustfmt::skip]
+#[allow(dead_code)]
 const XLOGY: [(f64, f64, f64); 5] = [
     (2.0,   3.0,   2.1972245773362196),
     (0.5,   0.25, -0.6931471805599453),
@@ -64,6 +78,7 @@ const XLOGY: [(f64, f64, f64); 5] = [
 ];
 
 #[rustfmt::skip]
+#[allow(dead_code)]
 const XLOG1PY: [(f64, f64, f64); 4] = [
     (2.0,   3.0,    2.772588722239781),
     (0.5,  -0.5,   -0.34657359027997264),
@@ -72,6 +87,7 @@ const XLOG1PY: [(f64, f64, f64); 4] = [
 ];
 
 #[rustfmt::skip]
+#[allow(dead_code)]
 const ENTR: [(f64, f64); 6] = [
     (0.25, 0.34657359027997264),
     (0.5,  0.34657359027997264),
@@ -81,8 +97,9 @@ const ENTR: [(f64, f64); 6] = [
     (1e-8, 1.8420680743952367e-07),
 ];
 
-// (x, y, rel_entr, kl_div), where the two differ only by the -x + y tail.
+        // (x, y, rel_entr, kl_div), where the two differ only by the -x + y tail.
 #[rustfmt::skip]
+#[allow(dead_code)]
 const REL_KL: [(f64, f64, f64, f64); 5] = [
     (0.5,  0.25,  0.34657359027997264,  0.09657359027997266),
     (0.25, 0.5,  -0.17328679513998632,  0.07671320486001368),
@@ -90,9 +107,25 @@ const REL_KL: [(f64, f64, f64, f64); 5] = [
     (1.0,  1.0,   0.0,                  0.0),
     (0.3,  0.7,  -0.25418935811616106,  0.1458106418838389),
 ];
+    };
+}
 
-#[test]
+const NEAR_DIAGONAL: [(f64, f64, f64, f64); 4] = [
+    (0.3, 0.300000000003, -2.999989145975867e-12, 1.4999891460005018e-23),
+    (0.3, 0.2999999997, 2.9999996946096e-10, 1.4999996941096162e-19),
+    (
+        1e-08,
+        1.0000000010000002e-08,
+        -1.0000001487112813e-17,
+        5.0000014887795914e-27,
+    ),
+    (2.5, 2.5000000000002496, -2.495781359357227e-13, 1.2457849187430434e-26),
+];
+
+for_each_backend_concrete! {
+
 fn interior_values_match_the_reference() {
+    ctx!();
     for &(x, y, want) in XLOGY.iter() {
         close(&format!("xlogy({x},{y})"), xlogy(x, y), want, 4.0 * f64::EPSILON);
         close(
@@ -121,8 +154,8 @@ fn interior_values_match_the_reference() {
 
 // --- the guard, which is the reason these exist ---
 
-#[test]
 fn a_zero_first_argument_absorbs_an_infinite_log() {
+    ctx!();
     // The whole point: 0 * ln(0) is 0 * -inf = NaN written out, and one NaN takes a whole
     // reduction with it.
     assert!(
@@ -147,8 +180,8 @@ fn a_zero_first_argument_absorbs_an_infinite_log() {
     assert_eq!(xs.xlogy(D::ZERO).extract::<0>(), 0.0);
 }
 
-#[test]
 fn nan_wins_over_the_zero_guard() {
+    ctx!();
     // SciPy and PyTorch both order it this way: a NaN y propagates even at x = 0, because
     // a NaN input is missing information rather than a limit to be filled in.
     assert!(xlogy(0.0, f64::NAN).is_nan(), "NaN y must survive the x = 0 guard");
@@ -164,8 +197,8 @@ fn nan_wins_over_the_zero_guard() {
     assert!(entr(f64::NAN).is_nan());
 }
 
-#[test]
 fn the_extended_value_conventions_hold() {
+    ctx!();
     // entr is -inf below zero: a convention, not a limit, so that entr stays concave over
     // all of R and a convex solver can use it as a barrier.
     assert_eq!(entr(-1.0), f64::NEG_INFINITY);
@@ -190,8 +223,8 @@ fn the_extended_value_conventions_hold() {
     assert_eq!(kl_div(0.0, 3.0), 3.0);
 }
 
-#[test]
 fn kl_div_is_a_bregman_divergence_and_rel_entr_is_not() {
+    ctx!();
     // The property the -x + y tail buys: kl_div >= 0 everywhere with equality only at x = y,
     // even for unnormalized arguments. rel_entr alone goes negative, which is why it cannot
     // be used as an objective on its own.
@@ -207,8 +240,8 @@ fn kl_div_is_a_bregman_divergence_and_rel_entr_is_not() {
     }
 }
 
-#[test]
 fn entropy_of_a_distribution_sums_correctly() {
+    ctx!();
     // The actual use: sum entr over a distribution containing an impossible outcome. The
     // direct spelling returns NaN for the whole thing.
     let p = [0.5_f64, 0.25, 0.25, 0.0];
@@ -228,15 +261,8 @@ fn entropy_of_a_distribution_sums_correctly() {
 /// computed from these exact f64 inputs. This is the regime a converging optimizer lives
 /// in, and the one where the textbook `x * ln(x/y)` falls apart.
 #[rustfmt::skip]
-const NEAR_DIAGONAL: [(f64, f64, f64, f64); 4] = [
-    (0.3,   0.300000000003,          -2.999989145975867e-12,  1.4999891460005018e-23),
-    (0.3,   0.2999999997,             2.9999996946096e-10,    1.4999996941096162e-19),
-    (1e-08, 1.0000000010000002e-08,  -1.0000001487112813e-17, 5.0000014887795914e-27),
-    (2.5,   2.5000000000002496,      -2.495781359357227e-13,  1.2457849187430434e-26),
-];
-
-#[test]
 fn rel_entr_is_accurate_where_the_textbook_form_is_not() {
+    ctx!();
     // `x/y` rounds to a relative eps, so `ln(x/y)` has an ABSOLUTE error of eps while the
     // answer is O((x-y)/y), a relative error of eps*y/(x-y), unbounded on the diagonal. The
     // kernel switches to ln1p((x-y)/y) there, where x - y is exact by Sterbenz.
@@ -268,10 +294,9 @@ fn rel_entr_is_accurate_where_the_textbook_form_is_not() {
     }
 }
 
-#[test]
 fn lanes_stay_independent_across_the_branches() {
-    use thermite::backend::scalar::Scalar;
-    type D4 = thermite::simd::f64x4<Scalar>;
+    ctx!();
+    type D4 = thermite::simd::f64x4<S>;
 
     // One lane per branch of each definition, so a mask that leaks across lanes shows up.
     let xs = [0.0, 0.5, -1.0, 2.0];
@@ -292,10 +317,10 @@ fn lanes_stay_independent_across_the_branches() {
 }
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[test]
 fn wide_backend_agrees_with_scalar() {
+    ctx!();
     use thermite::simd::Simd;
-    type W = Vector<<thermite::backend::x86_v3::X86V3 as Simd>::f64x4>;
+    type W = Vector<<S as Simd>::f64x4>;
 
     let xs = [0.0, 0.5, -1.0, 2.0];
     let ys = [3.0, 0.25, 1.0, 0.5];
@@ -310,4 +335,6 @@ fn wide_backend_agrees_with_scalar() {
         assert_eq!(xl.as_slice()[lane], xlogy(x, y), "wide xlogy lane {lane}");
         assert_eq!(en.as_slice()[lane], entr(x), "wide entr lane {lane}");
     }
+}
+
 }

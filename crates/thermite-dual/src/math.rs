@@ -707,18 +707,10 @@ impl<V: DualMathVector, const N: usize> SpecializedRealMath<Dual<V::Element, N>>
     // `smoothstep_derivative` already carries the `1/(b-a)` edge factor, so its reciprocal is the
     // exact `dt/dy` even with edges (which are treated as constant parameters here).
     #[inline(always)]
-    fn inverse_smoothstep_n<P: Policy, const M: usize>(y: Self, edges: Option<(Self, Self)>) -> Self {
+    fn inverse_smoothstep<P: Policy, const M: usize>(y: Self, edges: Option<(Self, Self)>) -> Self {
         let edges_re = edges.map(|(a, b)| (a.re, b.re));
-        let t = y.re.inverse_smoothstep_n_p::<P, M>(edges_re);
-        let dprime = t.smoothstep_derivative_n_p::<P, M>(edges_re);
-        y.chain(t, dprime.approx_reciprocal_p::<P>())
-    }
-
-    #[inline(always)]
-    fn inverse_smoothstep<P: Policy>(y: Self, edges: Option<(Self, Self)>, n: u32) -> Self {
-        let edges_re = edges.map(|(a, b)| (a.re, b.re));
-        let t = y.re.inverse_smoothstep_p::<P>(edges_re, n);
-        let dprime = t.smoothstep_derivative_p::<P>(edges_re, n);
+        let t = y.re.inverse_smoothstep_p::<P, M>(edges_re);
+        let dprime = t.smoothstep_derivative_p::<P, M>(edges_re);
         y.chain(t, dprime.approx_reciprocal_p::<P>())
     }
 }

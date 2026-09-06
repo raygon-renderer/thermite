@@ -1,5 +1,6 @@
 //! Differential coverage for the scalar integer dividers (`divider/mod.rs`),
-//! the libdivide-derived fast-division machinery (`Divider`/`BranchfreeDivider`).
+//! the libdivide-derived fast-division machinery (`Divider`/`BranchfreeDivider`),
+//! and their vector forms on every backend.
 //!
 //! Oracle is Rust's own `/`. For every integer type we sweep a mix of edge and
 //! random `(divisor, x)` pairs through both the branching `Divider` and the
@@ -134,10 +135,10 @@ macro_rules! vdiv_check {
         let mut rng = harness::rng();
         let rdv = |v: V| v.into_array().as_slice().to_vec();
 
+        // written via wrapping_neg so the literals also type-check for the
+        // unsigned instantiations (the `if $signed` arm is dead there).
         let mut consts: Vec<$e> = vec![2, 3, 4, 7, 8, 16, 100, <$e>::MAX, <$e>::MAX / 3];
         if $signed {
-            // written via wrapping_neg so the literals also type-check for the
-            // unsigned instantiations (where this branch is never taken).
             consts.extend_from_slice(&[
                 (2 as $e).wrapping_neg(),
                 (3 as $e).wrapping_neg(),
@@ -147,7 +148,6 @@ macro_rules! vdiv_check {
             ]);
         }
 
-        // --- constant divisors: vec / Divider and vec / BranchfreeDivider ---
         for &d in &consts {
             let dv = d.to_divider();
             let bf = (if $signed || d != 1 {
@@ -171,7 +171,6 @@ macro_rules! vdiv_check {
             }
         }
 
-        // --- per-lane VectorDivider (vden.to_divider()) + masked variants ---
         for _ in 0..64 {
             let a: Vec<$e> = (0..n).map(|_| rng.random()).collect();
             let den: Vec<$e> = (0..n)
@@ -189,7 +188,6 @@ macro_rules! vdiv_check {
             let plain: Vec<$e> = (0..n).map(|i| a[i].wrapping_div(den[i])).collect();
             assert_eq!(rdv(vnum / vdiv), plain, "vec/VectorDivider");
 
-            // masked: div_c ? a/den : a ; div_m ? : src ; div_z ? : 0
             let src = V::from_slice(&(0..n).map(|_| rng.random::<$e>()).collect::<Vec<_>>());
             let mask = vnum.cmp_lt(vden);
             let mb: Vec<bool> = (0..n).map(|i| a[i] < den[i]).collect();
@@ -201,73 +199,27 @@ macro_rules! vdiv_check {
     }};
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86 {
-    use super::*;
-    use thermite::backend::x86_v1::X86V1;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
-
-    #[test]
-    fn vector_div_v3() {
-        vdiv_check!(<X86V3 as Simd>::u32x8, u32, false);
-        vdiv_check!(<X86V3 as Simd>::i32x8, i32, true);
-        vdiv_check!(<X86V3 as Simd>::u64x4, u64, false);
-        vdiv_check!(<X86V3 as Simd>::i64x4, i64, true);
+for_each_backend_concrete! {
+    fn vector_div_32() {
+        vdiv_check!(<S as Simd>::u32x4, u32, false);
+        vdiv_check!(<S as Simd>::i32x4, i32, true);
+        vdiv_check!(<S as Simd>::u32x8, u32, false);
+        vdiv_check!(<S as Simd>::i32x8, i32, true);
+        vdiv_check!(<S as Simd>::u32x16, u32, false);
+        vdiv_check!(<S as Simd>::i32x16, i32, true);
     }
-
-    #[test]
-    fn vector_div_v2() {
-        vdiv_check!(<X86V2 as Simd>::u32x4, u32, false);
-        vdiv_check!(<X86V2 as Simd>::i32x4, i32, true);
-        // 64-bit native VectorDivider exercises the SSE variable-shift polyfill
-        // (the lane-swap bug fixed in _mm_s{ll,rl}v_epi64x_v1).
-        vdiv_check!(<X86V2 as Simd>::u64x2, u64, false);
-        vdiv_check!(<X86V2 as Simd>::i64x2, i64, true);
-    }
-
-    #[test]
-    fn vector_div_v1() {
-        vdiv_check!(<X86V1 as Simd>::u32x4, u32, false);
-        vdiv_check!(<X86V1 as Simd>::i32x4, i32, true);
-        vdiv_check!(<X86V1 as Simd>::u64x2, u64, false);
-        vdiv_check!(<X86V1 as Simd>::i64x2, i64, true);
-    }
-}
-
-// wasm: native 128-bit u32x4/i32x4/u64x2/i64x2 divider path (libdivide polyfills).
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-
-    #[test]
-    fn vector_div_wasm() {
-        vdiv_check!(<Wasm as Simd>::u32x4, u32, false);
-        vdiv_check!(<Wasm as Simd>::i32x4, i32, true);
-        vdiv_check!(<Wasm as Simd>::u64x2, u64, false);
-        vdiv_check!(<Wasm as Simd>::i64x2, i64, true);
-    }
-}
-
-// neon: native 128-bit u32x4/i32x4/u64x2/i64x2 divider path (libdivide polyfills).
-#[cfg(target_arch = "aarch64")]
-mod neon {
-    use super::*;
-    use thermite::backend::neon::Neon;
-
-    #[test]
-    fn vector_div_neon() {
-        vdiv_check!(<Neon as Simd>::u32x4, u32, false);
-        vdiv_check!(<Neon as Simd>::i32x4, i32, true);
-        vdiv_check!(<Neon as Simd>::u64x2, u64, false);
-        vdiv_check!(<Neon as Simd>::i64x2, i64, true);
+    fn vector_div_64() {
+        vdiv_check!(<S as Simd>::u64x2, u64, false);
+        vdiv_check!(<S as Simd>::i64x2, i64, true);
+        vdiv_check!(<S as Simd>::u64x4, u64, false);
+        vdiv_check!(<S as Simd>::i64x4, i64, true);
+        vdiv_check!(<S as Simd>::u64x8, u64, false);
+        vdiv_check!(<S as Simd>::i64x8, i64, true);
     }
 }
 
 #[test]
 fn d_zero_constructs() {
-    // d == 0 hits the degenerate `_internal` branch, and must not panic to construct.
     let _ = 0u32.to_divider();
     let _ = 0i32.to_divider();
 }
@@ -280,7 +232,6 @@ fn unsigned_branchfree_one_panics() {
 
 #[test]
 fn signed_branchfree_one_ok() {
-    // Signed branchfree DOES support 1 (unlike unsigned).
     let bf = BranchfreeDivider::i32(1);
     for x in [-7, -1, 0, 1, 123, i32::MAX, i32::MIN] {
         assert_eq!(bf.divide(x), x);
@@ -289,15 +240,12 @@ fn signed_branchfree_one_ok() {
 
 #[test]
 fn from_and_tryfrom() {
-    // From<$t> for Divider (signed + unsigned)
     let du: Divider<u32> = Divider::from(7u32);
     assert_eq!(du.divide(100), 100 / 7);
     let di: Divider<i32> = Divider::from(-7i32);
     assert_eq!(di.divide(100), 100 / -7);
-    // TryFrom for unsigned branchfree: rejects 1, accepts others.
     assert!(BranchfreeDivider::<u32>::try_from(1u32).is_err());
     assert_eq!(BranchfreeDivider::<u32>::try_from(7u32).unwrap().divide(100), 100 / 7);
-    // From for signed branchfree
     let bi: BranchfreeDivider<i32> = BranchfreeDivider::from(-3i32);
     assert_eq!(bi.divide(100), 100 / -3);
 }
@@ -310,14 +258,12 @@ fn accessors_eq_clone_deref() {
     let c = a; // Copy
     assert_eq!(c.multiplier(), a.multiplier());
     assert_eq!(c.shift(), a.shift());
-    // BranchfreeDivider derefs to Divider (so multiplier()/shift() are reachable).
     let bf = BranchfreeDivider::u32(7);
     let _ = bf.multiplier();
     let _ = bf.shift();
     let bf2 = bf; // Copy
     assert!(bf == bf2); // PartialEq on BranchfreeDivider
 
-    // explicit Clone (Copy bypasses the manual `clone` impls) + Debug
     #[allow(clippy::clone_on_copy)]
     let a_cl = a.clone();
     assert_eq!(a_cl, a);
@@ -337,7 +283,6 @@ fn accessors_eq_clone_deref() {
 fn unsupported_divisor_error() {
     let e = BranchfreeDivider::<u32>::try_from(1u32).unwrap_err();
     assert_eq!(format!("{e}"), "unsupported divisor");
-    // exercise Debug + the std::error::Error impl
     let _ = format!("{e:?}");
     let _: &dyn core::error::Error = &e as &dyn core::error::Error;
     let _ = UnsupportedDivisor;

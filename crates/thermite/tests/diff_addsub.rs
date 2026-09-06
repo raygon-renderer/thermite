@@ -4,8 +4,8 @@
 //! - `addsub` is exact (a single IEEE add per lane), so it is differenced
 //!   bit-for-bit against the `Scalar` backend, exactly like `add`/`sub`.
 //! - `fmaddsub` / `fmsubadd` are a fused multiply then alternating add/sub. A
-//!   native FMA backend (v3) rounds once while the emulated backends round twice, so
-//!   they legitimately differ. They are therefore checked against a
+//!   native FMA backend (v3/v4/NEON) rounds once while the emulated backends round
+//!   twice, so they legitimately differ. They are therefore checked against a
 //!   correctly-rounded `mul_add` oracle with a bound relative to the *operand*
 //!   magnitude `|a*b| + |c|` (not the possibly-cancelled result), which both
 //!   fused and unfused evaluations satisfy.
@@ -13,7 +13,8 @@
 //!   scalar backend (blendv composition is exact).
 //!
 //! See `harness/mod.rs` for methodology and the register `addsub` docs for the
-//! interleaved-complex-multiply motivation.
+//! interleaved-complex-multiply motivation. Every backend runs every slot. The
+//! wide ones are `ArrayRegister`-emulated where the backend has no such register.
 #![cfg(any(
     target_arch = "x86",
     target_arch = "x86_64",
@@ -31,9 +32,9 @@ use thermite::simd::Simd;
 use thermite::backend::scalar::Scalar;
 
 /// Fused alternating multiply-add vs. a correctly-rounded `mul_add` oracle, with
-/// an operand-magnitude-relative bound so the fused (v3) and unfused (emulated)
-/// paths both pass without cancellation noise. `$even_subtracts` is `true` for
-/// `fmaddsub` (even lane = `a*b - c`) and `false` for `fmsubadd`.
+/// an operand-magnitude-relative bound so the fused and unfused paths both pass
+/// without cancellation noise. `$even_subtracts` is `true` for `fmaddsub` (even
+/// lane = `a*b - c`) and `false` for `fmsubadd`.
 macro_rules! oracle_fused {
     ($label:expr, $ut:ty, $method:ident, $even_subtracts:expr) => {{
         type E = <$ut as Register>::Element;
@@ -87,8 +88,7 @@ macro_rules! oracle_fused {
 }
 
 /// Masked binary diff (`addsub_c`/`_m`/`_z`) vs. the scalar backend. `_m`/`_z`
-/// are exact (blendv / bitand over the exact `addsub`), and `_c` is exact up to the
-/// sign of a zero result. See the comment on the assertion below.
+/// are exact. `_c` tolerates the documented signed-zero divergence.
 macro_rules! diff_addsub_masked {
     ($label:expr, $ut:ty, $rf:ty) => {{
         type E = <$ut as Register>::Element;
@@ -105,13 +105,10 @@ macro_rules! diff_addsub_masked {
             let m_ut = harness::build_mask::<$ut>(bools);
             let m_rf = harness::build_mask::<$rf>(bools);
 
-            // `_c` is `addsub(a, b & mask)` on an equal-size-mask backend, so a
-            // masked-off `-0.0` lane returns `+0.0` where the scalar oracle's
-            // blendv keeps the sign. See `Tol::ExactOrZeroSign`.
             let got_c = harness::read::<$ut>(&<$ut>::addsub_c(m_ut, ax, ay));
             let want_c = harness::read::<$rf>(&<$rf>::addsub_c(m_rf, rx, ry));
             harness::assert_lanes_eq(
-                concat!($label, " [addsub_c]"),
+                &format!("{} [addsub_c]", $label),
                 &[x, y],
                 &got_c,
                 &want_c,
@@ -120,76 +117,36 @@ macro_rules! diff_addsub_masked {
 
             let got_m = harness::read::<$ut>(&<$ut>::addsub_m(src, m_ut, ax, ay));
             let want_m = harness::read::<$rf>(&<$rf>::addsub_m(rsrc, m_rf, rx, ry));
-            harness::assert_lanes_eq(concat!($label, " [addsub_m]"), &[x, y], &got_m, &want_m, Tol::Exact);
+            harness::assert_lanes_eq(&format!("{} [addsub_m]", $label), &[x, y], &got_m, &want_m, Tol::Exact);
 
             let got_z = harness::read::<$ut>(&<$ut>::addsub_z(m_ut, ax, ay));
             let want_z = harness::read::<$rf>(&<$rf>::addsub_z(m_rf, rx, ry));
-            harness::assert_lanes_eq(concat!($label, " [addsub_z]"), &[x, y], &got_z, &want_z, Tol::Exact);
+            harness::assert_lanes_eq(&format!("{} [addsub_z]", $label), &[x, y], &got_z, &want_z, Tol::Exact);
         }
     }};
 }
 
-macro_rules! addsub_tests {
-    ($modname:ident, $ut_backend:ty, $reg:ident, $label:expr) => {
-        #[test]
-        fn $modname() {
-            type UT = <$ut_backend as Simd>::$reg;
-            type RF = <Scalar as Simd>::$reg;
+macro_rules! addsub {
+    ($reg:ident) => {{
+        type UT = <S as Simd>::$reg;
+        type RF = <Scalar as Simd>::$reg;
+        let label = harness::label::<S>(stringify!($reg));
+        let label = label.as_str();
 
-            // addsub is a single exact add per lane -> bit-exact vs scalar.
-            diff_binary!($label, UT, RF, addsub, Tol::Exact);
+        diff_binary!(label, UT, RF, addsub, Tol::Exact);
 
-            // fused variants: operand-magnitude-relative oracle (fused/unfused safe).
-            oracle_fused!($label, UT, fmaddsub, true);
-            oracle_fused!($label, UT, fmsubadd, false);
+        oracle_fused!(label, UT, fmaddsub, true);
+        oracle_fused!(label, UT, fmsubadd, false);
 
-            // masked addsub siblings.
-            diff_addsub_masked!($label, UT, RF);
-        }
-    };
+        diff_addsub_masked!(label, UT, RF);
+    }};
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-mod x86 {
-    use super::*;
-    use thermite::backend::x86_v1::X86V1;
-    use thermite::backend::x86_v2::X86V2;
-    use thermite::backend::x86_v3::X86V3;
-
-    // X86V3: native 256-bit and 128-bit addsub / fmaddsub / fmsubadd.
-    mod v3 {
-        use super::*;
-        addsub_tests!(f32x4, X86V3, f32x4, "x86_v3 f32x4");
-        addsub_tests!(f32x8, X86V3, f32x8, "x86_v3 f32x8");
-        addsub_tests!(f32x16, X86V3, f32x16, "x86_v3 f32x16"); // emulated (ArrayRegister)
-        addsub_tests!(f64x2, X86V3, f64x2, "x86_v3 f64x2");
-        addsub_tests!(f64x4, X86V3, f64x4, "x86_v3 f64x4");
-        addsub_tests!(f64x8, X86V3, f64x8, "x86_v3 f64x8"); // emulated (ArrayRegister)
-    }
-
-    // X86V2: native addsub (SSE3), fused variants = mul + native addsub.
-    mod v2 {
-        use super::*;
-        addsub_tests!(f32x4, X86V2, f32x4, "x86_v2 f32x4");
-        addsub_tests!(f32x8, X86V2, f32x8, "x86_v2 f32x8"); // emulated (ArrayRegister)
-        addsub_tests!(f64x2, X86V2, f64x2, "x86_v2 f64x2");
-        addsub_tests!(f64x4, X86V2, f64x4, "x86_v2 f64x4"); // emulated (ArrayRegister)
-    }
-
-    // X86V1: no SSE3 addsub, no FMA -> the materialized-constant xor emulation.
-    mod v1 {
-        use super::*;
-        addsub_tests!(f32x4, X86V1, f32x4, "x86_v1 f32x4");
-        addsub_tests!(f32x8, X86V1, f32x8, "x86_v1 f32x8"); // emulated (ArrayRegister)
-        addsub_tests!(f64x2, X86V1, f64x2, "x86_v1 f64x2");
-        addsub_tests!(f64x4, X86V1, f64x4, "x86_v1 f64x4"); // emulated (ArrayRegister)
-    }
-}
-
-#[cfg(target_arch = "wasm32")]
-mod wasm {
-    use super::*;
-    use thermite::backend::wasm::Wasm;
-    addsub_tests!(f32x4, Wasm, f32x4, "wasm f32x4");
-    addsub_tests!(f64x2, Wasm, f64x2, "wasm f64x2");
+for_each_backend_concrete! {
+    fn f32x4() { addsub!(f32x4) }
+    fn f32x8() { addsub!(f32x8) }
+    fn f32x16() { addsub!(f32x16) }
+    fn f64x2() { addsub!(f64x2) }
+    fn f64x4() { addsub!(f64x4) }
+    fn f64x8() { addsub!(f64x8) }
 }

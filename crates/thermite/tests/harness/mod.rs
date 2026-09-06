@@ -15,17 +15,20 @@
 //!   - `diff_ops.rs`     - arithmetic / bitwise / shift / compare / rounding
 //!   - `diff_math.rs`    - transcendental math vs `libm`
 //!
-//! Run everything with `cargo test -p thermite`. The differential suites are
-//! `#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]` because the
-//! reference vs. SIMD comparison only makes sense where the SIMD backends are
-//! compiled in.
+//! Suites are written once as `fn name<S: Simd>()` and stamped per backend by
+//! `for_each_backend!` (below), which also gates each row on the host ISA at
+//! runtime. x86-v4 rows only exist under an `avx512-tier*` feature and only run
+//! under Intel SDE on this host (`just features=std,avx512-tier1 sde-test 1
+//! "--test diff_ops"`).
 
 #![allow(dead_code)]
 
 use generic_array::{GenericArray, sequence::GenericSequence, typenum::Unsigned};
 use rand::{RngExt, rngs::SmallRng};
 
+use thermite::isa::InstructionSet;
 use thermite::register::{CoreRegister, MaskRegister, Register, Storage};
+use thermite::simd::HasIsa;
 
 /// Comparison tolerance for a single op.
 #[derive(Clone, Copy, Debug)]
@@ -322,6 +325,156 @@ pub fn assert_lanes_eq<E: Diff>(label: &str, inputs: &[&[E]], got: &[E], want: &
     }
 }
 
+// ===========================================================================
+// Backend enumeration. Tests are written ONCE as `fn name<S: Simd>()` and
+// `for_each_backend!` stamps one `#[test]` per compiled backend, each behind a
+// runtime ISA gate so a row the host cannot execute skips instead of SIGILLing
+// (the x86-v4 rows on an AVX2 host, outside Intel SDE).
+// ===========================================================================
+
+/// Can the host execute backend `S`? Capability order is the enum's declaration
+/// order within an architecture, and `InstructionSet::get()` is constant on NEON
+/// and WASM, so `<=` is the whole check. `Scalar` is always available.
+pub fn available<S: HasIsa>() -> bool {
+    S::ISA <= InstructionSet::get()
+}
+
+/// `"X86V3 f32x4"`-style label for a (backend, slot) pair, for assertion messages.
+pub fn label<S: HasIsa>(slot: &str) -> String {
+    format!("{:?} {slot}", S::ISA)
+}
+
+/// Run one backend row, or skip it (visibly) when the host lacks the ISA.
+pub fn run<S: HasIsa>(test: fn()) {
+    if !available::<S>() {
+        eprintln!(
+            "skipped: {:?} is not available on this host (detected {:?})",
+            S::ISA,
+            InstructionSet::get()
+        );
+        return;
+    }
+    test();
+}
+
+/// Stamp a suite of `fn name<S: Simd>()` tests once per compiled backend.
+///
+/// Each fn gets `#[thermite::dispatch(S)]`, so its body compiles under the
+/// backend's `#[target_feature]` set exactly as user kernels do (intrinsics
+/// inline instead of one out-of-line call each). One module per backend
+/// (`scalar`, `x86_v1`..`x86_v4`, `neon`, `wasm`) holds a `#[test]` per fn
+/// that goes through [`run`], so nextest names them `x86_v3::float_f32x4`.
+///
+/// Bodies cannot contain `type` aliases naming `S` (E0401). Spell the slot
+/// out (`<S as Simd>::f32x4`) or pass it to a macro as `$ut:ty`.
+#[macro_export]
+macro_rules! for_each_backend {
+    ($( $(#[$m:meta])* fn $name:ident<$s:ident: $bound:path>() $body:block )*) => {
+        $(
+            #[allow(dead_code)]
+            #[thermite::dispatch($s)]
+            fn $name<$s: $bound>() $body
+        )*
+
+        // Attributes (`///`, `#[should_panic]`) go on the `#[test]` wrappers.
+        $crate::__backend_mod!(scalar, ::thermite::backend::scalar::Scalar, all(), $( $(#[$m])* $name )*);
+        $crate::__backend_mod!(x86_v1, ::thermite::backend::x86_v1::X86V1,
+            any(target_arch = "x86", target_arch = "x86_64"), $( $(#[$m])* $name )*);
+        $crate::__backend_mod!(x86_v2, ::thermite::backend::x86_v2::X86V2,
+            any(target_arch = "x86", target_arch = "x86_64"), $( $(#[$m])* $name )*);
+        $crate::__backend_mod!(x86_v3, ::thermite::backend::x86_v3::X86V3,
+            any(target_arch = "x86", target_arch = "x86_64"), $( $(#[$m])* $name )*);
+        $crate::__backend_mod!(x86_v4, ::thermite::backend::x86_v4::X86V4Default,
+            all(any(target_arch = "x86", target_arch = "x86_64"), feature = "avx512-tier1"), $( $(#[$m])* $name )*);
+        $crate::__backend_mod!(neon, ::thermite::backend::neon::Neon, target_arch = "aarch64", $( $(#[$m])* $name )*);
+        $crate::__backend_mod!(wasm, ::thermite::backend::wasm::Wasm,
+            all(target_arch = "wasm32", feature = "wasm"), $( $(#[$m])* $name )*);
+    };
+}
+
+/// The concrete-alias flavor of [`for_each_backend!`]: the body is stamped once
+/// per compiled backend inside a module where `S` is a _type alias_ for that
+/// backend (`type S = X86V3;`) and the backend's `prelude` is glob-imported, so
+/// `f32x4`-style aliases resolve to that backend.
+///
+/// Use this instead of the generic flavor when the body must contain `type`
+/// items naming `S` (`type V = Vector<<S as Simd3A>::f32x3A>;`), which a
+/// generic fn body cannot (E0401), or when a suite is written against the
+/// prelude aliases. Each fn still gets `#[thermite::dispatch(S)]` and the ISA
+/// gate. Costs one parse + codegen of the body per backend.
+#[macro_export]
+macro_rules! for_each_backend_concrete {
+    ($( $(#[$m:meta])* fn $name:ident() $body:block )*) => {
+        $crate::__backend_mod_concrete!(scalar, ::thermite::backend::scalar::Scalar,
+            ::thermite::backend::scalar::prelude, all(), $( $(#[$m])* fn $name() $body )*);
+        $crate::__backend_mod_concrete!(x86_v1, ::thermite::backend::x86_v1::X86V1,
+            ::thermite::backend::x86_v1::prelude,
+            any(target_arch = "x86", target_arch = "x86_64"), $( $(#[$m])* fn $name() $body )*);
+        $crate::__backend_mod_concrete!(x86_v2, ::thermite::backend::x86_v2::X86V2,
+            ::thermite::backend::x86_v2::prelude,
+            any(target_arch = "x86", target_arch = "x86_64"), $( $(#[$m])* fn $name() $body )*);
+        $crate::__backend_mod_concrete!(x86_v3, ::thermite::backend::x86_v3::X86V3,
+            ::thermite::backend::x86_v3::prelude,
+            any(target_arch = "x86", target_arch = "x86_64"), $( $(#[$m])* fn $name() $body )*);
+        $crate::__backend_mod_concrete!(x86_v4, ::thermite::backend::x86_v4::X86V4Default,
+            ::thermite::backend::x86_v4::prelude,
+            all(any(target_arch = "x86", target_arch = "x86_64"), feature = "avx512-tier1"),
+            $( $(#[$m])* fn $name() $body )*);
+        $crate::__backend_mod_concrete!(neon, ::thermite::backend::neon::Neon,
+            ::thermite::backend::neon::prelude, target_arch = "aarch64", $( $(#[$m])* fn $name() $body )*);
+        $crate::__backend_mod_concrete!(wasm, ::thermite::backend::wasm::Wasm,
+            ::thermite::backend::wasm::prelude,
+            all(target_arch = "wasm32", feature = "wasm"), $( $(#[$m])* fn $name() $body )*);
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __backend_mod_concrete {
+    ($modname:ident, $backend:ty, $prelude:path, $cfg:meta, $( $(#[$m:meta])* fn $name:ident() $body:block )*) => {
+        #[cfg($cfg)]
+        mod $modname {
+            mod imp {
+                #[allow(unused_imports)]
+                use super::super::*;
+                #[allow(unused_imports)]
+                use $prelude::*;
+                #[allow(dead_code)]
+                pub type S = $backend;
+                $(
+                    #[allow(dead_code)]
+                    #[thermite::dispatch(S)]
+                    pub fn $name() $body
+                )*
+            }
+            $(
+                $(#[$m])*
+                #[test]
+                fn $name() {
+                    $crate::harness::run::<imp::S>(imp::$name);
+                }
+            )*
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __backend_mod {
+    ($modname:ident, $backend:ty, $cfg:meta, $( $(#[$m:meta])* $name:ident )*) => {
+        #[cfg($cfg)]
+        mod $modname {
+            $(
+                $(#[$m])*
+                #[test]
+                fn $name() {
+                    $crate::harness::run::<$backend>(super::$name::<$backend>);
+                }
+            )*
+        }
+    };
+}
+
 /// Stamp a differential test for a **unary** register op.
 ///
 /// `$ut` is the backend register under test, `$rf` the scalar reference
@@ -331,15 +484,14 @@ pub fn assert_lanes_eq<E: Diff>(label: &str, inputs: &[&[E]], got: &[E], want: &
 macro_rules! diff_unary {
     ($label:expr, $ut:ty, $rf:ty, $method:ident, $tol:expr) => {{
         let mut rng = $crate::harness::rng();
-        type E = <$ut as ::thermite::register::Register>::Element;
         let lanes = <<$ut as ::thermite::register::CoreRegister>::Lanes as ::generic_array::typenum::Unsigned>::USIZE;
-        for input in $crate::harness::corpus::<E>(lanes, &mut rng) {
+        for input in $crate::harness::corpus::<<$ut as ::thermite::register::Register>::Element>(lanes, &mut rng) {
             let a_ut = $crate::harness::make_array::<$ut>(&input);
             let a_rf = $crate::harness::make_array::<$rf>(&input);
             let got = $crate::harness::read::<$ut>(&<$ut>::$method(a_ut));
             let want = $crate::harness::read::<$rf>(&<$rf>::$method(a_rf));
             $crate::harness::assert_lanes_eq(
-                concat!($label, " [", stringify!($method), "]"),
+                &format!("{} [{}]", $label, stringify!($method)),
                 &[input.as_slice()],
                 &got,
                 &want,
@@ -354,10 +506,9 @@ macro_rules! diff_unary {
 macro_rules! diff_binary {
     ($label:expr, $ut:ty, $rf:ty, $method:ident, $tol:expr) => {{
         let mut rng = $crate::harness::rng();
-        type E = <$ut as ::thermite::register::Register>::Element;
         let lanes = <<$ut as ::thermite::register::CoreRegister>::Lanes as ::generic_array::typenum::Unsigned>::USIZE;
-        let xs = $crate::harness::corpus::<E>(lanes, &mut rng);
-        let ys = $crate::harness::corpus::<E>(lanes, &mut rng);
+        let xs = $crate::harness::corpus::<<$ut as ::thermite::register::Register>::Element>(lanes, &mut rng);
+        let ys = $crate::harness::corpus::<<$ut as ::thermite::register::Register>::Element>(lanes, &mut rng);
         for (x, y) in xs.iter().zip(ys.iter()) {
             let got = $crate::harness::read::<$ut>(&<$ut>::$method(
                 $crate::harness::make_array::<$ut>(x),
@@ -368,7 +519,7 @@ macro_rules! diff_binary {
                 $crate::harness::make_array::<$rf>(y),
             ));
             $crate::harness::assert_lanes_eq(
-                concat!($label, " [", stringify!($method), "]"),
+                &format!("{} [{}]", $label, stringify!($method)),
                 &[x.as_slice(), y.as_slice()],
                 &got,
                 &want,
@@ -383,13 +534,12 @@ macro_rules! diff_binary {
 macro_rules! diff_reduce {
     ($label:expr, $ut:ty, $rf:ty, $method:ident, $tol:expr) => {{
         let mut rng = $crate::harness::rng();
-        type E = <$ut as ::thermite::register::Register>::Element;
         let lanes = <<$ut as ::thermite::register::CoreRegister>::Lanes as ::generic_array::typenum::Unsigned>::USIZE;
-        for input in $crate::harness::corpus::<E>(lanes, &mut rng) {
+        for input in $crate::harness::corpus::<<$ut as ::thermite::register::Register>::Element>(lanes, &mut rng) {
             let got = <$ut>::$method($crate::harness::make_array::<$ut>(&input));
             let want = <$rf>::$method($crate::harness::make_array::<$rf>(&input));
             $crate::harness::assert_lanes_eq(
-                concat!($label, " [", stringify!($method), "]"),
+                &format!("{} [{}]", $label, stringify!($method)),
                 &[input.as_slice()],
                 &[got],
                 &[want],
@@ -426,22 +576,26 @@ macro_rules! diff_reduce {
 macro_rules! diff_varshift {
     ($label:expr, $ut:ty, $rf:ty, $method:ident) => {{
         use ::rand::RngExt as _;
-        type E = <$ut as ::thermite::register::Register>::Element;
-        type UUT = <$ut as ::thermite::register::Register>::Unsigned;
-        type URF = <$rf as ::thermite::register::Register>::Unsigned;
-        type UE = <UUT as ::thermite::register::Register>::Element;
+        // No `type` aliases here: the caller is usually generic over `S`, and items
+        // inside a fn body cannot name the outer generics (E0401).
         let mut rng = $crate::harness::rng();
         let lanes = <<$ut as ::thermite::register::CoreRegister>::Lanes as ::generic_array::typenum::Unsigned>::USIZE;
-        let bits = (core::mem::size_of::<E>() * 8) as UE;
-        for input in $crate::harness::corpus::<E>(lanes, &mut rng) {
+        let bits = (core::mem::size_of::<<$ut as ::thermite::register::Register>::Element>() * 8)
+            as <<$ut as ::thermite::register::Register>::Unsigned as ::thermite::register::Register>::Element;
+        for input in $crate::harness::corpus::<<$ut as ::thermite::register::Register>::Element>(lanes, &mut rng) {
             // Distinct per-lane shift amounts so a lane transposition is visible.
-            let sh: Vec<UE> = (0..lanes).map(|_| rng.random::<UE>() % bits).collect();
-            let ut_sh = $crate::harness::make_array::<UUT>(&sh);
-            let rf_sh = $crate::harness::make_array::<URF>(&sh);
+            let sh: Vec<_> = (0..lanes)
+                .map(|_| {
+                    rng.random::<<<$ut as ::thermite::register::Register>::Unsigned as ::thermite::register::Register>::Element>()
+                        % bits
+                })
+                .collect();
+            let ut_sh = $crate::harness::make_array::<<$ut as ::thermite::register::Register>::Unsigned>(&sh);
+            let rf_sh = $crate::harness::make_array::<<$rf as ::thermite::register::Register>::Unsigned>(&sh);
             let got = $crate::harness::read::<$ut>(&<$ut>::$method($crate::harness::make_array::<$ut>(&input), ut_sh));
             let want = $crate::harness::read::<$rf>(&<$rf>::$method($crate::harness::make_array::<$rf>(&input), rf_sh));
             $crate::harness::assert_lanes_eq(
-                concat!($label, " [", stringify!($method), "]"),
+                &format!("{} [{}]", $label, stringify!($method)),
                 &[input.as_slice()],
                 &got,
                 &want,
@@ -459,10 +613,9 @@ macro_rules! diff_binary_finite {
     ($label:expr, $ut:ty, $rf:ty, $method:ident, $tol:expr) => {{
         use $crate::harness::Diff as _;
         let mut rng = $crate::harness::rng();
-        type E = <$ut as ::thermite::register::Register>::Element;
         let lanes = <<$ut as ::thermite::register::CoreRegister>::Lanes as ::generic_array::typenum::Unsigned>::USIZE;
-        let xs = $crate::harness::corpus::<E>(lanes, &mut rng);
-        let ys = $crate::harness::corpus::<E>(lanes, &mut rng);
+        let xs = $crate::harness::corpus::<<$ut as ::thermite::register::Register>::Element>(lanes, &mut rng);
+        let ys = $crate::harness::corpus::<<$ut as ::thermite::register::Register>::Element>(lanes, &mut rng);
         for (x, y) in xs.iter().zip(ys.iter()) {
             if x.iter().chain(y.iter()).any(|v| !v.finite()) {
                 continue;
@@ -476,7 +629,7 @@ macro_rules! diff_binary_finite {
                 $crate::harness::make_array::<$rf>(y),
             ));
             $crate::harness::assert_lanes_eq(
-                concat!($label, " [", stringify!($method), "]"),
+                &format!("{} [{}]", $label, stringify!($method)),
                 &[x.as_slice(), y.as_slice()],
                 &got,
                 &want,
@@ -493,16 +646,15 @@ macro_rules! diff_reduce_finite {
     ($label:expr, $ut:ty, $rf:ty, $method:ident, $tol:expr) => {{
         use $crate::harness::Diff as _;
         let mut rng = $crate::harness::rng();
-        type E = <$ut as ::thermite::register::Register>::Element;
         let lanes = <<$ut as ::thermite::register::CoreRegister>::Lanes as ::generic_array::typenum::Unsigned>::USIZE;
-        for input in $crate::harness::corpus::<E>(lanes, &mut rng) {
+        for input in $crate::harness::corpus::<<$ut as ::thermite::register::Register>::Element>(lanes, &mut rng) {
             if input.iter().any(|v| !v.finite()) {
                 continue;
             }
             let got = <$ut>::$method($crate::harness::make_array::<$ut>(&input));
             let want = <$rf>::$method($crate::harness::make_array::<$rf>(&input));
             $crate::harness::assert_lanes_eq(
-                concat!($label, " [", stringify!($method), "]"),
+                &format!("{} [{}]", $label, stringify!($method)),
                 &[input.as_slice()],
                 &[got],
                 &[want],
@@ -530,7 +682,7 @@ macro_rules! oracle_unary {
             let got = $crate::harness::read::<$ut>(&<$ut>::$method($crate::harness::make_array::<$ut>(&input)));
             let want: Vec<$elem> = input.iter().map(|&x| oracle(x)).collect();
             $crate::harness::assert_lanes_eq(
-                concat!($label, " [", stringify!($method), " vs Rust]"),
+                &format!("{} [{} vs Rust]", $label, stringify!($method)),
                 &[input.as_slice()],
                 &got,
                 &want,
@@ -556,7 +708,7 @@ macro_rules! oracle_binary {
             ));
             let want: Vec<$elem> = x.iter().zip(y.iter()).map(|(&a, &b)| oracle(a, b)).collect();
             $crate::harness::assert_lanes_eq(
-                concat!($label, " [", stringify!($method), " vs Rust]"),
+                &format!("{} [{} vs Rust]", $label, stringify!($method)),
                 &[x.as_slice(), y.as_slice()],
                 &got,
                 &want,
@@ -580,7 +732,7 @@ macro_rules! oracle_shift {
                 let got = $crate::harness::read::<$ut>(&<$ut>::$method($crate::harness::make_array::<$ut>(&input), sh));
                 let want: Vec<$elem> = input.iter().map(|&x| oracle(x, sh)).collect();
                 $crate::harness::assert_lanes_eq(
-                    concat!($label, " [", stringify!($method), " vs Rust]"),
+                    &format!("{} [{} vs Rust]", $label, stringify!($method)),
                     &[input.as_slice()],
                     &got,
                     &want,
@@ -612,7 +764,7 @@ macro_rules! sat_cast_diff {
                 $crate::harness::make_array::<$src_rf>(&input),
             ));
             $crate::harness::assert_lanes_eq(
-                concat!($label, " [saturating_cast vs scalar `as`]"),
+                &format!("{} [saturating_cast vs scalar `as`]", $label),
                 &[],
                 &got,
                 &want,
@@ -650,7 +802,7 @@ macro_rules! fast_cast_diff {
                 $crate::harness::make_array::<$src_rf>(&input),
             ));
             $crate::harness::assert_lanes_eq(
-                concat!($label, " [fast_cast vs scalar `as`]"),
+                &format!("{} [fast_cast vs scalar `as`]", $label),
                 &[],
                 &got,
                 &want,
@@ -683,7 +835,7 @@ macro_rules! cast_diff {
             let want = $crate::harness::read::<$dst_rf>(&<$dst_rf as CastRegister<$src_rf>>::cast_from(
                 $crate::harness::make_array::<$src_rf>(&input),
             ));
-            $crate::harness::assert_lanes_eq(concat!($label, " [cast vs scalar `as`]"), &[], &got, &want, $tol);
+            $crate::harness::assert_lanes_eq(&format!("{} [cast vs scalar `as`]", $label), &[], &got, &want, $tol);
         }
     }};
 }
@@ -706,7 +858,7 @@ macro_rules! bitcast_diff {
             let want = $crate::harness::read::<$dst_rf>(&<$dst_rf as BitCastRegister<$src_rf>>::from_bits(
                 $crate::harness::make_array::<$src_rf>(&input),
             ));
-            $crate::harness::assert_lanes_eq(concat!($label, " [bitcast vs scalar]"), &[], &got, &want, Tol::Exact);
+            $crate::harness::assert_lanes_eq(&format!("{} [bitcast vs scalar]", $label), &[], &got, &want, Tol::Exact);
         }
     }};
 }
