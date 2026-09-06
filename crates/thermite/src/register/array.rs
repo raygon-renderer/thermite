@@ -8,7 +8,12 @@ use crate::{Vector, math::policy::Policy};
 
 use super::*;
 
-// generates array_zip2, array_zip3, array_zip4, array_zip5, etc., to combine many arrays using a provided function
+// generates array_zip1 (array_map), array_zip2, array_zip3, array_zip4, array_zip5, etc.,
+// to combine many arrays using a provided function.
+// `core::array::map` / `core::array::from_fn` lower through `try_map` /
+// `try_from_fn_erased`, which LLVM will not inline into `#[target_feature]`
+// code: every intrinsic inside the closure ends up behind an out-of-line call
+// Plain loops inline.
 macro_rules! decl_array_zips {
     ($($count:literal => ($($part:ident,)+)),* $(,)?) => {paste::paste! {$(
         #[inline(always)] #[allow(dead_code)]
@@ -22,6 +27,7 @@ macro_rules! decl_array_zips {
 }
 
 decl_array_zips! {
+    1 => (A,),
     2 => (A, B,),
     3 => (A, B, C,),
     4 => (A, B, C, D,),
@@ -44,6 +50,18 @@ where
     }
 
     unsafe { (MaybeUninit::assume_init(a.into()), MaybeUninit::assume_init(b.into())) }
+}
+
+#[inline(always)]
+fn array_from_fn<U, F, const N: usize>(mut f: F) -> [U; N]
+where
+    F: FnMut(usize) -> U,
+{
+    let mut result: [MaybeUninit<U>; N] = unsafe { MaybeUninit::uninit().assume_init() };
+    for i in 0..N {
+        result[i].write(f(i));
+    }
+    unsafe { MaybeUninit::assume_init(result.into()) }
 }
 
 #[repr(transparent)]
@@ -504,17 +522,17 @@ where
 
     fn broadcast_c<const I: usize>(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         let e = R::splat(Self::as_slice(&value)[I]);
-        Self(core::array::from_fn(|j| R::blendv(mask.0[j], value.0[j], e)))
+        Self(array_from_fn(|j| R::blendv(mask.0[j], value.0[j], e)))
     }
 
     fn broadcast_m<const I: usize>(src: Storage<Self>, mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         let e = R::splat(Self::as_slice(&value)[I]);
-        Self(core::array::from_fn(|j| R::blendv(mask.0[j], src.0[j], e)))
+        Self(array_from_fn(|j| R::blendv(mask.0[j], src.0[j], e)))
     }
 
     fn broadcast_z<const I: usize>(mask: Storage<Self::Mask>, value: Storage<Self>) -> Storage<Self> {
         let e = R::splat(Self::as_slice(&value)[I]);
-        Self(mask.0.map(|mask_reg| R::blendv(mask_reg, R::EMPTY, e)))
+        Self(array_zip1(mask.0, |mask_reg| R::blendv(mask_reg, R::EMPTY, e)))
     }
 
     fn last_element(value: Storage<Self>) -> Self::Element {
@@ -529,17 +547,17 @@ where
 
     fn broadcastv_c(mask: Storage<Self::Mask>, value: Storage<Self>, idx: usize) -> Storage<Self> {
         let e = R::splat(Self::as_slice(&value)[idx]);
-        Self(core::array::from_fn(|j| R::blendv(mask.0[j], value.0[j], e)))
+        Self(array_from_fn(|j| R::blendv(mask.0[j], value.0[j], e)))
     }
 
     fn broadcastv_m(src: Storage<Self>, mask: Storage<Self::Mask>, value: Storage<Self>, idx: usize) -> Storage<Self> {
         let e = R::splat(Self::as_slice(&value)[idx]);
-        Self(core::array::from_fn(|j| R::blendv(mask.0[j], src.0[j], e)))
+        Self(array_from_fn(|j| R::blendv(mask.0[j], src.0[j], e)))
     }
 
     fn broadcastv_z(mask: Storage<Self::Mask>, value: Storage<Self>, idx: usize) -> Storage<Self> {
         let e = R::splat(Self::as_slice(&value)[idx]);
-        Self(mask.0.map(|mask_reg| R::blendv(mask_reg, R::EMPTY, e)))
+        Self(array_zip1(mask.0, |mask_reg| R::blendv(mask_reg, R::EMPTY, e)))
     }
 
     unsafe fn load(ptr: *const Self::Element) -> Storage<Self> {
@@ -1256,7 +1274,7 @@ where
     }
 }
 
-#[rustfmt::skip]
+#[rustfmt::skip] #[thermite_macros::array_impl]
 impl<R: PartialOrdRegister, const N: usize> PartialOrdRegister for ArrayRegister<R, N>
 where
     Const<N>: ToUInt<Output: ArrayLength + Mul<R::Lanes, Output: Lanes>>,
@@ -1438,7 +1456,7 @@ where
     fn pairwise_sum(lo: Storage<Self>, hi: Storage<Self>) -> Storage<Self> {
         // Pairs adjacent inner registers within lo first, then within hi.
         // Works uniformly for 1-lane and multi-lane R.
-        Self(core::array::from_fn(|i| {
+        Self(array_from_fn(|i| {
             if i < const { N / 2 } {
                 R::pairwise_sum(lo.0[2 * i], lo.0[2 * i + 1])
             } else {
@@ -1766,7 +1784,7 @@ where
     Const<N>: ToUInt<Output: ArrayLength + Mul<R::Lanes, Output: Lanes>>,
 {
     unsafe fn gather(ptr: *const Self::Element, indices: Storage<ArrayRegister<IDX, N>>) -> Storage<Self> {
-        Self(indices.0.map(|idx| unsafe { R::gather(ptr, idx) }))
+        Self(array_zip1(indices.0, |idx| unsafe { R::gather(ptr, idx) }))
     }
 
     unsafe fn gather_m(
@@ -1996,7 +2014,7 @@ where
 {
     #[inline(always)]
     fn mask_from(value: Storage<ArrayRegister<FROM, N>>) -> Storage<Self> {
-        Self(value.0.map(INTO::mask_from))
+        Self(array_zip1(value.0, INTO::mask_from))
     }
 }
 
@@ -2007,15 +2025,15 @@ where
     Const<N>: ToUInt<Output: ArrayLength + Mul<FROM::Lanes, Output: Lanes>>,
 {
     fn cast_from(value: Storage<ArrayRegister<FROM, N>>) -> Storage<Self> {
-        Self(value.0.map(INTO::cast_from))
+        Self(array_zip1(value.0, INTO::cast_from))
     }
 
     fn fast_cast_from(value: Storage<ArrayRegister<FROM, N>>) -> Storage<Self> {
-        Self(value.0.map(INTO::fast_cast_from))
+        Self(array_zip1(value.0, INTO::fast_cast_from))
     }
 
     fn saturating_cast_from(value: Storage<ArrayRegister<FROM, N>>) -> Storage<Self> {
-        Self(value.0.map(INTO::saturating_cast_from))
+        Self(array_zip1(value.0, INTO::saturating_cast_from))
     }
 }
 
@@ -2026,7 +2044,7 @@ where
 {
     #[inline(always)]
     fn from_bits(value: Storage<ArrayRegister<FROM, N>>) -> Storage<Self> {
-        Self(value.0.map(INTO::from_bits))
+        Self(array_zip1(value.0, INTO::from_bits))
     }
 }
 
