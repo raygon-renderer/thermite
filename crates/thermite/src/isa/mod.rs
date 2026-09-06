@@ -51,16 +51,25 @@ pub enum InstructionSet {
     SPIRV,
 }
 
+mod detect_once;
+pub use detect_once::DetectOnce;
+
+/// x86 / x86_64 feature bits via `cpuid`, with the OS `XCR0` state folded in.
+/// What [`InstructionSet::get`] dispatches on.
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+pub mod x86;
+
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 mod x86_detector;
 
 impl InstructionSet {
     /// Detect the current instruction set at runtime. This result is cached for future calls.
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[inline]
     pub fn get() -> InstructionSet {
-        static DETECTOR: x86_detector::DetectInstructionSet = x86_detector::DetectInstructionSet::new();
+        static DETECTOR: DetectOnce<InstructionSet> = DetectOnce::new(InstructionSet::Scalar);
 
-        DETECTOR.get_or_init()
+        *DETECTOR.get(x86_detector::detect)
     }
 
     /// Detect the current instruction set at runtime. This result is cached for future calls.
@@ -95,9 +104,9 @@ impl InstructionSet {
 
     /// Detect the current instruction set at runtime. This result is cached for future calls.
     ///
-    /// Fallback for targets with no SIMD backend compiled in -- an unlisted
+    /// Fallback for targets with no SIMD backend compiled in: an unlisted
     /// architecture, or wasm without its opt-in feature. Without this the method
-    /// would simply not exist on those targets, so anything calling it
+    /// would not exist on those targets, so anything calling it
     /// (including `dispatch_dyn!`) failed to compile rather than falling back to
     /// scalar.
     #[cfg(not(any(
@@ -113,8 +122,8 @@ impl InstructionSet {
     /// Order two sets by capability, returning the weaker.
     ///
     /// Ordering is the enum's declaration order, which ascends by capability
-    /// *within* an architecture (`Scalar < X86V1 < .. < X86V4`). Across
-    /// architectures it is meaningless -- but two architectures' variants never
+    /// _within_ an architecture (`Scalar < X86V1 < .. < X86V4`). Across
+    /// architectures it is meaningless, but two architectures' variants never
     /// coexist, since each is `cfg`-gated to its own target.
     #[inline(always)]
     pub const fn min(a: InstructionSet, b: InstructionSet) -> InstructionSet {
@@ -136,7 +145,7 @@ impl InstructionSet {
         a
     }
 
-    /// Whether the *target* executes independent instructions in parallel, so
+    /// Whether the _target_ executes independent instructions in parallel, so
     /// that breaking a dependency chain into several accumulators pays off.
     ///
     /// A property of the hardware, not of the instruction set: a superscalar CPU
@@ -156,8 +165,8 @@ impl InstructionSet {
 
 /// Per-ISA properties, one row per variant.
 ///
-/// Written as a table because the alternative -- a separate `match` per property
-/// -- repeated the same three `#[cfg]` predicates on every arm, roughly
+/// Written as a table because the alternative (a separate `match` per property)
+/// repeated the same three `#[cfg]` predicates on every arm, roughly
 /// `variants x properties` times, and scattered one ISA's characteristics across
 /// the whole file. Here each variant carries its `cfg` once and all of its
 /// properties are visible together.
@@ -178,7 +187,7 @@ macro_rules! isa_properties {
     )*) => {
         impl InstructionSet {
             /// Estimate of how many SIMD registers the ISA exposes. Used by
-            /// inlining/unrolling heuristics; see also [`NativeIsa::Registers`],
+            /// inlining/unrolling heuristics. See also [`NativeIsa::Registers`],
             /// the type-level equivalent.
             ///
             /// [`NativeIsa::Registers`]: crate::simd::NativeIsa::Registers
@@ -256,7 +265,7 @@ isa_properties! {
         registers: 16, fma: true, simd: true, unaligned_cheap: true, unroll: 4, masked: false,
     }
 
-    // Twice the registers, so twice the unroll; and the only ISA here with real
+    // Twice the registers, so twice the unroll, and the only ISA here with real
     // masked operations.
     #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
     X86V4 {
@@ -268,7 +277,7 @@ isa_properties! {
         registers: 32, fma: true, simd: true, unaligned_cheap: true, unroll: 4, masked: false,
     }
 
-    // TODO: verify the wasm register count and unaligned cost; the engine's JIT
+    // TODO: verify the wasm register count and unaligned cost. The engine's JIT
     // decides both, so these are conservative guesses.
     #[cfg(all(feature = "wasm", target_arch = "wasm32"))]
     WASM32 {
@@ -323,7 +332,7 @@ mod tests {
         for &isa in all() {
             assert!(isa.num_registers() >= 1, "{isa:?}: zero registers");
             assert!(isa.unroll_factor() >= 1, "{isa:?}: zero unroll factor");
-            // Masked operations are a SIMD feature; nothing scalar can have them.
+            // Masked operations are a SIMD feature, so nothing scalar can have them.
             assert!(
                 !isa.has_masked_operations() || isa.is_simd(),
                 "{isa:?}: masked but not SIMD"
@@ -374,7 +383,7 @@ mod tests {
         InstructionSet::assert_eq(InstructionSet::Scalar, InstructionSet::Unknown);
     }
 
-    /// ILP is a property of the host, not of the ISA variant -- previously this
+    /// ILP is a property of the host, not of the ISA variant. Previously this
     /// was a `match` whose first arm was a `_` wildcard, making every later arm
     /// dead code.
     #[test]

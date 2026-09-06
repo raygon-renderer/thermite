@@ -95,8 +95,7 @@ impl core::fmt::Display for QosError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for QosError {}
+impl core::error::Error for QosError {}
 
 /// Request a QoS class for the **calling thread**.
 ///
@@ -115,7 +114,6 @@ impl std::error::Error for QosError {}
 /// // Confine a background rebuild to the efficiency cores.
 /// set_thread_qos(QosClass::Background, 0).unwrap();
 /// ```
-#[inline]
 pub fn set_thread_qos(class: QosClass, relative_priority: c_int) -> Result<(), QosError> {
     const EINVAL: c_int = 22;
 
@@ -136,7 +134,6 @@ pub fn set_thread_qos(class: QosClass, relative_priority: c_int) -> Result<(), Q
 ///
 /// `None` if the query failed or libSystem reported a class this build does not
 /// recognise. [`QosClass::Unspecified`] means the thread is opted out.
-#[inline]
 pub fn thread_qos() -> Option<(QosClass, c_int)> {
     let mut class = 0u32;
     let mut relative_priority = 0 as c_int;

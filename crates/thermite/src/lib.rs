@@ -19,13 +19,13 @@
     feature(asm_experimental_arch)
 )]
 #![cfg_attr(feature = "nightly", allow(internal_features))]
-// generic_const_exprs is too unstable - causes "overly complex generic constant" errors
+// generic_const_exprs is too unstable, causing "overly complex generic constant" errors
 // throughout the codebase when enabled. Commented out until the feature matures.
 // #![cfg_attr(feature = "nightly", feature(generic_const_exprs))]
 // #![cfg_attr(feature = "nightly", allow(incomplete_features))]
 // Enable wasm64 simd on nightly
 #![cfg_attr(all(feature = "nightly", target_arch = "wasm64"), feature(simd_wasm64))]
-// Scalar WASM float intrinsics (f32_sqrt, f32_floor, etc.) - still unstable
+// Scalar WASM float intrinsics (f32_sqrt, f32_floor, etc.) are still unstable
 #![cfg_attr(
     all(
         feature = "nightly",
@@ -58,7 +58,7 @@ fn spirv_readiness_check() {
 /// canaries here (instead of lazily on first use) keeps the flag read path
 /// call-free, so the load is loop-invariant and hoistable out of hot loops.
 ///
-/// Embedders that never invoke `__wasm_call_ctors` simply leave the flags
+/// Embedders that never invoke `__wasm_call_ctors` leave the flags
 /// zeroed: `mul_add` then takes the (bit-identical, slower) emulation on
 /// every call.
 #[cfg(all(feature = "wasm", any(target_arch = "wasm32", target_arch = "wasm64")))]
@@ -141,8 +141,8 @@ pub use thermite_macros::{HasIsa, dispatch, dispatch_dyn};
 #[doc(hidden)]
 pub use thermite_macros::math_traits;
 
-/// Creates a shuffle mask for various instructions. Note
-/// that the order of the arguments is reversed from the
+/// Creates a shuffle mask for various instructions. The
+/// order of the arguments is reversed from the
 /// normal order of the lanes, so `MM_SHUFFLE!(3, 2, 1, 0)`
 /// would be the identity shuffle (unchanged).
 #[macro_export]
@@ -205,7 +205,7 @@ pub mod guide {
 /// cluttering the namespace. This is the recommended starting point for most
 /// code.
 ///
-/// Note that the math traits are imported anonymously: their methods are
+/// The math traits are imported anonymously: their methods are
 /// callable, but the trait names are not in scope. To name one in a generic
 /// bound (e.g. `fn f<V: FloatVector + TranscendentalMath>`), import it
 /// explicitly with `use thermite::math::TranscendentalMath;`.
@@ -259,7 +259,6 @@ pub mod vector;
 
 pub mod backend;
 pub mod compat;
-pub mod cpu;
 pub mod divider;
 pub mod element;
 pub mod mask;
@@ -281,7 +280,7 @@ pub use vector::Vector;
 /// The widest signed integer type that is efficient on the current target.
 ///
 /// Normally `i64`. On the SPIR-V GPU backend, however, 64-bit integers require
-/// the `Int64` capability, which not every device advertises; when targeting
+/// the `Int64` capability, which not every device advertises. When targeting
 /// SPIR-V without that capability this falls back to `i32`. Use this (and
 /// [`LargeUInt`]) for index/size arithmetic that should stay native on every
 /// supported target rather than hard-coding `i64`.

@@ -1,28 +1,23 @@
-//! x86 / x86_64 machine facts via `cpuid`.
-//!
-//! The only target that can answer all of this with a plain user-space
-//! instruction, so this path needs no OS and works in `no_std`. Leaves used:
+//! x86 / x86_64 feature detection via `cpuid`: the bits
+//! [`InstructionSet::get`](crate::isa::InstructionSet::get) dispatches on, plus
+//! the vendor/family/model helpers that the `thermite-cpu` crate builds its
+//! machine facts (caches, topology, microcode quirks) on. Leaves used:
 //!
 //! | Leaf | Field |
 //! |---|---|
 //! | `0` | max leaf + vendor string |
-//! | `1` `EBX[15:8]` | line size (`clflush` granularity, x8) |
-//! | `4` / `0x8000001D` | deterministic cache parameters per level |
-//! | `0x1F` / `0xB` | extended topology (SMT + core level counts) |
-//! | `0x80000008` / `0x8000001E` | AMD's topology, when the above are absent |
-//! | `7`:0 `EDX[15]` | hybrid part |
-//! | `0x1A` `EAX[31:24]` | this core's type (`0x20` Atom/E, `0x40` Core/P) |
+//! | `1` | family/model, SSE2/SSE4.2/POPCNT/PCLMUL/AVX/FMA/F16C, `OSXSAVE` |
+//! | `7`:0 | AVX2, the `avx512*` alphabet, GFNI/VAES/VPCLMULQDQ |
+//! | `7`:1 `EAX[5]` | AVX512-BF16 |
 //! | `7`:1 `EDX[19]` | AVX10 enumerated (leaf `0x24` is valid) |
-//! | `0x24` `EBX[7:0]` | AVX10 converged version ([`features`](crate::cpu::x86::features)) |
+//! | `0x24` `EBX[7:0]` | AVX10 converged version ([`features`]) |
 //!
-//! Leaves are tried and *checked for an empty answer*, not merely bounded by
-//! the reported maximum: a CPU can advertise a max leaf above one it does not
-//! implement, in which case it returns zeros (see `read_topology_amd`).
+//! Plus `xgetbv` for `XCR0`: every AVX-class flag means **usable**, folding in
+//! whether the OS saves the YMM/ZMM/opmask state.
 //!
 //! `cpuid` is serializing (100-250 cycles bare metal, a VM exit under a
-//! hypervisor), which is why the caller caches the result.
-
-use super::{CacheInfo, CacheKind, CoreType, CpuInfo};
+//! hypervisor), which is why every caller caches the result behind a
+//! [`DetectOnce`](crate::isa::DetectOnce).
 
 /// How much of AVX-512 the CPU implements, in the rungs this crate's
 /// `avx512-tier1..3` crate features and `backend::x86::avx512f::tiers` intrinsic
@@ -91,7 +86,7 @@ fn bit(value: u32, index: u32) -> bool {
 }
 
 #[inline]
-pub(super) fn cpuid(leaf: u32, sub: u32) -> CpuidResult {
+pub fn cpuid(leaf: u32, sub: u32) -> CpuidResult {
     // SAFETY: `cpuid` is unprivileged and has no preconditions on any CPU this
     // crate can target (486+). Callers bound `leaf` by the reported maximum.
     __cpuid_count(leaf, sub)
@@ -99,7 +94,7 @@ pub(super) fn cpuid(leaf: u32, sub: u32) -> CpuidResult {
 
 /// Highest basic leaf, and highest extended (`0x8000_xxxx`) leaf.
 #[inline]
-fn max_leaves() -> (u32, u32) {
+pub fn max_leaves() -> (u32, u32) {
     let basic = cpuid(0, 0).eax;
     let ext = cpuid(0x8000_0000, 0).eax;
     // A CPU with no extended leaves returns something < 0x8000_0000 here.
@@ -116,7 +111,7 @@ fn max_leaves() -> (u32, u32) {
 /// probe-then-fall-through structure below is that an unrecognised vendor still
 /// gets whichever leaves it does implement. This only picks the order to try.
 #[inline]
-pub(super) fn is_amd_lineage() -> bool {
+pub fn is_amd_lineage() -> bool {
     let r = cpuid(0, 0);
     // Vendor string arrives split across EBX, EDX, ECX.
     let amd = r.ebx == 0x6874_7541 && r.edx == 0x6974_6e65 && r.ecx == 0x444d_4163; // "AuthenticAMD"
@@ -126,17 +121,11 @@ pub(super) fn is_amd_lineage() -> bool {
 
 /// Whether this is a genuine Intel part. Unlike [`is_amd_lineage`], which only
 /// picks which leaves to *try*, this gates a model-number table
-/// ([`quirks`](super::quirks)) whose entries are meaningless on a clone.
+/// (`thermite-cpu`'s `quirks` table) whose entries are meaningless on a clone.
 #[inline]
-pub(super) fn is_intel() -> bool {
+pub fn is_intel() -> bool {
     let r = cpuid(0, 0);
     r.ebx == 0x756e_6547 && r.edx == 0x4965_6e69 && r.ecx == 0x6c65_746e // "GenuineIntel"
-}
-
-/// CPU family, with the extended-family field folded in per the x86 rules.
-#[inline]
-fn family() -> u32 {
-    family_model().0
 }
 
 /// Family *and* model, with both extended fields folded in per the x86 rules.
@@ -147,7 +136,7 @@ fn family() -> u32 {
 /// is exactly the pair that matters, since every Intel Core part is family 6
 /// and every AMD Zen part is family `0x17`+ (base `0xf`, extended).
 #[inline]
-pub(super) fn family_model() -> (u32, u32) {
+pub fn family_model() -> (u32, u32) {
     let eax = cpuid(1, 0).eax;
     let base_family = (eax >> 8) & 0xf;
     let base_model = (eax >> 4) & 0xf;
@@ -164,221 +153,6 @@ pub(super) fn family_model() -> (u32, u32) {
     };
 
     (family, model)
-}
-
-/// Walk the deterministic-cache-parameter leaf. Intel uses `4`; AMD uses the
-/// identically-formatted `0x8000001D` (older AMD reported nothing here, which
-/// simply leaves the levels `None`).
-fn read_caches(info: &mut CpuInfo, leaf: u32) {
-    for sub in 0..16 {
-        let r = cpuid(leaf, sub);
-
-        let kind = match r.eax & 0x1f {
-            0 => break, // no more caches
-            1 => CacheKind::Data,
-            2 => CacheKind::Instruction,
-            _ => CacheKind::Unified,
-        };
-
-        let level = ((r.eax >> 5) & 0x7) as u8;
-        let fully_associative = (r.eax >> 9) & 1 != 0;
-        let shared_by = (((r.eax >> 14) & 0xfff) + 1) as u16;
-
-        let line = u64::from(r.ebx & 0xfff) + 1;
-        let partitions = u64::from((r.ebx >> 12) & 0x3ff) + 1;
-        let ways = u64::from((r.ebx >> 22) & 0x3ff) + 1;
-        let sets = u64::from(r.ecx) + 1;
-
-        let entry = CacheInfo {
-            size: (line * partitions * ways * sets) as u32,
-            line_size: Some(line as u32),
-            // 0 encodes fully associative, matching the sysfs convention.
-            associativity: Some(if fully_associative { 0 } else { ways as u16 }),
-            shared_by: Some(shared_by),
-            kind,
-        };
-
-        match (level, kind) {
-            (1, CacheKind::Data) => info.l1d = Some(entry),
-            (1, CacheKind::Instruction) => info.l1i = Some(entry),
-            // A unified L1 (rare, some Atom) counts as both.
-            (1, CacheKind::Unified) => {
-                info.l1d = Some(entry);
-                info.l1i = Some(entry);
-            }
-            (2, _) => info.l2 = Some(entry),
-            (3, _) => info.l3 = Some(entry),
-            _ => {}
-        }
-    }
-}
-
-/// Extended topology enumeration. Each subleaf's EBX is the count of logical
-/// processors *at and below* that level, so the SMT level gives threads-per-core
-/// and the widest level gives logical-per-package.
-fn read_topology(leaf: u32) -> (Option<u16>, Option<u16>) {
-    const LEVEL_SMT: u32 = 1;
-
-    let mut threads_per_core = None;
-    let mut widest = 0u16;
-
-    for sub in 0..8 {
-        let r = cpuid(leaf, sub);
-        let level_type = (r.ecx >> 8) & 0xff;
-        let count = (r.ebx & 0xffff) as u16;
-
-        if level_type == 0 {
-            break; // invalid level: enumeration is done
-        }
-        if count == 0 {
-            continue;
-        }
-        if level_type == LEVEL_SMT {
-            threads_per_core = Some(count);
-        }
-        widest = widest.max(count);
-    }
-
-    (threads_per_core, (widest > 0).then_some(widest))
-}
-
-/// AMD's own topology leaves.
-///
-/// Necessary because AMD parts advertise a max basic leaf well above `0xB`
-/// while implementing neither `0xB` nor `0x1F`, both of which return all zeros, so
-/// bounding by the max leaf is not enough to know the standard enumeration
-/// exists. Measured on a 16-core Zen: `max_basic = 0xD`, leaf `0xB` all zeros,
-/// while `0x80000008`/`0x8000001E` carry the real counts. Linux's topology code
-/// documents the same fallback.
-fn read_topology_amd(max_ext: u32) -> (Option<u16>, Option<u16>) {
-    let mut threads_per_core = None;
-    let mut logical = None;
-
-    if max_ext >= 0x8000_0008 {
-        // ECX[7:0] "NC": logical processors in this package, minus one.
-        logical = u16::try_from((cpuid(0x8000_0008, 0).ecx & 0xff) + 1).ok();
-    }
-
-    // EBX[15:8] is threads-per-core minus one, but only from family 0x17
-    // (Zen). Family 0x15 advertises the leaf with a *non-zero* SMT field that
-    // does not mean this, which is the exact trap Linux carries a patch for.
-    // It also needs TopoExt (0x80000001:ECX[22]).
-    if max_ext >= 0x8000_001E && family() >= 0x17 && bit(cpuid(0x8000_0001, 0).ecx, 22) {
-        threads_per_core = u16::try_from(((cpuid(0x8000_001E, 0).ebx >> 8) & 0xff) + 1).ok();
-    }
-
-    (threads_per_core, logical)
-}
-
-pub fn detect() -> CpuInfo {
-    let mut info = CpuInfo::UNKNOWN;
-    let (max_basic, max_ext) = max_leaves();
-
-    // --- cache geometry -------------------------------------------------
-    if max_basic >= 1 {
-        // EBX[15:8] is the `clflush` line size in 8-byte units.
-        let line = ((cpuid(1, 0).ebx >> 8) & 0xff) * 8;
-        if line > 0 {
-            info.line_size = Some(line);
-            // x86 has no separate writeback granule, and a line is the unit of
-            // coherence, so false-sharing padding is line-sized.
-            info.writeback_granule = Some(line);
-        }
-    }
-
-    // Try both cache leaves, most-likely-first by vendor, and fall through if
-    // the preferred one came back empty. An unrecognised vendor therefore still
-    // gets whichever it implements instead of being written off.
-    let (first, second) = if is_amd_lineage() {
-        (0x8000_001D, 4)
-    } else {
-        (4, 0x8000_001D)
-    };
-    for leaf in [first, second] {
-        let available = if leaf >= 0x8000_0000 {
-            max_ext >= leaf
-        } else {
-            max_basic >= leaf
-        };
-        if available {
-            read_caches(&mut info, leaf);
-        }
-        if info.l1d.is_some() {
-            break;
-        }
-    }
-
-    // Prefer the per-level line size if leaf 1 was silent.
-    if info.line_size.is_none()
-        && let Some(l1d) = info.l1d
-    {
-        info.line_size = l1d.line_size;
-        info.writeback_granule = l1d.line_size;
-    }
-
-    // --- topology -------------------------------------------------------
-    // 0x1F supersedes 0xB, and either may be *present but empty* (AMD reports a
-    // max basic leaf above both while implementing neither), so fall through on
-    // an empty result rather than trusting the leaf bound alone.
-    let mut topology = (None, None);
-    if max_basic >= 0x1F {
-        topology = read_topology(0x1F);
-    }
-    if topology.1.is_none() && max_basic >= 0xB {
-        topology = read_topology(0xB);
-    }
-    if topology.1.is_none() {
-        // Not gated on vendor: the leaves are AMD-defined but bounded by
-        // `max_ext`, and a non-AMD CPU that does not implement them simply
-        // reports nothing rather than garbage.
-        topology = read_topology_amd(max_ext);
-    }
-    let (threads_per_core, logical_per_package) = topology;
-
-    info.topology.threads_per_core = threads_per_core;
-
-    // The OS knows the whole machine (and honours affinity masks / cgroup
-    // limits); `cpuid` only ever describes one package.
-    #[cfg(feature = "std")]
-    {
-        info.topology.logical_cores = std::thread::available_parallelism()
-            .ok()
-            .and_then(|n| u16::try_from(n.get()).ok());
-    }
-    if info.topology.logical_cores.is_none() {
-        info.topology.logical_cores = logical_per_package;
-    }
-
-    if let (Some(logical), Some(per_core)) = (info.topology.logical_cores, threads_per_core)
-        && per_core > 0
-    {
-        info.topology.physical_cores = Some(logical / per_core);
-    }
-
-    // --- hybrid ---------------------------------------------------------
-    if max_basic >= 7 {
-        info.hybrid = (cpuid(7, 0).edx >> 15) & 1 != 0;
-    }
-    // P/E *counts* need every core interrogated in turn (each `cpuid` describes
-    // only the core it ran on), which means pinning threads. Deliberately left
-    // `None` rather than guessed; `current_core_type()` answers for this core.
-
-    info
-}
-
-pub fn current_core_type() -> CoreType {
-    let (max_basic, _) = max_leaves();
-
-    // Leaf 0x1A is only architecturally defined on a hybrid part.
-    if max_basic < 0x1A || (cpuid(7, 0).edx >> 15) & 1 == 0 {
-        return CoreType::Unknown;
-    }
-
-    match cpuid(0x1A, 0).eax >> 24 {
-        0x20 => CoreType::Efficiency,  // Atom
-        0x40 => CoreType::Performance, // Core
-        _ => CoreType::Unknown,
-    }
 }
 
 /// The feature bits [`InstructionSet`](crate::isa::InstructionSet) dispatches
@@ -622,4 +396,224 @@ pub fn features() -> Features {
     }
 
     f
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The dispatcher's hand-rolled `cpuid` must agree with the ISA the crate
+    /// was actually compiled to run on: if the build enabled a feature
+    /// statically, detection has to see it too.
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[test]
+    fn x86_features_agree_with_build() {
+        let f = features();
+
+        if cfg!(target_feature = "sse2") {
+            assert!(f.sse2, "built with sse2 but not detected");
+        }
+        if cfg!(target_feature = "avx2") {
+            assert!(f.avx2, "built with avx2 but not detected");
+        }
+        if cfg!(target_feature = "fma") {
+            assert!(f.fma, "built with fma but not detected");
+        }
+
+        // Implication chain: the wider level cannot be usable without the narrower.
+        assert!(!f.avx2 || f.avx, "avx2 without avx");
+        assert!(!f.avx512f || f.avx, "avx512f without avx");
+        assert!(!f.fma || f.avx, "fma without avx");
+        assert!(!f.sse42 || f.sse2, "sse4.2 without sse2");
+
+        // And it must pick a level consistent with those bits.
+        use crate::isa::InstructionSet;
+        let isa = InstructionSet::get();
+        match isa {
+            InstructionSet::X86V3 => assert!(f.avx2 && f.fma && f.popcnt),
+            InstructionSet::X86V2 => assert!(f.sse42 && f.popcnt),
+            InstructionSet::X86V1 => assert!(f.sse2),
+            _ => {}
+        }
+    }
+
+    /// The oracle for the hand-rolled detection that replaced `core_detect`:
+    /// `std`'s `std_detect` is the reference implementation, and it applies the
+    /// same `XCR0` rules. Any disagreement means dispatch could pick a backend
+    /// the OS or CPU cannot actually run, so this is checked bit for bit.
+    #[cfg(all(feature = "std", any(target_arch = "x86", target_arch = "x86_64")))]
+    #[test]
+    fn x86_features_match_std_detect() {
+        let f = features();
+
+        assert_eq!(f.sse2, std::is_x86_feature_detected!("sse2"), "sse2");
+        assert_eq!(f.sse42, std::is_x86_feature_detected!("sse4.2"), "sse4.2");
+        assert_eq!(f.popcnt, std::is_x86_feature_detected!("popcnt"), "popcnt");
+        assert_eq!(f.pclmulqdq, std::is_x86_feature_detected!("pclmulqdq"), "pclmulqdq");
+        assert_eq!(f.avx, std::is_x86_feature_detected!("avx"), "avx");
+        assert_eq!(f.avx2, std::is_x86_feature_detected!("avx2"), "avx2");
+        assert_eq!(f.fma, std::is_x86_feature_detected!("fma"), "fma");
+        assert_eq!(f.f16c, std::is_x86_feature_detected!("f16c"), "f16c");
+        assert_eq!(f.avx512f, std::is_x86_feature_detected!("avx512f"), "avx512f");
+
+        // The AVX-512 sub-features behind the tier ladder. `std_detect` applies
+        // the same XCR0 gate, so these must match on AVX-512 hardware and all be
+        // false on this (AVX2) machine.
+        assert_eq!(f.avx512cd, std::is_x86_feature_detected!("avx512cd"), "avx512cd");
+        assert_eq!(f.avx512bw, std::is_x86_feature_detected!("avx512bw"), "avx512bw");
+        assert_eq!(f.avx512dq, std::is_x86_feature_detected!("avx512dq"), "avx512dq");
+        assert_eq!(f.avx512vl, std::is_x86_feature_detected!("avx512vl"), "avx512vl");
+        assert_eq!(f.avx512vbmi, std::is_x86_feature_detected!("avx512vbmi"), "avx512vbmi");
+        assert_eq!(
+            f.avx512vbmi2,
+            std::is_x86_feature_detected!("avx512vbmi2"),
+            "avx512vbmi2"
+        );
+        assert_eq!(f.avx512vnni, std::is_x86_feature_detected!("avx512vnni"), "avx512vnni");
+        assert_eq!(
+            f.avx512bitalg,
+            std::is_x86_feature_detected!("avx512bitalg"),
+            "avx512bitalg"
+        );
+        assert_eq!(
+            f.avx512vpopcntdq,
+            std::is_x86_feature_detected!("avx512vpopcntdq"),
+            "avx512vpopcntdq"
+        );
+        assert_eq!(f.avx512ifma, std::is_x86_feature_detected!("avx512ifma"), "avx512ifma");
+        assert_eq!(f.avx512bf16, std::is_x86_feature_detected!("avx512bf16"), "avx512bf16");
+        assert_eq!(f.avx512fp16, std::is_x86_feature_detected!("avx512fp16"), "avx512fp16");
+        assert_eq!(f.gfni, std::is_x86_feature_detected!("gfni"), "gfni");
+        assert_eq!(f.vaes, std::is_x86_feature_detected!("vaes"), "vaes");
+        assert_eq!(f.vpclmulqdq, std::is_x86_feature_detected!("vpclmulqdq"), "vpclmulqdq");
+    }
+
+    /// The tier ladder must match `backend::x86::avx512f::tiers` exactly, and be
+    /// monotone: reaching tier N implies every feature of tiers below it.
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[test]
+    fn avx512_tiers_are_monotone() {
+        let f = features();
+
+        // No tier and no `avx512*` sub-feature without the foundation.
+        // Deliberately NOT asserted for gfni/vaes/vpclmulqdq: those are separate
+        // features that exist on AVX2-only parts (Zen 3+), and asserting
+        // otherwise is the bug this test caught in the first place.
+        if !f.avx512f {
+            assert_eq!(f.avx512_tier(), None, "a tier without AVX512F");
+            assert!(!f.avx512cd && !f.avx512bw && !f.avx512dq && !f.avx512vl);
+            assert!(!f.avx512vbmi && !f.avx512vbmi2 && !f.avx512vnni && !f.avx512bitalg);
+            assert!(!f.avx512vpopcntdq && !f.avx512ifma && !f.avx512bf16 && !f.avx512fp16);
+            // AVX10 folds the foundation in, so it cannot outlive it either.
+            assert_eq!(f.avx10_version, 0, "AVX10 without AVX512F");
+        }
+
+        // Synthesise each rung and check it reports exactly that rung: this pins
+        // the ladder itself, on any host, including CI without AVX-512.
+        // The Knights Landing shape (F + CD and nothing else) is below the
+        // ladder's floor: without BW/DQ/VL there is nothing the backend wants.
+        let mut synthetic = Features {
+            avx512f: true,
+            avx512cd: true,
+            ..Default::default()
+        };
+        assert_eq!(synthetic.avx512_tier(), None, "KNL shape is not a tier");
+
+        // BW + DQ alone is still not tier 1: VL is required with them. (No real
+        // CPU is shaped like this, Skylake-SP having brought all three at once,
+        // but it pins that VL actually gates the floor.)
+        synthetic.avx512bw = true;
+        synthetic.avx512dq = true;
+        assert_eq!(synthetic.avx512_tier(), None, "promoted without VL");
+
+        synthetic.avx512vl = true;
+        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier1));
+
+        // Tier 2 needs all nine, so check it does not promote on a partial set.
+        synthetic.avx512vbmi = true;
+        synthetic.avx512vnni = true;
+        assert_eq!(
+            synthetic.avx512_tier(),
+            Some(Avx512Tier::Tier1),
+            "promoted on a partial tier 2"
+        );
+
+        synthetic.avx512vbmi2 = true;
+        synthetic.avx512bitalg = true;
+        synthetic.avx512vpopcntdq = true;
+        synthetic.avx512ifma = true;
+        synthetic.gfni = true;
+        synthetic.vaes = true;
+        synthetic.vpclmulqdq = true;
+        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier2));
+
+        synthetic.avx512bf16 = true;
+        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier3));
+
+        // Dropping VL from a full-featured part falls below the ladder
+        // entirely: without it there are no 128/256-bit EVEX encodings, which
+        // is most of what this crate wants from AVX-512. (Also the Cooper Lake
+        // pin, inverted: BF16 without the tier-2 set stays tier 1.)
+        let mut no_vl = synthetic;
+        no_vl.avx512vl = false;
+        assert_eq!(no_vl.avx512_tier(), None, "VL is part of the floor");
+
+        let cooper_lake = Features {
+            avx512f: true,
+            avx512cd: true,
+            avx512bw: true,
+            avx512dq: true,
+            avx512vl: true,
+            avx512bf16: true,
+            ..Default::default() // no tier-2 set
+        };
+        assert_eq!(
+            cooper_lake.avx512_tier(),
+            Some(Avx512Tier::Tier1),
+            "BF16 without the tier-2 set must not promote"
+        );
+
+        // F alone is below the floor too.
+        let f_only = Features {
+            avx512f: true,
+            ..Default::default()
+        };
+        assert_eq!(f_only.avx512_tier(), None);
+
+        assert!(Avx512Tier::Tier1 < Avx512Tier::Tier3, "tiers must order");
+    }
+
+    /// AVX10 is a version number, not a feature alphabet: `features()` must
+    /// fold version >= 1 into the full AVX-512 flag set, and the raw-version
+    /// mapping must treat unknown future versions as supersets.
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    #[test]
+    fn avx10_implies_the_full_ladder() {
+        let f = features();
+
+        // On real AVX10 hardware the fold must have landed: the whole ladder,
+        // plus the pieces no tier requires (FP16).
+        if f.avx10().is_some() {
+            assert_eq!(f.avx512_tier(), Some(Avx512Tier::Tier3));
+            assert!(f.avx512fp16 && f.avx512vl && f.gfni && f.vaes && f.vpclmulqdq);
+        }
+
+        // The raw-version -> rung mapping. Versions are strict supersets with
+        // no optional parts, so an unknown future version still satisfies
+        // everything 10.2 promises and must not report `None`.
+        let mut s = Features::default();
+        assert_eq!(s.avx10(), None);
+        s.avx10_version = 1;
+        assert_eq!(s.avx10(), Some(Avx10Version::V10_1));
+        s.avx10_version = 2;
+        assert_eq!(s.avx10(), Some(Avx10Version::V10_2));
+        s.avx10_version = 9;
+        assert_eq!(
+            s.avx10(),
+            Some(Avx10Version::V10_2),
+            "future versions are supersets of 10.2"
+        );
+
+        assert!(Avx10Version::V10_1 < Avx10Version::V10_2, "versions must order");
+    }
 }

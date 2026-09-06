@@ -1,11 +1,11 @@
 //! Microarchitectural quirks: instructions that **exist** but are microcoded.
 //!
 //! This is the one module here that breaks the rule stated in the [parent
-//! module docs](super): every value below comes from a vendor/family/model
+//! module docs](crate): every value below comes from a vendor/family/model
 //! table, not from the hardware. That is not an oversight. There is no
 //! enumeration bit for "this instruction is a microcode sequence", there never
 //! has been one, and the gap between the fast and slow implementations of the
-//! same opcode reaches **70x** (see [`Quirks::fast_compress_store`](crate::cpu::quirks::Quirks)). Refusing
+//! same opcode reaches **70x** (see [`Quirks::fast_compress_store`](crate::quirks::Quirks::fast_compress_store)). Refusing
 //! to guess would mean refusing to answer at all.
 //!
 //! Everything here is therefore:
@@ -34,7 +34,7 @@
 //!
 //! # Consuming these
 //!
-//! Read the flag **once, at the [`dispatch`](crate::dispatch) boundary**, and
+//! Read the flag **once, at the [`dispatch`](thermite::dispatch) boundary**, and
 //! branch there. A quirk test inside a hot loop costs more than the quirk.
 //!
 //! ```no_run
@@ -47,10 +47,7 @@
 //! }
 //! ```
 
-use core::cell::UnsafeCell;
-use core::sync::atomic::AtomicU8;
-
-use super::Cache;
+use thermite::isa::DetectOnce;
 
 /// Which microcoded-instruction traps this CPU has. Get one from
 /// [`Quirks::get`].
@@ -122,8 +119,8 @@ pub struct Quirks {
     /// measured with a fast form, so this is `false` for all of them rather
     /// than optimistic about the ones not in the data.
     ///
-    /// Gates [`count_conflicts`](crate::vector::IntegerVector::count_conflicts)
-    /// and [`group_by_value`](crate::vector::PartialOrdVector::group_by_value). Only
+    /// Gates [`count_conflicts`](thermite::vector::IntegerVector::count_conflicts)
+    /// and [`group_by_value`](thermite::vector::PartialOrdVector::group_by_value). Only
     /// meaningful when `avx512cd` is also present, since on a part without it the
     /// polyfill runs regardless of what this says.
     pub fast_conflict_detect: bool,
@@ -162,10 +159,7 @@ impl Quirks {
     /// answer a question whose answer is a hint.
     #[inline]
     pub fn get() -> &'static Quirks {
-        static CACHE: Cache<Quirks> = Cache {
-            state: AtomicU8::new(super::UNINIT),
-            value: UnsafeCell::new(Quirks::CONSERVATIVE),
-        };
+        static CACHE: DetectOnce<Quirks> = DetectOnce::new(Quirks::CONSERVATIVE);
 
         CACHE.get(Quirks::detect)
     }
@@ -203,7 +197,7 @@ impl Quirks {
 
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 fn detect_x86() -> Quirks {
-    use super::x86::{family_model, is_amd_lineage, is_intel};
+    use thermite::isa::x86::{family_model, is_amd_lineage, is_intel};
 
     let (family, model) = family_model();
 

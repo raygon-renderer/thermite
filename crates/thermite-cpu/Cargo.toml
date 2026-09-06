@@ -1,0 +1,29 @@
+[package]
+name = "thermite-cpu"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+description = "Host machine facts for Thermite: cache geometry, core topology, hybrid core type, microcode quirks"
+keywords = ["simd", "cpuid", "cache", "topology", "no-std"]
+categories = ["hardware-support", "no-std"]
+publish = false # not ready for release yet
+
+[lints]
+workspace = true
+
+[dependencies]
+thermite = { workspace = true }
+
+[dev-dependencies]
+thermite = { workspace = true, features = ["std"] }
+# Self-dependency so tests see the `std` surface (sysfs readers, the
+# `std_detect` oracle) without every invocation passing `--features std`.
+thermite-cpu = { path = ".", features = ["std"] }
+
+[features]
+default = []
+std = ["thermite/std"]

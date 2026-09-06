@@ -12,7 +12,7 @@
 //! family and model. Its values are performance hints and nothing branches on
 //! them for correctness.
 //!
-//! This is deliberately *not* on [`NativeIsa`](crate::simd::NativeIsa). Nothing
+//! This is deliberately *not* on [`NativeIsa`](thermite::simd::NativeIsa). Nothing
 //! here varies by backend (`rdtsc` is the same instruction whether the caller
 //! is running SSE2 or AVX2 kernels), it varies by **target and host**, so it
 //! lives in one place and every backend sees the same answer.
@@ -53,13 +53,17 @@
 //!   first. On Alder Lake-class parts P and E cores report *different L2 sizes*,
 //!   so pin the thread and call [`CpuInfo::detect`] if that distinction matters.
 
-use core::cell::UnsafeCell;
-use core::sync::atomic::{AtomicU8, Ordering};
+#![no_std]
 
-/// x86-specific CPU features, including the AVX-512 tier ladder. Only compiled
-/// on x86/x86_64, since nothing in it is meaningful elsewhere.
+#[cfg(feature = "std")]
+extern crate std;
+
+use thermite::isa::DetectOnce;
+
+/// x86 cache geometry, topology and live core type via `cpuid`. Only compiled
+/// on x86/x86_64; the feature bits live in `thermite::isa::x86`.
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-pub mod x86;
+mod x86;
 
 /// Apple-specific scheduling control (macOS / iOS): quality-of-service classes,
 /// which are how the platform lets you *influence* P-core versus E-core
@@ -168,10 +172,7 @@ impl CpuInfo {
     /// live view on hybrid parts.
     #[inline]
     pub fn get() -> &'static CpuInfo {
-        static CACHE: Cache<CpuInfo> = Cache {
-            state: AtomicU8::new(UNINIT),
-            value: UnsafeCell::new(CpuInfo::UNKNOWN),
-        };
+        static CACHE: DetectOnce<CpuInfo> = DetectOnce::new(CpuInfo::UNKNOWN);
 
         CACHE.get(CpuInfo::detect)
     }
@@ -220,7 +221,7 @@ impl CpuInfo {
 
     /// Cache line size in bytes -- 64 on x86 and most aarch64, **128 on Apple
     /// silicon**. The number to align hot structures to and to stride prefetches
-    /// by. See [`crate::backend::prefetch`].
+    /// by. See [`thermite::backend::prefetch`].
     #[inline]
     pub fn cache_line_size(&self) -> Option<u32> {
         self.line_size
@@ -244,69 +245,6 @@ impl CpuInfo {
     #[inline]
     pub fn is_hybrid(&self) -> bool {
         self.hybrid
-    }
-}
-
-pub(crate) const UNINIT: u8 = 0;
-const BUSY: u8 = 1;
-const READY: u8 = 2;
-
-/// Write-once cell, in the same shape as the ISA detector
-/// (`isa/x86_detector.rs`): a state machine in an atomic guarding a single
-/// publish, rather than a lock.
-///
-/// Generic over the payload so the snapshot and the [`quirks`] table share one
-/// implementation, since both are "run a short `cpuid` sequence once, publish the
-/// result forever", and a second hand-rolled copy of this is exactly the kind
-/// of thing that acquires a subtle ordering bug in only one of its versions.
-pub(crate) struct Cache<T: 'static> {
-    pub(crate) state: AtomicU8,
-    pub(crate) value: UnsafeCell<T>,
-}
-
-// SAFETY: `value` is written exactly once, by whichever thread wins the CAS to
-// `BUSY`, and is only ever read after an `Acquire` load observes `READY`,
-// which synchronizes with that writer's `Release` store.
-unsafe impl<T: Send> Sync for Cache<T> {}
-
-impl<T> Cache<T> {
-    /// The cached value, running `detect` exactly once across all threads.
-    #[inline]
-    pub(crate) fn get(&'static self, detect: fn() -> T) -> &'static T {
-        // Fast path: already published by whoever won the race.
-        if self.state.load(Ordering::Acquire) != READY {
-            self.init(detect);
-        }
-
-        // SAFETY: the state is `READY`, reached through an `Acquire` load that
-        // synchronizes with the writer's `Release` store, so the write has
-        // completed and no writer can still be running. Nothing mutates it again.
-        unsafe { &*self.value.get() }
-    }
-
-    #[inline(never)]
-    fn init(&self, detect: fn() -> T) {
-        match self
-            .state
-            .compare_exchange(UNINIT, BUSY, Ordering::AcqRel, Ordering::Acquire)
-        {
-            Ok(_) => {
-                let detected = detect();
-                // SAFETY: the CAS made this thread the unique writer, and no
-                // reader can observe the cell until the store below publishes it.
-                unsafe { *self.value.get() = detected };
-                self.state.store(READY, Ordering::Release);
-            }
-            // Another thread is detecting. It is a short, lock-free, non-blocking
-            // job (a handful of `cpuid`s), so spin rather than park.
-            Err(BUSY) => {
-                while self.state.load(Ordering::Acquire) != READY {
-                    core::hint::spin_loop();
-                }
-            }
-            // Already `READY`.
-            Err(_) => {}
-        }
     }
 }
 
@@ -416,225 +354,6 @@ mod tests {
         if !info.is_hybrid() {
             assert_eq!(*info, CpuInfo::detect(), "uncached detect disagrees with the snapshot");
         }
-    }
-
-    /// The dispatcher's hand-rolled `cpuid` must agree with the ISA the crate
-    /// was actually compiled to run on: if the build enabled a feature
-    /// statically, detection has to see it too.
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    #[test]
-    fn x86_features_agree_with_build() {
-        let f = crate::cpu::x86::features();
-
-        if cfg!(target_feature = "sse2") {
-            assert!(f.sse2, "built with sse2 but not detected");
-        }
-        if cfg!(target_feature = "avx2") {
-            assert!(f.avx2, "built with avx2 but not detected");
-        }
-        if cfg!(target_feature = "fma") {
-            assert!(f.fma, "built with fma but not detected");
-        }
-
-        // Implication chain: the wider level cannot be usable without the narrower.
-        assert!(!f.avx2 || f.avx, "avx2 without avx");
-        assert!(!f.avx512f || f.avx, "avx512f without avx");
-        assert!(!f.fma || f.avx, "fma without avx");
-        assert!(!f.sse42 || f.sse2, "sse4.2 without sse2");
-
-        // And it must pick a level consistent with those bits.
-        use crate::isa::InstructionSet;
-        let isa = InstructionSet::get();
-        match isa {
-            InstructionSet::X86V3 => assert!(f.avx2 && f.fma && f.popcnt),
-            InstructionSet::X86V2 => assert!(f.sse42 && f.popcnt),
-            InstructionSet::X86V1 => assert!(f.sse2),
-            _ => {}
-        }
-    }
-
-    /// The oracle for the hand-rolled detection that replaced `core_detect`:
-    /// `std`'s `std_detect` is the reference implementation, and it applies the
-    /// same `XCR0` rules. Any disagreement means dispatch could pick a backend
-    /// the OS or CPU cannot actually run, so this is checked bit for bit.
-    #[cfg(all(feature = "std", any(target_arch = "x86", target_arch = "x86_64")))]
-    #[test]
-    fn x86_features_match_std_detect() {
-        let f = crate::cpu::x86::features();
-
-        assert_eq!(f.sse2, std::is_x86_feature_detected!("sse2"), "sse2");
-        assert_eq!(f.sse42, std::is_x86_feature_detected!("sse4.2"), "sse4.2");
-        assert_eq!(f.popcnt, std::is_x86_feature_detected!("popcnt"), "popcnt");
-        assert_eq!(f.pclmulqdq, std::is_x86_feature_detected!("pclmulqdq"), "pclmulqdq");
-        assert_eq!(f.avx, std::is_x86_feature_detected!("avx"), "avx");
-        assert_eq!(f.avx2, std::is_x86_feature_detected!("avx2"), "avx2");
-        assert_eq!(f.fma, std::is_x86_feature_detected!("fma"), "fma");
-        assert_eq!(f.f16c, std::is_x86_feature_detected!("f16c"), "f16c");
-        assert_eq!(f.avx512f, std::is_x86_feature_detected!("avx512f"), "avx512f");
-
-        // The AVX-512 sub-features behind the tier ladder. `std_detect` applies
-        // the same XCR0 gate, so these must match on AVX-512 hardware and all be
-        // false on this (AVX2) machine.
-        assert_eq!(f.avx512cd, std::is_x86_feature_detected!("avx512cd"), "avx512cd");
-        assert_eq!(f.avx512bw, std::is_x86_feature_detected!("avx512bw"), "avx512bw");
-        assert_eq!(f.avx512dq, std::is_x86_feature_detected!("avx512dq"), "avx512dq");
-        assert_eq!(f.avx512vl, std::is_x86_feature_detected!("avx512vl"), "avx512vl");
-        assert_eq!(f.avx512vbmi, std::is_x86_feature_detected!("avx512vbmi"), "avx512vbmi");
-        assert_eq!(
-            f.avx512vbmi2,
-            std::is_x86_feature_detected!("avx512vbmi2"),
-            "avx512vbmi2"
-        );
-        assert_eq!(f.avx512vnni, std::is_x86_feature_detected!("avx512vnni"), "avx512vnni");
-        assert_eq!(
-            f.avx512bitalg,
-            std::is_x86_feature_detected!("avx512bitalg"),
-            "avx512bitalg"
-        );
-        assert_eq!(
-            f.avx512vpopcntdq,
-            std::is_x86_feature_detected!("avx512vpopcntdq"),
-            "avx512vpopcntdq"
-        );
-        assert_eq!(f.avx512ifma, std::is_x86_feature_detected!("avx512ifma"), "avx512ifma");
-        assert_eq!(f.avx512bf16, std::is_x86_feature_detected!("avx512bf16"), "avx512bf16");
-        assert_eq!(f.avx512fp16, std::is_x86_feature_detected!("avx512fp16"), "avx512fp16");
-        assert_eq!(f.gfni, std::is_x86_feature_detected!("gfni"), "gfni");
-        assert_eq!(f.vaes, std::is_x86_feature_detected!("vaes"), "vaes");
-        assert_eq!(f.vpclmulqdq, std::is_x86_feature_detected!("vpclmulqdq"), "vpclmulqdq");
-    }
-
-    /// The tier ladder must match `backend::x86::avx512f::tiers` exactly, and be
-    /// monotone: reaching tier N implies every feature of tiers below it.
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    #[test]
-    fn avx512_tiers_are_monotone() {
-        use crate::cpu::x86::{Avx512Tier, Features};
-
-        let f = crate::cpu::x86::features();
-
-        // No tier and no `avx512*` sub-feature without the foundation.
-        // Deliberately NOT asserted for gfni/vaes/vpclmulqdq: those are separate
-        // features that exist on AVX2-only parts (Zen 3+), and asserting
-        // otherwise is the bug this test caught in the first place.
-        if !f.avx512f {
-            assert_eq!(f.avx512_tier(), None, "a tier without AVX512F");
-            assert!(!f.avx512cd && !f.avx512bw && !f.avx512dq && !f.avx512vl);
-            assert!(!f.avx512vbmi && !f.avx512vbmi2 && !f.avx512vnni && !f.avx512bitalg);
-            assert!(!f.avx512vpopcntdq && !f.avx512ifma && !f.avx512bf16 && !f.avx512fp16);
-            // AVX10 folds the foundation in, so it cannot outlive it either.
-            assert_eq!(f.avx10_version, 0, "AVX10 without AVX512F");
-        }
-
-        // Synthesise each rung and check it reports exactly that rung: this pins
-        // the ladder itself, on any host, including CI without AVX-512.
-        // The Knights Landing shape (F + CD and nothing else) is below the
-        // ladder's floor: without BW/DQ/VL there is nothing the backend wants.
-        let mut synthetic = Features {
-            avx512f: true,
-            avx512cd: true,
-            ..Default::default()
-        };
-        assert_eq!(synthetic.avx512_tier(), None, "KNL shape is not a tier");
-
-        // BW + DQ alone is still not tier 1: VL is required with them. (No real
-        // CPU is shaped like this, Skylake-SP having brought all three at once,
-        // but it pins that VL actually gates the floor.)
-        synthetic.avx512bw = true;
-        synthetic.avx512dq = true;
-        assert_eq!(synthetic.avx512_tier(), None, "promoted without VL");
-
-        synthetic.avx512vl = true;
-        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier1));
-
-        // Tier 2 needs all nine, so check it does not promote on a partial set.
-        synthetic.avx512vbmi = true;
-        synthetic.avx512vnni = true;
-        assert_eq!(
-            synthetic.avx512_tier(),
-            Some(Avx512Tier::Tier1),
-            "promoted on a partial tier 2"
-        );
-
-        synthetic.avx512vbmi2 = true;
-        synthetic.avx512bitalg = true;
-        synthetic.avx512vpopcntdq = true;
-        synthetic.avx512ifma = true;
-        synthetic.gfni = true;
-        synthetic.vaes = true;
-        synthetic.vpclmulqdq = true;
-        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier2));
-
-        synthetic.avx512bf16 = true;
-        assert_eq!(synthetic.avx512_tier(), Some(Avx512Tier::Tier3));
-
-        // Dropping VL from a full-featured part falls below the ladder
-        // entirely: without it there are no 128/256-bit EVEX encodings, which
-        // is most of what this crate wants from AVX-512. (Also the Cooper Lake
-        // pin, inverted: BF16 without the tier-2 set stays tier 1.)
-        let mut no_vl = synthetic;
-        no_vl.avx512vl = false;
-        assert_eq!(no_vl.avx512_tier(), None, "VL is part of the floor");
-
-        let cooper_lake = Features {
-            avx512f: true,
-            avx512cd: true,
-            avx512bw: true,
-            avx512dq: true,
-            avx512vl: true,
-            avx512bf16: true,
-            ..Default::default() // no tier-2 set
-        };
-        assert_eq!(
-            cooper_lake.avx512_tier(),
-            Some(Avx512Tier::Tier1),
-            "BF16 without the tier-2 set must not promote"
-        );
-
-        // F alone is below the floor too.
-        let f_only = Features {
-            avx512f: true,
-            ..Default::default()
-        };
-        assert_eq!(f_only.avx512_tier(), None);
-
-        assert!(Avx512Tier::Tier1 < Avx512Tier::Tier3, "tiers must order");
-    }
-
-    /// AVX10 is a version number, not a feature alphabet: `features()` must
-    /// fold version >= 1 into the full AVX-512 flag set, and the raw-version
-    /// mapping must treat unknown future versions as supersets.
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    #[test]
-    fn avx10_implies_the_full_ladder() {
-        use crate::cpu::x86::{Avx10Version, Avx512Tier, Features};
-
-        let f = crate::cpu::x86::features();
-
-        // On real AVX10 hardware the fold must have landed: the whole ladder,
-        // plus the pieces no tier requires (FP16).
-        if f.avx10().is_some() {
-            assert_eq!(f.avx512_tier(), Some(Avx512Tier::Tier3));
-            assert!(f.avx512fp16 && f.avx512vl && f.gfni && f.vaes && f.vpclmulqdq);
-        }
-
-        // The raw-version -> rung mapping. Versions are strict supersets with
-        // no optional parts, so an unknown future version still satisfies
-        // everything 10.2 promises and must not report `None`.
-        let mut s = Features::default();
-        assert_eq!(s.avx10(), None);
-        s.avx10_version = 1;
-        assert_eq!(s.avx10(), Some(Avx10Version::V10_1));
-        s.avx10_version = 2;
-        assert_eq!(s.avx10(), Some(Avx10Version::V10_2));
-        s.avx10_version = 9;
-        assert_eq!(
-            s.avx10(),
-            Some(Avx10Version::V10_2),
-            "future versions are supersets of 10.2"
-        );
-
-        assert!(Avx10Version::V10_1 < Avx10Version::V10_2, "versions must order");
     }
 
     #[cfg(target_arch = "aarch64")]

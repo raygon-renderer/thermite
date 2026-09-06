@@ -4,6 +4,7 @@ default-members = [
     "crates/thermite",
     "crates/thermite-blas",
     "crates/thermite-compensated",
+    "crates/thermite-cpu",
     "crates/thermite-complex",
     "crates/thermite-dual",
     "crates/thermite-geometry",
@@ -60,16 +61,18 @@ panic = "abort"
 [workspace.dependencies]
 # Exact pin: the macros emit code that references thermite internals, so the
 # published pair must stay in lockstep (same reason serde pins serde_derive).
-thermite-macros = { path = "crates/thermite-macros", version = "=0.2.1" }
+thermite-macros = { path = "crates/thermite-macros", version = "=0.3.0" }
 
-thermite = { path = "crates/thermite", version = "0.2.1", default-features = false }
-thermite-special = { path = "crates/thermite-special", version = "0.2.1", default-features = false }
-thermite-geometry = { path = "crates/thermite-geometry", version = "0.2.1", default-features = false }
-thermite-dual = { path = "crates/thermite-dual", version = "0.2.1", default-features = false }
-thermite-compensated = { path = "crates/thermite-compensated", version = "0.2.1", default-features = false }
-thermite-interval = { path = "crates/thermite-interval", version = "0.2.1", default-features = false }
-thermite-complex = { path = "crates/thermite-complex", version = "0.2.1", default-features = false }
-thermite-sort = { path = "crates/thermite-sort", version = "0.2.1", default-features = false }
+thermite = { path = "crates/thermite", version = "0.3.0", default-features = false }
+thermite-special = { path = "crates/thermite-special", version = "0.3.0", default-features = false }
+thermite-geometry = { path = "crates/thermite-geometry", version = "0.3.0", default-features = false }
+# thermite-gaussian = { path = "crates/thermite-gaussian", version = "0.3.0", default-features = false }
+thermite-dual = { path = "crates/thermite-dual", version = "0.3.0", default-features = false }
+thermite-compensated = { path = "crates/thermite-compensated", version = "0.3.0", default-features = false }
+thermite-cpu = { path = "crates/thermite-cpu", version = "0.3.0", default-features = false }
+thermite-interval = { path = "crates/thermite-interval", version = "0.3.0", default-features = false }
+thermite-complex = { path = "crates/thermite-complex", version = "0.3.0", default-features = false }
+thermite-sort = { path = "crates/thermite-sort", version = "0.3.0", default-features = false }
 
 spirv-builder = { version = "0.9.0" }
 spirv-std-macros = { version = "0.9.0" }
