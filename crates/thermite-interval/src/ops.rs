@@ -272,26 +272,29 @@ impl<V: IntervalFloatVector, W: WideningPolicy> Interval<V, W> {
         let x_pos = self.lo.cmp_gt(V::ZERO);
         let x_neg = self.hi.cmp_lt(V::ZERO);
 
-        let widen_dn = |v: V| {
+        #[inline(always)]
+        fn widen_dn<V: IntervalFloatVector, W: WideningPolicy>(v: V) -> V {
             if const { is_fastest::<W>() } {
                 scale_down(v)
             } else {
                 bump_down(v)
             }
-        };
-        let widen_up = |v: V| {
+        }
+
+        #[inline(always)]
+        fn widen_up<V: IntervalFloatVector, W: WideningPolicy>(v: V) -> V {
             if const { is_fastest::<W>() } {
                 scale_up(v)
             } else {
                 bump_up(v)
             }
-        };
+        }
 
         // For y = [0, yu] the finite bound is x?/yu, and for y = [yl, 0] it is x?/yl.
-        let lo = (zero_div & y_zero_lo & x_pos).select(widen_dn(self.lo / rhs.hi), lo);
-        let hi = (zero_div & y_zero_lo & x_neg).select(widen_up(self.hi / rhs.hi), hi);
-        let hi = (zero_div & y_zero_hi & x_pos).select(widen_up(self.lo / rhs.lo), hi);
-        let lo = (zero_div & y_zero_hi & x_neg).select(widen_dn(self.hi / rhs.lo), lo);
+        let lo = (zero_div & y_zero_lo & x_pos).select(widen_dn::<V, W>(self.lo / rhs.hi), lo);
+        let hi = (zero_div & y_zero_lo & x_neg).select(widen_up::<V, W>(self.hi / rhs.hi), hi);
+        let hi = (zero_div & y_zero_hi & x_pos).select(widen_up::<V, W>(self.lo / rhs.lo), hi);
+        let lo = (zero_div & y_zero_hi & x_neg).select(widen_dn::<V, W>(self.hi / rhs.lo), lo);
 
         Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
     }

@@ -317,12 +317,16 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedCoreMath<IntervalElem<
     /// functions of `x` (mignitude/magnitude), odd ones are monotone.
     #[inline(always)]
     fn powi<P: Policy>(self, e: i32) -> Self {
-        let f = |x: V| x.powi_p::<KernelPolicy<P>>(e);
-
         if e % 2 == 0 {
-            self.even_inc::<P, true>(f)
+            self.even_inc::<P, true>(
+                #[inline(always)]
+                |x: V| x.powi_p::<KernelPolicy<P>>(e),
+            )
         } else {
-            self.monotone_inc::<P>(f)
+            self.monotone_inc::<P>(
+                #[inline(always)]
+                |x: V| x.powi_p::<KernelPolicy<P>>(e),
+            )
         }
     }
 
@@ -770,13 +774,17 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
             return self;
         }
 
-        let f = |x: V| x.nth_root_n_p::<KernelPolicy<P>, N>();
-
         if const { N & 1 == 1 } {
-            self.monotone_inc::<P>(f)
+            self.monotone_inc::<P>(
+                #[inline(always)]
+                |x: V| x.nth_root_n_p::<KernelPolicy<P>, N>(),
+            )
         } else {
             let empty = self.hi.cmp_lt(V::ZERO);
-            let r = self.restrict(V::ZERO, V::INFINITY).monotone_inc::<P>(f);
+            let r = self.restrict(V::ZERO, V::INFINITY).monotone_inc::<P>(
+                #[inline(always)]
+                |x: V| x.nth_root_n_p::<KernelPolicy<P>, N>(),
+            );
             Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
         }
     }
@@ -790,13 +798,17 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedTranscendentalMath<Int
             return self;
         }
 
-        let f = |x: V| x.nth_root_p::<KernelPolicy<P>>(n);
-
         if n & 1 == 1 {
-            self.monotone_inc::<P>(f)
+            self.monotone_inc::<P>(
+                #[inline(always)]
+                |x: V| x.nth_root_p::<KernelPolicy<P>>(n),
+            )
         } else {
             let empty = self.hi.cmp_lt(V::ZERO);
-            let r = self.restrict(V::ZERO, V::INFINITY).monotone_inc::<P>(f);
+            let r = self.restrict(V::ZERO, V::INFINITY).monotone_inc::<P>(
+                #[inline(always)]
+                |x: V| x.nth_root_p::<KernelPolicy<P>>(n),
+            );
             Self::from_bounds_unchecked(empty.select(V::INFINITY, r.lo), empty.select(V::NEG_INFINITY, r.hi))
         }
     }
@@ -1220,5 +1232,4 @@ impl<V: IntervalMathVector, W: WideningPolicy> SpecializedRealMath<IntervalElem<
 
         Self::from_bounds_unchecked(poison.select(V::INFINITY, lo), poison.select(V::NEG_INFINITY, hi))
     }
-
 }

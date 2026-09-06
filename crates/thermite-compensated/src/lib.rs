@@ -782,7 +782,7 @@ impl<E: ScalarValue + FloatElement> FloatElement for Compensated<E> {
             return None;
         }
 
-        let df= <E as FloatElement>::try_from_int(d)?;
+        let df = <E as FloatElement>::try_from_int(d)?;
 
         // fast path for values that both fit in the float exactly
         if let Some(n) = <E as FloatElement>::try_from_int(n) {
