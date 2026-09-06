@@ -229,6 +229,7 @@ pub fn rng() -> SmallRng {
 }
 
 /// One input array of exactly `LANES` elements.
+#[inline(always)]
 pub fn make_array<R>(values: &[R::Element]) -> Storage<R>
 where
     R: Register,
@@ -241,6 +242,7 @@ where
 }
 
 /// Read a register's lanes back as a `Vec`.
+#[inline(always)]
 pub fn read<R>(storage: &Storage<R>) -> Vec<R::Element>
 where
     R: Register,
@@ -251,12 +253,14 @@ where
 
 /// Build a mask register from a known boolean pattern (`bools.len()` must be
 /// at least `LANES`). Shared by the mask / comparison / predicate suites.
+#[inline(always)]
 pub fn build_mask<R: Register>(bools: &[bool]) -> Storage<R::Mask> {
     let arr: GenericArray<bool, <R::Mask as CoreRegister>::Lanes> = GenericArray::generate(|i| bools[i]);
     <R::Mask as MaskRegister>::new_mask(arr)
 }
 
 /// Read a mask register back into a `Vec<bool>`, lane by lane.
+#[inline(always)]
 pub fn read_mask<R: Register>(mask: Storage<R::Mask>, lanes: usize) -> Vec<bool> {
     (0..lanes).map(|i| <R::Mask as MaskRegister>::test(mask, i)).collect()
 }
@@ -335,16 +339,19 @@ pub fn assert_lanes_eq<E: Diff>(label: &str, inputs: &[&[E]], got: &[E], want: &
 /// Can the host execute backend `S`? Capability order is the enum's declaration
 /// order within an architecture, and `InstructionSet::get()` is constant on NEON
 /// and WASM, so `<=` is the whole check. `Scalar` is always available.
+#[inline(always)]
 pub fn available<S: HasIsa>() -> bool {
     S::ISA <= InstructionSet::get()
 }
 
 /// `"X86V3 f32x4"`-style label for a (backend, slot) pair, for assertion messages.
+#[inline(always)]
 pub fn label<S: HasIsa>(slot: &str) -> String {
     format!("{:?} {slot}", S::ISA)
 }
 
 /// Run one backend row, or skip it (visibly) when the host lacks the ISA.
+#[inline(always)]
 pub fn run<S: HasIsa>(test: fn()) {
     if !available::<S>() {
         eprintln!(

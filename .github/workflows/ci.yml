@@ -220,8 +220,14 @@ jobs:
   # notes/thermite-audit) and scanned for kernels compiled without their
   # backend's target features. x86 only on purpose. NEON and simd128 are
   # baseline on the ARM and wasm jobs' targets, so the audit skips those.
+  #
+  # Opt-in: put `[audit]` in the commit message to run it. It costs a full
+  # `--emit=llvm-ir` build of every target, so it is not worth paying on
+  # every push. `head_commit` exists only for push events, so pull_request
+  # runs never trigger it.
   audit:
     name: Dispatch audit (dev, x86)
+    if: ${{ contains(github.event.head_commit.message, '[audit]') }}
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
