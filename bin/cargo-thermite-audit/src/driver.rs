@@ -12,7 +12,8 @@ use std::time::SystemTime;
 use serde_json::Value;
 
 use crate::AuditOpts;
-use crate::{ir, report, rules};
+use crate::ir;
+use crate::rules::Report;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Kind {
@@ -133,15 +134,15 @@ pub fn run(sel: &Selection, opts: &AuditOpts) -> Result<bool, String> {
                 println!("== {title}: BUILD FAILED\n{e}");
                 "BUILD FAILED".to_owned()
             }
-            Ok(ll) => match ir::parse(&ll, opts.min_width) {
+            Ok(ll) => match ir::Module::parse(&ll, opts.min_width) {
                 Err(e) => {
                     failed = true;
                     println!("== {title}: cannot read {}: {e}", ll.display());
                     "UNREADABLE".to_owned()
                 }
                 Ok(module) => {
-                    let r = rules::run(&module, &opts.allow);
-                    let v = report::print(&title, &module, &r, opts, false);
+                    let r = Report::build(&module, &opts.allow);
+                    let v = r.print(&title, &module, opts, false);
                     failed |= v.failed();
                     v.line()
                 }
@@ -287,10 +288,11 @@ fn emit_ir(sel: &Selection, t: &Target) -> Result<PathBuf, String> {
         if target["name"].as_str() != Some(t.name.as_str()) {
             continue;
         }
-        let kinds: Vec<&str> = target["kind"]
+        // Checked once, so no need to materialize the list.
+        let kind_matches = target["kind"]
             .as_array()
-            .map_or(Vec::new(), |k| k.iter().filter_map(Value::as_str).collect());
-        if !kinds.iter().any(|k| t.kind.matches(k)) {
+            .is_some_and(|k| k.iter().filter_map(Value::as_str).any(|k| t.kind.matches(k)));
+        if !kind_matches {
             continue;
         }
         let path = msg["executable"].as_str().or_else(|| {

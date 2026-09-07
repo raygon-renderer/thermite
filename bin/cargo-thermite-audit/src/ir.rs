@@ -100,131 +100,138 @@ const SIMD_OPCODES: &[&str] = &[
     "insertelement",
 ];
 
-/// Parse one `.ll` file. `min_width` (bits) is the vector width at which an
-/// instruction counts as SIMD work.
-pub fn parse(path: &Path, min_width: u32) -> io::Result<Module> {
-    let reader = BufReader::with_capacity(1 << 20, File::open(path)?);
-    let mut module = Module::default();
-    let mut current: Option<FnRecord> = None;
+impl Module {
+    /// Parse one `.ll` file. `min_width` (bits) is the vector width at which an
+    /// instruction counts as SIMD work.
+    pub fn parse(path: &Path, min_width: u32) -> io::Result<Module> {
+        let reader = BufReader::with_capacity(1 << 20, File::open(path)?);
+        let mut module = Module::default();
+        let mut current: Option<FnRecord> = None;
 
-    for line in reader.split(b'\n') {
-        let line = line?;
-        let line = String::from_utf8_lossy(&line);
-        let line = line.trim_end_matches('\r');
+        for line in reader.split(b'\n') {
+            let line = line?;
+            let line = String::from_utf8_lossy(&line);
+            let line = line.trim_end_matches('\r');
 
-        if let Some(f) = current.as_mut() {
-            if line == "}" {
-                module.fns.push(current.take().expect("open function"));
+            if let Some(f) = current.as_mut() {
+                if line == "}" {
+                    module.fns.push(current.take().expect("open function"));
+                    continue;
+                }
+                f.classify(line.trim_start(), min_width);
                 continue;
             }
-            classify_instruction(line.trim_start(), f, min_width);
-            continue;
+
+            if line.starts_with("define ") {
+                current = Some(FnRecord::from_define(line));
+            } else if line.starts_with("attributes #")
+                && let Some((id, feats)) = parse_attr_group(line)
+            {
+                module.attrs.insert(id, feats);
+            }
         }
 
-        if line.starts_with("define ") {
-            current = Some(parse_define(line));
-        } else if line.starts_with("attributes #")
-            && let Some((id, feats)) = parse_attr_group(line)
-        {
-            module.attrs.insert(id, feats);
-        }
-    }
-
-    Ok(module)
-}
-
-fn parse_define(line: &str) -> FnRecord {
-    let symbol = symbol_after_at(line).unwrap_or_default();
-    let name = demangle(&symbol);
-
-    // Attribute group: the last `#N` token before the opening brace.
-    let attr_id = line
-        .rsplit(' ')
-        .filter_map(|tok| tok.strip_prefix('#'))
-        .find_map(|digits| digits.parse::<u32>().ok());
-
-    FnRecord {
-        name,
-        attr_id,
-        simd_ops: 0,
-        max_width: 0,
-        arch_calls: 0,
-        compute_calls: 0,
-        asm_calls: 0,
-        callees: HashMap::new(),
-        calls: HashMap::new(),
+        Ok(module)
     }
 }
 
-fn classify_instruction(line: &str, f: &mut FnRecord, min_width: u32) {
-    if line.is_empty() || line.starts_with(';') || line.ends_with(':') {
-        return;
+impl FnRecord {
+    /// A fresh record from a `define` header: symbol, demangled name, and the
+    /// trailing `#N` attribute group.
+    fn from_define(line: &str) -> Self {
+        let symbol = symbol_after_at(line).unwrap_or_default();
+        let name = demangle(&symbol);
+
+        // Attribute group: the last `#N` token before the opening brace.
+        let attr_id = line
+            .rsplit(' ')
+            .filter_map(|tok| tok.strip_prefix('#'))
+            .find_map(|digits| digits.parse::<u32>().ok());
+
+        FnRecord {
+            name,
+            attr_id,
+            simd_ops: 0,
+            max_width: 0,
+            arch_calls: 0,
+            compute_calls: 0,
+            asm_calls: 0,
+            callees: HashMap::new(),
+            calls: HashMap::new(),
+        }
     }
 
-    // `%x = [tail] opcode ...` or `opcode ...`
-    let rhs = match line.find(" = ") {
-        Some(i) if line.starts_with('%') => &line[i + 3..],
-        _ => line,
-    };
-    let rhs = rhs
-        .strip_prefix("tail ")
-        .or_else(|| rhs.strip_prefix("musttail "))
-        .or_else(|| rhs.strip_prefix("notail "))
-        .unwrap_or(rhs);
-    let opcode = rhs.split(' ').next().unwrap_or("");
+    /// Fold one instruction line into this record's counts.
+    fn classify(&mut self, line: &str, min_width: u32) {
+        if line.is_empty() || line.starts_with(';') || line.ends_with(':') {
+            return;
+        }
 
-    match opcode {
-        "call" | "invoke" => {
-            // `call <ty> asm [sideeffect] "text", "constraints"(args)`: the
-            // `asm` keyword sits before the first quote.
-            let head = &rhs[..rhs.find('"').unwrap_or(rhs.len())];
-            if head.split(' ').any(|t| t == "asm") {
-                // `core::hint::black_box` is an EMPTY asm template, not work.
-                if rhs[head.len()..].starts_with("\"\"") {
+        // `%x = [tail] opcode ...` or `opcode ...`
+        let rhs = match line.find(" = ") {
+            Some(i) if line.starts_with('%') => &line[i + 3..],
+            _ => line,
+        };
+        let rhs = rhs
+            .strip_prefix("tail ")
+            .or_else(|| rhs.strip_prefix("musttail "))
+            .or_else(|| rhs.strip_prefix("notail "))
+            .unwrap_or(rhs);
+        let opcode = rhs.split(' ').next().unwrap_or("");
+
+        match opcode {
+            "call" | "invoke" => {
+                // `call <ty> asm [sideeffect] "text", "constraints"(args)`: the
+                // `asm` keyword sits before the first quote.
+                let head = &rhs[..rhs.find('"').unwrap_or(rhs.len())];
+                if head.split(' ').any(|t| t == "asm") {
+                    // `core::hint::black_box` is an EMPTY asm template, not work.
+                    if rhs[head.len()..].starts_with("\"\"") {
+                        return;
+                    }
+                    self.asm_calls += 1;
+                    if let Some(w) = widest_vector(rhs) {
+                        self.max_width = self.max_width.max(w);
+                    }
                     return;
                 }
-                f.asm_calls += 1;
-                if let Some(w) = widest_vector(rhs) {
-                    f.max_width = f.max_width.max(w);
+                let Some(callee) = symbol_after_at(rhs) else { return };
+                if callee.starts_with("llvm.") {
+                    // LLVM intrinsics (fma, sqrt, minnum, x86.*) with vector operands are work.
+                    if let Some(w) = widest_vector(rhs)
+                        && w >= min_width
+                    {
+                        self.simd_ops += 1;
+                        self.max_width = self.max_width.max(w);
+                    }
+                    return;
                 }
-                return;
+                let name = demangle(&callee);
+                *self.calls.entry(name.clone()).or_insert(0) += 1;
+                // The function's own path must be under core_arch. A generic
+                // argument naming `__m256` (`<[__m256; 2]>::try_map`) is not one.
+                if is_core_arch_path(&name) {
+                    let short = short_name(&name);
+                    if is_detection_intrinsic(&short) {
+                        return;
+                    }
+                    self.arch_calls += 1;
+                    if !is_transfer_intrinsic(&short) {
+                        self.compute_calls += 1;
+                    }
+                    *self.callees.entry(short).or_insert(0) += 1;
+                }
             }
-            let Some(callee) = symbol_after_at(rhs) else { return };
-            if callee.starts_with("llvm.") {
-                // LLVM intrinsics (fma, sqrt, minnum, x86.*) with vector operands are work.
+            op if SIMD_OPCODES.contains(&op) => {
                 if let Some(w) = widest_vector(rhs)
                     && w >= min_width
                 {
-                    f.simd_ops += 1;
-                    f.max_width = f.max_width.max(w);
+                    self.simd_ops += 1;
+                    self.max_width = self.max_width.max(w);
                 }
-                return;
             }
-            let name = demangle(&callee);
-            *f.calls.entry(name.clone()).or_insert(0) += 1;
-            // The function's own path must be under core_arch. A generic
-            // argument naming `__m256` (`<[__m256; 2]>::try_map`) is not one.
-            if is_core_arch_path(&name) {
-                let short = short_name(&name);
-                if is_detection_intrinsic(&short) {
-                    return;
-                }
-                f.arch_calls += 1;
-                if !is_transfer_intrinsic(&short) {
-                    f.compute_calls += 1;
-                }
-                *f.callees.entry(short).or_insert(0) += 1;
-            }
+            _ => {}
         }
-        op if SIMD_OPCODES.contains(&op) => {
-            if let Some(w) = widest_vector(rhs)
-                && w >= min_width
-            {
-                f.simd_ops += 1;
-                f.max_width = f.max_width.max(w);
-            }
-        }
-        _ => {}
     }
 }
 

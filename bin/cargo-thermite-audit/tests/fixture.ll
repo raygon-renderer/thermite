@@ -54,3 +54,14 @@ declare <8 x float> @llvm.fma.v8f32(<8 x float>, <8 x float>, <8 x float>)
 
 attributes #0 = { nounwind "target-cpu"="x86-64" "target-features"="+cx8,+fxsr,+mmx,+sse,+sse2,+x87" }
 attributes #1 = { nounwind "target-cpu"="x86-64" "target-features"="+avx,+avx2,+fma,+popcnt,+sse,+sse2" }
+
+; Rule C control: the round-to-odd emulation reached from an AVX2+FMA
+; register type. Attribute group #1 carries avx2/fma, so this trips Rule C
+; alone and neither Rule A nor Rule B.
+define internal <8 x float> @_ZN9fma_gated4kern17h0000000000000009E(<8 x float> %a) unnamed_addr #1 {
+start:
+  %0 = call <8 x float> @"thermite::backend::generic::polyfills::math::fmadd_ro_rescue::<thermite::backend::x86_v3::registers::f64x4::F64x4V3>"(<8 x float> %a)
+  ret <8 x float> %0
+}
+
+declare <8 x float> @"thermite::backend::generic::polyfills::math::fmadd_ro_rescue::<thermite::backend::x86_v3::registers::f64x4::F64x4V3>"(<8 x float>)

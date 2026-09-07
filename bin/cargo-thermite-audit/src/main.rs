@@ -13,6 +13,7 @@ mod ir;
 mod report;
 mod rules;
 
+use crate::rules::Report;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -137,10 +138,10 @@ fn main() -> ExitCode {
         Mode::Files(files) => {
             let mut failed = false;
             for path in &files {
-                match ir::parse(path, opts.min_width) {
+                match ir::Module::parse(path, opts.min_width) {
                     Ok(module) => {
-                        let r = rules::run(&module, &opts.allow);
-                        failed |= report::print(&path.display().to_string(), &module, &r, &opts, true).failed();
+                        let r = Report::build(&module, &opts.allow);
+                        failed |= r.print(&path.display().to_string(), &module, &opts, true).failed();
                     }
                     Err(e) => {
                         eprintln!("{}: {e}", path.display());
