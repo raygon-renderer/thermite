@@ -164,6 +164,41 @@ pub trait FloatElementWithBits: FloatElement {
     /// Magic value for crushing denormals
     const DENORMAL_TRICK: Self::Bits;
 
+    /// Veltkamp's splitting constant, `$2^{\lceil p/2 \rceil} + 1$` for a format with `p`
+    /// bits of precision (so `MANTISSA_BITS + 1`): `$2^{12} + 1$` for binary32,
+    /// `$2^{27} + 1$` for binary64.
+    ///
+    /// Splits `a` into two halves of about `p/2` bits whose products are exact, which is
+    /// what makes Dekker's `two_prod` possible without an FMA. Lives here rather than in
+    /// `thermite-compensated` because core's emulated FMA and `compensated_horner` need it.
+    ///
+    /// `a * VELTKAMP_SPLITTER` overflows above roughly `MAX / VELTKAMP_SPLITTER`, so a
+    /// general `two_prod` scales large operands down first; see
+    /// [`VELTKAMP_SPLIT_THRESH`](Self::VELTKAMP_SPLIT_THRESH).
+    const VELTKAMP_SPLITTER: Self;
+
+    /// `|a|` above this overflows `a * VELTKAMP_SPLITTER`, so a split must scale it down
+    /// first.
+    ///
+    /// The real limit is `MAX / VELTKAMP_SPLITTER` (8.3056e34 for binary32, 1.3394e300 for
+    /// binary64); this sits at or below it: `$2^{115}$` for binary32, and the largest
+    /// double under `$2^{996}$` for binary64. Not `$2^{116}$` for binary32, which is
+    /// 8.3077e34 and lands just above the limit. Pinned by the const assertions below.
+    const VELTKAMP_SPLIT_THRESH: Self;
+
+    /// Exact power of two to scale an operand past
+    /// [`VELTKAMP_SPLIT_THRESH`](Self::VELTKAMP_SPLIT_THRESH) down by before splitting.
+    ///
+    /// The factor moves onto the other operand, leaving the product unchanged. That cannot
+    /// overflow: if `|a| > THRESH` and `a * b` is finite then `|b| < MAX / THRESH`, which
+    /// is this factor. Scaling the split's output back up does not work, since for `a`
+    /// near `MAX` the split rounds `hi` past `MAX / scale`.
+    const VELTKAMP_SPLIT_DOWN: Self;
+
+    /// Exact reciprocal of [`VELTKAMP_SPLIT_DOWN`](Self::VELTKAMP_SPLIT_DOWN), also an
+    /// exact power of two. Applied to the operand that did *not* need scaling down.
+    const VELTKAMP_SPLIT_UP: Self;
+
     // /// Is there an implicit leading bit (1.xxx)?
     // /// Almost always TRUE.
     // /// Exception: x87 80-bit float (FALSE).
@@ -350,6 +385,16 @@ impl_float_element!(f32: f => u32, i32 {
     MAX_SUBNORMAL: u32 = 0x007F_FFFF;
     DENORMAL_TRICK: u32 = 0x0C800001;
 
+    // Veltkamp: 2^ceil(24/2) + 1. Written out rather than derived from MANTISSA_BITS,
+    // which is deliberately zeroed for f64 on a SPIR-V target without Float64 and so is
+    // not a safe base for arithmetic in a shared macro.
+    VELTKAMP_SPLITTER: f32 = 4097.0;
+
+    // 2^115, NOT 2^116 - see the doc comment. The obvious power lands above the limit.
+    VELTKAMP_SPLIT_THRESH: f32 = 4.153_837_5e34;
+    VELTKAMP_SPLIT_DOWN: f32 = 1.220_703_1e-4; // 2^-13
+    VELTKAMP_SPLIT_UP: f32 = 8192.0; // 2^13
+
     // IMPLICIT_LEAD_BIT: bool = true;
 });
 
@@ -374,8 +419,40 @@ impl_float_element!(f64 => u64, i64 {
     MAX_SUBNORMAL: u64 = 0x000F_FFFF_FFFF_FFFF;
     DENORMAL_TRICK: u64 = 0x0360000000000001;
 
+    // Veltkamp: 2^ceil(53/2) + 1. See the f32 entry for why this is a literal.
+    VELTKAMP_SPLITTER: f64 = 134217729.0;
+
+    // Largest f64 strictly below 2^996.
+    VELTKAMP_SPLIT_THRESH: f64 = 6.69692879491417e299;
+    VELTKAMP_SPLIT_DOWN: f64 = 3.725_290_298_461_914e-9; // 2^-28
+    VELTKAMP_SPLIT_UP: f64 = 268435456.0; // 2^28
+
     // IMPLICIT_LEAD_BIT: bool = true;
 });
+
+// Checked at compile time because a wrong value produces plausible numbers, not a failure.
+// The thresholds need not be powers of two (the f64 value is Bailey's QD literal); they
+// only need to keep the split from overflowing. An earlier f32 threshold of 2^116 failed
+// exactly this check: `2^116 * 4097` exceeds `f32::MAX`.
+const _: () = {
+    // 1. The scale factors are exact reciprocals, so rebalancing preserves the product.
+    assert!(f32::VELTKAMP_SPLIT_DOWN * f32::VELTKAMP_SPLIT_UP == 1.0);
+    assert!(f64::VELTKAMP_SPLIT_DOWN * f64::VELTKAMP_SPLIT_UP == 1.0);
+
+    // 2. Both are powers of two, so scaling is lossless. A power of two has an all-zero
+    //    significand field.
+    assert!(f32::VELTKAMP_SPLIT_DOWN.to_bits() & ((1 << 23) - 1) == 0);
+    assert!(f64::VELTKAMP_SPLIT_DOWN.to_bits() & ((1 << 52) - 1) == 0);
+    assert!(f32::VELTKAMP_SPLIT_UP.to_bits() & ((1 << 23) - 1) == 0);
+    assert!(f64::VELTKAMP_SPLIT_UP.to_bits() & ((1 << 52) - 1) == 0);
+
+    // 3. Splitting is safe on both sides of the branch: at the threshold unscaled, and at
+    //    the largest finite value once scaled down.
+    assert!(f32::VELTKAMP_SPLIT_THRESH * f32::VELTKAMP_SPLITTER < f32::MAX);
+    assert!(f64::VELTKAMP_SPLIT_THRESH * f64::VELTKAMP_SPLITTER < f64::MAX);
+    assert!(f32::MAX * f32::VELTKAMP_SPLIT_DOWN * f32::VELTKAMP_SPLITTER < f32::MAX);
+    assert!(f64::MAX * f64::VELTKAMP_SPLIT_DOWN * f64::VELTKAMP_SPLITTER < f64::MAX);
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RoundingMode {

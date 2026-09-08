@@ -101,15 +101,16 @@ set of function names.
 | `scalar` | none, 1 lane | Always available, and what the ragged ends of a loop run on |
 | `x86_v1` | SSE2 | Complete |
 | `x86_v2` | SSE4.2 | Complete, adds `pshufb` shuffles over v1 |
-| `x86_v3` | AVX2 + FMA | Complete, the widest working backend |
-| `x86_v4` | AVX-512 | **Not implemented.** The hardware still works, it runs the AVX2 backend |
+| `x86_v3` | AVX2 + FMA | Complete, and the default on AVX-512 hardware unless a tier feature is on |
+| `x86_v4` | AVX-512 | Complete, opt-in behind `avx512-tier1..3`. Validated under emulation, not yet on hardware |
 | `neon` | AArch64 AdvSIMD | Complete. Mandatory on the architecture, so there is no feature to enable |
 | `wasm` | SIMD128 | Complete, opt-in behind the `wasm` feature |
 | `spirv` | SPIR-V | Incomplete, and **a compile error in released versions** |
 Backend selection is a runtime decision made once by `dispatch_dyn!`, not a
 compile-time target flag, so a single binary runs the best kernel on whatever CPU
-it lands on. On an AVX-512 machine `InstructionSet::get()` reports `X86V4` and
-dispatch maps that rung onto `x86_v3`.
+it lands on. On an AVX-512 machine `InstructionSet::get()` reports `X86V4`, and
+dispatch selects `x86_v4` when the build carries a tier feature, or `x86_v3`
+when it doesn't.
 
 Which backends are compiled in the first place is covered under
 [Reaching the other backends](#reaching-the-other-backends) below.
@@ -180,12 +181,15 @@ thermite = { version = "0.3", default-features = false, features = ["wasm"] }
 
 `wasm32` works on stable. `wasm64` additionally needs `nightly`.
 
-**AVX-512** has no registers yet. The `avx512-tier1` through `avx512-tier3`
-features select which tier the in-progress x86-v4 backend compiles to, exactly
-one per build, resolved to the highest requested. Tier 1 is the Skylake-SP set
-(F+CD+BW+DQ+VL), the floor, and there is no Knights Landing tier. Today they
-compile the module skeleton only, change no codegen, and AVX-512 hardware runs
-the AVX2 backend in the meantime.
+**AVX-512** is opt-in. The `avx512-tier1` through `avx512-tier3` features select
+which tier the x86-v4 backend compiles to, exactly one per build, resolved to the
+highest requested. Tier 1 is the Skylake-SP set (F+CD+BW+DQ+VL), the floor, and
+there is no Knights Landing tier. With one of them on, `dispatch_dyn!` picks the
+v4 backend on AVX-512 hardware and `f32xN` becomes 16 lanes. Without a specified
+tier the v4 registers are not compiled and that hardware runs the AVX2 backend.
+
+The backend is feature-complete at every width, and the test suites are green on
+all three tiers, but under Intel SDE emulation only, so far.
 
 **SPIR-V** is unfinished, and enabling the `spirv` feature on a released version
 is a hard compile error. Work on it continues and the code stays in the repository.

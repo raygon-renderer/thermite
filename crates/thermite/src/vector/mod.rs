@@ -3230,6 +3230,94 @@ pub trait FloatVectorWithBits:
         > + FullyInteroperable<Self, Self::SignedBits>
         + CastVector<Self::Unsigned>;
 
+    /// [`FloatElementWithBits::VELTKAMP_SPLITTER`] splatted across every lane.
+    ///
+    /// `2^ceil(p/2) + 1`, which splits a lane into two halves whose products are exact
+    /// (Dekker's `two_prod`). On this trait rather than [`FloatVector`] because it is
+    /// defined by the format's precision.
+    ///
+    /// `self * VELTKAMP_SPLITTER` overflows above roughly `MAX / VELTKAMP_SPLITTER`, so a
+    /// general split scales large operands down first; see
+    /// [`VELTKAMP_SPLIT_THRESH`](Self::VELTKAMP_SPLIT_THRESH).
+    const VELTKAMP_SPLITTER: Self;
+
+    /// Lanes above this magnitude overflow when multiplied by
+    /// [`VELTKAMP_SPLITTER`](Self::VELTKAMP_SPLITTER), and must be scaled down first.
+    const VELTKAMP_SPLIT_THRESH: Self;
+
+    /// Exact power of two to scale an over-threshold lane down by, the factor moving onto
+    /// the other operand so the product is unchanged.
+    const VELTKAMP_SPLIT_DOWN: Self;
+
+    /// Exact reciprocal of [`VELTKAMP_SPLIT_DOWN`](Self::VELTKAMP_SPLIT_DOWN).
+    const VELTKAMP_SPLIT_UP: Self;
+
+    // --- error-free transformations ------------------------------------------------
+    //
+    // Named pairs rather than the register layer's const-generic switches, since a call
+    // site picks one and keeps it. They come up from the register layer instead of being
+    // spelled here because only a backend can force the arithmetic strict.
+
+    /// Knuth's 2Sum: `(s, e)` with `s = RN(self + rhs)` and `s + e == self + rhs`
+    /// exactly. Six operations, no FMA, no ordering requirement.
+    ///
+    /// `a.two_sum(b).0` is a useful idiom: the high word is the same correctly-rounded sum
+    /// a plain `+` produces, the residual is dead code, and what survives is one strict
+    /// instruction. Under `algebraic-scalar` (measured in `probes/eft_dce_probe`):
+    ///
+    /// | expression | LLVM IR |
+    /// |---|---|
+    /// | `(a + b)` | `fadd reassoc nsz arcp contract double` |
+    /// | `a.two_sum(b).0` | `fadd double` |
+    ///
+    /// Same for [`two_diff`](Self::two_diff) and [`two_prod`](Self::two_prod), where the
+    /// whole Veltkamp split collapses to one `mulsd`. Use it wherever an expression must
+    /// not be re-bracketed, typically a subtraction whose operands nearly cancel.
+    fn two_sum(self, rhs: Self) -> (Self, Self);
+
+    /// Dekker's Fast2Sum: the same `(s, e)` in three operations.
+    ///
+    /// Exact only where `|self| >= |rhs|` lane-wise (`self == 0` is also fine). Violate it
+    /// and the sum is still right while the error term is quietly wrong. When in doubt
+    /// use [`two_sum`](Self::two_sum).
+    fn fast_two_sum(self, rhs: Self) -> (Self, Self);
+
+    /// 2Diff: `(s, e)` with `s = RN(self - rhs)` and `s + e == self - rhs` **exactly**.
+    ///
+    /// The subtractive twin of [`two_sum`](Self::two_sum), with the same properties.
+    fn two_diff(self, rhs: Self) -> (Self, Self);
+
+    /// Fast2Diff: the same `(s, e)` in three operations, with the same unchecked
+    /// `|self| >= |rhs|` precondition as [`fast_two_sum`](Self::fast_two_sum).
+    fn fast_two_diff(self, rhs: Self) -> (Self, Self);
+
+    /// 2Product: `(p, e)` with `p = RN(self * rhs)` and `p + e == self * rhs` **exactly**.
+    ///
+    /// One instruction for the error with a native FMA, Dekker's guarded split otherwise.
+    /// If `self * rhs` is within a relative `2^-p` of `MAX` the error term comes back
+    /// infinite, though the value is still correct.
+    fn two_prod(self, rhs: Self) -> (Self, Self);
+
+    /// 2Square: `(p, e)` with `p = RN(self * self)` and `p + e == self * self` **exactly**.
+    ///
+    /// Cheaper than `two_prod(self, self)`: one split, one doubled cross term, and no
+    /// overflow guard since squaring anything that large already overflows.
+    fn two_square(self) -> (Self, Self);
+
+    /// 2Quotient: `(q, r)` with `q = RN(self / rhs)` and `self == q * rhs + r` **exactly**.
+    ///
+    /// `r` is a remainder, not a second word of the quotient: `self / rhs == q + r / rhs`.
+    ///
+    /// The main use is `two_quot(a, b).0`, a correctly-rounded division for free. Under
+    /// `algebraic-scalar` the scalar backend's `/` carries `arcp`, which rewrites `x / c`
+    /// for a constant `c` into `x * RN(1/c)`, two roundings, measured at 1.204 ulp for
+    /// `c = 49.0`. Discarding `r` leaves one strict `fdiv`. `thermite-interval` divides
+    /// every endpoint this way.
+    ///
+    /// `rhs == 0`, an infinite operand or a NaN gives the IEEE quotient in `q` with a
+    /// non-finite `r`; mask those lanes before branching on `r`'s sign.
+    fn two_quot(self, rhs: Self) -> (Self, Self);
+
     /// Bit-flag set describing which `native_*` methods on this trait have a
     /// real hardware implementation on the current backend.
     ///

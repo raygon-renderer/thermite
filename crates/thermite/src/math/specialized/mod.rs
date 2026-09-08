@@ -420,104 +420,6 @@ impl<P: Policy, const N: usize, V: FloatVector> AsFloatVectorWithBitsKernel<V, N
     }
 }
 
-/// Compensated Horner evaluation, Graillat-Langlois-Louvet 2005.
-///
-/// Runs an ordinary Horner recurrence and, alongside it, an exact accumulation of every
-/// rounding error the recurrence commits. The result is about what a doubled-precision
-/// Horner would give, which makes it **insensitive to the conditioning of the polynomial**,
-/// the reason it is here.
-///
-/// `REV` picks the coefficient order: `false` is constant-term-first (`poly_n`), `true` is
-/// leading-term-first (`poly_rev_n`). It is a const parameter so the index arithmetic folds.
-///
-/// # Why this is opt-in and not a precision tier
-///
-/// About **10 operations per term against 1 FMA**: `two_product` is 2, `two_sum` is 6, and
-/// the error accumulator 2. No standard policy enables it. A call site that wants it asks
-/// with `UseCompensation<P, true>`, which is how the Bessel rationals reach it.
-///
-/// # Two arms, chosen by `HAS_NATIVE_FMA`
-///
-/// The product half of the compensation needs a **correctly rounded** FMA for `pi` to be the
-/// exact product error. Where the hardware fuses, that is one instruction and this is the full
-/// Graillat-Langlois-Louvet scheme: both error sources captured, the condition number entering
-/// **squared**, behavior equivalent to doubled precision.
-///
-/// Where it does not fuse (and on `Indeterminate`, i.e. wasm, which cannot promise it) the
-/// product half is **dropped** and only the sums are compensated. Thermite's `mul_add` is
-/// correctly rounded on every backend, so the full scheme would still be _exact_ there. It is
-/// simply not worth it. The emulated correctly rounded FMA is a stronger guarantee than the
-/// product error this needs, and measured **27x on the 1-lane f64 seed** and about **4x on
-/// f64x4** for roughly 2x of accuracy.
-///
-/// The downgrade is real and is not hidden: with the product errors uncompensated they are
-/// still amplified by the full condition number, so the bound improves only from
-/// `gamma_{2n}` to `gamma_n` (about a factor of two, not an order of magnitude). The
-/// compensation stops being conditioning-proof and becomes a constant-factor improvement. It
-/// is kept because the same ~9 operations deliver that factor with no FMA anywhere, which is
-/// strictly better than the alternative of not compensating at all.
-#[inline(always)]
-fn compensated_horner<V, E, const N: usize, const REV: bool>(x: V, coeffs: &[E; N]) -> V
-where
-    E: Copy,
-    V: FloatVector<Element = E>,
-{
-    // Leading coefficient: last slot when constant-first, first slot when leading-first.
-    let mut s = V::splat(coeffs[if REV { 0 } else { N - 1 }]);
-    let mut e = V::ZERO;
-
-    let mut i = 1usize;
-    while i < N {
-        let c = V::splat(coeffs[if REV { i } else { N - 1 - i }]);
-
-        let p = s * x;
-
-        // two_sum(p, c): t is the rounded sum, sigma the exact error (Knuth, 6 ops: the
-        // operands are not ordered by magnitude, so the cheap fast_two_sum is not valid).
-        // This half needs no FMA at all, only adds and subtracts.
-        let t = p + c;
-        let b = t - p;
-        let sigma = (p - (t - b)) + (c - b);
-
-        // two_product(s, x): `pi` is the EXACT error of the rounded product `p`, and is
-        // available in one instruction only where the hardware fuses.
-        //
-        // Where it does not, `mul_add` lowers to the emulated correctly rounded FMA, which is
-        // strictly more work than this needs: correct rounding of a SUM is a stronger
-        // guarantee than the product error we are extracting, and we throw the rest away.
-        // Measured, that path cost 27x on the 1-lane f64 seed and about 4x on f64x4, against
-        // roughly 2x of accuracy. So off-FMA this degrades to compensating the SUMS only.
-        //
-        // That is a real downgrade, and an honest one: capturing both errors makes the
-        // condition number enter SQUARED, which is what makes full compensation behave like
-        // doubled precision. Sums alone leaves the surviving product errors amplified by the
-        // full condition number, so the bound only improves from `gamma_{2n}` to `gamma_n`.
-        // That is a factor of about two, not an order of magnitude. It is still worth
-        // having: the same ~9 operations buy that factor without an FMA anywhere.
-        //
-        // `Indeterminate` (wasm, where the engine may or may not fuse a relaxed madd) takes the
-        // cheap arm as well. It cannot PROMISE fusion, and `pi` is only the exact product error
-        // under a genuine FMA. A `mul_add` that silently lowers to multiply-then-add makes the
-        // compensation compensate for the wrong thing.
-        let inc = if const { matches!(V::HAS_NATIVE_FMA, tribool::True) } {
-            s.mul_add(x, -p) + sigma
-        } else {
-            sigma
-        };
-
-        // The error terms ride the same recurrence as the value. `mul_adde` and not `mul_add`:
-        // `e` is already a correction of relative size ~eps, so its own rounding is second
-        // order, and insisting on a correctly rounded FMA here would drag the emulated path
-        // back in on exactly the backends the branch above just rescued.
-        e = e.mul_adde(x, inc);
-        s = t;
-
-        i += 1;
-    }
-
-    s + e
-}
-
 pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
     /// Backing definition of [`CoreMath::poly_n_primal`](crate::math::CoreMath::poly_n_primal).
     ///
@@ -629,207 +531,71 @@ pub trait SpecializedCoreMath<E>: FloatVector<Element = E> + PrimalProjection {
         (-self).mul_add_primal::<P>(m, a)
     }
 
+    /// The naive form, the fallback for composite arithmetics only.
+    ///
+    /// Kahan's compensated lowering needs a single-rounding multiply-add, which `Complex`
+    /// and `Dual` do not have. `HAS_NATIVE_FMA` cannot gate this, since a composite over a
+    /// hardware-FMA vector answers `True`. Real vectors override with
+    /// [`generic::difference_of_products_internal`]; composites build their own out of the
+    /// inner type's version.
     #[inline(always)]
     fn difference_of_products<P: Policy>(self, b: Self, c: Self, d: Self) -> Self {
-        let (a, cd) = (self, c * d);
-
-        if const { !matches!(Self::HAS_NATIVE_FMA, tribool::True) } {
-            a * b - cd
-        } else if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
-            a.mul_sub(b, cd)
-        } else {
-            a.mul_sub(b, cd) + c.nmul_add(d, cd) // value + error
-        }
+        self * b - c * d
     }
 
+    /// The naive form, the fallback for composite arithmetics only. See
+    /// [`difference_of_products`](Self::difference_of_products).
     #[inline(always)]
     fn sum_of_products<P: Policy>(self, b: Self, c: Self, d: Self) -> Self {
-        let (a, cd) = (self, c * d);
-
-        if const { !matches!(Self::HAS_NATIVE_FMA, tribool::True) } {
-            a * b + cd
-        } else if const { P::POLICY.precision.lt(PrecisionPolicy::Average) } {
-            a.mul_add(b, cd)
-        } else {
-            a.mul_add(b, cd) - c.nmul_add(d, cd)
-        }
+        self * b + c * d
     }
+
+    // default implementations of polynomial evaluation, which just use
+    // basic Horner's method. Native vectors and composite types can
+    // override these with more efficient implementations if they have them.
 
     #[inline(always)]
     fn poly<P: Policy>(self, coeffs: &[E]) -> Self {
-        if const {
-            !P::POLICY.unroll_loops
-                || P::POLICY.precision.ge(PrecisionPolicy::Best)
-                || !Self::ISA.has_instruction_level_parallelism()
-        } {
-            if crate::unlikely(coeffs.is_empty()) {
-                return Self::ZERO;
-            }
-
-            let mut res = Self::splat(coeffs[coeffs.len() - 1]);
-            for &c in coeffs.iter().rev().skip(1) {
-                res = res.mul_adde(self, Self::splat(c));
-            }
-            return res;
+        if crate::unlikely(coeffs.is_empty()) {
+            return Self::ZERO;
         }
 
-        // NumVector provides the num_traits::MulAdd implementation needed for fast_polynomial
-        let res = fast_polynomial::poly_f::<_, _>(crate::vector::NumVector(self), coeffs.len(), |i| unsafe {
-            crate::vector::NumVector(Self::splat(*coeffs.get_unchecked(i)))
-        });
-
-        res.0
+        let mut res = Self::splat(coeffs[coeffs.len() - 1]);
+        for &c in coeffs.iter().rev().skip(1) {
+            res = res.mul_adde(self, Self::splat(c));
+        }
+        res
     }
 
     #[inline(always)]
     fn poly_rev<P: Policy>(self, coeffs: &[E]) -> Self {
-        if const {
-            !P::POLICY.unroll_loops
-                || P::POLICY.precision.ge(PrecisionPolicy::Best)
-                || !Self::ISA.has_instruction_level_parallelism()
-        } {
-            if crate::unlikely(coeffs.is_empty()) {
-                return Self::ZERO;
-            }
-
-            let mut res = Self::splat(coeffs[0]);
-            for &c in coeffs.iter().skip(1) {
-                res = res.mul_adde(self, Self::splat(c));
-            }
-            return res;
+        if crate::unlikely(coeffs.is_empty()) {
+            return Self::ZERO;
         }
 
-        // NumVector provides the num_traits::MulAdd implementation needed for fast_polynomial
-        let res = fast_polynomial::poly_f::<_, _>(crate::vector::NumVector(self), coeffs.len(), |i| unsafe {
-            crate::vector::NumVector(Self::splat(*coeffs.get_unchecked(coeffs.len() - 1 - i)))
-        });
-
-        res.0
+        let mut res = Self::splat(coeffs[0]);
+        for &c in coeffs.iter().skip(1) {
+            res = res.mul_adde(self, Self::splat(c));
+        }
+        res
     }
 
     #[inline(always)]
     fn poly_n<P: Policy, const N: usize>(self, coeffs: &[E; N]) -> Self {
-        let x = self;
-
-        // Opt-in only: no standard policy sets `use_compensation`, so this arm exists for
-        // call sites that ask with `UseCompensation<P, true>`.
-        if const { P::POLICY.use_compensation } {
-            return compensated_horner::<Self, E, N, false>(x, coeffs);
+        let mut res = Self::splat(coeffs[N - 1]);
+        for &c in coeffs.iter().rev().skip(1) {
+            res = res.mul_adde(self, Self::splat(c));
         }
-
-        if const {
-            !P::POLICY.unroll_loops
-                || P::POLICY.precision.ge(PrecisionPolicy::Best)
-                || !Self::ISA.has_instruction_level_parallelism()
-        } {
-            // SPIR-V is terrible at unrolling loops like this,
-            // so we'll just do it ourselves.
-            #[cfg(all(feature = "spirv", target_arch = "spirv"))]
-            {
-                use crunchy::unroll;
-
-                let mut res = Self::splat(coeffs[N - 1]);
-
-                macro_rules! unroll_poly {
-                    ($($len:tt),*) => {
-                        $(if const { N == $len } {
-                            unroll! {
-                                for i in 1..$len {
-                                    res = res.mul_adde(x, Self::splat(coeffs[
-                                        const { if $len > i + 1 { $len - 1 - i } else { 0 } }
-                                    ]));
-                                }
-                            }
-                        } else )* {
-                            let mut i = const { N - 1 };
-                            while i > 0 {
-                                i -= 1;
-                                unsafe { core::hint::assert_unchecked(i < N) };
-                                res = res.mul_adde(x, Self::splat(coeffs[i]));
-                            }
-                        }
-                    };
-                }
-
-                unroll_poly!(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-
-                return res;
-            }
-
-            // basic Horner's method that's both compact and accurate, even without FMA
-            let mut res = Self::splat(coeffs[N - 1]);
-            for &c in coeffs.iter().rev().skip(1) {
-                res = res.mul_adde(x, Self::splat(c));
-            }
-            return res;
-        }
-
-        // NumVector provides the num_traits::MulAdd implementation needed for fast_polynomial
-        let res = fast_polynomial::poly_f_n::<_, _, N>(crate::vector::NumVector(x), |i| unsafe {
-            crate::vector::NumVector(Self::splat(*coeffs.get_unchecked(i)))
-        });
-
-        res.0
+        res
     }
 
     #[inline(always)]
     fn poly_rev_n<P: Policy, const N: usize>(self, coeffs: &[E; N]) -> Self {
-        let x = self;
-
-        // See `poly_n`. `poly_rational_n`'s reciprocal branch evaluates through here, so
-        // leaving it out would silently keep the old accuracy for every `x > 1`.
-        if const { P::POLICY.use_compensation } {
-            return compensated_horner::<Self, E, N, true>(x, coeffs);
+        let mut res = Self::splat(coeffs[0]);
+        for &c in coeffs.iter().skip(1) {
+            res = res.mul_adde(self, Self::splat(c));
         }
-
-        if const {
-            !P::POLICY.unroll_loops
-                || P::POLICY.precision.ge(PrecisionPolicy::Best)
-                || !Self::ISA.has_instruction_level_parallelism()
-        } {
-            #[cfg(all(feature = "spirv", target_arch = "spirv"))]
-            {
-                use crunchy::unroll;
-
-                let mut res = Self::splat(coeffs[0]);
-
-                macro_rules! unroll_poly {
-                    ($($len:tt),*) => {
-                        $(if const { N == $len } {
-                            unroll! {
-                                for i in 1..$len {
-                                    res = res.mul_adde(x, Self::splat(coeffs[i]));
-                                }
-                            }
-                        } else )* {
-                            let mut i = 1usize;
-                            while i < N {
-                                unsafe { core::hint::assert_unchecked(i < N) };
-                                res = res.mul_adde(x, Self::splat(coeffs[i]));
-                                i += 1;
-                            }
-                        }
-                    };
-                }
-
-                unroll_poly!(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
-
-                return res;
-            }
-
-            // basic Horner's method that's both compact and accurate, even without FMA
-            let mut res = Self::splat(coeffs[0]);
-            for &c in coeffs.iter().skip(1) {
-                res = res.mul_adde(x, Self::splat(c));
-            }
-            return res;
-        }
-
-        let res = fast_polynomial::poly_f_n::<_, _, N>(crate::vector::NumVector(x), |i| unsafe {
-            crate::vector::NumVector(Self::splat(*coeffs.get_unchecked(N - 1 - i)))
-        });
-
-        res.0
+        res
     }
 
     #[inline(always)]

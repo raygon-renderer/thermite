@@ -50,6 +50,67 @@ impl<V: DualMathVector, const N: usize> PrimalProjection for Dual<V, N> {
 }
 
 impl<V: DualMathVector, const N: usize> SpecializedCoreMath<Dual<V::Element, N>> for Dual<V, N> {
+    /// `$ab - cd$`, with the compensation on the inner real vector.
+    ///
+    /// A dual multiply-add rounds twice on every derivative part, so Kahan's correction
+    /// term is not the residual of anything there. Instead the value is one real
+    /// difference of products and each derivative part is two, by the product rule:
+    ///
+    /// ```math
+    /// (ab - cd)' = (a b' - c d') + (a' b - c' d)
+    /// ```
+    ///
+    /// The value part is the plain vector's own lowering, so the primal stays
+    /// bit-identical.
+    ///
+    /// The pairing matters: `difference_of_products` is exact when its two products are
+    /// equal, and for `$ab - ba$` to stay zero on the derivative each term pairs with the
+    /// one it maps onto under `$c = b, d = a$`. Pairing the two `$ab$` terms together
+    /// loses the zero on about 22% of inputs (100k random dual pairs).
+    ///
+    /// Derivative part against a 60-digit reference: mean 0.531 ulp vs naive's 0.488.
+    /// Slightly worse on the mean, but the exact-zero contract is what matters.
+    #[inline(always)]
+    fn difference_of_products<P: Policy>(self, b: Self, c: Self, d: Self) -> Self {
+        let re = self.re.difference_of_products_p::<P>(b.re, c.re, d.re);
+
+        // Hand-rolled: `array::map` does not inline inside target_feature code.
+        let mut dual = self.dual;
+        let mut i = 0;
+        while i < N {
+            dual[i] = self.re.difference_of_products_p::<P>(b.dual[i], c.dual[i], d.re)
+                + self.dual[i].difference_of_products_p::<P>(b.re, c.re, d.dual[i]);
+            i += 1;
+        }
+
+        Dual { re, dual }
+    }
+
+    /// `$ab + cd$`, the companion to
+    /// [`difference_of_products`](SpecializedCoreMath::difference_of_products) and the
+    /// same argument.
+    ///
+    /// ```math
+    /// (ab + cd)' = (a b' + c' d) + (c d' + a' b)
+    /// ```
+    ///
+    /// Mirror-paired against the degenerate case `$ab + (-b)a$`, so `$c = -b, d = a$`.
+    /// Derivative part over 100k random inputs: mean 0.454 ulp vs naive's 0.498.
+    #[inline(always)]
+    fn sum_of_products<P: Policy>(self, b: Self, c: Self, d: Self) -> Self {
+        let re = self.re.sum_of_products_p::<P>(b.re, c.re, d.re);
+
+        let mut dual = self.dual;
+        let mut i = 0;
+        while i < N {
+            dual[i] = self.re.sum_of_products_p::<P>(b.dual[i], c.dual[i], d.re)
+                + c.re.sum_of_products_p::<P>(d.dual[i], self.dual[i], b.re);
+            i += 1;
+        }
+
+        Dual { re, dual }
+    }
+
     /// The product is a genuine dual multiply (both operands vary), but the addend is
     /// a constant, so only the value part moves. The default would lift `a` into a
     /// `Dual` with `N` zero derivatives and add those too, and `d + 0.0` does not fold

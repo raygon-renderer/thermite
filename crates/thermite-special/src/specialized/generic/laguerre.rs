@@ -232,10 +232,13 @@ where
 {
     let quarter = V::splat(<E as FloatElement>::ConstRatio::<1, 4>::VALUE);
 
-    let (rest, large, prod, n) = poisson::pmf_parts::<P, E, V, ALL_LARGE>(a, x);
+    let (rest, rest_lo, large, prod, n) = poisson::pmf_parts::<P, E, V, ALL_LARGE>(a, x);
 
     let x4 = x * quarter;
-    let g = poisson::exp_two_sum::<P, E, V>(x4.neg_c(!large), rest * V::HALF);
+    // The seed is the square root of the mass, so both exponent words are halved (exact).
+    // Dropping the second word graded ~6 ulp against 0.55 on the `alpha = 0` lanes that
+    // skip the seed, which is how the shared `pmf_parts` defect was found.
+    let g = poisson::exp_sum::<P, E, V>(x4.neg_c(!large), rest * V::HALF, rest_lo * V::HALF);
     let g = g * (n * V::splat(E::TAU)).sqrt().inverse_sqrt_p::<P>();
     // sqrt(prod) is 1 wherever no lane was shifted, and a sqrt is not free.
     let g = if const { ALL_LARGE } || (const { !P::POLICY.avoid_branching } && large.all()) {

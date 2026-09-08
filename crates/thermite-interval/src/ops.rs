@@ -18,7 +18,8 @@ use thermite::tribool::{self, Tribool};
 use thermite::vector::ops::{AddSubExt, MulAddExt, Square};
 
 use crate::round::{
-    bump_down, bump_up, residual_down, residual_up, scale_down, scale_up, two_prod, two_square, two_sum,
+    bump_down, bump_up, residual_down, residual_up, scale_down, scale_up, two_prod, two_quot, two_square,
+    two_sum,
 };
 use crate::widen::{WideningPolicy, WideningTier};
 use crate::{Interval, IntervalFloatVector};
@@ -242,10 +243,12 @@ impl<V: IntervalFloatVector, W: WideningPolicy> Interval<V, W> {
         let poison = self.is_empty() | rhs.is_empty();
         let zero_div = rhs.lo.cmp_le(V::ZERO) & rhs.hi.cmp_ge(V::ZERO);
 
-        let q0 = unpoison(self.lo / rhs.lo);
-        let q1 = unpoison(self.lo / rhs.hi);
-        let q2 = unpoison(self.hi / rhs.lo);
-        let q3 = unpoison(self.hi / rhs.hi);
+        // `two_quot(..).0`, not `/`: the one-ulp widening below needs a faithfully rounded
+        // quotient, which a bare `/` is not under `algebraic-scalar`. See `round::two_quot`.
+        let q0 = unpoison(two_quot(self.lo, rhs.lo).0);
+        let q1 = unpoison(two_quot(self.lo, rhs.hi).0);
+        let q2 = unpoison(two_quot(self.hi, rhs.lo).0);
+        let q3 = unpoison(two_quot(self.hi, rhs.hi).0);
 
         let lo = q0.min(q1).min(q2.min(q3));
         let hi = q0.max(q1).max(q2.max(q3));

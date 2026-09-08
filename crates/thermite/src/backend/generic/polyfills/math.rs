@@ -48,22 +48,17 @@ pub fn fix_max<R: FloatRegister>(a: Storage<R>, b: Storage<R>, mut max: Storage<
 // and none about subnormal intermediates.
 //
 // Assumes round-to-nearest-even, the Rust/Thermite baseline rounding mode.
+//
+// Every 2Sum below is `R::two_sum`: Knuth's unconditional form for `FAST = false` (the
+// form Theorem 4 is proved with), Dekker's for `FAST = true`.
+//
+// Going through the register method matters: spelled out of `R::add`/`R::sub` it is
+// reassociable on the scalar backend under `algebraic-scalar`, and LLVM folds the error
+// term to zero (measured, `tests/eft.rs`). Every guarantee in this file depends on that
+// error term being real.
 // ---------------------------------------------------------------------------
 
-/// Knuth's 2Sum: `(s, err)` with `s = RN(x + y)` and `s + err == x + y` exactly.
-///
-/// Unconditional (no magnitude ordering required), branch-free, and exact for
-/// all finite inputs including subnormals, since the error of a floating-point
-/// addition is always representable. This is the form Theorem 4 is proved with.
-#[inline(always)]
-fn two_sum<R: FloatRegister>(x: Storage<R>, y: Storage<R>) -> (Storage<R>, Storage<R>) {
-    let s = R::add(x, y);
-    let bb = R::sub(s, x);
-    let err = R::add(R::sub(x, R::sub(s, bb)), R::sub(y, bb));
-    (s, err)
-}
-
-/// Magnitude-sorted Fast2Sum: same `(s, err)` as [`two_sum`] (`s = RN(x + y)`
+/// Magnitude-sorted Fast2Sum: same `(s, err)` as plain 2Sum (`s = RN(x + y)`
 /// and `s + err == x + y` exactly), via Dekker's 3-op form, whose
 /// `|big| >= |small|` precondition is established by an explicit sort.
 ///
@@ -78,15 +73,20 @@ fn two_sum<R: FloatRegister>(x: Storage<R>, y: Storage<R>) -> (Storage<R>, Stora
 /// Dekker's condition), zeros and subnormals are exact as in 2Sum, and
 /// non-finite inputs produce the same NaN/inf garbage classes 2Sum does, and
 /// callers' guards and post-checks are indifferent to which.
+/// The sort stays local - it is a per-call-site trade, not a primitive - but the three
+/// arithmetic operations after it go through [`FloatRegister::two_sum`] with `FAST`, for
+/// the same strictness reason given in the section note above.
+///
+/// One change from the hand-rolled version: the sum now comes from the sorted pair, so it
+/// waits on the blends instead of issuing beside them. Same value, one blend deeper. The
+/// -7..-9% latency figure above was measured on the older form.
 #[inline(always)]
 fn two_sum_sorted<R: FloatRegister>(x: Storage<R>, y: Storage<R>) -> (Storage<R>, Storage<R>) {
     let x_larger = R::ge(R::abs(x), R::abs(y));
     let big = R::blendv(x_larger, y, x);
     let small = R::blendv(x_larger, x, y);
 
-    let s = R::add(x, y);
-    let err = R::sub(small, R::sub(s, big));
-    (s, err)
+    R::two_sum::<true>(big, small)
 }
 
 /// Round-to-odd addition: `RO(x + y)`, branch-free.
@@ -125,7 +125,7 @@ fn odd_round_add_full<R: FloatRegister, const SORTED: bool>(
     let (s, err) = if SORTED {
         two_sum_sorted::<R>(x, y)
     } else {
-        two_sum::<R>(x, y)
+        R::two_sum::<false>(x, y)
     };
 
     let s_bits = <R::Bits as BitCastRegister<R>>::from_bits(s);
@@ -299,7 +299,7 @@ fn bm_core<R: FloatRegister>(a: Storage<R>, b: Storage<R>, c: Storage<R>) -> (St
     let u_l = R::add(e3, R::mul(a_lo, b_lo));
 
     // ExactAdd(c, u_h).
-    let (t_h, t_l) = two_sum::<R>(u_h, c);
+    let (t_h, t_l) = R::two_sum::<false>(u_h, c);
 
     (t_h, t_l, u_l)
 }
@@ -476,7 +476,7 @@ fn fmadd_ro_rescue<R: FloatRegister>(a: Storage<R>, b: Storage<R>, c: Storage<R>
     // overshoots: |step| > |err_v| even across a downward binade crossing),
     // and dv == 0 iff err_v == 0.
     let (v, err_v, fired) = odd_round_add_full::<R, true>(t_l, u_l);
-    let (s_rn, e_rn) = two_sum::<R>(t_h, v);
+    let (s_rn, e_rn) = R::two_sum::<false>(t_h, v);
 
     // Exact-zero sign, as in the main path: v == 0 means the exact result is
     // t_h, whose zero keeps its sign.

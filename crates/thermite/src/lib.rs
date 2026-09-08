@@ -117,6 +117,10 @@ pub mod features {
     /// gets dramatically slower, which is the whole problem dispatch exists to solve.
     pub const DISABLE_DISPATCH: bool = cfg!(feature = "disable_dispatch");
 
+    /// Whether the `outline_all_math` feature is enabled, emitting every math forwarder as
+    /// `#[inline(never)]` so each function has its own symbol. Diagnostic only.
+    pub const OUTLINE_ALL_MATH: bool = cfg!(feature = "outline_all_math");
+
     /// Whether the `avx2-f16c` feature is enabled, assuming `f16c` is present
     /// whenever AVX2 is (true of every AVX2 CPU) so half-precision conversion needs
     /// no separate runtime check. No effect off x86.

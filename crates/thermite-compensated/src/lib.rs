@@ -16,18 +16,23 @@ use thermite::{LargeInt, mask::GenericSelectable, prelude::*};
 
 use thermite::vector::ops::{AddSubExt, AddSubExtMasked, MulAddAssignExt, MulAddExt, Square, SquareMasked};
 
-// Every error-free transformation here (`two_sum`, `two_diff`, `two_prod`,
-// Veltkamp splitting) recovers the rounding error of an operation by relying on
-// the compiler evaluating the expression exactly as written. Thermite's
-// `algebraic-scalar` feature makes scalar-backend arithmetic reassociable, at
-// which point LLVM is entitled to fold `(a - (s - v)) + (b - v)` to zero and
-// every error term silently vanishes. The results stay plausible and lose all
-// the extra precision this crate exists to provide. Refuse the combination.
-const _: () = assert!(
-    !thermite::features::ALGEBRAIC_SCALAR,
-    "thermite-compensated cannot be used with thermite's `algebraic-scalar` feature: reassociable \
-     float arithmetic silently zeroes the error terms of double-double arithmetic."
-);
+// # `algebraic-scalar` support
+//
+// Error-free transformations only work if the compiler evaluates them as written. Under
+// `algebraic-scalar` the scalar backend's arithmetic is reassociable, so LLVM can fold
+// `(a - (s - v)) + (b - v)` to zero and the error terms silently vanish.
+//
+// Two things keep that from happening here:
+//
+// - `ScalarValue for Vector<R>` delegates `two_sum`/`two_diff`/`two_prod`/`square` to
+//   `FloatVectorWithBits`, which the scalar backend overrides strict. `f32`/`f64` keep the
+//   default bodies, since element-level `+` is plain strict Rust.
+// - Operators that join a cancelling subtraction in bare `+`/`-` lose the second word even
+//   when every EFT is strict. Those sites (`division_remainder`, the remainder join in the
+//   three division entry points, `Sub`'s `self.error - rhs.error`) take a `two_diff`/`two_sum`
+//   high word instead. The residual is dead code, so it is free.
+//
+// `tests/algebraic_scalar.rs` pins this.
 
 pub mod consts;
 pub mod math;
@@ -235,6 +240,27 @@ pub trait ScalarValue:
 
         (p, err)
     }
+
+    /// 2Quotient: `(q, r)` with `q = RN(a / b)` and `a == q * b + r` exactly.
+    ///
+    /// `r` is a remainder, not a second word of the quotient: `a / b == q + r / b`.
+    ///
+    /// Mostly used for `q`. `two_quot(a, b).0` is a correctly-rounded division that
+    /// survives `algebraic-scalar`, where a bare `/` may become `x * RN(1/c)` (up to
+    /// 1.204 ulp measured). The unused remainder is dead code. See
+    /// [`FloatVectorWithBits::two_quot`](thermite::vector::FloatVectorWithBits::two_quot).
+    #[inline(always)]
+    fn two_quot(a: Self, b: Self) -> (Self, Self) {
+        let q = a / b;
+
+        if matches!(Self::HAS_NATIVE_FMA, tribool::True) {
+            return (q, q.nmul_add(b, a));
+        }
+
+        let (p, e) = Self::two_prod(q, b);
+
+        (q, (a - p) - e)
+    }
 }
 
 impl ScalarValue for f32 {
@@ -428,11 +454,46 @@ where
     const MAX_ERFINV_SERIES: Self = const_splat::<Self, MaxErfinvSeriesValue<R::Element>>();
     const ERF_CF_SPLIT: Self = const_splat::<Self, ErfCfSplitValue<R::Element>>();
 
+    // Error-free transformations delegate to core, whose scalar backend overrides them
+    // strict. The trait defaults spell them in `+`/`-`/`*`, which `algebraic-scalar` makes
+    // reassociable on the scalar backend (see the crate-level note).
+    //
+    // `veltkamp_split` is not overridden; its only caller was `two_prod`, which now
+    // delegates. It stays as the reference implementation.
+    #[inline(always)]
+    fn two_sum(a: Self, b: Self) -> (Self, Self) {
+        <Self as FloatVectorWithBits>::two_sum(a, b)
+    }
+
+    #[inline(always)]
+    fn two_diff(a: Self, b: Self) -> (Self, Self) {
+        <Self as FloatVectorWithBits>::two_diff(a, b)
+    }
+
+    #[inline(always)]
+    fn two_prod(a: Self, b: Self) -> (Self, Self) {
+        <Self as FloatVectorWithBits>::two_prod(a, b)
+    }
+
+    #[inline(always)]
+    fn square(a: Self) -> (Self, Self) {
+        <Self as FloatVectorWithBits>::two_square(a)
+    }
+
+    #[inline(always)]
+    fn two_quot(a: Self, b: Self) -> (Self, Self) {
+        <Self as FloatVectorWithBits>::two_quot(a, b)
+    }
+
     // Operands this large are rare, so the packet takes one predictable branch rather
     // than four blends on every call. Below SSE4.1 there is no `blendv` and each select
     // is a three-op polyfill; the rebalance itself also needs enough registers to force
     // callee-saved spills into the prologue, which the hot path would pay even when the
     // branch is not taken. Both costs move into `rebalance_split_cold`.
+    //
+    // NOTE: `two_prod` now delegates to core, which uses its own per-lane-select
+    // `rebalance_for_split`, so this one only runs when called directly. Whether the cold
+    // branch was worth it off-FMA (x86_v1/v2, scalar) was never measured.
     #[inline(always)]
     fn rebalance_for_split(a: Self, b: Self) -> (Self, Self) {
         // One test for the whole packet, on the larger of the two magnitudes.
@@ -752,8 +813,11 @@ impl<E: ScalarValue + FloatElement> FloatElement for Compensated<E> {
 
         let (p, e) = E::square(s);
 
-        // sum of differences
-        let remainder = (this.value - p) + (this.error - e);
+        // Strict subtractions, same as the `FloatVector` twin below. Redundant when `E`
+        // is a plain element, necessary otherwise.
+        let (d_value, _) = E::two_diff(this.value, p);
+        let (d_error, _) = E::two_diff(this.error, e);
+        let remainder = d_value + d_error;
 
         // correction term
         let corr = remainder / (s + s);
@@ -845,9 +909,12 @@ impl<V: ScalarValue> Compensated<V> {
     }
 
     /// Returns the normalized value `(value + error)`.
+    ///
+    /// Strict, so a re-bracketing into surrounding arithmetic cannot discard the second
+    /// word instead of rounding it in.
     #[inline(always)]
     pub fn value(self) -> V {
-        self.value + self.error
+        V::two_sum(self.value, self.error).0
     }
 
     /// Returns the uncompensated value, with no error term applied.
@@ -863,10 +930,14 @@ impl<V: ScalarValue> Compensated<V> {
     }
 
     /// Renormalizes a compensated number from a value and error term.
+    ///
+    /// Goes through `two_sum` rather than spelling Fast2Sum inline, since the inline form
+    /// is algebraically zero and `algebraic-scalar` may fold it. Knuth's unconditional
+    /// form, because `|value| >= |error|` is what this function is meant to restore, not
+    /// something it can assume.
     #[inline(always)]
     pub(crate) fn renormalized(value: V, error: V) -> Self {
-        let sum = value + error;
-        let err = (value - sum) + error;
+        let (sum, err) = V::two_sum(value, error);
         Self { value: sum, error: err }
     }
 
@@ -898,7 +969,10 @@ impl<V: ScalarValue> Compensated<V> {
         if ALLOW_UNNORMALIZED {
             let (s, e) = V::two_sum(self.value, rhs.value);
             self.value = s;
-            self.error += e + rhs.error;
+            // Strict. The two per-step residuals combine before meeting the running error.
+            let (t, _) = V::two_sum(e, rhs.error);
+            let (t, _) = V::two_sum(self.error, t);
+            self.error = t;
         } else {
             *self += rhs;
         }
@@ -913,7 +987,10 @@ impl<V: ScalarValue> Compensated<V> {
         if ALLOW_UNNORMALIZED {
             let (s, e) = V::two_diff(self.value, rhs.value);
             self.value = s;
-            self.error = e + (self.error - rhs.error);
+            // `self.error - rhs.error` cancels and carries the result. Strict, see `Sub`.
+            let (d, _) = V::two_diff(self.error, rhs.error);
+            let (t, _) = V::two_sum(e, d);
+            self.error = t;
         } else {
             *self -= rhs;
         }
@@ -936,7 +1013,12 @@ impl<V: ScalarValue> Add<Self> for Compensated<V> {
     #[inline(always)]
     fn add(self, rhs: Self) -> Self::Output {
         let (s, e) = V::two_sum(self.value, rhs.value);
-        Self::renormalized(s, e + self.error + rhs.error)
+
+        // Strict, left-associated as before. Opposite-sign error words cancel here too.
+        let (t, _) = V::two_sum(e, self.error);
+        let (t, _) = V::two_sum(t, rhs.error);
+
+        Self::renormalized(s, t)
     }
 }
 
@@ -946,7 +1028,8 @@ impl<V: ScalarValue> Add<V> for Compensated<V> {
     #[inline(always)]
     fn add(self, rhs: V) -> Self::Output {
         let (s, e) = V::two_sum(self.value, rhs);
-        Self::renormalized(s, e + self.error)
+        let (t, _) = V::two_sum(e, self.error);
+        Self::renormalized(s, t)
     }
 }
 
@@ -956,7 +1039,14 @@ impl<V: ScalarValue> Sub<Self> for Compensated<V> {
     #[inline(always)]
     fn sub(self, rhs: Self) -> Self::Output {
         let (s, e) = V::two_diff(self.value, rhs.value);
-        Self::renormalized(s, e + (self.error - rhs.error))
+
+        // `self.error - rhs.error` must be strict: when the values nearly cancel so do the
+        // error words, and this difference IS the second word of the result. As a bare `-`
+        // under `algebraic-scalar` it folded, dropping `digamma`/`trigamma` to plain f64
+        // (5.5e-17 relative). The outer `e + d` was measured and does not need this.
+        let (d, _) = V::two_diff(self.error, rhs.error);
+
+        Self::renormalized(s, e + d)
     }
 }
 
@@ -967,7 +1057,8 @@ impl<V: ScalarValue> Sub<V> for Compensated<V> {
     #[inline(always)]
     fn sub(self, rhs: V) -> Self::Output {
         let (s, e) = V::two_diff(self.value, rhs);
-        Self::renormalized(s, e + self.error)
+        let (t, _) = V::two_sum(e, self.error);
+        Self::renormalized(s, t)
     }
 }
 
@@ -978,9 +1069,13 @@ impl<V: ScalarValue> Square for Compensated<V> {
     fn square(self) -> Self {
         let (p, e) = V::square(self.value);
 
-        let d = self.error * self.value;
+        // `d + d` is exact, but `contract` would otherwise be free to fuse the product
+        // into the following add and change the rounding, so take the product strictly too.
+        let d = V::two_prod(self.error, self.value).0;
+        let (dd, _) = V::two_sum(d, d);
+        let (t, _) = V::two_sum(dd, e);
 
-        Self::renormalized(p, d + d + e)
+        Self::renormalized(p, t)
     }
 }
 
@@ -1031,13 +1126,19 @@ impl<V: ScalarValue> Div<Self> for Compensated<V> {
 
     #[inline(always)]
     fn div(self, rhs: Self) -> Self {
-        let q1 = self.value / rhs.value;
+        let q1 = V::two_quot(self.value, rhs.value).0;
 
         let (p_hi, p_lo) = V::two_prod(q1, rhs.value);
 
         // calculate the remainder r
         // let r = (self.value - p_hi) - p_lo + self.error - (q1 * rhs.error);
-        let r = (self.value - p_hi) - p_lo + q1.nmul_adde(rhs.error, self.error);
+        //
+        // Strict join: the remainder has cancelled and this add carries the result.
+        // `nmul_adde` only covers its own half.
+        let (r, _) = V::two_sum(
+            division_remainder(self.value, p_hi, p_lo),
+            q1.nmul_adde(rhs.error, self.error),
+        );
 
         Self::renormalized(q1, r / rhs.value)
     }
@@ -1045,13 +1146,13 @@ impl<V: ScalarValue> Div<Self> for Compensated<V> {
 
 impl<V: ScalarValue> Compensated<V> {
     pub fn div_scalar(num: V, denom: Self) -> Self {
-        let q1 = num / denom.value;
+        let q1 = V::two_quot(num, denom.value).0;
 
         let (p_hi, p_lo) = V::two_prod(q1, denom.value);
 
         // calculate the remainder r
         // let r = (self.value - p_hi) - p_lo + self.error - (q1 * rhs.error);
-        let r = (num - p_hi) - p_lo - (q1 * denom.error);
+        let (r, _) = V::two_diff(division_remainder(num, p_hi, p_lo), V::two_prod(q1, denom.error).0);
 
         Compensated::renormalized(q1, r / denom.value)
     }
@@ -1062,12 +1163,12 @@ impl<V: ScalarValue> Compensated<V> {
     /// dividing with compensation.
     #[inline(always)]
     pub fn from_fraction(numerator: V, denominator: V) -> Self {
-        let q1 = numerator / denominator;
+        let q1 = V::two_quot(numerator, denominator).0;
 
         let (p_hi, p_lo) = V::two_prod(q1, denominator);
 
         // calculate the remainder r
-        let r = (numerator - p_hi) - p_lo;
+        let r = division_remainder(numerator, p_hi, p_lo);
 
         Self::renormalized(q1, r / denominator)
     }
@@ -1087,18 +1188,38 @@ impl Compensated<f32> {
     }
 }
 
+/// `(x - p_hi) - p_lo`, the remainder step shared by every compensated division, with
+/// both subtractions strict.
+///
+/// The order matters: `x - p_hi` cancels almost completely, and the second step corrects
+/// at `p_lo`'s scale. Re-bracketed as `x - (p_hi + p_lo)` the product rounds back to one
+/// word and the remainder collapses, which is exactly what `algebraic-scalar` did to
+/// `Compensated / V` (error term came back zero).
+///
+/// The residuals are discarded to match what the call sites did before. Carrying them
+/// would be more accurate and is a separate change.
+#[inline(always)]
+fn division_remainder<V: ScalarValue>(x: V, p_hi: V, p_lo: V) -> V {
+    let (t, _) = V::two_diff(x, p_hi);
+    let (t, _) = V::two_diff(t, p_lo);
+    t
+}
+
 impl<V: ScalarValue> Div<V> for Compensated<V> {
     type Output = Self;
 
     #[inline(always)]
     fn div(self, rhs: V) -> Self {
         // same as regular division, but rhs has no error term
-        let q1 = self.value / rhs;
+        let q1 = V::two_quot(self.value, rhs).0;
 
         let (p_hi, p_lo) = V::two_prod(q1, rhs);
 
         // calculate the remainder r
-        let r = (self.value - p_hi) - p_lo + self.error;
+        //
+        // The `+ self.error` must be strict too: the remainder has cancelled, so this add
+        // carries the whole result. `Div<Self>` gets that from `nmul_adde` for free.
+        let (r, _) = V::two_sum(division_remainder(self.value, p_hi, p_lo), self.error);
 
         Self::renormalized(q1, r / rhs)
     }
@@ -1139,9 +1260,9 @@ impl<V: ScalarValue> MulAddExt<Self, Self> for Compensated<V> {
         let (p, e_prod_base) = V::two_prod(self.value, b.value);
         let (s, e_sum) = V::two_sum(p, c.value);
 
-        let e_prod = self.error.mul_adde(b.value, self.value.mul_adde(b.error, e_prod_base + e_sum));
+        let e_prod = self.error.mul_adde(b.value, self.value.mul_adde(b.error, V::two_sum(e_prod_base, e_sum).0));
 
-        Self::renormalized(s, e_prod + c.error)
+        Self::renormalized(s, V::two_sum(e_prod, c.error).0)
     }
 
     #[inline(always)]
@@ -1149,11 +1270,11 @@ impl<V: ScalarValue> MulAddExt<Self, Self> for Compensated<V> {
         let (p, e_prod_base) = V::two_prod(self.value, b.value);
         let (s, e_diff) = V::two_diff(p, c.value);
 
-        let e_prod = self.error.mul_adde(b.value, self.value.mul_adde(b.error, e_prod_base + e_diff));
+        let e_prod = self.error.mul_adde(b.value, self.value.mul_adde(b.error, V::two_sum(e_prod_base, e_diff).0));
 
         // Subtract c.error because the operation is (a*b) - c
         // The total error is the product error + subtraction error - c's error component
-        Self::renormalized(s, e_prod - c.error)
+        Self::renormalized(s, V::two_diff(e_prod, c.error).0)
     }
 
     #[inline(always)] fn nmul_add(self, a: Self, b: Self) -> Self::Output { self.mul_add(-a, b) }
@@ -1175,9 +1296,9 @@ impl<V: ScalarValue> MulAddExt<V, Self> for Compensated<V> {
         let (p, e_prod_base) = V::two_prod(self.value, b);
         let (s, e_sum) = V::two_sum(p, c.value);
 
-        let e_prod = self.error.mul_adde(b, e_prod_base + e_sum);
+        let e_prod = self.error.mul_adde(b, V::two_sum(e_prod_base, e_sum).0);
 
-        Self::renormalized(s, e_prod + c.error)
+        Self::renormalized(s, V::two_sum(e_prod, c.error).0)
     }
 
     #[inline(always)]
@@ -1185,9 +1306,9 @@ impl<V: ScalarValue> MulAddExt<V, Self> for Compensated<V> {
         let (p, e_prod_base) = V::two_prod(self.value, b);
         let (s, e_diff) = V::two_diff(p, c.value);
 
-        let e_prod = self.error.mul_adde(b, e_prod_base + e_diff);
+        let e_prod = self.error.mul_adde(b, V::two_sum(e_prod_base, e_diff).0);
 
-        Self::renormalized(s, e_prod - c.error)
+        Self::renormalized(s, V::two_diff(e_prod, c.error).0)
     }
 
     #[inline(always)] fn nmul_add(self, a: V, b: Self) -> Self::Output { self.mul_add(-a, b) }
@@ -1212,7 +1333,7 @@ impl<V: ScalarValue> MulAddExt<Self, V> for Compensated<V> {
         // Estimating FMAs, like the sibling impls: this is the second-order error term,
         // where a rounding is already below the result's last bit, so it is not worth an
         // emulated FMA on a backend without one.
-        let e_prod = self.error.mul_adde(a.value, self.value.mul_adde(a.error, e_prod_base + e_sum));
+        let e_prod = self.error.mul_adde(a.value, self.value.mul_adde(a.error, V::two_sum(e_prod_base, e_sum).0));
 
         Self::renormalized(s, e_prod)
     }
@@ -1222,7 +1343,7 @@ impl<V: ScalarValue> MulAddExt<Self, V> for Compensated<V> {
         let (p, e_prod_base) = V::two_prod(self.value, b.value);
         let (s, e_diff) = V::two_diff(p, c);
 
-        let e_prod = self.error.mul_adde(b.value, self.value.mul_adde(b.error, e_prod_base + e_diff));
+        let e_prod = self.error.mul_adde(b.value, self.value.mul_adde(b.error, V::two_sum(e_prod_base, e_diff).0));
 
         Self::renormalized(s, e_prod)
     }
@@ -2633,12 +2754,15 @@ where
 
             // Project Low -> High (check our work)
             // Calculate residual (bits lost in cast) in High Precision
-            let delta = from.value - FROM::cast_from(value);
+            // Strict, twice: this subtraction cancels to exactly the lost bits, and a
+            // re-bracketing with the join below would drop them.
+            let (delta, _) = FROM::two_diff(from.value, FROM::cast_from(value));
+            let (delta, _) = FROM::two_sum(delta, from.error);
 
             Self {
                 value,
                 // Accumulate total error (new lost bits + old error)
-                error: TO::cast_from(delta + from.error),
+                error: TO::cast_from(delta),
             }
         } else if from_size < to_size {
             // --- Upsampling (f32-like -> f64-like) ---
@@ -2651,7 +2775,7 @@ where
             // Since f32+f32 (48 bits effective) fits in f64 (53 bits),
             // this sum is exact.
             Self {
-                value: v_hi + e_hi,
+                value: TO::two_sum(v_hi, e_hi).0,
                 error: TO::ZERO,
             }
         } else {
@@ -2701,8 +2825,12 @@ impl<V: CompensatedFloatVector> FloatVector for Compensated<V> {
 
         let (p, e) = ScalarValue::square(s);
 
-        // sum of differences
-        let remainder = (self.value - p) + (self.error - e);
+        // Strict subtractions, see `division_remainder`. `self.value - p` cancels almost
+        // completely; re-bracketed as `(value + error) - (p + e)` the remainder is
+        // destroyed. Under `algebraic-scalar` that cost a whole ulp in `sqrt`'s high word.
+        let (d_value, _) = V::two_diff(self.value, p);
+        let (d_error, _) = V::two_diff(self.error, e);
+        let (remainder, _) = V::two_sum(d_value, d_error);
 
         // correction term
         let corr = remainder / (s + s);

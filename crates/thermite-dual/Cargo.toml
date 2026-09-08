@@ -24,6 +24,7 @@ special = ["dep:thermite-special"]
 # derivatives carried through double-double arithmetic.
 compensated = ["dep:thermite-compensated"]
 std = ["thermite/std"]
+wasm = ["thermite/wasm"]                   # wasm32/wasm64 SIMD128 backend (needed to name it in tests)
 
 [dependencies]
 thermite = { workspace = true }

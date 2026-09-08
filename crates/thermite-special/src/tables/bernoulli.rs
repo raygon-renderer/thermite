@@ -68,7 +68,7 @@ use thermite::element::FloatElement;
 /// Implemented for `f32` and `f64` here, and for `Compensated<f32>` /
 /// `Compensated<f64>` by `thermite-compensated` under its `special` feature.
 pub trait BernoulliNumbers: FloatElement {
-    /// `$B_2, B_4, B_6, \ldots$`: every even-index Bernoulli number finite in `Self`,
+    /// `$B_2, B_4, B_6, \ldots$`, every even-index Bernoulli number finite in `Self`,
     /// starting at `$B_2$`, so that entry `i` is `$B_{2i+2}$`.
     ///
     /// See the [module docs](self) for why the table ends where it does, and why

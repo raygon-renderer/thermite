@@ -53,6 +53,27 @@ where
 }
 
 #[inline(always)]
+fn array_map2<T: Copy, U: Copy, A: Copy, B: Copy, F, const N: usize>(
+    x: [T; N],
+    y: [U; N],
+    mut f: F,
+) -> ([A; N], [B; N])
+where
+    F: FnMut(T, U) -> (A, B),
+{
+    let mut a: [MaybeUninit<A>; N] = unsafe { MaybeUninit::uninit().assume_init() };
+    let mut b: [MaybeUninit<B>; N] = unsafe { MaybeUninit::uninit().assume_init() };
+
+    for i in 0..N {
+        let (aa, bb) = f(x[i], y[i]);
+        a[i].write(aa);
+        b[i].write(bb);
+    }
+
+    unsafe { (MaybeUninit::assume_init(a.into()), MaybeUninit::assume_init(b.into())) }
+}
+
+#[inline(always)]
 fn array_from_fn<U, F, const N: usize>(mut f: F) -> [U; N]
 where
     F: FnMut(usize) -> U,
@@ -1685,6 +1706,30 @@ where
 
     unsafe fn native_ldexp(value: Storage<Self>, exp: Storage<Self::SignedBits>) -> Storage<Self> {
         Self(array_zip2(value.0, exp.0, |v, e| unsafe { R::native_ldexp(v, e) }))
+    }
+
+    fn two_sum<const FAST: bool>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (s, e) = array_map2(a.0, b.0, #[inline(always)] |a, b| R::two_sum::<FAST>(a, b));
+
+        (Self(s), Self(e))
+    }
+
+    fn two_diff<const FAST: bool>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (s, e) = array_map2(a.0, b.0, #[inline(always)] |a, b| R::two_diff::<FAST>(a, b));
+
+        (Self(s), Self(e))
+    }
+
+    fn two_prod<const SQUARE: bool>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (p, e) = array_map2(a.0, b.0, #[inline(always)] |a, b| R::two_prod::<SQUARE>(a, b));
+
+        (Self(p), Self(e))
+    }
+
+    fn two_quot(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (q, r) = array_map2(a.0, b.0, #[inline(always)] |a, b| R::two_quot(a, b));
+
+        (Self(q), Self(r))
     }
 
     unsafe fn native_frexp(value: Storage<Self>) -> (Storage<Self>, Storage<Self::SignedBits>) {

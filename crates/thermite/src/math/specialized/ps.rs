@@ -38,6 +38,16 @@ impl<V: FloatVectorWithBits<Element = f32> + PrimalProjection<Primal = V>> Speci
         super::generic::inv_sum_inv_slice_internal::<V, f32, P>(values, Self::ONE)
     }
 
+    #[inline(always)]
+    fn difference_of_products<P: Policy>(self, b: Self, c: Self, d: Self) -> Self {
+        super::generic::difference_of_products_internal::<V, f32, P>(self, b, c, d)
+    }
+
+    #[inline(always)]
+    fn sum_of_products<P: Policy>(self, b: Self, c: Self, d: Self) -> Self {
+        super::generic::sum_of_products_internal::<V, f32, P>(self, b, c, d)
+    }
+
     /// `Primal = Self`, so the coefficients are already this vector type, which means
     /// the ILP lowering [`poly`](SpecializedCoreMath::poly) uses applies unchanged, and
     /// the primal-Horner default would be a straight downgrade for real vectors.
@@ -47,6 +57,26 @@ impl<V: FloatVectorWithBits<Element = f32> + PrimalProjection<Primal = V>> Speci
     #[inline(always)]
     fn poly_n_primal<P: Policy, N: ArrayLength>(self, coeffs: &GenericArray<Self::Primal, N>) -> Self {
         super::generic::poly_n_primal_internal::<V, P, N>(self, coeffs)
+    }
+
+    #[inline(always)]
+    fn poly_n<P: Policy, const N: usize>(self, coeffs: &[f32; N]) -> Self {
+        super::generic::poly_n_internal::<V, f32, P, N>(self, coeffs)
+    }
+
+    #[inline(always)]
+    fn poly_rev_n<P: Policy, const N: usize>(self, coeffs: &[f32; N]) -> Self {
+        super::generic::poly_rev_n_internal::<V, f32, P, N>(self, coeffs)
+    }
+
+    #[inline(always)]
+    fn poly<P: Policy>(self, coeffs: &[f32]) -> Self {
+        super::generic::poly_slice_internal::<V, f32, P, false>(self, coeffs)
+    }
+
+    #[inline(always)]
+    fn poly_rev<P: Policy>(self, coeffs: &[f32]) -> Self {
+        super::generic::poly_slice_internal::<V, f32, P, true>(self, coeffs)
     }
 
     /// The reverse-order twin of [`poly_n_primal`](SpecializedCoreMath::poly_n_primal), with
@@ -1218,7 +1248,8 @@ impl<V: FloatVectorWithBits<Element = f32>> SpecializedRealMath<f32> for V {
             let tau_c: V = crate::const_splat!(f32: hexf::hexf32!("-0x1.58p-19"));
             let tau_d: V = crate::const_splat!(f32: hexf::hexf32!("0x1.10b462p-28"));
 
-            (((x - n * tau_a) - n * tau_b) - n * tau_c) - n * tau_d
+            // Chained `nmul_adde`, not bare operators; see `wrap_angle` in `pd.rs`.
+            n.nmul_adde(tau_d, n.nmul_adde(tau_c, n.nmul_adde(tau_b, n.nmul_adde(tau_a, x))))
         };
 
         // One-period repair for a floor that landed on the wrong side of a seam. Beyond
@@ -1469,7 +1500,9 @@ pub(crate) fn trig_range_reduction<P: Policy, V: FloatVectorWithBits<Element = f
             // dp1f + dp2f is exact in f32; three chained FMAs
             y.nmul_add(dp4f, y.nmul_add(dp3f, y.nmul_add(dp2f + dp1f, xa)))
         } else {
-            (((xa - y * dp1f) - y * dp2f) - y * dp3f) - y * dp4f
+            // `(((xa - y*dp1f) - y*dp2f) - y*dp3f) - y*dp4f` via `nmul_adde`, not bare
+            // operators, so `algebraic-scalar` cannot factor the products. See `pd.rs`.
+            y.nmul_adde(dp4f, y.nmul_adde(dp3f, y.nmul_adde(dp2f, y.nmul_adde(dp1f, xa))))
         }
     };
 

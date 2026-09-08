@@ -28,8 +28,14 @@ use thermite::{
 /// exactly and applied to first order, taking the seed from `O(x^2 eps)` to `O(eps)`. As
 /// in `compound`, no correction is attempted without a fused multiply-add: the residual is
 /// only a residual if the product was single-rounded.
+///
+/// `EXACT_FMA` says whether the multiply-add is a single rounding. `V::HAS_NATIVE_FMA`
+/// cannot: a `Complex` or `Dual` over a hardware-FMA vector answers `True` while rounding
+/// more than once, so `x.mul_sube(x, q)` on it is the residual of nothing. `ps`/`pd` pass
+/// `true`; the `SpecializedSpecialMath` defaults pass `false`. A composite that knows its
+/// arithmetic is single-rounded may pass `true` from its own override.
 #[inline(always)]
-fn seed<P, E, V>(x: V) -> (V, V)
+fn seed<P, E, V, const EXACT_FMA: bool>(x: V) -> (V, V)
 where
     P: Policy,
     E: FloatElement,
@@ -40,7 +46,7 @@ where
     let q = x * x;
     let mut f = (q * neg_quarter).exp_p::<P>();
 
-    if const { P::POLICY.precision.ge(PrecisionPolicy::Best) && matches!(V::HAS_NATIVE_FMA, thermite::tribool::True) } {
+    if const { EXACT_FMA && P::POLICY.precision.ge(PrecisionPolicy::Best) && matches!(V::HAS_NATIVE_FMA, thermite::tribool::True) } {
         // e^{-(q + q_lo)/4} = f * (1 - q_lo/4) to first order, and q_lo/4 is at most an ulp of
         // q/4 so the second-order term is below working precision. Guarded on a finite
         // square: past overflow f is already the correct zero and the residual is NaN.
@@ -65,13 +71,13 @@ where
 /// the critical path plus one multiply beside it. See [`seed`] for the range and the
 /// precision of the Gaussian factor.
 #[inline(always)]
-pub fn hermite_function_n<P, E, V, const N: usize>(x: V) -> V
+pub fn hermite_function_n<P, E, V, const N: usize, const EXACT_FMA: bool>(x: V) -> V
 where
     P: Policy,
     E: FloatElement,
     V: FloatVector<Element = E> + SpecializedTranscendentalMath<E>,
 {
-    let (f, g0) = seed::<P, E, V>(x);
+    let (f, g0) = seed::<P, E, V, EXACT_FMA>(x);
 
     if const { N == 0 } {
         return g0 * f;
@@ -101,13 +107,13 @@ where
 /// `a_k` and `b_k` are computed per step rather than folded. Both are a correctly rounded
 /// division and square root either way, so the result agrees with the const form to the bit.
 #[inline(always)]
-pub fn hermite_function<P, E, V>(x: V, n: u32) -> V
+pub fn hermite_function<P, E, V, const EXACT_FMA: bool>(x: V, n: u32) -> V
 where
     P: Policy,
     E: FloatElement,
     V: FloatVector<Element = E> + SpecializedTranscendentalMath<E>,
 {
-    let (f, g0) = seed::<P, E, V>(x);
+    let (f, g0) = seed::<P, E, V, EXACT_FMA>(x);
 
     if n == 0 {
         return g0 * f;
@@ -142,7 +148,7 @@ where
 ///
 /// The empty series is `0`, where the const form refuses to compile.
 #[inline(always)]
-pub fn hermite_function_series_slice<P, E, V>(x: V, coeffs: &[E]) -> V
+pub fn hermite_function_series_slice<P, E, V, const EXACT_FMA: bool>(x: V, coeffs: &[E]) -> V
 where
     P: Policy,
     E: FloatElement,
@@ -154,7 +160,7 @@ where
         return V::ZERO;
     }
 
-    let (f, g0) = seed::<P, E, V>(x);
+    let (f, g0) = seed::<P, E, V, EXACT_FMA>(x);
 
     if n == 1 {
         return (f * V::splat(coeffs[0])) * g0;
@@ -196,7 +202,7 @@ where
 /// S   = pi^{-1/4} f * (f c_0 + sqrt(2) x y_1 - sqrt(1/2) y_2)
 /// ```
 #[inline(always)]
-pub fn hermite_function_series<P, E, V, const N: usize>(x: V, coeffs: &[E; N]) -> V
+pub fn hermite_function_series<P, E, V, const N: usize, const EXACT_FMA: bool>(x: V, coeffs: &[E; N]) -> V
 where
     P: Policy,
     E: FloatElement,
@@ -206,7 +212,7 @@ where
         assert!(N >= 1, "hermite_function_series: N must be at least 1");
     }
 
-    let (f, g0) = seed::<P, E, V>(x);
+    let (f, g0) = seed::<P, E, V, EXACT_FMA>(x);
 
     // S = c_0 psi_0
     if const { N == 1 } {

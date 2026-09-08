@@ -458,19 +458,28 @@ fn forwarder(cx: &Cx, spec_path: &syn::Path, family: &Family, f: &MathFn) -> Tok
 
     // A declaration already carrying #[skip_dispatch] must not get a second
     // one from the disable_dispatch arm.
-    let skip = if f.attrs.iter().any(|a| a.path().is_ident("skip_dispatch")) {
+    let declared_skip = f.attrs.iter().any(|a| a.path().is_ident("skip_dispatch"));
+    let skip = if declared_skip {
         quote! {}
     } else {
         quote! { #[skip_dispatch] }
     };
 
+    // `outline_all_math` gives each math function its own symbol for profiling.
+    // #[skip_dispatch] methods have no #[target_feature] trampoline and would compile
+    // at the baseline ISA out of line, so they stay inlined.
+    let outline = cfg!(feature = "outline_all_math") && !declared_skip;
+    let inline_d = if outline { quote! { #[inline(never)] } } else { quote! { #[inline(always)] } };
+    // The disable_dispatch arm is #[skip_dispatch] by construction.
+    let inline_nd = quote! { #[inline(always)] };
+
     quote! {
         #[cfg(not(feature = "disable_dispatch"))]
-        #(#attrs)* #[inline(always)]
+        #(#attrs)* #inline_d
         fn #name #generics(#inputs) #output #where_clause #body
 
         #[cfg(feature = "disable_dispatch")]
-        #(#attrs)* #skip #[inline(always)]
+        #(#attrs)* #skip #inline_nd
         fn #name #generics(#inputs) #output #where_clause #body
     }
 }

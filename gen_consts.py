@@ -118,13 +118,24 @@ FEIGENBAUM_DELTA = mp.mpf(
     "4.6692016091029906718532038204662016172581855774757686327456513430041343302113147371386897440239480138171659848551898"
 )
 
-# Marker for the three constants whose value depends on the format's precision.
+# Marker for the constants whose value depends on the format's precision.
 # `EPS[name](p)` takes the mantissa bit count of the REPRESENTATION: 24/53 for
 # a plain f32/f64, and 47/105 for a double-double built out of them.
+NINE_LN_9 = 9 * mp.log(9)
+
+
+def _nine_ln_9_lo(p):
+    # The residual of the base format's rounding of 9 ln 9 (f32 for p <= 47).
+    nearest = nearest_f32 if p <= 47 else nearest_f64
+    r = exact(NINE_LN_9) - Fraction(nearest(exact(NINE_LN_9)))
+    return mp.mpf(r.numerator) / mp.mpf(r.denominator)
+
+
 EPS = {
     "EPSILON": lambda p: mp.mpf(2) ** -(p - 1),
     "SQRT_EPSILON": lambda p: mp.sqrt(mp.mpf(2) ** -(p - 1)),
     "FOURTH_ROOT_EPSILON": lambda p: mp.sqrt(mp.sqrt(mp.mpf(2) ** -(p - 1))),
+    "NINE_LN_9_LO": _nine_ln_9_lo,
 }
 
 # ---------------------------------------------------------------------------
@@ -160,6 +171,19 @@ CONSTS = [
     ("LN_10", mp.log(10), r"`$\ln 10$`"),
     ("LN_PI", mp.log(pi), r"`$\ln \pi$`"),
     ("LN_TAU", mp.log(2 * pi), r"`$\ln 2\pi$`"),
+    ("LN_9", mp.log(9), r"`$\ln 9$`"),
+    (
+        "NINE_LN_9_HI",
+        NINE_LN_9,
+        r"""`$9 \ln 9$`, the high word of the two-word split used by the Stirling shift in
+`thermite-special`'s Poisson kernel. `$9 \ln 9 \approx 19.8$` sits in an exponent, where
+one rounding of it is about 8 ulp of the density.""",
+    ),
+    (
+        "NINE_LN_9_LO",
+        None,
+        r"`$9 \ln 9$` minus [`NINE_LN_9_HI`](Self::NINE_LN_9_HI), exactly. Format-dependent like the epsilons.",
+    ),
     ("FRAC_LN_PI_2", mp.log(pi) / 2, r"`$\frac{1}{2}\ln \pi$`"),
     (
         "FRAC_LN_TAU_2",
@@ -549,8 +573,9 @@ def gen_thermite():
     p("    };")
     p("}")
     p("")
-    p("/// Like [`for_each_float_const!`], minus the three constants whose value depends on")
-    p("/// the representation's precision (`EPSILON`, `SQRT_EPSILON`, `FOURTH_ROOT_EPSILON`).")
+    p("/// Like [`for_each_float_const!`], minus the constants whose value depends on the")
+    p("/// representation's precision (`EPSILON`, `SQRT_EPSILON`, `FOURTH_ROOT_EPSILON`,")
+    p("/// `NINE_LN_9_LO`).")
     p("///")
     p("/// Use this for anything that compares one representation's constants against")
     p("/// another's: a `Compensated<f64>` carries its own, much smaller, epsilon.")

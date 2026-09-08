@@ -560,12 +560,14 @@ where
         let e3 = s.mul_adde(e2, e3_base);
 
         // Compute High-Precision Residual: r = x - s^3
-        // We perform the cancellation (value - p3) carefully.
-        let diff_hi = self.value - p3;
-        let diff_lo = self.error - e3;
+        //
+        // `value - p3` annihilates (`p3` is `s^3`), so the residual IS the result. Strict,
+        // same reason as `sqrt`.
+        let (diff_hi, _) = V::two_diff(self.value, p3);
+        let (diff_lo, _) = V::two_diff(self.error, e3);
 
         // Collapse to scalar (valid because diff is tiny, approx 10^-16)
-        let r = diff_hi + diff_lo;
+        let (r, _) = V::two_sum(diff_hi, diff_lo);
 
         // Halley Correction Term: s * (r / (2*s^3 + x))
 

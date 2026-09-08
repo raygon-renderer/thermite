@@ -17,6 +17,7 @@ mod cardinal;
 mod hypot;
 mod log;
 mod poly;
+mod products;
 mod reduce;
 mod sqrt;
 
@@ -24,5 +25,6 @@ pub use cardinal::*;
 pub use hypot::*;
 pub use log::*;
 pub use poly::*;
+pub use products::*;
 pub use reduce::*;
 pub use sqrt::*;

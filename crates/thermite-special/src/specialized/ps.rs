@@ -26,6 +26,44 @@ where
     V: thermite::math::PrimalProjection<Primal = V>,
     V: thermite::math::RealMathWithPolicy<Element = f32>,
 {
+    /// Through the strict `FloatVectorWithBits::two_sum`, so it survives `algebraic-scalar`.
+    #[inline(always)]
+    fn exp_two_sum(a: Self, b: Self) -> (Self, Self) {
+        a.two_sum(b)
+    }
+
+    // `EXACT_FMA = true`: a real vector's multiply-add is a single rounding, so the seed's
+    // `x*x` residual is real. See `generic::hermite::seed`.
+    #[inline(always)]
+    fn hermite_function_n<P: Policy, const N: usize>(mut x: Self) -> Self {
+        #[cfg(not(target_arch = "spirv"))]
+        if let Some(new_x) = thermite::math::specialized::FlushDenormals::<P>::flush_denormals([x]) {
+            x = new_x[0];
+        }
+
+        generic::hermite::hermite_function_n::<P, _, _, N, true>(x)
+    }
+
+    #[inline(always)]
+    fn hermite_function<P: Policy>(mut x: Self, n: u32) -> Self {
+        #[cfg(not(target_arch = "spirv"))]
+        if let Some(new_x) = thermite::math::specialized::FlushDenormals::<P>::flush_denormals([x]) {
+            x = new_x[0];
+        }
+
+        generic::hermite::hermite_function::<P, _, _, true>(x, n)
+    }
+
+    #[inline(always)]
+    fn hermite_function_series_n<P: Policy, const N: usize>(self, coeffs: &[Self::Element; N]) -> Self {
+        generic::hermite::hermite_function_series::<P, _, _, N, true>(self, coeffs)
+    }
+
+    #[inline(always)]
+    fn hermite_function_series<P: Policy>(self, coeffs: &[Self::Element]) -> Self {
+        generic::hermite::hermite_function_series_slice::<P, _, _, true>(self, coeffs)
+    }
+
     #[inline(always)]
     fn zetac<P: Policy>(self) -> Self {
         generic::zeta::zeta_impl::<P, _, _, true>(self)

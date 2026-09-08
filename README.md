@@ -162,21 +162,24 @@ on the helpers beneath it, and check that first when a kernel underperforms.
 | `scalar` | none, 1 lane | Always available, and what the ragged ends of a loop run on |
 | `x86_v1` | SSE2 | Complete |
 | `x86_v2` | SSE4.2 | Complete, adds `pshufb` shuffles over v1 |
-| `x86_v3` | AVX2 + FMA | Complete, the widest working backend and the primary optimization target |
-| `x86_v4` | AVX-512 | Not implemented. The hardware still works, it runs the AVX2 backend |
+| `x86_v3` | AVX2 + FMA | Complete, and the primary optimization target |
+| `x86_v4` | AVX-512 | Complete, opt-in behind `avx512-tier1..3`. Validated under emulation, not yet on hardware |
 | `neon` | AArch64 AdvSIMD | Complete. Mandatory on the architecture, so there's no feature to enable |
 | `wasm` | SIMD128 | Complete, opt-in behind the `wasm` feature |
 | `spirv` | SPIR-V | Incomplete and experimental, a compile error in released versions |
 
-All three x86 backends are compiled unconditionally on `x86` and `x86_64`, so a
+The v1-v3 x86 backends are compiled unconditionally on `x86` and `x86_64`, so a
 single binary carries all of them and `dispatch_dyn!` picks between them at
 runtime. 32-bit ARM isn't supported, since its NEON intrinsics are still
 unstable and ARMv7 NEON has no `f64` lanes. RISC-V V hasn't been started.
 
-The `avx512-tier1` through `avx512-tier3` features select which AVX-512 tier
-the in-progress x86-v4 backend compiles to (tier 1 is the Skylake-SP set, the
-floor, and there is no Knights Landing tier). The backend has no registers yet,
-so today they change no codegen and AVX-512 hardware runs the AVX2 backend.
+The `avx512-tier1` through `avx512-tier3` features select which AVX-512 tier the
+x86-v4 backend compiles to (tier 1 is the Skylake-SP set, the floor, there is
+no Knights Landing tier). With one on, `dispatch_dyn!` selects v4 on AVX-512
+hardware and `f32xN` is 16 lanes; without a tier specified the v4 registers
+aren't compiled at all and that hardware runs the AVX2 backend. The suites pass
+on all three tiers under Intel SDE emulation, which checks instruction
+semantics but not real hardware.
 
 ## The crates
 

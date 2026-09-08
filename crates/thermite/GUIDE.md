@@ -121,6 +121,9 @@ Five of the feature flags matter in practice:
   cheaper.
 - **`nightly`** unlocks the nightly-only paths, and then requires a nightly compiler. The
   AVX-512 tiers and the experimental SPIR-V backend live behind their own flags.
+- **`avx512-tier1..3`** compile the x86-v4 (AVX-512) backend at one of three tiers, one
+  per build. Without a specified tier, AVX-512 hardware runs the AVX2 backend.
+  See the backend table below.
 
 The two `avx2-` defaults assume that a CPU with AVX2 also has F16C and PCLMULQDQ, which is
 true of every shipping AVX2 part, and they let Thermite skip a runtime check.
@@ -224,16 +227,19 @@ idle:
 | NEON | 4 | 2 | 8 | 16 | ready |
 | WASM SIMD128 | 4 | 2 | 8 | 16 | ready, opt-in via `wasm` |
 | Scalar | 1 | 1 | 1 | 1 | ready |
-| AVX-512 | 16 | 8 | 32 | 64 | **not implemented yet** |
+| AVX-512 | 16 | 8 | 32 | 64 | ready, opt-in via `avx512-tier1..3`; emulation-tested only |
 | SPIR-V | 1 | 1 | | | **experimental, not ready to use** |
 
-Be careful with the last two. Their designs are settled, and the widths above
-are what they will be, but neither is finished. AVX-512 currently exists as the tier system
-that describes which sub-extensions a given part actually has, since AVX-512 is a foundation
-plus a dozen optional extensions instead of one ISA, and the register implementations
-behind it are still to come. That one is a question of time and of having the hardware to
-validate against. The SPIR-V backend is further along but still experimental, sits behind
-its own feature flag, and requires nightly. Don't build on either yet.
+AVX-512 is implemented at every width and its suites are
+green on all three tiers, but only under Intel SDE emulation. I haven't been able to
+run it on an actual AVX-512 CPU. It is opt-in rather than automatic because the tier ladder
+describes which sub-extensions a given part actually has, AVX-512 being a foundation
+plus a dozen optional extensions rather than one ISA, and exactly one tier compiles
+per build. A build with no tier feature runs AVX-512 hardware on the AVX2 backend.
+
+The SPIR-V backend is a different story: still experimental, behind its own feature
+flag, requiring nightly, and a hard compile error in released versions. Don't build
+on that one yet.
 
 The scalar backend really is one lane, and that is the point. It's what
 makes the same generic function usable as its own reference implementation, which the

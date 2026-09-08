@@ -860,6 +860,46 @@ impl<R: FloatRegister> FloatVectorWithBits for Vector<R> {
     type SignedBits = Vector<R::SignedBits>;
     type Bits = Vector<R::Bits>;
 
+    const VELTKAMP_SPLITTER: Self = Vector(R::VELTKAMP_SPLITTER);
+    const VELTKAMP_SPLIT_THRESH: Self = Vector(R::VELTKAMP_SPLIT_THRESH);
+    const VELTKAMP_SPLIT_DOWN: Self = Vector(R::VELTKAMP_SPLIT_DOWN);
+    const VELTKAMP_SPLIT_UP: Self = Vector(R::VELTKAMP_SPLIT_UP);
+
+    fn two_sum(self, rhs: Self) -> (Self, Self) {
+        let (s, e) = R::two_sum::<false>(self.0, rhs.0);
+        (Vector(s), Vector(e))
+    }
+
+    fn fast_two_sum(self, rhs: Self) -> (Self, Self) {
+        let (s, e) = R::two_sum::<true>(self.0, rhs.0);
+        (Vector(s), Vector(e))
+    }
+
+    fn two_diff(self, rhs: Self) -> (Self, Self) {
+        let (s, e) = R::two_diff::<false>(self.0, rhs.0);
+        (Vector(s), Vector(e))
+    }
+
+    fn fast_two_diff(self, rhs: Self) -> (Self, Self) {
+        let (s, e) = R::two_diff::<true>(self.0, rhs.0);
+        (Vector(s), Vector(e))
+    }
+
+    fn two_prod(self, rhs: Self) -> (Self, Self) {
+        let (p, e) = R::two_prod::<false>(self.0, rhs.0);
+        (Vector(p), Vector(e))
+    }
+
+    fn two_square(self) -> (Self, Self) {
+        let (p, e) = R::two_prod::<true>(self.0, self.0);
+        (Vector(p), Vector(e))
+    }
+
+    fn two_quot(self, rhs: Self) -> (Self, Self) {
+        let (q, r) = R::two_quot(self.0, rhs.0);
+        (Vector(q), Vector(r))
+    }
+
     const NATIVE_CAP: NativeCapability = R::NATIVE_CAP;
 
     unsafe fn native_ldexp(self, exp: Self::SignedBits) -> Self {

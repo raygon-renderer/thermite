@@ -33,6 +33,9 @@ pub(crate) mod f32_table {
     pub const LN_10: (f32, f32) = (f32::from_bits(0x40135D8D), f32::from_bits(0x40135D8E)); // 2.302585092994045684017991 (RD/RU)
     pub const LN_PI: (f32, f32) = (f32::from_bits(0x3F928682), f32::from_bits(0x3F928683)); // 1.144729885849400174143427 (RD/RU)
     pub const LN_TAU: (f32, f32) = (f32::from_bits(0x3FEB3F8E), f32::from_bits(0x3FEB3F8F)); // 1.837877066409345483560659 (RD/RU)
+    pub const LN_9: (f32, f32) = (f32::from_bits(0x400C9F53), f32::from_bits(0x400C9F54)); // 2.19722457733621938279049 (RD/RU)
+    pub const NINE_LN_9_HI: (f32, f32) = (f32::from_bits(0x419E333E), f32::from_bits(0x419E333F)); // 19.77502119602597444511441 (RD/RU)
+    pub const NINE_LN_9_LO: (f32, f32) = (f32::from_bits(0x35202A36), f32::from_bits(0x35202A37)); // 0.0000005966607400701144142646055 (RD/RU)
     pub const FRAC_LN_PI_2: (f32, f32) = (f32::from_bits(0x3F128682), f32::from_bits(0x3F128683)); // 0.5723649429247000870717137 (RD/RU)
     pub const FRAC_LN_TAU_2: (f32, f32) = (f32::from_bits(0x3F6B3F8E), f32::from_bits(0x3F6B3F8F)); // 0.9189385332046727417803297 (RD/RU)
     pub const LOG2_10: (f32, f32) = (f32::from_bits(0x40549A78), f32::from_bits(0x40549A79)); // 3.321928094887362347870319 (RD/RU)
@@ -152,6 +155,9 @@ pub(crate) mod f64_table {
     pub const LN_10: (f64, f64) = (f64::from_bits(0x40026BB1BBB55515), f64::from_bits(0x40026BB1BBB55516)); // 2.302585092994045684017991 (RD/RU)
     pub const LN_PI: (f64, f64) = (f64::from_bits(0x3FF250D048E7A1BD), f64::from_bits(0x3FF250D048E7A1BE)); // 1.144729885849400174143427 (RD/RU)
     pub const LN_TAU: (f64, f64) = (f64::from_bits(0x3FFD67F1C864BEB4), f64::from_bits(0x3FFD67F1C864BEB5)); // 1.837877066409345483560659 (RD/RU)
+    pub const LN_9: (f64, f64) = (f64::from_bits(0x400193EA7AAD030A), f64::from_bits(0x400193EA7AAD030B)); // 2.19722457733621938279049 (RD/RU)
+    pub const NINE_LN_9_HI: (f64, f64) = (f64::from_bits(0x4033C667CA02A36B), f64::from_bits(0x4033C667CA02A36C)); // 19.77502119602597444511441 (RD/RU)
+    pub const NINE_LN_9_LO: (f64, f64) = (f64::from_bits(0xBCB5A876341005A2), f64::from_bits(0xBCB5A876341005A1)); // -3.005658727500875590906372e-16 (RD/RU)
     pub const FRAC_LN_PI_2: (f64, f64) = (f64::from_bits(0x3FE250D048E7A1BD), f64::from_bits(0x3FE250D048E7A1BE)); // 0.5723649429247000870717137 (RD/RU)
     pub const FRAC_LN_TAU_2: (f64, f64) = (f64::from_bits(0x3FED67F1C864BEB4), f64::from_bits(0x3FED67F1C864BEB5)); // 0.9189385332046727417803297 (RD/RU)
     pub const LOG2_10: (f64, f64) = (f64::from_bits(0x400A934F0979A371), f64::from_bits(0x400A934F0979A372)); // 3.321928094887362347870319 (RD/RU)
@@ -275,6 +281,9 @@ pub mod nearest {
         pub const LN_10: f32 = f32::from_bits(0x40135D8E);
         pub const LN_PI: f32 = f32::from_bits(0x3F928682);
         pub const LN_TAU: f32 = f32::from_bits(0x3FEB3F8E);
+        pub const LN_9: f32 = f32::from_bits(0x400C9F54);
+        pub const NINE_LN_9_HI: f32 = f32::from_bits(0x419E333E);
+        pub const NINE_LN_9_LO: f32 = f32::from_bits(0x35202A37);
         pub const FRAC_LN_PI_2: f32 = f32::from_bits(0x3F128682);
         pub const FRAC_LN_TAU_2: f32 = f32::from_bits(0x3F6B3F8E);
         pub const LOG2_10: f32 = f32::from_bits(0x40549A78);
@@ -393,6 +402,9 @@ pub mod nearest {
         pub const LN_10: f64 = f64::from_bits(0x40026BB1BBB55516);
         pub const LN_PI: f64 = f64::from_bits(0x3FF250D048E7A1BD);
         pub const LN_TAU: f64 = f64::from_bits(0x3FFD67F1C864BEB5);
+        pub const LN_9: f64 = f64::from_bits(0x400193EA7AAD030B);
+        pub const NINE_LN_9_HI: f64 = f64::from_bits(0x4033C667CA02A36C);
+        pub const NINE_LN_9_LO: f64 = f64::from_bits(0xBCB5A876341005A2);
         pub const FRAC_LN_PI_2: f64 = f64::from_bits(0x3FE250D048E7A1BD);
         pub const FRAC_LN_TAU_2: f64 = f64::from_bits(0x3FED67F1C864BEB5);
         pub const LOG2_10: f64 = f64::from_bits(0x400A934F0979A371);

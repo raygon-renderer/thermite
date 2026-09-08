@@ -75,6 +75,60 @@ where
     type ExpIntDetails = Self;
     const LAGUERRE_PRODUCT_SEED_CAP: i32 = V::LAGUERRE_PRODUCT_SEED_CAP;
 
+    /// Componentwise, delegating to the inner vector's strict `two_sum`. Sound because a
+    /// dual's addition rounds once per component, so each residual is a real one (unlike
+    /// multiplication, where the derivative part is a sum of two products).
+    #[inline(always)]
+    fn exp_two_sum(a: Self, b: Self) -> (Self, Self) {
+        let (re_hi, re_lo) = V::exp_two_sum(a.re, b.re);
+
+        // Hand-rolled: `array::map` does not inline inside target_feature code.
+        let mut hi = a.dual;
+        let mut lo = a.dual;
+        let mut i = 0;
+        while i < N {
+            let (h, l) = V::exp_two_sum(a.dual[i], b.dual[i]);
+            hi[i] = h;
+            lo[i] = l;
+            i += 1;
+        }
+
+        (Dual { re: re_hi, dual: hi }, Dual { re: re_lo, dual: lo })
+    }
+
+    // Hermite functions with `EXACT_FMA = true` (the trait defaults pass `false`).
+    //
+    // The seed's Gaussian correction recovers the residual of `x*x`, which is only valid
+    // when the multiply-add is one rounding. A dual's is not, but it still works here:
+    //
+    // 1. The value channel is bit-for-bit the real computation, so `.re` gets the true
+    //    residual (verified over 200k random arguments).
+    // 2. The derivative `-x/2 * f` is proportional to `f`, so correcting the value
+    //    corrects it too.
+    //
+    // Worst band `|x| = 32..53` against a 50-digit reference: 0.24 ulp value / 0.30
+    // derivative with the correction, 87.35 for both without. Nested duals get the same
+    // argument one level down.
+    #[inline(always)]
+    fn hermite_function_n<P: Policy, const M: usize>(x: Self) -> Self {
+        thermite_special::specialized::generic::hermite::hermite_function_n::<P, _, _, M, true>(x)
+    }
+
+    #[inline(always)]
+    fn hermite_function<P: Policy>(x: Self, n: u32) -> Self {
+        thermite_special::specialized::generic::hermite::hermite_function::<P, _, _, true>(x, n)
+    }
+
+    #[inline(always)]
+    fn hermite_function_series_n<P: Policy, const M: usize>(self, coeffs: &[Self::Element; M]) -> Self {
+        thermite_special::specialized::generic::hermite::hermite_function_series::<P, _, _, M, true>(self, coeffs)
+    }
+
+    #[inline(always)]
+    fn hermite_function_series<P: Policy>(self, coeffs: &[Self::Element]) -> Self {
+        thermite_special::specialized::generic::hermite::hermite_function_series_slice::<P, _, _, true>(self, coeffs)
+    }
+
     #[inline(always)]
     fn erf<P: Policy>(self) -> Self {
         let v = self.re.erf_p::<P>();

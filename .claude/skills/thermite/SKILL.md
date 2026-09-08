@@ -8,7 +8,7 @@ description: Thermite, the generic ISA-portable Rust SIMD library, and its therm
 Pure-Rust SIMD abstraction. Write a function **once** over a trait hierarchy
 (`GenericVector -> NumericVector -> FloatVector` + math traits); it compiles to
 optimal code for every backend (SSE2, SSE4.2, AVX2, WASM SIMD128, NEON, scalar,
-experimental AVX-512 + SPIR-V) at every lane count. The *same* function also runs
+opt-in AVX-512, experimental SPIR-V) at every lane count. The *same* function also runs
 on **composite** types -- `Dual` (autodiff), `Compensated` (double-double) -- with
 no changes, because they implement the same traits.
 
@@ -74,7 +74,7 @@ Defaults: `document_registers`, `bitvec`, `avx2-f16c`, `avx2-pclmul`.
 | `disable_dispatch` | off | Replace runtime dispatch with `#[inline(always)]`. Bloats/slows unless all inlines. Advanced. |
 | `nightly` | off | Nightly-only paths (requires nightly compiler). |
 | `wasm` | off | wasm32/wasm64 SIMD128 backend. |
-| `avx512-tier1..3` | off | **UNDER CONSTRUCTION.** Select which AVX-512 tier the x86-v4 backend compiles to (one per build, highest requested wins; tier 1 = Skylake-SP F+CD+BW+DQ+VL floor, no KNL tier). No registers yet, so today they compile the module skeleton only; AVX-512 CPUs run the x86-v3 (AVX2) backend, which dispatch maps `X86V4` onto. |
+| `avx512-tier1..3` | off | Select which AVX-512 tier the x86-v4 backend compiles to (one per build, highest requested wins; tier 1 = Skylake-SP F+CD+BW+DQ+VL floor, no KNL tier). With one on, `dispatch_dyn!` selects `X86V4<TierN>` on AVX-512 hardware and `f32xN` is 16 lanes. WITHOUT one the v4 registers are not compiled and dispatch deliberately maps the `X86V4` rung onto x86-v3. Implemented at every width; tested under Intel SDE emulation only, never on real hardware. |
 | `spirv` | off | **HARD COMPILE ERROR in released versions.** Incomplete: no `impl Simd` (so no vector type aliases, not a dispatch target), f32/i32/u32 only, nothing off `target_arch = "spirv"`. Needs a git dep plus `RUSTFLAGS='--cfg thermite_unstable_spirv'`. |
 
 **No `neon` feature**: NEON/AdvSIMD is mandatory in AArch64, so the backend is

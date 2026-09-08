@@ -25,6 +25,7 @@ use thermite::{
 
 use crate::specialized::SpecializedSpecialMath;
 
+
 /// Below this the Stirling series in [`stirlerr`] is not accurate to binary64 at any
 /// depth (it is asymptotic, and the smallest term at `n = 9` is under `1e-18`, at `n = 6`
 /// it is `1e-14`). Callers handle `n < STIRLERR_MIN` some other way: a table for integers,
@@ -172,11 +173,16 @@ where
 }
 
 /// The shared core of every `$x^k e^{-x}/\Gamma(k+1)$` shape here: the Poisson mass, its
-/// log, and the Laguerre-function seed. Returns `(rest, large, prod, n)` such that
+/// log, and the Laguerre-function seed. Returns `(rest_hi, rest_lo, large, prod, n)` such
+/// that
 ///
 /// ```text
-/// P(k; lambda) = exp(rest - [large ? 0 : lambda]) * prod / sqrt(2 pi n)
+/// P(k; lambda) = exp(rest_hi + rest_lo - [large ? 0 : lambda]) * prod / sqrt(2 pi n)
 /// ```
+///
+/// `rest_lo` is the second word of the exponent, nonzero only on the shifted lanes (see
+/// the split below) and zero for `k >= 9` and the peak series. Callers must pass it to
+/// [`exp_two_sum`]; dropping it cost `poisson_pmf` 14 ulp.
 ///
 /// where `n`, `prod` are from [`shift_to_stirling`] (`n = k`, `prod = 1` for `k >= 9`) and
 /// `rest` is one of three things, per lane, always with `-stirlerr(n)`:
@@ -196,7 +202,7 @@ where
 /// shift and `ln lambda` fold away. Uniform vectors skip whichever branch no lane needs.
 /// `k = 0` gives `0 * ln 0 = NaN` at `lambda = 0`; callers pin that.
 #[inline(always)]
-pub fn pmf_parts<P, E, V, const ALL_LARGE: bool>(k: V, lambda: V) -> (V, V::Mask, V, V)
+pub fn pmf_parts<P, E, V, const ALL_LARGE: bool>(k: V, lambda: V) -> (V, V, V::Mask, V, V)
 where
     P: Policy,
     E: FloatElement,
@@ -216,45 +222,102 @@ where
     let near = large & v.abs().cmp_lt(V::splat(<E as FloatElement>::ConstRatio::<1, 5>::VALUE));
 
     if const { !P::POLICY.avoid_branching } && near.all() {
-        return (-(st + bd0_series::<P, E, V>(n, diff, v)), large, prod, n);
+        return (-(st + bd0_series::<P, E, V>(n, diff, v)), V::ZERO, large, prod, n);
     }
 
+    let all_large = const { ALL_LARGE } || (const { !P::POLICY.avoid_branching } && large.all());
+
     // Large: -(k ln(k/lambda) - diff). Small: k ln lambda - n ln n + n. One ln between them.
-    let kl = if const { ALL_LARGE } || (const { !P::POLICY.avoid_branching } && large.all()) {
+    let kl = if all_large {
         V::ZERO
     } else {
-        // 0 * ln 0 dodged at k = 0.
-        large.select(V::ZERO, k.is_zero().select(V::ZERO, k * lambda.ln_p::<P>()))
+        // Dodge `0 * ln 0` on the NaN itself, not on `k = 0`. Selecting on `k.is_zero()`
+        // has the same value but discards `d/dk = ln lambda`, which a `Dual` seeded on `k`
+        // lost at `k = 0`. Only `0 * inf` (lambda zero or infinite) needs dodging.
+        let kl = k * lambda.ln_p::<P>();
+        large.select(V::ZERO, kl.is_nan().select(V::ZERO, kl))
     };
+
+    // The shifted lanes never form `n ln n` as one rounded product: `exp` turns absolute
+    // error in the exponent into relative error in the density, and `n ln n ~ 19.8`, so
+    // one rounding is ~8 ulp (measured 14.4 ulp median on `poisson_pmf(0, lambda)`).
+    // Every shifted lane is in one binade, `n = 9 + frac(k)`, so split at its left edge:
+    //
+    //     n ln n = 9 ln 9 + f ln 9 + n ln(1 + f/9),   f = n - 9  (exact, Sterbenz)
+    //
+    // Only the leading term is large enough to need two words (`E::NINE_LN_9_HI/LO`).
+    // `LN_9` stays one word: it multiplies `f < 1`, and adding its low word measured no
+    // change at any `k`. `ln_1p` and not `ln(1 + t)`: forming `1 + t` rounds, and `n`
+    // times that is 4.5 ulp.
     let l = large.select(n / lambda, n).ln_p::<P>();
-    let plain = n.nmul_adde(l, kl + large.select(diff, n)) - st;
+
+    let (plain, plain_lo) = if all_large {
+        // No shifted lane to compensate.
+        (n.nmul_adde(l, kl + diff) - st, V::ZERO)
+    } else {
+        let f = n - V::splat(<E as FloatElement>::ConstInt::<STIRLERR_MIN>::VALUE);
+        let t = f * V::splat(<E as FloatElement>::ConstRatio::<1, STIRLERR_MIN>::VALUE);
+        let l1 = t.ln_1p_p::<P>();
+
+        let small = f.mul_adde(V::LN_9, n * l1);
+
+        // TwoSum against the constant head: `hi` is the rounded `n ln n`, `lo` its
+        // residual. Knuth's form, since `small` can be zero at integer `k`. Through
+        // `exp_two_sum` rather than inline so `algebraic-scalar` cannot fold it.
+        let (hi, resid) = V::exp_two_sum(V::NINE_LN_9_HI, small);
+        let lo = resid + V::NINE_LN_9_LO;
+
+        // Shifted lanes subtract the two-word head. `n - hi` is exact there (both are
+        // multiples of `2^-49` and the difference is under 16), so keep this association.
+        let a = large.select(n.nmul_adde(l, kl + diff), (n - hi) + kl);
+
+        // Second residual, from the rounding of `a - st`. Dropping it costs 1.06 ulp
+        // against 0.33. Through the same hook with `-st` (exact negation); the old
+        // inline `((a - p) - st)` was foldable under `algebraic-scalar`.
+        let (p, resid_p) = V::exp_two_sum(a, -st);
+
+        (p, large.select(V::ZERO, resid_p - lo))
+    };
 
     if const { !P::POLICY.avoid_branching } && near.none() {
-        return (plain, large, prod, n);
+        return (plain, plain_lo, large, prod, n);
     }
 
     (
         near.select(-(st + bd0_series::<P, E, V>(n, diff, v)), plain),
+        near.select(V::ZERO, plain_lo),
         large,
         prod,
         n,
     )
 }
 
-/// `exp(base + rest)` where `base` is a large exact-ish number (`-lambda`, `x/4`) and `rest`
-/// is small: TwoSum recovers the rounding of the sum, and `e^{s + lo} = e^s (1 + lo)` to
-/// first order. Without it the sum rounds to half an ulp of `base`, which the exponential
-/// turns into hundreds of ulp.
+/// `exp(base + rest_hi + rest_lo)` where `base` is a large exact-ish number (`-lambda`,
+/// `x/4`) and the `rest` pair is small: TwoSum recovers the rounding of the sum, and
+/// `e^{s + lo} = e^s (1 + lo)` to first order. Without it the sum rounds to half an ulp of
+/// `base`, which the exponential turns into hundreds of ulp.
+///
+/// `rest_lo` is the caller's own second word, added to the residual this function already
+/// recovers. It exists because the residual alone is not enough: `base`'s rounding is only
+/// half the problem, and `rest` arrives from [`pmf_parts`] carrying an error of its own
+/// that no amount of care in *this* sum can recover. Measured 2026-09-07 on
+/// `poisson_pmf(0, lambda)`, which is exactly `e^-lambda`: 14.39 ulp with `rest_lo`
+/// dropped, 0.33 with it.
+/// The TwoSum itself is [`SpecializedSpecialMath::exp_two_sum`], not spelled here: an
+/// error-free transformation written as `+` and `-` is only error-free when those are
+/// strict, and on the scalar backend under `algebraic-scalar` they are not. The trait
+/// method's default therefore returns a zero residual and this degrades cleanly to
+/// `exp(base + rest_hi + rest_lo)`; `ps`/`pd` and `Dual` override it to recover the real
+/// thing. See that method's docs.
 #[inline(always)]
-pub fn exp_two_sum<P, E, V>(base: V, rest: V) -> V
+pub fn exp_sum<P, E, V>(base: V, rest_hi: V, rest_lo: V) -> V
 where
     P: Policy,
     E: FloatElement,
     V: FloatVector<Element = E> + SpecializedSpecialMath<E>,
 {
-    let s = base + rest;
-    let bb = s - base;
-    let lo = (base - (s - bb)) + (rest - bb);
+    let (s, resid) = V::exp_two_sum(base, rest_hi);
+    let lo = resid + rest_lo;
     let es = s.exp_p::<P>();
     es.mul_adde(lo, es)
 }
@@ -272,7 +335,7 @@ where
     E: FloatElement,
     V: FloatVector<Element = E> + SpecializedSpecialMath<E>,
 {
-    let (rest, large, prod, n) = pmf_parts::<P, E, V, false>(k, lambda);
+    let (rest, rest_lo, large, prod, n) = pmf_parts::<P, E, V, false>(k, lambda);
     let tau_n = n * V::splat(E::TAU);
     let neg_half = V::splat(<E as FloatElement>::ConstRatio::<{ -1 }, 2>::VALUE);
 
@@ -295,10 +358,10 @@ where
 
     if const { LOG } {
         // rest + base + ln prod - ln(2 pi n) / 2
-        let l = tau_n.ln_p::<P>().mul_adde(neg_half, (base + rest) + prod.ln_p::<P>());
+        let l = tau_n.ln_p::<P>().mul_adde(neg_half, ((base + rest) + rest_lo) + prod.ln_p::<P>());
         lambda_zero.select(k_zero.select(V::ZERO, V::NEG_INFINITY), l)
     } else {
-        let p = (exp_two_sum::<P, E, V>(base, rest) * prod).approx_div_sqrt_p::<P>(tau_n);
+        let p = (exp_sum::<P, E, V>(base, rest, rest_lo) * prod).approx_div_sqrt_p::<P>(tau_n);
         lambda_zero.select(k_zero.select(V::ONE, V::ZERO), p)
     }
 }

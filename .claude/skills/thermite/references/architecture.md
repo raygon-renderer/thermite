@@ -50,10 +50,10 @@ boundary, while inner `#[inline(always)]` code keeps target-feature codegen.
 | `x86_v1` | SSE2 | 128-bit | no blendv/round/pshufh/popcnt -- polyfilled |
 | `x86_v2` | SSE4.2 + POPCNT | 128-bit | blendv, pshufb; no FMA/gather |
 | `x86_v3` | AVX2 + FMA | 256-bit | `f32x8`/`f64x4` native, HW gather + FMA, `zeroupper` at boundaries |
+| `x86_v4` | AVX-512 | 512-bit | `f32x16`/`f64x8` native, native k-register opmasks, scatter, compress/expand. Opt-in via `avx512-tier1..3` (one tier per build); without a tier feature AVX-512 hardware runs `x86_v3`. Emulation-tested (Intel SDE) only |
 | `neon` | NEON/AdvSIMD | 128-bit | aarch64-only, **always on** (no feature to enable); NEON is baseline on aarch64 so dispatch is constant and the trampoline attr is a no-op |
 | `wasm` | SIMD128 | 128-bit | `wasm` feature, `target_arch=wasm32/64` |
 | `spirv` | SIMT (GPU) | 1 (per-invocation) | experimental; each shader invocation is one lane |
-| *(planned)* | AVX-512 | 512-bit | k-register masks |
 
 Runtime detection via `InstructionSet::get()` (cached), selected by `dispatch`.
 x86 levels follow the x86-64 microarchitecture-level scheme (v1/v2/v3/v4).

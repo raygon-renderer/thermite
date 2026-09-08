@@ -1089,6 +1089,26 @@ where
         (Self(val, PhantomData), ReducedRegister(exp, PhantomData))
     }
 
+    fn two_sum<const FAST: bool>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (s, e) = R::two_sum::<FAST>(a.0, b.0);
+        (Self(s, PhantomData), Self(e, PhantomData))
+    }
+
+    fn two_diff<const FAST: bool>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (s, e) = R::two_diff::<FAST>(a.0, b.0);
+        (Self(s, PhantomData), Self(e, PhantomData))
+    }
+
+    fn two_prod<const SQUARE: bool>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (p, e) = R::two_prod::<SQUARE>(a.0, b.0);
+        (Self(p, PhantomData), Self(e, PhantomData))
+    }
+
+    fn two_quot(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let (q, r) = R::two_quot(a.0, b.0);
+        (Self(q, PhantomData), Self(r, PhantomData))
+    }
+
     unsafe fn native_sin_cos<P: Policy>(value: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
         let (s, c) = unsafe { R::native_sin_cos::<P>(value.0) };
         (Self(s, PhantomData), Self(c, PhantomData))

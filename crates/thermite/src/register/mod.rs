@@ -3325,6 +3325,33 @@ pub trait FloatRegister:
     const NAN: Storage<Self>;
     const EPSILON: Storage<Self>;
 
+    /// [`FloatElementWithBits::VELTKAMP_SPLITTER`] splatted across every lane.
+    ///
+    /// `2^ceil(p/2) + 1`, which splits a float into two halves whose products are exact
+    /// (Dekker's `two_prod`). Defaulted via [`reg_splat`] like [`ALT_NEG`](Self::ALT_NEG),
+    /// so the emulated widths get it too.
+    const VELTKAMP_SPLITTER: Storage<Self> = crate::register::reg_splat::<Self>(
+        <Self::Element as FloatElementWithBits>::VELTKAMP_SPLITTER,
+    );
+
+    /// [`FloatElementWithBits::VELTKAMP_SPLIT_THRESH`] splatted: the magnitude above which
+    /// multiplying by [`VELTKAMP_SPLITTER`](Self::VELTKAMP_SPLITTER) overflows.
+    const VELTKAMP_SPLIT_THRESH: Storage<Self> = crate::register::reg_splat::<Self>(
+        <Self::Element as FloatElementWithBits>::VELTKAMP_SPLIT_THRESH,
+    );
+
+    /// [`FloatElementWithBits::VELTKAMP_SPLIT_DOWN`] splatted: the exact power of two an
+    /// over-threshold operand is scaled down by, with the factor moved onto the other one.
+    const VELTKAMP_SPLIT_DOWN: Storage<Self> = crate::register::reg_splat::<Self>(
+        <Self::Element as FloatElementWithBits>::VELTKAMP_SPLIT_DOWN,
+    );
+
+    /// [`FloatElementWithBits::VELTKAMP_SPLIT_UP`] splatted: the exact reciprocal of
+    /// [`VELTKAMP_SPLIT_DOWN`](Self::VELTKAMP_SPLIT_DOWN).
+    const VELTKAMP_SPLIT_UP: Storage<Self> = crate::register::reg_splat::<Self>(
+        <Self::Element as FloatElementWithBits>::VELTKAMP_SPLIT_UP,
+    );
+
     const EXP_MASK: Storage<Self::Bits>;
 
     /// Lane-alternating sign-bit mask `[-0.0, +0.0, -0.0, +0.0, ...]` (sign set on
@@ -3640,6 +3667,180 @@ pub trait FloatRegister:
         zip_ternary::<Self, _>(lhs, rhs, acc, |lhs, rhs, acc| {
             *lhs = MulAddExt::nmul_sub(*lhs, rhs, acc);
         })
+    }
+
+    // --- error-free transformations -----------------------------------------------
+    //
+    // These rely on the arithmetic being evaluated exactly as written, which is why they
+    // live on the register trait: the scalar backend's `add`/`sub`/`mul` are reassociable
+    // under `algebraic-scalar`, LLVM folds `(a - (s - v)) + (b - v)` to zero, and every
+    // error term silently vanishes. A backend with non-strict arithmetic overrides these
+    // with strict operations. The emulated FMA, `compensated_horner` and
+    // `thermite-compensated` are all built on them.
+
+    /// `(s, e)` with `s = RN(a + b)` and `s + e == a + b` **exactly**.
+    ///
+    /// `FAST` picks the algorithm, both from Graillat & Muller 2025:
+    ///
+    /// | `FAST` | algorithm | ops | precondition |
+    /// |---|---|---|---|
+    /// | `false` | Knuth's 2Sum (Alg. 2) | 6 | none |
+    /// | `true` | Dekker's Fast2Sum (Alg. 1) | 3 | `\|a\| >= \|b\|` |
+    ///
+    /// Both are exact for every finite input including subnormals.
+    ///
+    /// The `FAST` precondition is not checked (`a = 0` is also fine). Violate it and the
+    /// sum is still correct while the error term is quietly garbage, so use `FAST = true`
+    /// only where the ordering is structural. A caller wanting Fast2Sum on unordered
+    /// operands sorts first with a compare and two blends; whether that pays is per call
+    /// site, so it is not offered here.
+    #[inline(always)]
+    fn two_sum<const FAST: bool>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let s = Self::add(a, b);
+
+        if const { FAST } {
+            return (s, Self::sub(b, Self::sub(s, a)));
+        }
+
+        let v = Self::sub(s, a);
+        (s, Self::add(Self::sub(a, Self::sub(s, v)), Self::sub(b, v)))
+    }
+
+    /// `(s, e)` with `s = RN(a - b)` and `s + e == a - b` **exactly**.
+    ///
+    /// The subtractive twin of [`two_sum`](Self::two_sum), same `FAST` choice and
+    /// unchecked precondition.
+    #[inline(always)]
+    fn two_diff<const FAST: bool>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let s = Self::sub(a, b);
+
+        if const { FAST } {
+            return (s, Self::sub(Self::sub(a, s), b));
+        }
+
+        let v = Self::sub(s, a);
+        (s, Self::sub(Self::sub(a, Self::sub(s, v)), Self::add(b, v)))
+    }
+
+    /// Veltkamp's splitting: `(hi, lo)` with `hi + lo == a` exactly and each half carrying
+    /// about half the significand, so products of halves are exact.
+    ///
+    /// **Overflows for `|a|` above [`VELTKAMP_SPLIT_THRESH`](Self::VELTKAMP_SPLIT_THRESH)**,
+    /// where `a * VELTKAMP_SPLITTER` leaves the format. [`two_prod`](Self::two_prod) brings
+    /// operands under that with [`rebalance_for_split`](Self::rebalance_for_split) first.
+    #[inline(always)]
+    fn veltkamp_split(a: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let c = Self::mul(a, Self::VELTKAMP_SPLITTER);
+        let hi = Self::sub(c, Self::sub(c, a));
+        (hi, Self::sub(a, hi))
+    }
+
+    /// Move an exact power of two out of whichever operand would overflow
+    /// [`veltkamp_split`](Self::veltkamp_split) and into the other, leaving `a * b`
+    /// unchanged.
+    ///
+    /// Rebalances the inputs rather than scaling the split's output back up, which would
+    /// overflow for `a` near `MAX`. The receiving operand cannot overflow: if
+    /// `|a| > THRESH` and `a * b` is finite then `|b| < MAX / THRESH`. When both are that
+    /// large the true product is already infinite.
+    #[inline(always)]
+    fn rebalance_for_split(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let big_a = Self::gt(Self::abs(a), Self::VELTKAMP_SPLIT_THRESH);
+        let big_b = Self::gt(Self::abs(b), Self::VELTKAMP_SPLIT_THRESH);
+
+        let down = Self::VELTKAMP_SPLIT_DOWN;
+        let up = Self::VELTKAMP_SPLIT_UP;
+
+        let sa = Self::blendv(big_a, Self::blendv(big_b, Self::ONE, up), down);
+        let sb = Self::blendv(big_a, Self::blendv(big_b, Self::ONE, down), up);
+
+        (Self::mul(a, sa), Self::mul(b, sb))
+    }
+
+    /// 2Product: `(p, e)` with `p = RN(a * b)` and `p + e == a * b` **exactly**.
+    ///
+    /// `SQUARE` computes `a * a` and ignores `b`: one split instead of two, the equal cross
+    /// terms collapse into one doubled product, and no overflow guard is needed since
+    /// squaring anything that large already overflows.
+    ///
+    /// With a native FMA the error is one instruction, `fma(a, b, -p)`. Otherwise Dekker's
+    /// split, about ten operations. The non-FMA arm does not use the emulated
+    /// correctly-rounded `mul_add`: `compensated_horner` measured that at 27x for about 2x
+    /// of accuracy. `Tribool::Indeterminate` (wasm) takes the Dekker arm, since a silent
+    /// multiply-then-add makes `fma(a, b, -p)` zero.
+    ///
+    /// Residual limit, inherent to Dekker: if `a * b` is within a relative `2^-p` of `MAX`
+    /// the error term comes back infinite (the value is still correct).
+    /// `two_prod(MAX, 0.5)` is fine; only `two_prod(MAX, 1.0)` is affected.
+    #[inline(always)]
+    fn two_prod<const SQUARE: bool>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let b = if const { SQUARE } { a } else { b };
+
+        // The product uses the original operands; the rebalance preserves it exactly.
+        let p = Self::mul(a, b);
+
+        if matches!(Self::HAS_NATIVE_FMA, tribool::True) {
+            return (p, Self::mul_sub(a, b, p));
+        }
+
+        if const { SQUARE } {
+            let (hi, lo) = Self::veltkamp_split(a);
+
+            // The two cross terms are equal, so one doubled product replaces both.
+            let cross = Self::mul(hi, lo);
+
+            return (
+                p,
+                Self::add(
+                    Self::add(Self::sub(Self::mul(hi, hi), p), Self::add(cross, cross)),
+                    Self::mul(lo, lo),
+                ),
+            );
+        }
+
+        let (sa, sb) = Self::rebalance_for_split(a, b);
+        let (a_hi, a_lo) = Self::veltkamp_split(sa);
+        let (b_hi, b_lo) = Self::veltkamp_split(sb);
+
+        let e = Self::add(
+            Self::add(
+                Self::add(Self::sub(Self::mul(a_hi, b_hi), p), Self::mul(a_hi, b_lo)),
+                Self::mul(a_lo, b_hi),
+            ),
+            Self::mul(a_lo, b_lo),
+        );
+
+        (p, e)
+    }
+
+    /// 2Quotient: `(q, r)` with `q = RN(a / b)` and `a == q * b + r` **exactly**.
+    ///
+    /// `r` is a remainder, not a second word of the quotient: `a / b` is not generally a
+    /// sum of two floats. `a / b == q + r / b`.
+    ///
+    /// The main use is `q`. Discarding `r` leaves one strict division after DCE, which
+    /// matters because under `algebraic-scalar` the scalar backend's `div` carries `arcp`:
+    /// `x / c` for a constant `c` becomes `x * RN(1/c)`, two roundings, measured at
+    /// 1.204 ulp for `c = 49.0`. Unlike reassociating a chain of adds, that breaks a single
+    /// operation. `thermite-interval` divides its endpoints this way.
+    ///
+    /// With a native FMA, `r = fma(-q, b, a)` is exact for every finite input. Without one
+    /// it is assembled from [`two_prod`](Self::two_prod) and two subtractions, exact
+    /// except in the subnormal range where it rounds once.
+    ///
+    /// `b == 0`, an infinite operand, or a NaN gives the IEEE quotient in `q` and a
+    /// non-finite `r`; mask those lanes before branching on `r`'s sign.
+    #[inline(always)]
+    fn two_quot(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let q = Self::div(a, b);
+
+        if matches!(Self::HAS_NATIVE_FMA, tribool::True) {
+            return (q, Self::nmul_add(q, b, a));
+        }
+
+        let (p, e) = Self::two_prod::<false>(q, b);
+
+        (q, Self::sub(Self::sub(a, p), e))
     }
 
     /// Lane-alternating subtract/add: **even lanes subtract, odd lanes add**.

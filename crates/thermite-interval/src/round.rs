@@ -44,6 +44,19 @@ pub(crate) fn two_prod<V: IntervalFloatVector>(a: V, b: V) -> (V, V) {
     thermite_compensated::ScalarValue::two_prod(a, b)
 }
 
+/// `(q, r)` with `q = RN(a / b)` and `a == q*b + r`, from thermite-compensated.
+///
+/// Used for the quotient. Every widening tier assumes the endpoint is within half an ulp,
+/// and a bare `/` does not guarantee that under `thermite/algebraic-scalar`: `arcp`
+/// rewrites `x / c` for a constant `c` into `x * RN(1/c)`, measured at 1.204 ulp for
+/// `c = 49.0`, and enclosure fails. `two_quot(a, b).0` pins the strict division for free.
+///
+/// The remainder is available for a residual-widened division; nothing uses it yet.
+#[inline(always)]
+pub(crate) fn two_quot<V: IntervalFloatVector>(a: V, b: V) -> (V, V) {
+    thermite_compensated::ScalarValue::two_quot(a, b)
+}
+
 /// Exact square `(p, r)` with `p + r == a * a`, from thermite-compensated
 /// (FMA fast path, Veltkamp fallback).
 #[inline(always)]

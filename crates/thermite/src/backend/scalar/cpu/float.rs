@@ -239,10 +239,112 @@ impl FloatRegister for [<f $width>] {
     const HAS_APPROX_RSQRT: bool = false;
     const HAS_APPROX_RCP: bool = false;
 
+    // --- error-free transformations, forced strict ------------------------------
+    //
+    // The `FloatRegister` defaults are written out of `Self::add`/`sub`/`mul`, which here
+    // are `alg_*` and reassociable under `algebraic-scalar`. LLVM then folds
+    // `(a - (s - v)) + (b - v)` to zero and every error term silently vanishes. These
+    // overrides use the plain element operators, which stay strict. Ordinary arithmetic
+    // stays algebraic so loops over this backend still vectorize.
+    //
+    // `ArrayRegister<f32, N>` and friends delegate here, so these cover those widths too.
+    fn two_sum<const FAST: bool>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let s = a + b;
+
+        if const { FAST } {
+            return (s, b - (s - a));
+        }
+
+        let v = s - a;
+        (s, (a - (s - v)) + (b - v))
+    }
+
+    fn two_diff<const FAST: bool>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let s = a - b;
+
+        if const { FAST } {
+            return (s, (a - s) - b);
+        }
+
+        let v = s - a;
+        (s, (a - (s - v)) - (b + v))
+    }
+
+    fn veltkamp_split(a: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let c = a * Self::VELTKAMP_SPLITTER;
+        let hi = c - (c - a);
+        (hi, a - hi)
+    }
+
+    fn rebalance_for_split(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        // One lane, so this branches where the vector form selects.
+        if Self::abs(a) > Self::VELTKAMP_SPLIT_THRESH {
+            (a * Self::VELTKAMP_SPLIT_DOWN, b * Self::VELTKAMP_SPLIT_UP)
+        } else if Self::abs(b) > Self::VELTKAMP_SPLIT_THRESH {
+            (a * Self::VELTKAMP_SPLIT_UP, b * Self::VELTKAMP_SPLIT_DOWN)
+        } else {
+            (a, b)
+        }
+    }
+
+    fn two_prod<const SQUARE: bool>(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let b = if const { SQUARE } { a } else { b };
+
+        let p = a * b;
+
+        if matches!(<Self as FloatRegister>::HAS_NATIVE_FMA, tribool::True) {
+            return (p, MulAddExt::mul_sub(a, b, p));
+        }
+
+        if const { SQUARE } {
+            let (hi, lo) = Self::veltkamp_split(a);
+            let cross = hi * lo;
+
+            return (p, ((hi * hi - p) + (cross + cross)) + lo * lo);
+        }
+
+        let (sa, sb) = Self::rebalance_for_split(a, b);
+        let (a_hi, a_lo) = Self::veltkamp_split(sa);
+        let (b_hi, b_lo) = Self::veltkamp_split(sb);
+
+        (p, ((a_hi * b_hi - p) + a_hi * b_lo + a_lo * b_hi) + a_lo * b_lo)
+    }
+
+    // Mostly used for its high word. `Self::div` here is `alg_div`, whose `arcp` rewrites
+    // `x / c` for a constant `c` into `x * RN(1/c)` (two roundings, up to 1.204 ulp
+    // measured). Plain `/` is strict, so `two_quot(a, b).0` is a free correctly-rounded
+    // division.
+    fn two_quot(a: Storage<Self>, b: Storage<Self>) -> (Storage<Self>, Storage<Self>) {
+        let q = a / b;
+
+        if matches!(<Self as FloatRegister>::HAS_NATIVE_FMA, tribool::True) {
+            return (q, MulAddExt::nmul_add(q, b, a));
+        }
+
+        let (p, e) = Self::two_prod::<false>(q, b);
+
+        (q, (a - p) - e)
+    }
+
     fn mul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::mul_add(lhs, rhs, acc) }
     fn mul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::mul_sub(lhs, rhs, acc) }
     fn nmul_add(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::nmul_add(lhs, rhs, acc) }
     fn nmul_sub(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::nmul_sub(lhs, rhs, acc) }
+
+    // The `_e` variants delegate to the element layer instead of the `FloatRegister`
+    // defaults, whose unfused arm is `alg_mul`/`alg_add`. A reassociable accumulate
+    // re-brackets a Cody-Waite reduction, `((x - m1) - m2) - m3` into `x - (m1+m2+m3)`,
+    // rounding the split constant back to one word: measured 122705 ulp on `sin(1e5)`,
+    // 76 ulp on `exp(-302)`. A strict multiply alone fixes `exp` (two terms, LLVM declined
+    // the rewrite) but not `sin` (three or four terms); the accumulate is what matters.
+    //
+    // Cost: an FMA-shaped reduction loop no longer reassociates on this backend, so it is
+    // harder to autovectorize. Accepted, since a true FMA cannot be algebraic anyway.
+    // Plain `add`/`sub`/`mul` loops still reassociate freely.
+    fn mul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::mul_adde(lhs, rhs, acc) }
+    fn mul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::mul_sube(lhs, rhs, acc) }
+    fn nmul_adde(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::nmul_adde(lhs, rhs, acc) }
+    fn nmul_sube(lhs: Storage<Self>, rhs: Storage<Self>, acc: Storage<Self>) -> Storage<Self> { MulAddExt::nmul_sube(lhs, rhs, acc) }
 
     fn sqrt(value: Storage<Self>) -> Storage<Self> { FloatElement::sqrt(value) }
     fn floor(value: Storage<Self>) -> Storage<Self> { FloatElement::floor(value) }

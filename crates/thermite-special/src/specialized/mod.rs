@@ -22,7 +22,12 @@ mod bessel;
 pub use bessel::{BesselDetails, kernels};
 pub(crate) use bessel::{bessel_reflect_negates, bessel_reflect_v};
 
-pub(crate) mod generic;
+/// The real-vector kernel bodies behind the `ps`/`pd` overrides and the trait defaults.
+///
+/// Public so a composite can call one directly from its own override when it wants a
+/// different lowering than the default (e.g. `thermite-dual` takes the Hermite functions
+/// with `EXACT_FMA = true`).
+pub mod generic;
 mod pd;
 mod ps;
 
@@ -91,6 +96,21 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
     /// Per-arithmetic details of the [`expint`](Self::expint) kernel. Almost always
     /// `Self`, with an empty [`ExpIntDetails`] impl taking every default.
     type ExpIntDetails: ExpIntDetails<E, Self>;
+
+    /// TwoSum for exponent assembly: `(a + b, the rounding it discarded)`. Internal to
+    /// this trait; it is a lowering detail of the Poisson exponent.
+    ///
+    /// The default returns a zero residual on purpose. A TwoSum spelled with `+`/`-` is
+    /// only error-free while those are strict, and on the scalar backend under
+    /// `algebraic-scalar` they are not: LLVM folds the residual to zero. `ps.rs`/`pd.rs`
+    /// override this with the strict `FloatVectorWithBits::two_sum`, and `Dual` delegates
+    /// componentwise to its inner type. Do not "optimize" the default by spelling the six
+    /// adds here; it passes every test on every SIMD backend and is silently wrong on
+    /// exactly one configuration.
+    #[inline(always)]
+    fn exp_two_sum(a: Self, b: Self) -> (Self, Self) {
+        (a + b, Self::ZERO)
+    }
 
     /// Largest integer weight for which `laguerre_function_i` seeds by the direct product
     /// `x^{alpha/2} / sqrt(alpha!)` (a scalar factorial, `powi`, at most one `sqrt`) instead
@@ -1043,7 +1063,7 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
             x = new_x[0];
         }
 
-        generic::hermite::hermite_function_n::<P, _, _, N>(x)
+        generic::hermite::hermite_function_n::<P, _, _, N, false>(x)
     }
 
     #[inline(always)]
@@ -1053,17 +1073,17 @@ pub trait SpecializedSpecialMath<E>: thermite::math::specialized::SpecializedTra
             x = new_x[0];
         }
 
-        generic::hermite::hermite_function::<P, _, _>(x, n)
+        generic::hermite::hermite_function::<P, _, _, false>(x, n)
     }
 
     #[inline(always)]
     fn hermite_function_series_n<P: Policy, const N: usize>(self, coeffs: &[Self::Element; N]) -> Self {
-        generic::hermite::hermite_function_series::<P, _, _, N>(self, coeffs)
+        generic::hermite::hermite_function_series::<P, _, _, N, false>(self, coeffs)
     }
 
     #[inline(always)]
     fn hermite_function_series<P: Policy>(self, coeffs: &[Self::Element]) -> Self {
-        generic::hermite::hermite_function_series_slice::<P, _, _>(self, coeffs)
+        generic::hermite::hermite_function_series_slice::<P, _, _, false>(self, coeffs)
     }
 
     #[inline(always)]
