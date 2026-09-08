@@ -2,6 +2,7 @@
 #![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![allow(clippy::needless_arbitrary_self_type, clippy::needless_range_loop)]
+#![recursion_limit = "256"]
 
 use thermite::{
     element::{Element, ElementExt, FloatElementWithBits},
