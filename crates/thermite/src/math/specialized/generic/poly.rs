@@ -1,4 +1,10 @@
 //! Polynomial evaluation shared by the f32 and f64 backends.
+//!
+//! NOTE: These use explicit loops because LLVM doesn't want to
+//! unroll behind iterator machinery. The `iter().rev().skip(1)`
+//! form is particularly bad. It peels one iteration and leaves
+//! the rest as a runtime loop, even on a const-length array.
+//! Use index loops instead.
 
 use super::super::*;
 
@@ -24,8 +30,10 @@ where
             || !V::ISA.has_instruction_level_parallelism()
     } {
         let mut res = coeffs[n - 1];
-        for &c in coeffs.iter().rev().skip(1) {
-            res = res.mul_adde(x, c);
+        let mut i = n - 1;
+        while i > 0 {
+            i -= 1;
+            res = res.mul_adde(x, coeffs[i]);
         }
         return res;
     }
@@ -72,15 +80,19 @@ where
 
         if REV {
             let mut res = coeffs[0];
-            for &c in coeffs.iter().skip(1) {
-                res = res.mul_adde(x, c);
+            let mut i = 1;
+            while i < n {
+                res = res.mul_adde(x, coeffs[i]);
+                i += 1;
             }
             return res;
         }
 
         let mut res = coeffs[n - 1];
-        for &c in coeffs.iter().rev().skip(1) {
-            res = res.mul_adde(x, c);
+        let mut i = n - 1;
+        while i > 0 {
+            i -= 1;
+            res = res.mul_adde(x, coeffs[i]);
         }
         return res;
     }
@@ -110,8 +122,10 @@ where
             || !V::ISA.has_instruction_level_parallelism()
     } {
         let mut res = coeffs[0];
-        for &c in coeffs.iter().skip(1) {
-            res = res.mul_adde(x, c);
+        let mut i = 1;
+        while i < n {
+            res = res.mul_adde(x, coeffs[i]);
+            i += 1;
         }
         return res;
     }
@@ -160,15 +174,19 @@ where
 
         if REV {
             let mut res = V::splat(coeffs[0]);
-            for &c in coeffs.iter().skip(1) {
-                res = res.mul_adde(x, V::splat(c));
+            let mut i = 1;
+            while i < n {
+                res = res.mul_adde(x, V::splat(coeffs[i]));
+                i += 1;
             }
             return res;
         }
 
         let mut res = V::splat(coeffs[n - 1]);
-        for &c in coeffs.iter().rev().skip(1) {
-            res = res.mul_adde(x, V::splat(c));
+        let mut i = n - 1;
+        while i > 0 {
+            i -= 1;
+            res = res.mul_adde(x, V::splat(coeffs[i]));
         }
         return res;
     }
@@ -287,12 +305,13 @@ where
             return res;
         }
 
-        // Basic Horner: compact and accurate, even without FMA.
         #[allow(unreachable_code)]
         {
             let mut res = V::splat(coeffs[N - 1]);
-            for &c in coeffs.iter().rev().skip(1) {
-                res = res.mul_adde(x, V::splat(c));
+            let mut i = N - 1;
+            while i > 0 {
+                i -= 1;
+                res = res.mul_adde(x, V::splat(coeffs[i]));
             }
             return res;
         }
@@ -359,8 +378,10 @@ where
         #[allow(unreachable_code)]
         {
             let mut res = V::splat(coeffs[0]);
-            for &c in coeffs.iter().skip(1) {
-                res = res.mul_adde(x, V::splat(c));
+            let mut i = 1;
+            while i < N {
+                res = res.mul_adde(x, V::splat(coeffs[i]));
+                i += 1;
             }
             return res;
         }
